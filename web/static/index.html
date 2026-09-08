@@ -1,1 +1,101 @@
-<!doctype html><title>agenttik</title>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>agenttik</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+
+<aside id="sidebar">
+  <div class="tabs" id="side-tabs">
+    <button class="tab active" data-pane="projects">Projects</button>
+    <button class="tab" data-pane="sessions">Sessions</button>
+  </div>
+
+  <section class="pane active" id="pane-projects">
+    <div class="pane-head">
+      <button id="add-project" class="ghost">+ Add project</button>
+    </div>
+    <div class="scroll" id="project-list"></div>
+  </section>
+
+  <section class="pane" id="pane-sessions">
+    <div class="pane-head">
+      <input id="session-filter" type="search" placeholder="Filter title, project, folder">
+      <select id="session-window">
+        <option value="1d">Last day</option>
+        <option value="3d" selected>Last 3 days</option>
+        <option value="7d">Last week</option>
+        <option value="1mo">Last month</option>
+        <option value="all">All</option>
+      </select>
+    </div>
+    <div class="scroll" id="session-list"></div>
+  </section>
+</aside>
+
+<main id="main">
+  <div class="tabs" id="main-tabs"></div>
+  <div id="main-body"></div>
+  <form id="prompt-bar" autocomplete="off">
+    <textarea id="prompt" rows="3" placeholder="Ask the agent…  (Enter to send, Shift+Enter for a newline)"></textarea>
+    <div class="prompt-controls">
+      <select id="model-select" title="Model"></select>
+      <select id="effort-select" title="Effort"></select>
+      <button type="button" id="star-btn" class="ghost" title="Star this model and effort">☆</button>
+      <span class="spacer"></span>
+      <span id="turn-state"></span>
+      <button type="button" id="stop-btn" class="ghost" hidden>Stop</button>
+      <button type="submit" id="send-btn">Send</button>
+    </div>
+  </form>
+</main>
+
+<aside id="inspector">
+  <div class="tabs" id="inspector-tabs">
+    <button class="tab active" data-pane="stats">Stats</button>
+    <button class="tab" data-pane="changed">Changed</button>
+    <button class="tab" data-pane="tree">Tree</button>
+  </div>
+  <div class="scroll pane active" id="pane-stats"></div>
+  <div class="scroll pane" id="pane-changed"></div>
+  <div class="scroll pane" id="pane-tree"></div>
+</aside>
+
+<dialog id="new-project">
+  <form method="dialog">
+    <h3>Add project</h3>
+    <label>Folder <input name="path" placeholder="~/code/myproject" required></label>
+    <label>Name <input name="name" placeholder="defaults to the folder name"></label>
+    <menu>
+      <button value="cancel" class="ghost">Cancel</button>
+      <button value="ok" id="new-project-ok">Add</button>
+    </menu>
+  </form>
+</dialog>
+
+<dialog id="new-session">
+  <form method="dialog">
+    <h3>New session</h3>
+    <label>Provider <select name="provider"></select></label>
+    <label>Model <select name="model"></select></label>
+    <label>Effort <select name="effort"></select></label>
+    <label>Permission
+      <select name="permission">
+        <option value="workspace" selected>Edit inside the project</option>
+        <option value="plan">Read only</option>
+        <option value="full">No guardrails</option>
+      </select>
+    </label>
+    <menu>
+      <button value="cancel" class="ghost">Cancel</button>
+      <button value="ok">Start</button>
+    </menu>
+  </form>
+</dialog>
+
+<script src="/app.js"></script>
+</body>
+</html>

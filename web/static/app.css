@@ -1,0 +1,143 @@
+:root {
+  --bg: #121316;
+  --bg-raised: #17191d;
+  --bg-input: #1d2026;
+  --line: #272b32;
+  --fg: #e4e6ea;
+  --fg-dim: #8b919c;
+  --accent: #6ea8fe;
+  --danger: #f08a7a;
+  --ok: #7ec699;
+  --radius: 6px;
+  --mono: ui-monospace, "JetBrains Mono", "SFMono-Regular", Menlo, monospace;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  height: 100vh;
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr) 300px;
+  background: var(--bg);
+  color: var(--fg);
+  font: 13px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+aside { background: var(--bg-raised); display: flex; flex-direction: column; min-height: 0; }
+#sidebar { border-right: 1px solid var(--line); }
+#inspector { border-left: 1px solid var(--line); }
+
+/* Tabs -------------------------------------------------------------- */
+.tabs { display: flex; border-bottom: 1px solid var(--line); flex: 0 0 auto; overflow-x: auto; }
+.tab {
+  flex: 0 0 auto; padding: 9px 14px; background: none; border: none;
+  border-bottom: 2px solid transparent; color: var(--fg-dim);
+  font: inherit; cursor: pointer; white-space: nowrap;
+}
+.tab:hover { color: var(--fg); }
+.tab.active { color: var(--fg); border-bottom-color: var(--accent); }
+.tab .close { margin-left: 8px; color: var(--fg-dim); }
+.tab .close:hover { color: var(--danger); }
+
+.pane { display: none; min-height: 0; flex: 1 1 auto; }
+.pane.active { display: flex; flex-direction: column; }
+.scroll { overflow: auto; min-height: 0; flex: 1 1 auto; }
+#inspector .pane.active { display: block; padding: 10px 12px; }
+
+.pane-head {
+  display: flex; gap: 6px; padding: 8px; border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+.pane-head input, .pane-head select { min-width: 0; }
+
+/* Controls ---------------------------------------------------------- */
+input, select, textarea, button {
+  font: inherit; color: var(--fg); background: var(--bg-input);
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 5px 7px;
+}
+input:focus, select:focus, textarea:focus { outline: 1px solid var(--accent); }
+button { cursor: pointer; }
+button:hover { border-color: #3a404a; }
+button.ghost { background: none; }
+#send-btn { background: var(--accent); border-color: var(--accent); color: #10131a; font-weight: 600; }
+#send-btn:disabled { opacity: .45; cursor: not-allowed; }
+.spacer { flex: 1 1 auto; }
+
+/* Sidebar lists ----------------------------------------------------- */
+.project { padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.project-head { display: flex; align-items: baseline; gap: 6px; }
+.project-name { font-weight: 600; }
+.project-path, .sub { color: var(--fg-dim); font-size: 11px; word-break: break-all; }
+.project .new { margin-left: auto; padding: 0 6px; line-height: 18px; }
+.project .del { padding: 0 6px; line-height: 18px; }
+
+.row {
+  display: block; width: 100%; text-align: left; background: none;
+  border: none; border-radius: 0; padding: 5px 10px; cursor: pointer;
+}
+.row:hover { background: #1e2128; }
+.row.active { background: #232833; box-shadow: inset 2px 0 0 var(--accent); }
+.row .title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project .row { padding-left: 14px; }
+
+.dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px; }
+.dot.running { background: var(--accent); animation: pulse 1.2s infinite; }
+.dot.error { background: var(--danger); }
+.dot.idle { background: #3a404a; }
+@keyframes pulse { 50% { opacity: .25; } }
+
+.empty { padding: 16px 12px; color: var(--fg-dim); }
+
+/* Main -------------------------------------------------------------- */
+#main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+#main-body { flex: 1 1 auto; overflow: auto; min-height: 0; }
+
+#transcript { padding: 16px 20px; max-width: 900px; }
+.msg { margin-bottom: 14px; }
+.msg .who { font-size: 11px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .06em; }
+.msg .body { white-space: pre-wrap; word-wrap: break-word; }
+.msg.user .body {
+  background: var(--bg-raised); border-left: 2px solid var(--accent);
+  padding: 8px 10px; border-radius: 0 var(--radius) var(--radius) 0;
+}
+.msg.tool .body { font-family: var(--mono); font-size: 12px; color: var(--fg-dim); }
+.msg.thinking .body { color: var(--fg-dim); font-style: italic; }
+.msg.error .body { color: var(--danger); }
+.cursor::after { content: "▍"; color: var(--accent); animation: pulse 1s infinite; }
+
+#file-view { margin: 0; padding: 14px 18px; font-family: var(--mono); font-size: 12px; }
+#file-view code { white-space: pre; }
+
+/* Prompt bar -------------------------------------------------------- */
+#prompt-bar { border-top: 1px solid var(--line); padding: 10px 12px; background: var(--bg-raised); }
+#prompt { width: 100%; resize: vertical; font-family: inherit; }
+.prompt-controls { display: flex; gap: 6px; align-items: center; margin-top: 7px; }
+#turn-state { color: var(--fg-dim); font-size: 11px; }
+#star-btn.on { color: #f2c94c; }
+
+/* Inspector --------------------------------------------------------- */
+.stat { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; }
+.stat dt { color: var(--fg-dim); }
+.stat dd { margin: 0; font-variant-numeric: tabular-nums; }
+.file-row {
+  display: block; width: 100%; text-align: left; background: none; border: none;
+  padding: 3px 4px; border-radius: var(--radius); cursor: pointer;
+  font-family: var(--mono); font-size: 12px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl;
+}
+.file-row > span { direction: ltr; unicode-bidi: embed; }
+.file-row:hover { background: #1e2128; }
+.file-row .st { color: var(--accent); display: inline-block; width: 22px; }
+
+/* Dialogs ----------------------------------------------------------- */
+dialog {
+  background: var(--bg-raised); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 8px; padding: 18px; min-width: 340px;
+}
+dialog::backdrop { background: #0009; }
+dialog h3 { margin: 0 0 12px; }
+dialog label { display: block; margin-bottom: 10px; }
+dialog input, dialog select { width: 100%; margin-top: 4px; }
+dialog menu { display: flex; gap: 8px; justify-content: flex-end; margin: 14px 0 0; padding: 0; }

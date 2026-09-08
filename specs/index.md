@@ -7,4 +7,6 @@
 | [003-providers.md](003-providers.md) | Provider interface, CLI invocation, event mapping |
 | [004-ui.md](004-ui.md) | Layout, panels, HTTP API |
 
-Status: scaffold. Claude Code provider works end to end; Codex provider is a stub.
+Status: scaffold, verified end to end. A Claude Code session started from the
+UI streams into the transcript and records per-turn token metrics; resume across
+turns works. The Codex provider is a stub.

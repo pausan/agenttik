@@ -14,6 +14,20 @@ direct APIs) come later as a separate provider kind that does hold keys.
 
 Linux only for now.
 
+## Shells
+
+One binary, two ways to show the same UI:
+
+- **Desktop (default)** — a Wails window. It starts the HTTP server on a random
+  loopback port and points a WebKit view at it through a reverse proxy with
+  `FlushInterval = -1`, so SSE still streams. Needs cgo, gtk3 and
+  webkit2gtk; built with `-tags "desktop production webkit2_41"`.
+- **Web (`--web`)** — the HTTP server only, prints its URL. Builds with
+  `CGO_ENABLED=0` and no system dependencies.
+
+A binary built without the `desktop` tag falls back to web mode with a notice
+rather than failing, so `go build ./...` works anywhere.
+
 ## Process model
 
 One Go binary. Fiber serves the HTTP API and the embedded static UI. Each agent

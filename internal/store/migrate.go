@@ -1,0 +1,97 @@
+package store
+
+import (
+	"database/sql"
+	"fmt"
+)
+
+// migrations run in order. Append only; never edit a released step.
+var migrations = []string{
+	`
+CREATE TABLE projects (
+    id         INTEGER PRIMARY KEY,
+    name       TEXT    NOT NULL,
+    path       TEXT    NOT NULL UNIQUE,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE sessions (
+    id                  TEXT    PRIMARY KEY,
+    project_id          INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    title               TEXT    NOT NULL DEFAULT '',
+    provider            TEXT    NOT NULL,
+    provider_session_id TEXT    NOT NULL DEFAULT '',
+    model               TEXT    NOT NULL,
+    effort              TEXT    NOT NULL DEFAULT '',
+    permission          TEXT    NOT NULL DEFAULT 'workspace',
+    source              TEXT    NOT NULL DEFAULT 'agenttik',
+    status              TEXT    NOT NULL DEFAULT 'idle',
+    created_at          INTEGER NOT NULL,
+    updated_at          INTEGER NOT NULL,
+    last_active_at      INTEGER NOT NULL
+);
+CREATE INDEX idx_sessions_project ON sessions(project_id, last_active_at DESC);
+CREATE INDEX idx_sessions_active  ON sessions(last_active_at DESC);
+
+CREATE TABLE turns (
+    id                 INTEGER PRIMARY KEY,
+    session_id         TEXT    NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    model              TEXT    NOT NULL,
+    effort             TEXT    NOT NULL DEFAULT '',
+    started_at         INTEGER NOT NULL,
+    ended_at           INTEGER,
+    input_tokens       INTEGER NOT NULL DEFAULT 0,
+    output_tokens      INTEGER NOT NULL DEFAULT 0,
+    cache_read_tokens  INTEGER NOT NULL DEFAULT 0,
+    cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+    cost_usd           REAL    NOT NULL DEFAULT 0,
+    status             TEXT    NOT NULL DEFAULT 'running',
+    error              TEXT    NOT NULL DEFAULT ''
+);
+CREATE INDEX idx_turns_session ON turns(session_id, id);
+
+CREATE TABLE messages (
+    id         INTEGER PRIMARY KEY,
+    session_id TEXT    NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    turn_id    INTEGER,
+    role       TEXT    NOT NULL,
+    content    TEXT    NOT NULL,
+    created_at INTEGER NOT NULL
+);
+CREATE INDEX idx_messages_session ON messages(session_id, id);
+
+CREATE TABLE starred_models (
+    provider   TEXT    NOT NULL,
+    model      TEXT    NOT NULL,
+    effort     TEXT    NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (provider, model, effort)
+);
+`,
+}
+
+func migrate(db *sql.DB) error {
+	var version int
+	if err := db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
+		return fmt.Errorf("read schema version: %w", err)
+	}
+	for i := version; i < len(migrations); i++ {
+		tx, err := db.Begin()
+		if err != nil {
+			return fmt.Errorf("migration %d: %w", i+1, err)
+		}
+		if _, err := tx.Exec(migrations[i]); err != nil {
+			tx.Rollback()
+			return fmt.Errorf("migration %d: %w", i+1, err)
+		}
+		// PRAGMA does not accept placeholders.
+		if _, err := tx.Exec(fmt.Sprintf("PRAGMA user_version = %d", i+1)); err != nil {
+			tx.Rollback()
+			return fmt.Errorf("migration %d: set version: %w", i+1, err)
+		}
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("migration %d: commit: %w", i+1, err)
+		}
+	}
+	return nil
+}

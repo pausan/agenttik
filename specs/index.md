@@ -18,8 +18,10 @@
 | [014-transcript-messages.md](014-transcript-messages.md) | Copying messages, editing a prompt in place |
 
 Status: the Logs pane and its commit diffs, transcript message copying and
-prompt editing, and the Claude Code subscription allowance are implemented and
-browser-checked — see 013, 014 and 011 for what each was verified against.
+prompt editing, queued prompts drawn in the transcript with their waiting
+timer, and the Claude Code subscription allowance are implemented and
+browser-checked — see 013, 014, 012 and 011 for what each was verified
+against.
 Sidebar ordering, session archiving, collapsible project session lists, the
 project-scoped Tree, fuzzy go-to navigation, global conversation closing,
 remembered open tabs, project-scoped closed-tab reopening, prompt and file

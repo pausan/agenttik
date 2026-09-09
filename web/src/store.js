@@ -1194,6 +1194,7 @@ function onSessionEvent(tab, msg) {
   switch (ev.type) {
     case "started":
       startLocal(tab, msg.prompt, msg.turn);
+      takeQueued(tab, msg.prompt);
       refreshSessions();
       refreshProjects();
       break;
@@ -1270,6 +1271,21 @@ function endLive(tab) {
   if (last && last.streaming) last.streaming = false;
 }
 
+/* takeQueued drops the waiting prompt a turn has just claimed, so its text
+   moves from the queued bubble to the transcript rather than sitting in both.
+
+   A session's queue is drained oldest first, so the first row with that text
+   is the one that started. A prompt typed twice can pick the wrong row; the
+   end of the turn re-reads the queue anyway. */
+function takeQueued(tab, prompt) {
+  const queued = tab.detail.queued;
+  if (!queued?.length) return;
+  const at = queued.findIndex((q) => q.prompt === prompt);
+  if (at < 0) return;
+  queued.splice(at, 1);
+  tab.detail.session.queue_count = queued.length;
+}
+
 /* ---------------------------------------------------------------- prompt */
 
 function startLocal(tab, prompt, turn) {
@@ -1288,6 +1304,8 @@ async function syncMessages(tab) {
     if (!S.tabs.some((open) => open.id === tab.id)) return;
     tab.detail.messages = detail.messages;
     tab.detail.turns = detail.turns;
+    tab.detail.queued = detail.queued;
+    tab.detail.session.queue_count = detail.session.queue_count;
   } catch {
     /* the transcript on screen is still the one the stream produced */
   }
@@ -1362,9 +1380,14 @@ export async function enqueue(prompt) {
   if (tab?.kind !== "session") return;
   prompt = prompt.trim();
   if (!prompt) return;
+  // Cleared before the request, as sending does: whatever is typed while it
+  // is in flight is the next prompt, not this one.
+  tab.draft = "";
   try {
     const result = await api("POST", `/api/sessions/${tab.sessionID}/queue`, { prompt });
-    tab.draft = "";
+    // What came back is the queue after scheduling, so a prompt that started
+    // immediately is not in it and the transcript draws none.
+    tab.detail.queued = result.queued;
     tab.detail.session.queue_count = result.queue_count;
     refreshSessions();
     refreshProjects();

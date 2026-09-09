@@ -147,17 +147,20 @@ func (r *Runner) Send(sessionID, prompt string) (*store.Turn, error) {
 	return &snapshot, nil
 }
 
-// Enqueue persists a prompt and starts the project queue when no turn is active.
-func (r *Runner) Enqueue(sessionID, prompt string) (int64, error) {
+// Enqueue persists a prompt and starts the project queue when no turn is
+// active. It reports what is still waiting afterwards, so a prompt the
+// scheduler picked up straight away is already gone from that list and the
+// transcript never draws it as queued.
+func (r *Runner) Enqueue(sessionID, prompt string) ([]store.QueuedMessage, error) {
 	sess, err := r.store.GetSession(sessionID)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	if _, err := r.store.EnqueueMessage(sessionID, prompt); err != nil {
-		return 0, err
+		return nil, err
 	}
 	r.schedule(sess.ProjectID, "")
-	return r.store.QueueCount(sessionID)
+	return r.store.ListQueuedMessages(sessionID)
 }
 
 // dispatchLock serializes queue dispatch within one project. One lock per

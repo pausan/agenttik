@@ -98,6 +98,10 @@ type sessionDetail struct {
 	Turns    []store.Turn    `json:"turns"`
 	Stats    *store.Stats    `json:"stats"`
 	Running  bool            `json:"running"`
+
+	// Queued are the prompts waiting their turn, oldest first. The transcript
+	// draws them under the messages so a queued prompt is visible.
+	Queued []store.QueuedMessage `json:"queued"`
 }
 
 func (s *Server) getSession(c *fiber.Ctx) error {
@@ -118,8 +122,12 @@ func (s *Server) getSession(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
+	queued, err := s.store.ListQueuedMessages(id)
+	if err != nil {
+		return err
+	}
 	return c.JSON(sessionDetail{Session: sess, Messages: messages,
-		Turns: turns, Stats: stats, Running: s.runner.Running(id)})
+		Turns: turns, Stats: stats, Running: s.runner.Running(id), Queued: queued})
 }
 
 // updateSession changes the model, effort or title mid-session.
@@ -304,11 +312,11 @@ func (s *Server) enqueueMessage(c *fiber.Ctx) error {
 	if strings.TrimSpace(body.Prompt) == "" {
 		return badRequest("prompt is required")
 	}
-	count, err := s.runner.Enqueue(c.Params("id"), body.Prompt)
+	queued, err := s.runner.Enqueue(c.Params("id"), body.Prompt)
 	if err != nil {
 		return err
 	}
-	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"queue_count": count})
+	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"queued": queued, "queue_count": len(queued)})
 }
 
 func (s *Server) stopSession(c *fiber.Ctx) error {

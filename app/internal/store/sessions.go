@@ -239,6 +239,28 @@ func (s *Store) NextQueuedMessage(sessionID string) (*QueuedMessage, error) {
 	return v, nil
 }
 
+// ListQueuedMessages returns everything still waiting in one session, oldest
+// first, which is the order the scheduler will run them in. Always a slice, so
+// the transcript can iterate it without a guard.
+func (s *Store) ListQueuedMessages(sessionID string) ([]QueuedMessage, error) {
+	rows, err := s.db.Query(`SELECT id, session_id, prompt, created_at FROM queued_messages
+		WHERE session_id = ? ORDER BY id`, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("list queued messages: %w", err)
+	}
+	defer rows.Close()
+
+	out := []QueuedMessage{}
+	for rows.Next() {
+		var v QueuedMessage
+		if err := rows.Scan(&v.ID, &v.SessionID, &v.Prompt, &v.CreatedAt); err != nil {
+			return nil, fmt.Errorf("list queued messages: %w", err)
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
 // RemoveQueuedMessage is called immediately after its turn has claimed it.
 func (s *Store) RemoveQueuedMessage(id int64) error {
 	_, err := s.db.Exec(`DELETE FROM queued_messages WHERE id = ?`, id)

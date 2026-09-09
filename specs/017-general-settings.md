@@ -27,8 +27,8 @@ next pane did would be worse than one that admits the state it is in.
 Both panes count their rows for the rail's filter like the other three, so
 `enqueue` narrows to General 2 and Shortcuts 1.
 
-The prompt bar's Send button and its Enqueue caret are left alone. They are
-labelled, so neither is a "default" the setting could be about.
+The prompt bar's primary button label follows the selected default: it reads Send
+normally and Enqueue when plain Enter queues. Its Enqueue caret is left alone.
 
 ## Validation
 

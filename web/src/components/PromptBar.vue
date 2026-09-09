@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, ref, watch } from "vue";
 
-import { S, contextWindow, enqueue, fail, hit, isStarred, providerOf, refreshSubscriptionLimits, send, setModel, stopTurn, toggleStar } from "../store";
+import { S, contextWindow, enqueue, enterDoes, fail, hit, isStarred, providerOf, refreshSubscriptionLimits, send, setModel, stopTurn, toggleStar } from "../store";
 import { ago } from "../api";
 import Chord from "./Chord.vue";
 import ContextPane from "./ContextPane.vue";
@@ -215,6 +215,8 @@ const hints = computed(() => [
   { chord: S.keys["prompt.enqueue"][0], what: "to enqueue" },
   { chord: S.keys["prompt.newline"][0], what: "for a newline" },
 ]);
+
+const submitLabel = computed(() => (enterDoes() === "enqueue" ? "Enqueue" : "Send"));
 </script>
 
 <template>
@@ -319,7 +321,7 @@ const hints = computed(() => [
           @click="stopTurn"
         />
         <div class="flex">
-          <UButton type="submit" size="sm" :disabled="S.detail.running" label="Send" />
+          <UButton type="submit" size="sm" :disabled="S.detail.running" :label="submitLabel" />
           <UPopover v-model:open="queueOpen">
             <UButton type="button" size="sm" color="primary" variant="solid" icon="i-lucide-chevron-down" aria-label="Send options" />
             <template #content>

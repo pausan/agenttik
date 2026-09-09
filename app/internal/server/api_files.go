@@ -94,7 +94,7 @@ func listFiles(root string) ([]string, error) {
 	if isGitRepo(root) {
 		out, err := runGit(root, "ls-files", "--cached", "--others", "--exclude-standard")
 		if err == nil {
-			return trimTo(splitLines(out), maxTreeEntries), nil
+			return trimTo(withoutDeleted(root, splitLines(out)), maxTreeEntries), nil
 		}
 	}
 	var paths []string
@@ -123,6 +123,32 @@ func listFiles(root string) ([]string, error) {
 	}
 	sort.Strings(paths)
 	return paths, nil
+}
+
+// withoutDeleted drops the tracked files that are no longer on disk. Git keeps
+// listing them until the deletion is staged, and a tree that still showed them
+// would open tabs on files that are not there. The usual answer is empty, so
+// this costs one git call and nothing else.
+func withoutDeleted(root string, paths []string) []string {
+	out, err := runGit(root, "ls-files", "--deleted")
+	if err != nil {
+		return paths
+	}
+	gone := splitLines(out)
+	if len(gone) == 0 {
+		return paths
+	}
+	drop := make(map[string]bool, len(gone))
+	for _, path := range gone {
+		drop[path] = true
+	}
+	kept := paths[:0]
+	for _, path := range paths {
+		if !drop[path] {
+			kept = append(kept, path)
+		}
+	}
+	return kept
 }
 
 type changedFile struct {
@@ -356,7 +382,10 @@ func isGitRepo(root string) bool {
 func runGit(dir string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", args...)
+	// --no-optional-locks keeps a read from writing: `git status` otherwise
+	// refreshes the index on disk, which the filesystem watcher would see as
+	// a change, refresh for, and see again.
+	cmd := exec.CommandContext(ctx, "git", append([]string{"--no-optional-locks"}, args...)...)
 	cmd.Dir = dir
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr

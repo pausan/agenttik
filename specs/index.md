@@ -20,8 +20,11 @@
 | [016-file-tab-reuse.md](016-file-tab-reuse.md) | The temporary file tab a click reuses |
 | [017-general-settings.md](017-general-settings.md) | The General section, and which key sends |
 | [018-readme-icon.md](018-readme-icon.md) | Concise project overview and shared SVG icon |
+| [019-file-watching.md](019-file-watching.md) | Tree and Changed following the disk as it moves |
 
-Status: the General settings section and the Enter / Ctrl+Enter swap, the
+Status: the tree and the changed list now follow the project folder as it
+moves on disk — see 019 for the watcher and what it deliberately ignores.
+The General settings section and the Enter / Ctrl+Enter swap, the
 temporary file tab that a click reuses and a double click keeps, the Settings
 rail with its fuzzy filter and editable shortcuts, the Commits pane and its commit
 diffs, transcript message copying and prompt editing, queued prompts drawn in

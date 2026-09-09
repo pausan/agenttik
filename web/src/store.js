@@ -1141,9 +1141,12 @@ export async function refreshChanged() {
   const id = currentProjectID();
   if (!id) return (S.changed = []);
   try {
-    S.changed = await api("GET", `/api/projects/${id}/changes`);
+    const changed = await api("GET", `/api/projects/${id}/changes`);
+    // The watcher can fire this often, so a slow answer for the project we
+    // just left must not replace the list of the one now in front.
+    if (currentProjectID() === id) S.changed = changed;
   } catch {
-    S.changed = [];
+    if (currentProjectID() === id) S.changed = [];
   }
 }
 
@@ -1242,12 +1245,23 @@ let streamURL = "";
 function subscriptionURL() {
   const sessions = S.tabs.filter((t) => t.kind === "session").map((t) => t.sessionID);
   const projects = S.tabs.filter((t) => t.kind === "project").map((t) => t.projectID);
-  if (!sessions.length && !projects.length) return "";
+  // The project in front is also the one whose folder the server watches for
+  // us: only its files are on screen, so only its files are worth following.
+  const shown = currentProjectID();
+  if (!sessions.length && !projects.length && !shown) return "";
   const params = new URLSearchParams();
   if (sessions.length) params.set("sessions", sessions.join(","));
   if (projects.length) params.set("projects", projects.join(","));
+  if (shown) params.set("watch", shown);
   return "/api/stream?" + params;
 }
+
+/* The stream also carries which project's folder the server should watch, so
+   moving between projects reopens it. Opening and closing tabs is not enough
+   on its own: two tabs can share a project, and switching between them opens
+   no tab at all. Watching from here rather than beside refreshInspector keeps
+   the stream's triggers together, and runs after `stream` exists. */
+watch(currentProjectID, () => resubscribe());
 
 /* resubscribe reopens the stream when the set of open tabs changes, and does
    nothing when it has not. */
@@ -1277,6 +1291,15 @@ function resubscribe() {
 }
 
 function onEvent(msg) {
+  // The working tree moved on disk: from a turn, an editor, or a git command
+  // in a terminal. Either way what is on screen is now out of date.
+  if (msg.event?.type === "files_changed") {
+    if (msg.project_id === currentProjectID()) {
+      refreshChanged();
+      refreshTree();
+    }
+    return;
+  }
   const tab = S.tabs.find((t) => t.kind === "session" && t.sessionID === msg.session_id);
   if (tab) onSessionEvent(tab, msg);
   // A turn ending anywhere in a project moves its totals, whether or not that

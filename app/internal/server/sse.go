@@ -3,6 +3,7 @@ package server
 import (
 	"bufio"
 	"encoding/json"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -37,9 +38,37 @@ func (s *Server) streamAll(c *fiber.Ctx) error {
 		}
 		topics = append(topics, runner.ProjectTopic(n))
 	}
+	// `watch` is the project the window is showing. Its working tree is
+	// followed for as long as this stream is open, so the tree and the changed
+	// list keep up with an editor or a git command outside agenttik.
+	release := func() {}
+	if id := strings.TrimSpace(c.Query("watch")); id != "" {
+		n, err := strconv.ParseInt(id, 10, 64)
+		if err != nil {
+			return badRequest("invalid project id %q", id)
+		}
+		topics = append(topics, runner.FilesTopic(n))
+		release = s.watchProject(n)
+	}
 	// Unknown ids are not an error: a session deleted in another window would
 	// otherwise break the whole stream. They simply never fire.
-	return s.stream(c, topics)
+	return s.stream(c, topics, release)
+}
+
+// watchProject starts following a project folder, or does nothing at all when
+// there is no folder to follow. A project whose path has gone missing still
+// streams its sessions.
+func (s *Server) watchProject(projectID int64) func() {
+	nothing := func() {}
+	p, err := s.store.GetProject(projectID)
+	if err != nil {
+		return nothing
+	}
+	root, err := filepath.EvalSymlinks(p.Path)
+	if err != nil {
+		return nothing
+	}
+	return s.watchers.acquire(projectID, root)
 }
 
 func splitList(v string) []string {
@@ -53,8 +82,10 @@ func splitList(v string) []string {
 }
 
 // stream serves a set of hub topics as SSE until the client leaves or the app
-// quits.
-func (s *Server) stream(c *fiber.Ctx, topics []string) error {
+// quits. release is run when it ends: the body is written after the handler
+// has returned, so a deferred cleanup in the caller would fire while the
+// stream was still open.
+func (s *Server) stream(c *fiber.Ctx, topics []string, release func()) error {
 	events, unsubscribe := s.runner.Hub().SubscribeMany(topics)
 
 	c.Set(fiber.HeaderContentType, "text/event-stream")
@@ -64,6 +95,7 @@ func (s *Server) stream(c *fiber.Ctx, topics []string) error {
 
 	c.Context().SetBodyStreamWriter(fasthttp.StreamWriter(func(w *bufio.Writer) {
 		defer unsubscribe()
+		defer release()
 
 		ticker := time.NewTicker(heartbeat)
 		defer ticker.Stop()

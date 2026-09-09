@@ -60,6 +60,16 @@ func (r *Runner) Hub() *Hub { return r.hub }
 // sessions run at once.
 func ProjectTopic(projectID int64) string { return "project:" + strconv.FormatInt(projectID, 10) }
 
+// FilesTopic carries "the files under this project moved on disk". It is kept
+// apart from ProjectTopic so a window can follow the working tree of the
+// project it is showing without also receiving the turn events of every
+// session in it.
+func FilesTopic(projectID int64) string { return "files:" + strconv.FormatInt(projectID, 10) }
+
+// EventFilesChanged is what the filesystem watcher publishes there. It names
+// no path: the panes re-read their listing whole.
+const EventFilesChanged agent.EventType = "files_changed"
+
 // Running reports whether a turn is in flight for the session.
 func (r *Runner) Running(sessionID string) bool {
 	r.mu.Lock()

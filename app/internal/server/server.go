@@ -26,6 +26,7 @@ type Server struct {
 	store    *store.Store
 	runner   *runner.Runner
 	registry *agent.Registry
+	watchers *watchers
 
 	// closing is closed by Shutdown to release the SSE handlers. Fiber waits
 	// for every open connection, and a live stream never ends on its own, so
@@ -49,7 +50,8 @@ func New(s *store.Store, reg *agent.Registry, r *runner.Runner) *Server {
 	})
 	app.Use(recover.New())
 
-	srv := &Server{app: app, store: s, runner: r, registry: reg, closing: make(chan struct{})}
+	srv := &Server{app: app, store: s, runner: r, registry: reg,
+		watchers: newWatchers(r.Hub()), closing: make(chan struct{})}
 	srv.routes()
 
 	// The UI is a Vite build, so a binary made without it says so rather than

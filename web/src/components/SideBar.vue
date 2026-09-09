@@ -229,7 +229,7 @@ function onSessionDrop(e) {
           </div>
           <div
             v-if="!collapsedProjects.has(p.id)"
-            v-for="s in p.recent_sessions"
+            v-for="(s, sessionIndex) in p.recent_sessions"
             :key="s.id"
             :class="[
               draggingSession?.sessionID === s.id ? 'opacity-40' : '',
@@ -245,6 +245,7 @@ function onSessionDrop(e) {
               :title="s.title"
               :status="s.status"
               :active="S.detail?.session.id === s.id"
+              :number="S.activeProjectID === p.id ? sessionIndex + 1 : 0"
               archive
               @select="openSession(s.id)"
               @toggle-archive="setSessionArchived(s, true)"

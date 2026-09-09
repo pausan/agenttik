@@ -21,6 +21,13 @@ drag changes what a chord reaches and each project counts from 1 again.
 `Alt+A … Alt+H` index `S.projects`, so dragging a project row changes its
 letter too. Both are read from the physical key code.
 
+The sidebar is the canonical order for a project's sessions. The project page
+and the session-tab subset are kept in that order whenever either is dragged,
+then one project-session order request is sent at drop. Selected-project rows
+show their matching one-based number. Session tab labels are shortened to 20
+characters with `...`; project and file tabs keep their complete names and
+scroll horizontally when needed.
+
 A project row shows its letter dimmed in front of the name, is highlighted when
 selected, and pulses a dot on the right while any of its sessions is mid-turn —
 `recent_sessions` already carries each session's status, so this costs nothing
@@ -59,5 +66,4 @@ label, so a tab is addressable by its full name.
 
 ## Validation
 
-Nothing was compiled or run: `make ui`, `go vet ./...` and a browser check are
-outstanding. No tests were added, as requested for the prototype.
+`npm run build` passed. No tests were run.

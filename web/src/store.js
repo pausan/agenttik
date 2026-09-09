@@ -158,6 +158,43 @@ function insertTab(tab) {
   S.tabs.splice(at, 0, tab);
 }
 
+/* The sidebar owns a project's complete session order. Project pages and the
+   open subset in the tab strip are projections of it, so every drag starts by
+   bringing those projections into the same order. Entries absent from a list
+   (for example an archived session tab) keep their relative place after the
+   ordered sessions. */
+function orderBySessionID(items, ids, idOf) {
+  const rank = new Map(ids.map((id, i) => [id, i]));
+  return items
+    .map((item, i) => ({ item, i }))
+    .sort(
+      (a, b) =>
+        (rank.get(idOf(a.item)) ?? Infinity) - (rank.get(idOf(b.item)) ?? Infinity) || a.i - b.i,
+    )
+    .map(({ item }) => item);
+}
+
+function syncProjectSessionOrder(projectID, ids) {
+  const project = S.projects.find((p) => p.id === projectID);
+  if (project) {
+    project.recent_sessions = orderBySessionID(project.recent_sessions, ids, (session) => session.id);
+  }
+  const projectTab = S.tabs.find((tab) => tab.kind === "project" && tab.projectID === projectID);
+  if (projectTab) {
+    projectTab.data.sessions = orderBySessionID(projectTab.data.sessions, ids, (session) => session.id);
+  }
+  const slots = [];
+  const sessions = [];
+  S.tabs.forEach((tab, i) => {
+    if (tab.kind === "session" && projectOfTab(tab) === projectID) {
+      slots.push(i);
+      sessions.push(tab);
+    }
+  });
+  const orderedTabs = orderBySessionID(sessions, ids, (tab) => tab.sessionID);
+  slots.forEach((i, j) => (S.tabs[i] = orderedTabs[j]));
+}
+
 /* moveTab is a tab dragged along the strip. Only tabs of the same kind trade
    places: the groups keep their order, and the numbers follow the strip
    rather than the strip following the numbers. */
@@ -167,7 +204,27 @@ export function moveTab(dragID, overID) {
   if (from < 0 || to < 0 || from === to) return;
   if (S.tabs[from].kind !== S.tabs[to].kind) return;
   if (projectOfTab(S.tabs[from]) !== projectOfTab(S.tabs[to])) return;
+  if (S.tabs[from].kind === "session") {
+    const projectID = projectOfTab(S.tabs[from]);
+    const project = S.projects.find((p) => p.id === projectID);
+    if (!project) return;
+    const fromSidebar = project.recent_sessions.findIndex((session) => session.id === S.tabs[from].sessionID);
+    const toSidebar = project.recent_sessions.findIndex((session) => session.id === S.tabs[to].sessionID);
+    if (fromSidebar < 0 || toSidebar < 0) return;
+    project.recent_sessions.splice(toSidebar, 0, ...project.recent_sessions.splice(fromSidebar, 1));
+    syncProjectSessionOrder(projectID, project.recent_sessions.map((session) => session.id));
+    return;
+  }
   S.tabs.splice(to, 0, ...S.tabs.splice(from, 1));
+}
+
+/* Session tab drags already change the sidebar order under the pointer. This
+   persists that shared order after the drag ends, rather than per hover. */
+export function persistTabOrder(id) {
+  const tab = S.tabs.find((candidate) => candidate.id === id);
+  if (tab?.kind !== "session") return;
+  const project = S.projects.find((p) => p.id === projectOfTab(tab));
+  if (project) reorderSidebarSessions(project, project.recent_sessions.map((session) => session.id));
 }
 
 /* The prompt bar watches this counter. A counter, rather than a Boolean,
@@ -302,6 +359,9 @@ export function currentProjectID() {
 
 export async function refreshProjects() {
   S.projects = await api("GET", "/api/projects");
+  for (const project of S.projects) {
+    syncProjectSessionOrder(project.id, project.recent_sessions.map((session) => session.id));
+  }
 }
 
 /* reorderProjects persists the sidebar order after it has already moved under
@@ -608,8 +668,7 @@ export function isArchived(session) {
    is the only reliable way back — the row has been moved under the cursor
    since the drag began and the order it started in is gone. */
 export async function reorderSessions(tab, ids) {
-  const byID = new Map(tab.data.sessions.map((s) => [s.id, s]));
-  tab.data.sessions = ids.map((id) => byID.get(id)).filter(Boolean);
+  syncProjectSessionOrder(tab.projectID, ids);
   try {
     await api("POST", `/api/projects/${tab.projectID}/sessions/order`, { ids });
     await refreshProjects();
@@ -623,6 +682,7 @@ export async function reorderSessions(tab, ids) {
    but owns a different array. It can therefore use the same endpoint without
    coupling a sidebar drag to an open project tab. */
 export async function reorderSidebarSessions(project, ids) {
+  syncProjectSessionOrder(project.id, ids);
   try {
     await api("POST", `/api/projects/${project.id}/sessions/order`, { ids });
     await refreshProjects();

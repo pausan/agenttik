@@ -7,7 +7,7 @@
    where a tab now sits, so rearranging changes what Alt+1 … Alt+9 reach. */
 import { computed, ref } from "vue";
 
-import { S, closeTab, moveTab, selectTab, startCurrentSession } from "../store";
+import { S, closeTab, moveTab, persistTabOrder, selectTab, startCurrentSession } from "../store";
 import Transcript from "./Transcript.vue";
 import ProjectView from "./ProjectView.vue";
 import FileView from "./FileView.vue";
@@ -16,7 +16,7 @@ import StatusDot from "./StatusDot.vue";
 
 /* A session title can be a whole sentence, and the strip has to stay
    readable with a dozen of them open. */
-const MAX_LABEL = 22;
+const MAX_SESSION_LABEL = 20;
 
 /* One colour per kind, so what a tab is reads before its label does. */
 const KINDS = {
@@ -32,7 +32,10 @@ const items = computed(() =>
     // The tab is named by its whole label even when the strip shows less of
     // it, so a truncated tab is still addressable.
     name: t.label,
-    label: t.label.length > MAX_LABEL ? t.label.slice(0, MAX_LABEL - 1) + "…" : t.label,
+    label:
+      t.kind === "session" && t.label.length > MAX_SESSION_LABEL
+        ? t.label.slice(0, MAX_SESSION_LABEL - 3) + "..."
+        : t.label,
     title: t.label + (i < 9 ? `  (Alt+${i + 1})` : ""),
     // Only the first nine are one chord away, so only those show a number.
     hint: i < 9 ? String(i + 1) : "",
@@ -56,6 +59,12 @@ function onStart(e, id) {
   e.dataTransfer.effectAllowed = "move";
   // Firefox starts no drag at all without data on the transfer.
   e.dataTransfer.setData("text/plain", id);
+}
+
+function onEnd() {
+  const id = dragging.value;
+  dragging.value = "";
+  persistTabOrder(id);
 }
 
 const current = computed(() => S.tab);
@@ -82,8 +91,8 @@ const running = computed(() => !!S.detail?.running);
           @click="selectTab(item.id)"
           @dragstart="onStart($event, item.id)"
           @dragover="onOver($event, item.id)"
-          @dragend="dragging = ''"
-          @drop.prevent="dragging = ''"
+          @dragend="onEnd"
+          @drop.prevent="onEnd"
         >
           <span
             v-if="item.hint"

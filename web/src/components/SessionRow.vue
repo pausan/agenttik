@@ -13,6 +13,7 @@ const props = defineProps({
   title: { type: String, default: "" },
   status: { type: String, default: "idle" },
   sub: { type: String, default: "" },
+  number: { type: Number, default: 0 },
   active: Boolean,
   archived: Boolean,
   archive: Boolean,
@@ -74,6 +75,7 @@ function commit() {
           class="flex items-center gap-2 overflow-hidden"
           :class="active ? 'text-primary' : 'text-highlighted'"
         >
+          <span v-if="number" class="w-3 shrink-0 font-mono text-[10px] text-dimmed tabular-nums">{{ number }}</span>
           <StatusDot :status="status" />
           <span class="truncate">{{ title || "Untitled session" }}</span>
         </span>

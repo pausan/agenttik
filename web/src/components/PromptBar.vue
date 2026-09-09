@@ -3,6 +3,7 @@ import { computed, nextTick, ref, watch } from "vue";
 
 import { S, contextWindow, fail, isStarred, providerOf, refreshSubscriptionLimits, send, setModel, stopTurn, toggleStar } from "../store";
 import ContextPane from "./ContextPane.vue";
+import { useTextHistory } from "../text-history";
 
 /* The unsent prompt belongs to the conversation, not to this bar: one bar
    serves every session, so text kept here would follow you between tabs. */
@@ -12,6 +13,7 @@ const text = computed({
     if (S.owner) S.owner.draft = v;
   },
 });
+const history = useTextHistory(text, (value) => (text.value = value));
 const prompt = ref(null);
 const modelOpen = ref(false);
 
@@ -168,6 +170,14 @@ async function star() {
 function submit() {
   send(text.value);
 }
+
+function onPromptInput(e) {
+  history.input(e);
+}
+
+function onPromptKey(e) {
+  history.keydown(e);
+}
 </script>
 
 <template>
@@ -183,6 +193,8 @@ function submit() {
         placeholder="Ask the agent…"
         class="w-full"
         :ui="{ base: 'resize-y' }"
+        @input="onPromptInput"
+        @keydown="onPromptKey"
         @keydown.enter.exact.prevent="submit"
       />
       <div class="flex items-center gap-1.5">
@@ -218,45 +230,45 @@ function submit() {
           @click="star"
         />
         <span class="flex-1" />
-        <UTooltip :content="{ side: 'top', sideOffset: 8 }">
-          <button
-            type="button"
-            class="context-ring"
-            :style="{ '--context-pct': contextPct + '%', '--context-tone': contextTone }"
-            aria-label="Context and session totals"
-          >
-            <span class="context-ring-value">{{ contextTotal ? contextPct + '%' : '—' }}</span>
+        <UPopover :content="{ side: 'top', sideOffset: 8 }">
+          <button type="button" class="usage-summary" aria-label="Context and subscription usage">
+            <span
+              class="context-ring"
+              :style="{ '--context-pct': contextPct + '%', '--context-tone': contextTone }"
+            >
+              <span class="context-ring-value">{{ contextTotal ? contextPct + '%' : '—' }}</span>
+            </span>
+            <span v-if="subscriptionWindows.length" class="subscription-limits">
+              <span v-for="window in subscriptionWindows" :key="window.label" class="subscription-limit-track">
+                <span
+                  class="subscription-limit-fill"
+                  :class="window.used_percent >= 90 ? 'bg-error' : window.used_percent >= 70 ? 'bg-warning' : 'bg-primary'"
+                  :style="{ width: Math.min(100, window.used_percent) + '%' }"
+                />
+              </span>
+            </span>
           </button>
-          <template #content><ContextPane /></template>
-        </UTooltip>
-        <UTooltip v-if="subscriptionWindows.length" :content="{ side: 'top', sideOffset: 8 }">
-          <div class="subscription-limits" aria-label="Subscription allowance">
-            <div v-for="window in subscriptionWindows" :key="window.label" class="subscription-limit-track">
-              <div
-                class="subscription-limit-fill"
-                :class="window.used_percent >= 90 ? 'bg-error' : window.used_percent >= 70 ? 'bg-warning' : 'bg-primary'"
-                :style="{ width: Math.min(100, window.used_percent) + '%' }"
-              />
-            </div>
-          </div>
           <template #content>
-            <div class="w-64 p-3">
-              <p class="m-0 text-xs font-medium text-muted">
-                {{ subscriptionLimit.plan_type ? subscriptionLimit.plan_type + ' subscription' : 'Subscription allowance' }}
-              </p>
-              <dl class="mt-1.5 mb-0 space-y-1 text-xs tabular-nums">
-                <div v-for="window in subscriptionWindows" :key="window.label" class="flex justify-between gap-3">
-                  <dt class="text-muted">{{ window.label }}</dt>
-                  <dd class="m-0 text-highlighted">{{ Math.round(window.used_percent) }}% used · resets {{ resetAt(window.resets_at) }}</dd>
-                </div>
-                <div v-if="subscriptionLimit.reached_type" class="flex justify-between gap-3">
-                  <dt class="text-muted">Status</dt>
-                  <dd class="m-0 text-highlighted">{{ subscriptionLimit.reached_type }}</dd>
-                </div>
-              </dl>
+            <div class="flex divide-x divide-default">
+              <ContextPane />
+              <div v-if="subscriptionWindows.length" class="w-64 p-3">
+                <p class="m-0 text-xs font-medium text-muted">
+                  {{ subscriptionLimit.plan_type ? subscriptionLimit.plan_type + ' subscription' : 'Subscription allowance' }}
+                </p>
+                <dl class="mt-1.5 mb-0 space-y-1 text-xs tabular-nums">
+                  <div v-for="window in subscriptionWindows" :key="window.label" class="flex justify-between gap-3">
+                    <dt class="text-muted">{{ window.label }}</dt>
+                    <dd class="m-0 text-highlighted">{{ Math.round(window.used_percent) }}% used · resets {{ resetAt(window.resets_at) }}</dd>
+                  </div>
+                  <div v-if="subscriptionLimit.reached_type" class="flex justify-between gap-3">
+                    <dt class="text-muted">Status</dt>
+                    <dd class="m-0 text-highlighted">{{ subscriptionLimit.reached_type }}</dd>
+                  </div>
+                </dl>
+              </div>
             </div>
           </template>
-        </UTooltip>
+        </UPopover>
         <span v-if="S.detail.running" class="text-xs text-dimmed">running…</span>
         <UButton
           v-if="S.detail.running"

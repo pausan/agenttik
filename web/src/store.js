@@ -41,7 +41,7 @@ export const S = reactive({
   subscriptionLimits: {}, // provider -> its latest subscription allowance buckets
   sessions: [],
   tabs: [], // every open view, of every project
-  closedSessions: {}, // project id -> most recently closed non-empty session ids
+  closedTabs: {}, // project id -> most recently closed tabs and archived sessions
   activeTab: "",
   activeProjectID: null, // the project the strip and the sidebar show
   lastTab: {}, // per project, the tab it was last left on
@@ -299,8 +299,8 @@ export function selectProjectAt(i) {
 
 /* closeTab also closes the files opened from the tab, which have nothing to
    belong to once it is gone, and moves to the neighbour in the same project
-   rather than back to the first tab. A never-used session is disposable;
-   every other session is archived.
+   rather than back to the first tab. Closing a tab only removes that view;
+   archiving is a separate action.
 
    Unsaved edits stop it: closing a file that has been typed into — or a
    conversation holding one — asks first, and resolveClosing comes back here
@@ -315,6 +315,8 @@ export async function closeTab(id, remember = true, force = false) {
     return;
   }
   const projectID = projectOfTab(tab);
+  const dependents = S.tabs.filter((t) => t.owner === id);
+  if (remember) rememberClosedTab(projectID, tab, dependents);
   // Its own project's list, not the strip: a project being deleted closes
   // tabs that are not on screen.
   const at = S.tabs.filter((t) => projectOfTab(t) === projectID).findIndex((t) => t.id === id);
@@ -335,29 +337,55 @@ export async function closeTab(id, remember = true, force = false) {
     }
   }
   resubscribe();
-
-  if (!remember || tab.kind !== "session") return;
-  if (tab.detail.messages.length) return setSessionArchived(tab.detail.session, true, projectID);
-  try {
-    await api("DELETE", "/api/sessions/" + tab.sessionID);
-    await Promise.all([refreshProjects(), refreshSessions()]);
-    reloadProjects();
-  } catch (e) {
-    fail(e);
-  }
 }
 
-/* reopenClosedSession restores the newest session closed in the active
-   project. Each project keeps its own history, so switching workspaces never
-   restores a conversation from somewhere else. */
-export async function reopenClosedSession() {
-  const closed = S.closedSessions[S.activeProjectID];
-  const id = closed?.[0];
-  if (!id) return;
-  const restored = await setSessionArchived({ id }, false);
-  if (!restored) return;
-  closed.shift();
-  await openSession(id);
+function rememberClosedTab(projectID, tab, dependents = [], archived = false) {
+  if (!projectID) return;
+  const closed = S.closedTabs[projectID] || [];
+  S.closedTabs[projectID] = [{
+    tab: savedTab(tab),
+    dependents: dependents.map(savedTab).filter(Boolean),
+    archived,
+  }, ...closed];
+}
+
+async function openSavedTab(tab) {
+  if (!tab) return false;
+  if (tab.kind === "project") await openProject(tab.projectID, true);
+  else if (tab.kind === "session") {
+    await openSession(tab.sessionID, true);
+    const open = S.tabs.find((candidate) => candidate.id === tab.id);
+    if (open) open.draft = typeof tab.draft === "string" ? tab.draft : "";
+  } else if (tab.kind === "file") {
+    const owner = S.tabs.some((open) => open.id === tab.owner) ? tab.owner : "";
+    await openFileIn(tab.projectID, owner, tab.path, true);
+  }
+  return S.tabs.some((open) => open.id === tab.id);
+}
+
+/* Ctrl+Shift+T walks the closed entries newest-first, scoped to the project
+   in front. Archived sessions are reopened by unarchiving; ordinary tab
+   closes never change the session itself. */
+export async function reopenClosedTab() {
+  const closed = S.closedTabs[S.activeProjectID];
+  const entry = closed?.[0];
+  if (!entry?.tab) return;
+  let restored;
+  if (entry.archived) {
+    restored = await setSessionArchived({ id: entry.tab.sessionID }, false);
+    if (restored) {
+      restored = await openSavedTab(entry.tab);
+      for (const tab of entry.dependents) await openSavedTab(tab);
+      selectTab(entry.tab.id);
+    }
+  } else {
+    restored = await openSavedTab(entry.tab);
+    if (restored) {
+      for (const tab of entry.dependents) await openSavedTab(tab);
+      selectTab(entry.tab.id);
+    }
+  }
+  if (restored) closed.shift();
 }
 
 /* currentProjectID is the project the right panel works against, whichever
@@ -660,21 +688,21 @@ export async function renameSession(session, title) {
 
 /* setSessionArchived removes a session from project views and closes its tab
    without deleting it. The Sessions list keeps archived sessions so they can
-   be restored. */
-export async function setSessionArchived(session, archived, closedProjectID = null) {
+   be restored. An open session is added to the same restore stack as a
+   manually closed tab, marked so restoration first unarchives it. */
+export async function setSessionArchived(session, archived) {
   try {
     const updated = await api("PATCH", "/api/sessions/" + session.id, { done: archived });
     const tab = S.tabs.find((t) => t.kind === "session" && t.sessionID === session.id);
+    const dependents = tab ? S.tabs.filter((t) => t.owner === tab.id) : [];
     if (tab) tab.detail.session = updated;
     await Promise.all([refreshProjects(), refreshSessions()]);
     reloadProjects();
-    if (archived && tab) await closeTab(tab.id, false);
-    if (archived && closedProjectID) {
-      const closed = S.closedSessions[closedProjectID] || [];
-      S.closedSessions[closedProjectID] = [
-        session.id,
-        ...closed.filter((sessionID) => sessionID !== session.id),
-      ];
+    if (archived && tab) {
+      await closeTab(tab.id, false);
+      if (!S.tabs.some((open) => open.id === tab.id)) {
+        rememberClosedTab(projectOfTab(tab), tab, dependents, true);
+      }
     }
     return updated;
   } catch (e) {

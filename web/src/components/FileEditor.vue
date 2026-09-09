@@ -12,6 +12,7 @@ import { computed, nextTick, ref, watch } from "vue";
 
 import { editFile } from "../store";
 import { highlight, langOf } from "../highlight";
+import { useTextHistory } from "../text-history";
 
 const props = defineProps({ tab: { type: Object, required: true } });
 
@@ -25,12 +26,14 @@ const text = computed(() => props.tab.edited ?? props.tab.content ?? "");
 const lang = computed(() =>
   text.value.length > MAX_HIGHLIGHT ? "" : langOf(props.tab.path),
 );
+const history = useTextHistory(text, (value) => editFile(props.tab, value));
 
 /* The trailing newline is deliberate: without it the last line of the <pre>
    collapses and the caret sits a line above its own text. */
 const coloured = computed(() => highlight(text.value + "\n", lang.value));
 
 function onInput(e) {
+  history.input(e);
   editFile(props.tab, e.target.value);
   grow();
 }
@@ -39,12 +42,14 @@ function onInput(e) {
    Ctrl+S is not handled here — App.vue already answers it for whatever file
    is in front, and the caret being in the text changes nothing about it. */
 function onKey(e) {
+  if (history.keydown(e)) return;
   if (e.key !== "Tab" || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return;
   e.preventDefault();
   const el = e.target;
   const { selectionStart: from, selectionEnd: to } = el;
   el.value = el.value.slice(0, from) + "  " + el.value.slice(to);
   el.selectionStart = el.selectionEnd = from + 2;
+  history.input({ target: el });
   editFile(props.tab, el.value);
   grow();
 }

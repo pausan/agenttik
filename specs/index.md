@@ -16,8 +16,8 @@
 
 Status: sidebar ordering, session archiving, collapsible project session lists,
 the project-scoped Tree, fuzzy go-to navigation, global conversation closing,
-remembered open tabs, disposable empty sessions, project-scoped closed-session
-reopening, and renaming a session in its row are implemented. Earlier Go, web-unit, and
+remembered open tabs, project-scoped closed-tab reopening, prompt and file
+undo/redo, clickable usage details, and renaming a session in its row are implemented. Earlier Go, web-unit, and
 targeted Sessions/Inspector browser runs pass; this prototype update does not
 add or run tests.
 

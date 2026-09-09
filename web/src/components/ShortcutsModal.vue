@@ -14,7 +14,7 @@ const groups = [
     rows: [
       { keys: "Ctrl+N / Ctrl+T", what: "New session in the current project" },
       { keys: "Ctrl+W", what: "Close the current conversation" },
-      { keys: "Ctrl+Shift+T", what: "Restore the last closed session in this project" },
+      { keys: "Ctrl+Shift+T", what: "Restore the last closed tab in this project" },
     ],
   },
   {
@@ -41,6 +41,7 @@ const groups = [
     rows: [
       { keys: "Ctrl+S", what: "Save the file in front" },
       { keys: "Tab", what: "Indent, with the caret in a file" },
+      { keys: "Ctrl+Z / Ctrl+Y", what: "Undo / redo file edits" },
     ],
   },
   {
@@ -48,6 +49,7 @@ const groups = [
     rows: [
       { keys: "Enter", what: "Send" },
       { keys: "Shift+Enter", what: "New line" },
+      { keys: "Ctrl+Z / Ctrl+Y", what: "Undo / redo draft edits" },
     ],
   },
 ];

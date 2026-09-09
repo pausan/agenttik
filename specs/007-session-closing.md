@@ -3,11 +3,11 @@
 ## Outcome
 
 `Ctrl+N` and `Ctrl+T` start a session for the active tab's project. Closing a
-session through its tab close button or `Ctrl+W` deletes it when its transcript
-has no messages. A non-empty session is archived, which removes it from the
-project sidebar and closes its tab. `Ctrl+Shift+T` unarchives and reopens the
-most recently closed session for the active project. Archiving a session from either
-sidebar or the project page likewise closes its tab and any files it owns.
+session tab or `Ctrl+W` only closes that tab and any files it owns; the session
+remains active. `Ctrl+Shift+T` restores closed entries newest-first for the
+active project, including more than one close. Archiving a session removes it
+from the project sidebar and closes any open tab and owned files. Restoring
+that archived entry unarchives the session before reopening its tab.
 
 ## Validation
 

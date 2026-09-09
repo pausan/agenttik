@@ -6,7 +6,7 @@ import {
   S,
   closeTab,
   init,
-  reopenClosedSession,
+  reopenClosedTab,
   selectAdjacentTab,
   saveActiveFile,
   selectProjectAt,
@@ -65,7 +65,7 @@ function onKey(e) {
       if (S.owner?.kind === "session") closeTab(S.owner.id);
     } else if (e.code === "KeyT") {
       e.preventDefault();
-      if (e.shiftKey) reopenClosedSession();
+      if (e.shiftKey) reopenClosedTab();
       else startCurrentSession();
     }
     return;

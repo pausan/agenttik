@@ -15,12 +15,10 @@ the sidebar as well as the project page. The project endpoint now includes all
 open session rows, rather than a five-row subset, so a sidebar drop always sends
 the complete order.
 
-Project-session checkboxes mark a session done and it disappears from that
-project. The Sessions tab retains completed rows so they can be toggled back;
-their checked box is the only completion styling. Its filter input uses the
-same search/lens icon as Tree.
+Project-session archive icons archive a session and remove it from that project.
+The Sessions tab retains archived rows, with a right-side unarchive icon to
+restore them. Its filter input uses the same search/lens icon as Tree.
 
 ## Validation
 
-The store and browser coverage was updated to match the move. No tests were run
-for this change, as requested.
+No tests were run for this change, as requested.

@@ -41,7 +41,7 @@ test("changed lists what git reports as edited", async ({ page }) => {
 test("project stats aggregate over every session", async ({ page }) => {
   await inspector(page).getByRole("tab", { name: "Stats" }).click();
 
-  for (const row of ["Sessions", "Running now", "Turns", "Cost", "Agent time", "Last active"]) {
+  for (const row of ["Sessions", "Running now", "Turns", "Cost", "Agent time", "Last used"]) {
     await expect(inspector(page).getByText(row, { exact: true })).toBeVisible();
   }
   await expect(inspector(page).getByText("$0.0000")).toBeVisible();
@@ -59,4 +59,6 @@ test("the pane in use survives switching from a project to a session", async ({ 
     "active",
   );
   await expect(inspector(page).getByText("Permission")).toBeVisible(); // a session row, not a project one
+  await expect(inspector(page).getByText("Last used", { exact: true })).toBeVisible();
+  await expect(inspector(page).locator("dd").filter({ hasText: /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/ })).toHaveCount(2);
 });

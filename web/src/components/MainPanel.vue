@@ -58,7 +58,7 @@ const running = computed(() => !!S.detail?.running);
         </template>
         <template #trailing="{ item }">
           <span
-            class="-mr-1 inline-flex size-4 items-center justify-center rounded text-dimmed hover:bg-accented hover:text-highlighted"
+            class="-mr-1 inline-flex size-4 cursor-pointer items-center justify-center rounded text-dimmed hover:bg-accented hover:text-highlighted"
             :title="`Close ${item.label}`"
             @click.stop="closeTab(item.value)"
             >×</span

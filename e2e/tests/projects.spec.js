@@ -17,7 +17,7 @@ test("opening a project puts its panes on the right and Tree on the left", async
 
   await expect(page.getByRole("tab", { name: "agenttik" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "agenttik" })).toBeVisible();
-  await expect(page.getByText("No sessions yet in this project.")).toBeVisible();
+  await expect(page.getByText("Nothing open in this project.")).toBeVisible();
 
   for (const pane of ["Options", "Stats"]) {
     await expect(inspector(page).getByRole("tab", { name: pane })).toBeVisible();

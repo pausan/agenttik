@@ -4,10 +4,10 @@
    Rows are dragged with the browser's own drag and drop rather than pointer
    maths. The list reorders under the cursor as you go, so where the row is
    when you let go is where it lands, and the new order is sent once on drop.
-   Ticked-off sessions are not here at all — they stay in the Sessions list. */
+   Archived sessions are not here at all — they stay in the Sessions list. */
 import { ref } from "vue";
 
-import { S, markDone, openSession, reorderSessions, startSession } from "../store";
+import { S, openSession, reorderSessions, setSessionArchived, startSession } from "../store";
 import { ago } from "../api";
 import SessionRow from "./SessionRow.vue";
 
@@ -77,9 +77,9 @@ function onDrop() {
           :status="s.status"
           :sub="`${s.model}${s.effort ? ' · ' + s.effort : ''} · ${ago(s.last_active_at)}`"
           :active="S.detail?.session.id === s.id"
-          tick
+          archive
           @select="openSession(s.id)"
-          @toggle-done="markDone(s, true)"
+          @toggle-archive="setSessionArchived(s, true)"
         />
       </div>
     </div>

@@ -22,8 +22,8 @@ All timestamps are **unix milliseconds**, so turn timings need no second table.
   `claude --session-id`, so our id and the provider's match for Claude Code.
   Codex assigns its own, kept in `provider_session_id`. `source` is always
   `agenttik` today; the column exists so imported CLI history can be added later
-  without a migration. `done_at` is 0 while the session is open and the time it
-  was ticked off otherwise. `position` is the order the project session lists
+  without a migration. `done_at` is 0 while the session is active and the time it
+  was archived otherwise. `position` is the order the project session lists
   were dragged into: 0 means never dragged, which sorts a new session to the top.
 - **turns** — one row per prompt. `session_id, model, effort, started_at,
   ended_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,

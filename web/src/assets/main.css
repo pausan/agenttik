@@ -16,6 +16,12 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Buttons are actionable controls. Keep draggable rows distinct so their drag
+   affordance remains visible. */
+button:not(:disabled) { cursor: pointer; }
+button[draggable="true"] { cursor: grab; }
+button[draggable="true"]:active { cursor: grabbing; }
+
 /* A path is more readable clipped at the front than at the end, and rtl is
    the only way to move an ellipsis there. The inner span keeps the text
    itself in logical order. */

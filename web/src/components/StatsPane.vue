@@ -2,7 +2,7 @@
 import { computed } from "vue";
 
 import { S, contextWindow } from "../store";
-import { ago, cost, duration, nf, tokens } from "../api";
+import { cost, duration, isoDate, nf, tokens } from "../api";
 
 /* The context row is the last prompt's size against the model's window, not a
    sum — see ContextPane.vue, which shows the same number as a gauge. */
@@ -27,8 +27,8 @@ const rows = computed(() => {
       ["Cache write", tokens(stats.cache_write_tokens)],
       ["Cost", cost(stats.cost_usd)],
       ["Agent time", duration(stats.duration_ms)],
-      ["Last active", ago(stats.last_active_at)],
-      ["Added", new Date(project.created_at).toLocaleString()],
+      ["Last used", isoDate(stats.last_active_at)],
+      ["Added", isoDate(project.created_at)],
     ];
   }
   if (!S.detail) return [];
@@ -48,7 +48,8 @@ const rows = computed(() => {
     ["Cache write", tokens(stats.cache_write_tokens)],
     ["Cost", cost(stats.cost_usd)],
     ["Agent time", duration(stats.duration_ms)],
-    ["Started", new Date(s.created_at).toLocaleString()],
+    ["Started", isoDate(s.created_at)],
+    ["Last used", isoDate(s.last_active_at)],
   ];
 });
 </script>

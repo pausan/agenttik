@@ -39,6 +39,14 @@ export function ago(ts) {
   return Math.floor(s / 86400) + "d ago";
 }
 
+// Keep the stats panel stable across browser locales. Times are UTC, matching
+// the ISO date source while omitting the T, fractional seconds, and Z for a
+// compact `YYYY-MM-DD HH:mm:ss` display.
+export function isoDate(ts) {
+  if (!ts) return "never";
+  return new Date(ts).toISOString().slice(0, 19).replace("T", " ");
+}
+
 export function cost(usd) {
   return "$" + (usd || 0).toFixed(4);
 }

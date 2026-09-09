@@ -1,15 +1,15 @@
 <script setup>
-import { ref, watch } from "vue";
+import { nextTick, ref, watch } from "vue";
 
 import {
   S,
-  isDone,
-  markDone,
+  isArchived,
   openProject,
   openSession,
   refreshSessions,
   reorderProjects,
   reorderSidebarSessions,
+  setSessionArchived,
 } from "../store";
 import { ago } from "../api";
 import { debounce } from "../debounce";
@@ -20,12 +20,24 @@ import SessionRow from "./SessionRow.vue";
 defineEmits(["add-project", "setup"]);
 
 const tab = ref("projects");
+const sessionFilter = ref(null);
 
 const tabs = [
   { label: "Projects", value: "projects" },
   { label: "Sessions", value: "sessions" },
   { label: "Tree", value: "tree" },
 ];
+
+function show(which, focus = false) {
+  tab.value = which;
+  if (focus) nextTick(() => sessionFilter.value?.inputRef?.focus());
+}
+
+defineExpose({
+  showProjects: () => show("projects"),
+  showSessions: () => show("sessions", true),
+  showTree: () => show("tree"),
+});
 
 const windows = [
   { label: "Last day", value: "1d" },
@@ -111,7 +123,13 @@ function onSessionDrop(e) {
       size="sm"
       class="mx-2.5 mb-2 shrink-0"
       :ui="SEGMENTED"
-    />
+    >
+      <template #default="{ item }">
+        <template v-if="item.value === 'projects'"><span class="underline">P</span>rojects</template>
+        <template v-else-if="item.value === 'sessions'"><span class="underline">S</span>essions</template>
+        <template v-else><span class="underline">T</span>ree</template>
+      </template>
+    </UTabs>
 
     <!-- Projects -->
     <template v-if="tab === 'projects'">
@@ -160,9 +178,9 @@ function onSessionDrop(e) {
               :title="s.title || 'Untitled session'"
               :status="s.status"
               :active="S.detail?.session.id === s.id"
-              tick
+              archive
               @select="openSession(s.id)"
-              @toggle-done="markDone(s, true)"
+              @toggle-archive="setSessionArchived(s, true)"
             />
           </div>
         </div>
@@ -173,6 +191,7 @@ function onSessionDrop(e) {
     <template v-else-if="tab === 'sessions'">
       <div class="shrink-0 px-2.5 pb-2">
         <UInput
+          ref="sessionFilter"
           v-model="S.query"
           type="search"
           icon="i-lucide-search"
@@ -194,10 +213,10 @@ function onSessionDrop(e) {
           :status="s.status"
           :sub="`${s.project_name} · ${s.project_path} · ${ago(s.last_active_at)}`"
           :active="S.detail?.session.id === s.id"
-          :done="isDone(s)"
-          tick
+          :archived="isArchived(s)"
+          archive
           @select="openSession(s.id)"
-          @toggle-done="markDone(s, !isDone(s))"
+          @toggle-archive="setSessionArchived(s, !isArchived(s))"
         />
       </div>
     </template>
@@ -215,7 +234,7 @@ function onSessionDrop(e) {
         color="neutral"
         variant="ghost"
         icon="i-lucide-settings"
-        label="Setup"
+        label="Settings"
         @click="$emit('setup')"
       />
     </footer>

@@ -187,8 +187,7 @@ export async function openProject(id) {
   await Promise.all([refreshProjects(), refreshSessions()]).catch(fail);
 }
 
-/* The project views hide the sessions ticked off; the Sessions list keeps
-   them. */
+/* Project views hide archived sessions; the Sessions list keeps them. */
 function projectSessions(id) {
   return api("GET", `/api/sessions?window=all&project_id=${id}&include_done=false`);
 }
@@ -331,7 +330,7 @@ function sessionDefaults() {
 
 export async function startSession(project) {
   const cfg = sessionDefaults();
-  if (!cfg) return fail(new Error("No agent CLI is available. Open Setup to see why."));
+  if (!cfg) return fail(new Error("No agent CLI is available. Open Settings to see why."));
   try {
     const sess = await api("POST", "/api/sessions", { project_id: project.id, ...cfg });
     await Promise.all([refreshProjects(), refreshSessions()]);
@@ -340,6 +339,18 @@ export async function startSession(project) {
   } catch (e) {
     fail(e);
   }
+}
+
+/* startCurrentSession is the keyboard and command-palette version of the
+   project page's New session button. A session, project, or file tab all
+   identify their owning project. */
+export function startCurrentSession() {
+  const id = currentProjectID();
+  const project = S.project?.project?.id === id
+    ? S.project.project
+    : S.projects.find((p) => p.id === id);
+  if (!project) return fail(new Error("Open a project or session first."));
+  return startSession(project);
 }
 
 export async function openSession(id) {
@@ -374,11 +385,11 @@ export async function setModel(model, effort) {
   }
 }
 
-/* markDone ticks a session off. It leaves the project views and stays in the
-   Sessions list, which is where it can be brought back. */
-export async function markDone(session, done) {
+/* setSessionArchived removes a session from project views without deleting
+   it. The Sessions list keeps archived sessions so they can be restored. */
+export async function setSessionArchived(session, archived) {
   try {
-    const updated = await api("PATCH", "/api/sessions/" + session.id, { done });
+    const updated = await api("PATCH", "/api/sessions/" + session.id, { done: archived });
     const tab = S.tabs.find((t) => t.kind === "session" && t.sessionID === session.id);
     if (tab) tab.detail.session = updated;
     await Promise.all([refreshProjects(), refreshSessions()]);
@@ -388,7 +399,7 @@ export async function markDone(session, done) {
   }
 }
 
-export function isDone(session) {
+export function isArchived(session) {
   return !!session?.done_at;
 }
 

@@ -28,7 +28,7 @@ async function star(provider, model, effort) {
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Setup" :ui="{ content: 'max-w-2xl' }">
+  <UModal v-model:open="open" title="Settings" :ui="{ content: 'max-w-2xl' }">
     <template #body>
       <p class="mb-3.5 text-xs text-dimmed">
         Star the model and effort combinations you use. Starred ones come first in the model

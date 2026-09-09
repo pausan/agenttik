@@ -5,7 +5,7 @@ test("a new session asks nothing and opens ready to prompt", async ({ page }) =>
   await openProject(page);
   await page.getByRole("button", { name: "New session" }).first().click();
 
-  await expect(page.getByRole("tab", { name: "Conversation" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "New session" })).toBeVisible();
   await expect(page.getByPlaceholder("Ask the agent…")).toBeVisible();
   await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
   await expect(page.getByRole("button", { name: "Stop" })).toBeHidden();
@@ -30,7 +30,7 @@ test("an empty prompt sends nothing", async ({ page }) => {
 });
 
 test("setup lists the providers and whether their CLI is installed", async ({ page }) => {
-  await page.getByRole("button", { name: "Setup" }).click();
+  await page.getByRole("button", { name: "Settings" }).click();
 
   await expect(page.getByText("Claude Code", { exact: true })).toBeVisible();
   await expect(page.getByText("Codex", { exact: true })).toBeVisible();
@@ -40,7 +40,7 @@ test("setup lists the providers and whether their CLI is installed", async ({ pa
 });
 
 test("a starred model and effort heads the picker and sets both at once", async ({ page }) => {
-  await page.getByRole("button", { name: "Setup" }).click();
+  await page.getByRole("button", { name: "Settings" }).click();
   const chip = page.getByRole("button", { name: "xhigh", exact: true }).first();
   await chip.click();
   await expect(page.getByRole("button", { name: "★ xhigh", exact: true }).first()).toBeVisible();
@@ -82,4 +82,20 @@ test("the transcript follows the session, and the prompt bar goes away with it",
   await openProject(page);
   await expect(page.getByPlaceholder("Ask the agent…")).toBeHidden();
   await expect(page.getByText("1 session", { exact: true })).toBeVisible();
+});
+
+test("Ctrl+W closes the current conversation and leaves project views alone", async ({ page }) => {
+  await addProject(page);
+  await openProject(page);
+
+  // The browser tab remains open and a project is not a conversation.
+  await page.keyboard.press("Control+w");
+  await expect(page.getByRole("heading", { name: "agenttik" })).toBeVisible();
+
+  await page.getByRole("button", { name: "New session" }).first().click();
+  await expect(page.getByPlaceholder("Ask the agent…")).toBeVisible();
+  await page.keyboard.press("Control+w");
+
+  await expect(page.getByPlaceholder("Ask the agent…")).toBeHidden();
+  await expect(page.getByRole("heading", { name: "agenttik" })).toBeVisible();
 });

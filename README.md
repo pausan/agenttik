@@ -78,10 +78,14 @@ not expose it.
 3. **Prompt** — the reply streams into the transcript. Star a model + effort
    combination and it sorts to the top of the picker next time.
 
-The right panel carries **Stats** (tokens, cost, agent time, turn count) and
-**Changed** (files git reports as edited). The left panel's **Tree** tab shows
+The right panel carries **Changed** (files git reports as edited), **Logs**
+(the branch's commits, each expanding into the files it touched) and **Stats**
+(tokens, cost, agent time, turn count). The left panel's **Tree** tab shows
 the repo for the active conversation or selected project; clicking a file opens
 it as a tab beside the conversation.
+
+In a transcript, any message can be copied and your own prompts can be edited
+in place, which continues the conversation from that point.
 
 ## Permission modes
 

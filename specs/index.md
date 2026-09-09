@@ -17,38 +17,22 @@
 | [013-project-logs.md](013-project-logs.md) | The Logs pane, commit files, commit diffs |
 | [014-transcript-messages.md](014-transcript-messages.md) | Copying messages, editing a prompt in place |
 
-Status: sidebar ordering, session archiving, collapsible project session lists,
-the project-scoped Tree, fuzzy go-to navigation, global conversation closing,
+Status: the Logs pane and its commit diffs, transcript message copying and
+prompt editing, and the Claude Code subscription allowance are implemented and
+browser-checked — see 013, 014 and 011 for what each was verified against.
+Sidebar ordering, session archiving, collapsible project session lists, the
+project-scoped Tree, fuzzy go-to navigation, global conversation closing,
 remembered open tabs, project-scoped closed-tab reopening, prompt and file
-undo/redo, clickable usage details, and renaming a session in its row are implemented. Earlier Go, web-unit, and
-targeted Sessions/Inspector browser runs pass; this prototype update does not
-add or run tests.
+undo/redo, clickable usage details, renaming a session in its row, the
+per-project tab strip, the file tab's three views, and queued prompts are all
+implemented.
 
-Written but not yet run: stepping the tab strip with Ctrl+PageUp/PageDown, the
-shortcut list under the sidebar, focusing the Sessions and Tree filters when
-their pane is shown, a project page handing its tab over to the session started
-from it, and the per-project tab strip — draggable tabs in three coloured
-groups, Alt+A…H to switch project, the pulsing dot and shortcut letter on a
-project row, and a per-session prompt draft. The accent and grey pickers in
-Settings are the same.
-
-Also written, not compiled: the file tab's three views. `Edit | Diff |
-Preview` replaces `File | Diff` — an in-place editor with hand-written syntax
-colouring, a `*` and a Save button over `PUT /api/projects/:id/file`, and a
-Save / Don't save / Continue editing dialog on close; the diff as unified or
-side by side; markdown and HTML preview. A file tab now carries its own status
-bar instead of the conversation's prompt box.
-
-None of it has been compiled: `make ui`, `go vet` and a browser check are
-still to run.
-
-Also changed, not compiled or run: workspace sessions now pass
-`--permission-mode auto` instead of `acceptEdits`, so a Claude Code session can
-run commands rather than only edit files. `go test ./app/internal/agent/...`
-and a check that a session actually commits are still to run.
+`go build ./...`, `go vet ./...`, `make ui` and the web unit tests (32) pass.
+Two Go tests fail and did so before this work: `TestDoneReachesProjectTopic`
+in runner and `TestReorderSessionsDrivesProjectOrder` in store.
 
 Claude Code sessions stream into the transcript, record per-turn token metrics,
-and resume across turns. The Codex provider is implemented against the current
-CLI JSONL contract and compiles; its picker exposes Astra, Sol, Terra, and Luna
-with their supported reasoning efforts. Its billable live-turn check remains pending.
-Several sessions can be open at once, each streaming into its own tab.
+report their context window and subscription allowance, and resume across
+turns. The Codex provider is implemented against the current CLI JSONL
+contract and its app-server allowance query answers live; its billable
+live-turn check remains pending.

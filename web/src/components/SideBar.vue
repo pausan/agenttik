@@ -1,9 +1,10 @@
 <script setup>
-import { nextTick, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 
 import {
   PROJECT_KEYS,
   S,
+  TAB_CHORDS,
   isArchived,
   openProject,
   openSession,
@@ -77,6 +78,26 @@ function toggleProject(id) {
 /* The first eight rows answer to Alt and a letter, so the letter is where the
    row is, and dragging a project changes it. */
 const projectKey = (i) => PROJECT_KEYS[i] || "";
+
+/* A number in the sidebar means the same as the same number on the tab strip:
+   Alt and that digit go there. So it is the session's place in the strip, not
+   its place in this list — the strip also holds the project page and any open
+   files, and a session that is not open has no number at all.
+
+   One pass over the strip rather than a lookup per row, since the sidebar is
+   redrawn whenever a tab changes. */
+const numbers = computed(() => {
+  const found = new Map();
+  S.strip.slice(0, TAB_CHORDS).forEach((t, i) => {
+    if (t.kind === "session") found.set(t.sessionID, i + 1);
+  });
+  return found;
+});
+
+/* Rows of the selected project keep the number column even when nothing
+   reaches them, so the titles line up. Other projects have no strip. */
+const sessionNumber = (project, session) =>
+  S.activeProjectID === project.id ? numbers.value.get(session.id) || 0 : null;
 
 /* A project is lit while any of its sessions is mid-turn, whether or not that
    conversation is the one on screen. */
@@ -229,7 +250,7 @@ function onSessionDrop(e) {
           </div>
           <div
             v-if="!collapsedProjects.has(p.id)"
-            v-for="(s, sessionIndex) in p.recent_sessions"
+            v-for="s in p.recent_sessions"
             :key="s.id"
             :class="[
               draggingSession?.sessionID === s.id ? 'opacity-40' : '',
@@ -246,7 +267,7 @@ function onSessionDrop(e) {
               :status="s.status"
               :queued="s.queue_count"
               :active="S.detail?.session.id === s.id"
-              :number="S.activeProjectID === p.id ? sessionIndex + 1 : 0"
+              :number="sessionNumber(p, s)"
               archive
               @select="openSession(s.id)"
               @toggle-archive="setSessionArchived(s, true)"

@@ -13,7 +13,9 @@ const props = defineProps({
   title: { type: String, default: "" },
   status: { type: String, default: "idle" },
   sub: { type: String, default: "" },
-  number: { type: Number, default: 0 },
+  // null keeps the row out of a numbered list. 0 is a row in one that no
+  // chord reaches, and holds the column so the titles still line up.
+  number: { type: Number, default: null },
   active: Boolean,
   archived: Boolean,
   archive: Boolean,
@@ -76,7 +78,12 @@ function commit() {
           class="flex items-center gap-2 overflow-hidden"
           :class="active ? 'text-primary' : 'text-highlighted'"
         >
-          <span v-if="number" class="w-3 shrink-0 font-mono text-[10px] text-dimmed tabular-nums">{{ number }}</span>
+          <span
+            v-if="number !== null"
+            class="w-3 shrink-0 font-mono text-[10px] text-dimmed tabular-nums"
+            aria-hidden="true"
+            >{{ number || "" }}</span
+          >
           <StatusDot :status="status" />
           <span v-if="queued" class="shrink-0" title="Queued prompt">🕒</span>
           <span class="truncate">{{ title || "Untitled session" }}</span>

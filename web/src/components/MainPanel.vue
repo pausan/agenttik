@@ -6,7 +6,15 @@
    tab now sits, so rearranging changes what Alt+1 … Alt+9 reach. */
 import { computed, ref } from "vue";
 
-import { S, closeTab, moveTab, persistTabOrder, selectTab, startCurrentSession } from "../store";
+import {
+  S,
+  TAB_CHORDS,
+  closeTab,
+  moveTab,
+  persistTabOrder,
+  selectTab,
+  startCurrentSession,
+} from "../store";
 import Transcript from "./Transcript.vue";
 import ProjectView from "./ProjectView.vue";
 import FileView from "./FileView.vue";
@@ -35,9 +43,9 @@ const items = computed(() =>
       t.kind === "session" && t.label.length > MAX_SESSION_LABEL
         ? t.label.slice(0, MAX_SESSION_LABEL - 3) + "..."
         : t.label,
-    title: t.label + (i < 9 ? `  (Alt+${i + 1})` : ""),
+    title: t.label + (i < TAB_CHORDS ? `  (Alt+${i + 1})` : ""),
     // Only the first nine are one chord away, so only those show a number.
-    hint: i < 9 ? String(i + 1) : "",
+    hint: i < TAB_CHORDS ? String(i + 1) : "",
     running: t.kind === "session" && t.detail.running,
     colors: KINDS[t.kind],
   })),

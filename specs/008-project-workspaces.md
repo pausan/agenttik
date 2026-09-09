@@ -24,10 +24,14 @@ letter too. Both are read from the physical key code.
 The sidebar is the canonical order for a project's sessions. New sessions get
 the next position, so their row is last. The project page and the session-tab
 subset are kept in that order whenever either is dragged, then one
-project-session order request is sent at drop. Selected-project rows show their
-matching one-based number. Session tab labels are shortened to 20 characters
-with `...`; project and file tabs keep their complete names and scroll
-horizontally when needed.
+project-session order request is sent at drop. Session tab labels are shortened
+to 20 characters with `...`; project and file tabs keep their complete names and
+scroll horizontally when needed.
+
+A sidebar row of the selected project carries the number of its tab rather than
+its place in the list, so the digit there is the digit that reaches it. Rows
+whose conversation is not open, or that sit past the ninth tab, keep the blank
+column; rows of every other project have no column at all.
 
 A project row shows its letter dimmed in front of the name, is highlighted when
 selected, and pulses a dot on the right while any of its sessions is mid-turn —
@@ -55,6 +59,13 @@ insertion rule touches only insertion and the strip. The array holds every
 project's tabs interleaved, and the invariant is that a new tab follows every
 tab already open in its project.
 
+**The sidebar number is the tab number.** It used to be the row's own place in
+the list, which read as an `Alt` chord and was not one: the strip counts the
+project page and open files too, and numbered rows for conversations that were
+not open at all. Positions in the two lists cannot be made to agree — the strip
+is a subset with two other kinds of tab in it — so a row shows the strip's
+number or nothing.
+
 **A file tab carries its project id.** It used to be derived from the view it
 was opened from, which is nothing once that view closes — and files can now be
 opened from the Tree with no tab open at all, since the right panel and Tree
@@ -69,3 +80,9 @@ label, so a tab is addressable by its full name.
 
 `git diff --check` passed. Tests and builds were not run, per the current
 prototype policy.
+
+The numbering was browser-checked on a fresh database with three named
+conversations. With only the project page open every sidebar row showed a blank
+column; opening two of them numbered those rows 2 and 3, matching the strip,
+and `Alt+1`/`Alt+2`/`Alt+3` selected the page, the first and the second. The
+page logged no errors.

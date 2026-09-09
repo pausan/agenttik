@@ -31,6 +31,10 @@ const LAYOUT_LIMITS = { left: [180, 520], right: [200, 620] };
    sidebar get one, so dragging a project changes its letter. */
 export const PROJECT_KEYS = "ABCDEFGH";
 
+/* Alt+1 … Alt+9 reach the first nine tabs of the strip, so those are the only
+   tabs — and the only sidebar rows — that carry a number. */
+export const TAB_CHORDS = 9;
+
 export const S = reactive({
   providers: [],
   stars: [],

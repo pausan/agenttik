@@ -12,6 +12,13 @@ bubble per waiting prompt under the working indicator, each with a timer of how
 long it has waited. Without it, clicking into a session said nothing about the
 text that had been accepted.
 
+While that same session is active, each waiting prompt also offers **Force
+send**. It stops the current turn, then runs the selected prompt next in that
+provider conversation. A running CLI cannot safely accept another prompt in
+place, so this is deliberately an interruption rather than an in-turn message.
+The selected prompt remains queued until its replacement turn starts, which
+keeps it visible if cancellation or startup fails.
+
 Session detail carries the queue, so opening a session or reloading the page
 shows it. The POST that queues a prompt answers with the queue *after*
 scheduling, so a prompt the scheduler took straight away is never drawn as
@@ -33,3 +40,9 @@ turn stays running and the scheduler leaves the queue alone: two prompts queued
 back to back both appear, oldest first, their timers tick, they survive a
 reload, and stopping the turn moves the first into the transcript as a prompt
 while the second keeps waiting. No console or page errors.
+
+## Force-send validation
+
+`go build ./...` and `make ui` passed. Tests were not run, per the prototype
+workflow. Force send cancels the active turn, then the runner claims the chosen
+queued row before normal scheduling resumes.

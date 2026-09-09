@@ -319,6 +319,24 @@ func (s *Server) enqueueMessage(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"queued": queued, "queue_count": len(queued)})
 }
 
+// forceQueuedMessage interrupts this session's active turn and runs the
+// selected queued prompt next in the same provider conversation.
+func (s *Server) forceQueuedMessage(c *fiber.Ctx) error {
+	var body struct {
+		QueuedID int64 `json:"queued_id"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return badRequest("invalid body: %v", err)
+	}
+	if body.QueuedID <= 0 {
+		return badRequest("queued_id is required")
+	}
+	if err := s.runner.ForceQueued(c.Params("id"), body.QueuedID); err != nil {
+		return err
+	}
+	return c.SendStatus(fiber.StatusAccepted)
+}
+
 func (s *Server) stopSession(c *fiber.Ctx) error {
 	if err := s.runner.Stop(c.Params("id")); err != nil {
 		return err

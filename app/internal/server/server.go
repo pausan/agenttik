@@ -106,6 +106,7 @@ func (s *Server) routes() {
 	api.Post("/sessions/:id/messages", s.postMessage)
 	api.Post("/sessions/:id/messages/:message/edit", s.editMessage)
 	api.Post("/sessions/:id/queue", s.enqueueMessage)
+	api.Post("/sessions/:id/queue/force", s.forceQueuedMessage)
 	api.Post("/sessions/:id/stop", s.stopSession)
 
 	// One stream for every open tab. See streamAll.
@@ -150,6 +151,8 @@ func errorHandler(c *fiber.Ctx, err error) error {
 	case errors.Is(err, runner.ErrBusy):
 		code = fiber.StatusConflict
 	case errors.Is(err, runner.ErrNotRunning):
+		code = fiber.StatusConflict
+	case errors.Is(err, runner.ErrForcePending):
 		code = fiber.StatusConflict
 	case errors.Is(err, agent.ErrNotImplemented):
 		code = fiber.StatusNotImplemented

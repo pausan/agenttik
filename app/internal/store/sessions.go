@@ -239,6 +239,21 @@ func (s *Store) NextQueuedMessage(sessionID string) (*QueuedMessage, error) {
 	return v, nil
 }
 
+// GetQueuedMessage returns one waiting prompt. Its session id lets callers
+// verify that a queue item belongs to the session they are acting on.
+func (s *Store) GetQueuedMessage(id int64) (*QueuedMessage, error) {
+	v := &QueuedMessage{}
+	err := s.db.QueryRow(`SELECT id, session_id, prompt, created_at FROM queued_messages WHERE id = ?`, id).
+		Scan(&v.ID, &v.SessionID, &v.Prompt, &v.CreatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get queued message %d: %w", id, err)
+	}
+	return v, nil
+}
+
 // ListQueuedMessages returns everything still waiting in one session, oldest
 // first, which is the order the scheduler will run them in. Always a slice, so
 // the transcript can iterate it without a guard.

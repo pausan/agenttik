@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
-import { S } from "../store";
+import { forceQueued, S } from "../store";
 import Message from "./Message.vue";
 
 const box = ref(null);
@@ -21,9 +21,21 @@ const clockFace = computed(() => CLOCK_FACES[Math.floor(now.value / 250) % CLOCK
 /* Queued prompts are drawn under the transcript, each with how long it has
    been waiting, so opening a session shows the text that is going to run. */
 const queued = computed(() => S.detail?.queued || []);
+const forcing = ref(0);
 function waitLabel(since) {
   const secs = Math.max(0, Math.floor((now.value - Number(since || 0)) / 1000));
   return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
+}
+
+async function force(q) {
+  forcing.value = q.id;
+  try {
+    await forceQueued(q.id);
+  } catch {
+    /* forceQueued has already shown the failure */
+  } finally {
+    forcing.value = 0;
+  }
 }
 
 /* The POST response normally supplies the running turn right away. The local
@@ -81,6 +93,18 @@ watch(
         >
           {{ q.prompt }}
         </div>
+        <UButton
+          v-if="S.detail.running"
+          class="mt-1"
+          color="warning"
+          variant="ghost"
+          size="xs"
+          label="Force send"
+          :loading="forcing === q.id"
+          :disabled="forcing !== 0"
+          title="Stop the current turn and send this queued prompt next"
+          @click="force(q)"
+        />
       </div>
     </div>
   </div>

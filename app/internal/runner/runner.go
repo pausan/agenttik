@@ -18,6 +18,7 @@ import (
 var (
 	ErrBusy            = errors.New("session already has a turn running")
 	ErrNotRunning      = errors.New("session has no running turn")
+	ErrForcePending    = errors.New("session already has a forced prompt pending")
 	ErrUnknownProvider = errors.New("unknown provider")
 )
 
@@ -43,11 +44,13 @@ type Runner struct {
 	mu     sync.Mutex
 	active map[string]context.CancelFunc // session id -> cancel
 	sched  map[int64]*sync.Mutex         // project id -> serializes queue dispatch
+	forced map[string]int64              // session id -> queued message to run next
 }
 
 func New(s *store.Store, reg *agent.Registry, hub *Hub) *Runner {
 	return &Runner{store: s, registry: reg, hub: hub,
-		active: make(map[string]context.CancelFunc), sched: make(map[int64]*sync.Mutex)}
+		active: make(map[string]context.CancelFunc), sched: make(map[int64]*sync.Mutex),
+		forced: make(map[string]int64)}
 }
 
 func (r *Runner) Hub() *Hub { return r.hub }
@@ -89,9 +92,15 @@ func (r *Runner) Send(sessionID, prompt string) (*store.Turn, error) {
 	release := func() {
 		r.mu.Lock()
 		delete(r.active, sessionID)
+		forcedID, forced := r.forced[sessionID]
+		delete(r.forced, sessionID)
 		r.mu.Unlock()
 		cancel()
-		go r.schedule(sess.ProjectID, sessionID)
+		if forced {
+			go r.runForced(sess.ProjectID, sessionID, forcedID)
+		} else {
+			go r.schedule(sess.ProjectID, sessionID)
+		}
 	}
 
 	// The first prompt names the session.
@@ -161,6 +170,46 @@ func (r *Runner) Enqueue(sessionID, prompt string) ([]store.QueuedMessage, error
 	}
 	r.schedule(sess.ProjectID, "")
 	return r.store.ListQueuedMessages(sessionID)
+}
+
+// ForceQueued stops this session's current turn and makes one of its waiting
+// prompts the next turn. The message stays in the queue until Send has
+// accepted it, so a failed launch cannot lose it.
+func (r *Runner) ForceQueued(sessionID string, queuedID int64) error {
+	queued, err := r.store.GetQueuedMessage(queuedID)
+	if err != nil {
+		return err
+	}
+	if queued.SessionID != sessionID {
+		return store.ErrNotFound
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, pending := r.forced[sessionID]; pending {
+		return ErrForcePending
+	}
+	cancel, running := r.active[sessionID]
+	if !running {
+		return ErrNotRunning
+	}
+	r.forced[sessionID] = queuedID
+	cancel()
+	return nil
+}
+
+// runForced starts the chosen queued prompt after the cancelled turn has
+// fully released its provider process. It bypasses normal project ordering
+// exactly once; the rest of the queue resumes its ordinary scheduler order.
+func (r *Runner) runForced(projectID int64, sessionID string, queuedID int64) {
+	queued, err := r.store.GetQueuedMessage(queuedID)
+	if err == nil && queued.SessionID == sessionID {
+		if _, err := r.Send(sessionID, queued.Prompt); err == nil {
+			_ = r.store.RemoveQueuedMessage(queued.ID)
+			return
+		}
+	}
+	r.schedule(projectID, sessionID)
 }
 
 // dispatchLock serializes queue dispatch within one project. One lock per

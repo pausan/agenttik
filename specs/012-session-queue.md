@@ -2,7 +2,7 @@
 
 ## Outcome
 
-A prompt can be queued with the Send menu or Alt+Q. Queued prompts are persisted and marked with a clock in session lists.
+A prompt can be queued with the Send menu or Alt+Enter. Queued prompts are persisted and marked with a clock in session lists.
 
 Each project runs queued prompts only after its active turns finish. The scheduler keeps draining the session that just ran while it has queued prompts; otherwise it scans the projects open sessions from top to bottom.
 

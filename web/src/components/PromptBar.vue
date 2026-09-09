@@ -182,7 +182,7 @@ function enqueuePrompt() {
 }
 
 function onPromptKey(e) {
-  if (e.altKey && !e.ctrlKey && !e.metaKey && e.key.toLowerCase() === "q") {
+  if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && e.key === "Enter") {
     e.preventDefault();
     enqueuePrompt();
     return;
@@ -303,7 +303,7 @@ function onPromptKey(e) {
       </div>
     </div>
     <p class="mx-auto mt-1.5 max-w-[860px] px-1 text-xs text-dimmed">
-      <UKbd value="enter" /> to send · <UKbd value="alt" /><UKbd value="q" /> to enqueue · <UKbd value="shift" /><UKbd value="enter" /> for a newline
+      <UKbd value="enter" /> to send · <UKbd value="alt" /><UKbd value="enter" /> to enqueue · <UKbd value="shift" /><UKbd value="enter" /> for a newline
     </p>
   </form>
 </template>

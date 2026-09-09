@@ -38,7 +38,7 @@ watch(
 );
 
 onMounted(() => {
-  clock = window.setInterval(() => (now.value = Date.now()), 1000);
+  clock = window.setInterval(() => (now.value = Date.now()), 250);
 });
 onUnmounted(() => window.clearInterval(clock));
 

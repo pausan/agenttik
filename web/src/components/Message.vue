@@ -5,9 +5,14 @@
    grows the last message a few characters at a time, and if the bubbles were
    inlined in the transcript's v-for every one of them would be re-rendered —
    and re-parsed as markdown — on every delta. Here only the message whose
-   content changed re-renders, and its computed markdown is what re-runs. */
-import { computed } from "vue";
+   content changed re-renders, and its computed markdown is what re-runs.
 
+   Every message can be copied. Only your own prompts can be edited, and only
+   once they have been stored: a message still arriving over the stream has no
+   id to rewrite. */
+import { computed, nextTick, ref } from "vue";
+
+import { S, copyText, editMessage } from "../store";
 import { markdown } from "../markdown";
 
 const props = defineProps({ message: { type: Object, required: true } });
@@ -36,14 +41,112 @@ const classes = computed(() => [
   BUBBLE[props.message.role],
   props.message.streaming ? "streaming" : "",
 ]);
+
+const editable = computed(
+  () => props.message.role === "user" && !!props.message.id && !props.message.streaming,
+);
+
+const copied = ref(false);
+async function copy() {
+  if (!(await copyText(props.message.content))) return;
+  copied.value = true;
+  window.setTimeout(() => (copied.value = false), 1200);
+}
+
+const draft = ref(null); // non-null while editing
+const box = ref(null);
+const sending = ref(false);
+
+async function startEdit() {
+  draft.value = props.message.content;
+  await nextTick();
+  box.value?.textareaRef?.focus();
+}
+
+async function submit() {
+  if (sending.value) return;
+  sending.value = true;
+  const sent = await editMessage(props.message, draft.value);
+  sending.value = false;
+  // On success this bubble is about to be replaced by the truncation, so the
+  // editor is only closed when it is still here to close.
+  if (sent) draft.value = null;
+}
+
+function onKey(e) {
+  if (e.key === "Escape") draft.value = null;
+}
 </script>
 
 <template>
-  <div class="mb-4" :class="message.role === 'user' ? 'flex flex-col items-end' : ''">
-    <div class="mb-0.5 text-[11px] font-medium tracking-wider text-dimmed uppercase">
-      {{ WHO[message.role] || message.role }}
+  <div class="group mb-4" :class="message.role === 'user' ? 'flex flex-col items-end' : ''">
+    <div
+      class="mb-0.5 flex items-center gap-1.5"
+      :class="message.role === 'user' ? 'flex-row-reverse' : ''"
+    >
+      <span class="text-[11px] font-medium tracking-wider text-dimmed uppercase">
+        {{ WHO[message.role] || message.role }}
+      </span>
+      <!-- The actions stay in the layout and only appear on hover, so a
+           bubble does not shift when the pointer reaches it. -->
+      <span
+        class="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100"
+      >
+        <UButton
+          :icon="copied ? 'i-lucide-check' : 'i-lucide-copy'"
+          size="xs"
+          color="neutral"
+          variant="ghost"
+          :aria-label="`Copy ${WHO[message.role] || message.role} message`"
+          title="Copy"
+          @click="copy"
+        />
+        <UButton
+          v-if="editable"
+          icon="i-lucide-pencil"
+          size="xs"
+          color="neutral"
+          variant="ghost"
+          :disabled="draft !== null || S.detail?.running"
+          aria-label="Edit this prompt"
+          title="Edit and continue from here"
+          @click="startEdit"
+        />
+      </span>
     </div>
-    <div v-if="rendered" :class="classes" v-html="html" />
-    <div v-else :class="classes">{{ message.content }}</div>
+
+    <!-- Editing replaces the bubble in place, so the prompt is rewritten
+         where it sits rather than in a dialogue over the transcript. -->
+    <form v-if="draft !== null" class="w-full max-w-[85%] self-end" @submit.prevent="submit">
+      <UTextarea
+        ref="box"
+        v-model="draft"
+        :rows="4"
+        autoresize
+        class="w-full"
+        @keydown="onKey"
+        @keydown.enter.exact.prevent="submit"
+      />
+      <div class="mt-1.5 flex items-center gap-2">
+        <UButton type="submit" size="xs" :loading="sending" :disabled="!draft.trim()" label="Send" />
+        <UButton
+          type="button"
+          size="xs"
+          color="neutral"
+          variant="ghost"
+          label="Cancel"
+          @click="draft = null"
+        />
+        <span class="text-[11px] leading-snug text-dimmed">
+          Replaces the transcript from here down. The agent keeps its own memory
+          of the turns after this one, and files on disk are left as they are.
+        </span>
+      </div>
+    </form>
+
+    <template v-else>
+      <div v-if="rendered" :class="classes" v-html="html" />
+      <div v-else :class="classes">{{ message.content }}</div>
+    </template>
   </div>
 </template>

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/pausan/agenttik/app/internal/agent"
+	"github.com/pausan/agenttik/app/internal/runner"
 	"github.com/pausan/agenttik/app/internal/store"
 )
 
@@ -232,6 +234,60 @@ func (s *Server) postMessage(c *fiber.Ctx) error {
 		return badRequest("prompt is required")
 	}
 	turn, err := s.runner.Send(c.Params("id"), body.Prompt)
+	if err != nil {
+		return err
+	}
+	return c.Status(fiber.StatusAccepted).JSON(turn)
+}
+
+// editMessage rewrites one of your own prompts and carries on from there. The
+// transcript is truncated at that message and the new text is sent as an
+// ordinary turn.
+//
+// What this cannot do is rewind the agent. Continuity is the provider's own
+// session id and neither CLI offers a way to truncate its history, so the
+// agent still remembers the exchange that left our transcript — it reads the
+// edit as "I meant this instead", which is the useful half of the intent.
+// Nothing on disk is reverted either: the files are whatever the earlier turns
+// left behind. The UI says both before you commit to it.
+func (s *Server) editMessage(c *fiber.Ctx) error {
+	sessionID := c.Params("id")
+	if _, err := s.store.GetSession(sessionID); err != nil {
+		return err
+	}
+	messageID, err := strconv.ParseInt(c.Params("message"), 10, 64)
+	if err != nil {
+		return badRequest("invalid message id")
+	}
+	var body struct {
+		Prompt string `json:"prompt"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return badRequest("invalid body: %v", err)
+	}
+	if strings.TrimSpace(body.Prompt) == "" {
+		return badRequest("prompt is required")
+	}
+
+	message, err := s.store.GetMessage(messageID)
+	if err != nil {
+		return err
+	}
+	if message.SessionID != sessionID {
+		return badRequest("message %d belongs to another session", messageID)
+	}
+	if message.Role != store.RoleUser {
+		return badRequest("only your own prompts can be edited")
+	}
+	// Refuse before deleting anything: a busy session would otherwise lose the
+	// tail of its transcript and not get a turn for it.
+	if s.runner.Running(sessionID) {
+		return runner.ErrBusy
+	}
+	if err := s.store.DeleteMessagesFrom(sessionID, messageID); err != nil {
+		return err
+	}
+	turn, err := s.runner.Send(sessionID, body.Prompt)
 	if err != nil {
 		return err
 	}

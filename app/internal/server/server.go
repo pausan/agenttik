@@ -104,6 +104,7 @@ func (s *Server) routes() {
 	api.Delete("/sessions/:id", s.deleteSession)
 	api.Patch("/sessions/:id", s.updateSession)
 	api.Post("/sessions/:id/messages", s.postMessage)
+	api.Post("/sessions/:id/messages/:message/edit", s.editMessage)
 	api.Post("/sessions/:id/queue", s.enqueueMessage)
 	api.Post("/sessions/:id/stop", s.stopSession)
 

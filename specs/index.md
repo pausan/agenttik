@@ -15,6 +15,7 @@
 | [011-prompt-bar-usage.md](011-prompt-bar-usage.md) | Fuzzy models, context ring, subscription allowance |
 | [012-session-queue.md](012-session-queue.md) | Queued prompts and project scheduling |
 | [013-project-logs.md](013-project-logs.md) | The Logs pane, commit files, commit diffs |
+| [014-transcript-messages.md](014-transcript-messages.md) | Copying messages, editing a prompt in place |
 
 Status: sidebar ordering, session archiving, collapsible project session lists,
 the project-scoped Tree, fuzzy go-to navigation, global conversation closing,

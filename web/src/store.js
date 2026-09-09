@@ -1232,6 +1232,10 @@ function onSessionEvent(tab, msg) {
       if (msg.stats) {
         tab.detail.stats = msg.stats;
         tab.detail.running = false;
+        // The transcript grown from the stream has no message ids, and editing
+        // a prompt needs one. Re-reading it at the end of a turn is also what
+        // reconciles anything the stream and the store disagree about.
+        syncMessages(tab);
         if (tab.id === S.owner?.id) {
           refreshChanged();
           // A turn that commits has changed the history as well as the tree.
@@ -1272,6 +1276,65 @@ function startLocal(tab, prompt, turn) {
   if (turn && !tab.detail.turns.some((current) => current.id === turn.id)) tab.detail.turns.push(turn);
   if (prompt && tab.detail.messages.at(-1)?.content !== prompt) push(tab, "user", prompt);
   tab.detail.running = true;
+}
+
+/* syncMessages replaces a tab's transcript with the stored one. Streamed
+   messages are built locally and carry no ids; the stored rows do, which is
+   what makes a prompt editable. */
+async function syncMessages(tab) {
+  try {
+    const detail = await api("GET", "/api/sessions/" + tab.sessionID);
+    // The tab can have been closed, or a new turn started, while we waited.
+    if (!S.tabs.some((open) => open.id === tab.id)) return;
+    tab.detail.messages = detail.messages;
+    tab.detail.turns = detail.turns;
+  } catch {
+    /* the transcript on screen is still the one the stream produced */
+  }
+}
+
+/* editMessage rewrites one of your own prompts and continues from there: the
+   transcript is truncated at that message and the new text is sent as a turn.
+
+   Two things it does not do, both of which the UI says out loud. The agent is
+   not rewound — continuity is the provider's own session id and neither CLI
+   can truncate its history, so it still remembers the exchange that left the
+   transcript and reads the edit as "I meant this instead". And nothing on disk
+   is reverted: the files are whatever the earlier turns left behind. */
+export async function editMessage(message, prompt) {
+  const tab = S.owner;
+  if (tab?.kind !== "session" || !message?.id) return false;
+  prompt = prompt.trim();
+  if (!prompt) return false;
+  try {
+    const turn = await api(
+      "POST",
+      `/api/sessions/${tab.sessionID}/messages/${message.id}/edit`,
+      { prompt },
+    );
+    const at = tab.detail.messages.findIndex((m) => m.id === message.id);
+    if (at >= 0) tab.detail.messages.splice(at);
+    startLocal(tab, prompt, turn);
+    refreshSessions();
+    refreshProjects();
+    return true;
+  } catch (e) {
+    fail(e);
+    return false;
+  }
+}
+
+/* copyText is the transcript's copy button. The clipboard is only reachable
+   from a secure context, which loopback counts as, but a refusal should say
+   so rather than look like nothing happened. */
+export async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(String(text ?? ""));
+    return true;
+  } catch (e) {
+    fail(e);
+    return false;
+  }
 }
 
 export async function send(prompt) {

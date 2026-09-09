@@ -50,7 +50,8 @@ make build-web  # UI + server only  -> bin/agenttik-web  (CGO_ENABLED=0)
 make run-web    # build and serve on http://127.0.0.1:7717
 
 make ui         # just the UI    -> web/dist
-make test
+make test       # go tests + UI unit tests
+make e2e        # Playwright, against a real server
 ```
 
 Both build targets compile the UI first, so a plain `make build` is all you
@@ -124,6 +125,7 @@ app/                the Go application
   internal/runner   turn lifecycle and SSE fan-out
   internal/server   Fiber routes, SSE, project file access
 web/                the Vue UI (Vite); dist/ is built and embedded by embed.go
+e2e/                Playwright tests, each against its own server
 specs/              design notes — start at specs/index.md
 ```
 

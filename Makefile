@@ -1,13 +1,14 @@
 BIN      := bin/agenttik
 PKG      := ./app/cmd/agenttik
 UI       := web
+E2E      := e2e
 
 # Wails needs to know which webkit2gtk is installed. 4.1 is the current one;
 # older distros still ship 4.0.
 WEBKIT_TAG := $(shell pkg-config --exists webkit2gtk-4.1 && echo webkit2_41)
 DESKTOP_TAGS := desktop production $(WEBKIT_TAG)
 
-.PHONY: all build build-web run run-web test vet fmt clean deps ui ui-dev
+.PHONY: all build build-web run run-web test e2e vet fmt clean deps ui ui-dev
 
 all: build
 
@@ -37,6 +38,11 @@ test:
 	go test ./...
 	cd $(UI) && npm test
 
+## e2e: browser tests against a real server. The first run downloads a
+## chromium into ~/.cache/ms-playwright.
+e2e: build-web
+	cd $(E2E) && npm install --no-audit --no-fund && npx playwright install chromium && npx playwright test
+
 vet:
 	go vet ./...
 
@@ -44,7 +50,7 @@ fmt:
 	gofmt -l -w .
 
 clean:
-	rm -rf bin
+	rm -rf bin $(E2E)/test-results $(E2E)/playwright-report
 	find web/dist -mindepth 1 ! -name .gitkeep -delete
 
 ## deps: system packages the desktop build needs on Debian/Ubuntu. The UI

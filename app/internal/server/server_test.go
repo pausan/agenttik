@@ -17,6 +17,7 @@ import (
 	"github.com/pausan/agenttik/app/internal/agent"
 	"github.com/pausan/agenttik/app/internal/runner"
 	"github.com/pausan/agenttik/app/internal/store"
+	"github.com/pausan/agenttik/web"
 )
 
 func newTestServer(t *testing.T) (*Server, *store.Store) {
@@ -192,11 +193,19 @@ func TestParseStatus(t *testing.T) {
 	}
 }
 
+// The UI is a Vite build, so a checkout that has not run `make ui` has nothing
+// to serve. That is a build state, not a failure: the server answers with a
+// notice saying so, and either answer is correct here.
 func TestIndexIsServed(t *testing.T) {
 	s, _ := newTestServer(t)
 	resp := do(t, s, "GET", "/", nil)
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("status = %d, want 200", resp.StatusCode)
+
+	want := http.StatusOK
+	if !web.Built() {
+		want = http.StatusServiceUnavailable
+	}
+	if resp.StatusCode != want {
+		t.Errorf("status = %d, want %d (ui built: %v)", resp.StatusCode, want, web.Built())
 	}
 }
 

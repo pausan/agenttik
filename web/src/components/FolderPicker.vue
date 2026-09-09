@@ -27,13 +27,13 @@ let key = null; // query that produced `listing`, so filtering does not refetch
 const matches = computed(() => (listing.value ? filterDirs(listing.value.dirs, filter.value) : []));
 
 async function browse(to, quiet, narrow) {
-  filter.value = narrow || "";
   // What the field says now. A listing takes a moment to arrive, and by then
   // the user may have typed on; their text wins over a stale answer.
   const asked = path.value;
   const want = (to || "") + " " + (hidden.value ? "1" : "");
   if (want === key) {
     // Same folder, new filter — the listing we have is still good.
+    filter.value = narrow || "";
     if (!quiet) setPath(listing.value.path);
     return;
   }
@@ -50,6 +50,10 @@ async function browse(to, quiet, narrow) {
   error.value = "";
   key = want;
   listing.value = next;
+  // The filter belongs to this listing, so it only applies now that the
+  // listing arrived. A half-typed path that resolves to nothing leaves both
+  // alone rather than filtering the folder still on screen by its tail.
+  filter.value = narrow || "";
   at = next.path;
   if (!quiet && path.value === asked) setPath(next.path);
 }

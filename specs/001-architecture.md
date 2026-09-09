@@ -57,8 +57,8 @@ therefore decided up front by the session's permission mode, not asked mid-fligh
 
 ## Packages
 
-Two top-level directories hold code: `app/` is the Go application, `web/` the
-Vue UI and its embed glue.
+Three top-level directories hold code: `app/` is the Go application, `web/` the
+Vue UI and its embed glue, `e2e/` the browser tests ([005-testing.md](005-testing.md)).
 
 | Package | Responsibility |
 |---------|----------------|

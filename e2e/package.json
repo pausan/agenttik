@@ -1,0 +1,17 @@
+{
+  "name": "agenttik-e2e",
+  "version": "1.0.0",
+  "description": "Browser tests, driven against a real agenttik server.",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "playwright test",
+    "report": "playwright show-report"
+  },
+  "type": "module",
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  },
+  "private": true
+}

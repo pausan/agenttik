@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 )
 
@@ -24,10 +25,10 @@ func (s *Store) FinishTurn(t *Turn) error {
 	_, err := s.db.Exec(
 		`UPDATE turns SET ended_at = ?, input_tokens = ?, output_tokens = ?,
 		    cache_read_tokens = ?, cache_write_tokens = ?, cost_usd = ?,
-		    status = ?, error = ?
+		    context_tokens = ?, status = ?, error = ?
 		 WHERE id = ?`,
 		nowMillis(), t.InputTokens, t.OutputTokens, t.CacheReadTokens,
-		t.CacheWriteTokens, t.CostUSD, t.Status, t.Error, t.ID)
+		t.CacheWriteTokens, t.CostUSD, t.ContextTokens, t.Status, t.Error, t.ID)
 	if err != nil {
 		return fmt.Errorf("finish turn %d: %w", t.ID, err)
 	}
@@ -60,6 +61,18 @@ func (s *Store) SessionStats(sessionID string) (*Stats, error) {
 	if err != nil {
 		return nil, fmt.Errorf("session stats %s: %w", sessionID, err)
 	}
+	// The context in use is the last prompt's size, so this one is read from
+	// the newest turn that reported one instead of summed. No rows yet, or a
+	// provider that reports none, leaves it at zero and the gauge hides.
+	var ctx sql.NullInt64
+	err = s.db.QueryRow(
+		`SELECT context_tokens FROM turns
+		 WHERE session_id = ? AND context_tokens > 0 ORDER BY id DESC LIMIT 1`,
+		sessionID).Scan(&ctx)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("session stats %s: %w", sessionID, err)
+	}
+	st.ContextTokens = ctx.Int64
 	return st, nil
 }
 
@@ -88,7 +101,7 @@ func (s *Store) ListTurns(sessionID string) ([]Turn, error) {
 	rows, err := s.db.Query(
 		`SELECT id, session_id, model, effort, started_at, COALESCE(ended_at,0),
 		        input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-		        cost_usd, status, error
+		        cost_usd, context_tokens, status, error
 		 FROM turns WHERE session_id = ? ORDER BY id`, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("list turns: %w", err)
@@ -100,7 +113,8 @@ func (s *Store) ListTurns(sessionID string) ([]Turn, error) {
 		var t Turn
 		if err := rows.Scan(&t.ID, &t.SessionID, &t.Model, &t.Effort, &t.StartedAt,
 			&t.EndedAt, &t.InputTokens, &t.OutputTokens, &t.CacheReadTokens,
-			&t.CacheWriteTokens, &t.CostUSD, &t.Status, &t.Error); err != nil {
+			&t.CacheWriteTokens, &t.CostUSD, &t.ContextTokens,
+			&t.Status, &t.Error); err != nil {
 			return nil, fmt.Errorf("list turns: %w", err)
 		}
 		out = append(out, t)

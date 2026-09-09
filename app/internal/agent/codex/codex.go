@@ -26,8 +26,8 @@ func (p *Provider) DisplayName() string { return "Codex" }
 
 func (p *Provider) Models() []agent.Model {
 	return []agent.Model{
-		{ID: "gpt-5-codex", Label: "GPT-5 Codex"},
-		{ID: "gpt-5", Label: "GPT-5"},
+		{ID: "gpt-5-codex", Label: "GPT-5 Codex", ContextWindow: 400_000},
+		{ID: "gpt-5", Label: "GPT-5", ContextWindow: 400_000},
 	}
 }
 

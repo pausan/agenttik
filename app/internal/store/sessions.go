@@ -9,13 +9,14 @@ import (
 
 const sessionCols = `s.id, s.project_id, s.title, s.provider, s.provider_session_id,
 	s.model, s.effort, s.permission, s.source, s.status,
-	s.created_at, s.updated_at, s.last_active_at, p.name, p.path`
+	s.created_at, s.updated_at, s.last_active_at, s.done_at, s.position, p.name, p.path`
 
 func scanSession(sc interface{ Scan(...any) error }) (*Session, error) {
 	var v Session
 	err := sc.Scan(&v.ID, &v.ProjectID, &v.Title, &v.Provider, &v.ProviderSessionID,
 		&v.Model, &v.Effort, &v.Permission, &v.Source, &v.Status,
-		&v.CreatedAt, &v.UpdatedAt, &v.LastActiveAt, &v.ProjectName, &v.ProjectPath)
+		&v.CreatedAt, &v.UpdatedAt, &v.LastActiveAt, &v.DoneAt, &v.Position,
+		&v.ProjectName, &v.ProjectPath)
 	if err != nil {
 		return nil, err
 	}
@@ -58,15 +59,17 @@ func (s *Store) GetSession(id string) (*Session, error) {
 	return v, nil
 }
 
-// SessionFilter drives the Sessions sidebar.
+// SessionFilter drives the Sessions sidebar and the project view.
 type SessionFilter struct {
-	Since     int64 // unix millis; 0 means no lower bound
-	ProjectID int64 // 0 means all projects
-	Query     string
-	Limit     int
+	Since       int64 // unix millis; 0 means no lower bound
+	ProjectID   int64 // 0 means all projects
+	Query       string
+	Limit       int
+	ExcludeDone bool // the project views hide ticked-off sessions
 }
 
-// ListSessions returns running sessions first, then the rest by recency.
+// ListSessions orders one project's sessions by the order they were dragged
+// into, and every other listing by running first, then recency.
 func (s *Store) ListSessions(f SessionFilter) ([]Session, error) {
 	var where []string
 	var args []any
@@ -79,6 +82,9 @@ func (s *Store) ListSessions(f SessionFilter) ([]Session, error) {
 		where = append(where, "s.project_id = ?")
 		args = append(args, f.ProjectID)
 	}
+	if f.ExcludeDone {
+		where = append(where, "s.done_at = 0")
+	}
 	if q := strings.TrimSpace(f.Query); q != "" {
 		where = append(where, "(s.title LIKE ? OR p.name LIKE ? OR p.path LIKE ?)")
 		like := "%" + q + "%"
@@ -88,7 +94,11 @@ func (s *Store) ListSessions(f SessionFilter) ([]Session, error) {
 	if len(where) > 0 {
 		sqlStr += " WHERE " + strings.Join(where, " AND ")
 	}
-	sqlStr += ` ORDER BY (s.status = '` + StatusRunning + `') DESC, s.last_active_at DESC`
+	if f.ProjectID > 0 {
+		sqlStr += ` ORDER BY s.position, s.last_active_at DESC`
+	} else {
+		sqlStr += ` ORDER BY (s.status = '` + StatusRunning + `') DESC, s.last_active_at DESC`
+	}
 	if f.Limit > 0 {
 		sqlStr += " LIMIT ?"
 		args = append(args, f.Limit)
@@ -147,6 +157,50 @@ func (s *Store) SetSessionModel(id, model, effort string) error {
 		model, effort, nowMillis(), id)
 	if err != nil {
 		return fmt.Errorf("set session model: %w", err)
+	}
+	return nil
+}
+
+// SetSessionDone ticks a session off, or unticks it. Doing so is not activity,
+// so last_active_at is left alone and the Sessions window keeps showing it.
+func (s *Store) SetSessionDone(id string, done bool) error {
+	var at int64
+	if done {
+		at = nowMillis()
+	}
+	res, err := s.db.Exec(`UPDATE sessions SET done_at = ?, updated_at = ? WHERE id = ?`,
+		at, nowMillis(), id)
+	if err != nil {
+		return fmt.Errorf("set session done: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// ReorderSessions numbers the given sessions 1..n in the order supplied. Ids
+// belonging to another project are ignored rather than moved. A session that
+// was never dragged keeps position 0 and so sorts above all of them, which is
+// what puts a new session at the top of the list.
+func (s *Store) ReorderSessions(projectID int64, ids []string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("reorder sessions: %w", err)
+	}
+	defer tx.Rollback()
+	stmt, err := tx.Prepare(`UPDATE sessions SET position = ? WHERE id = ? AND project_id = ?`)
+	if err != nil {
+		return fmt.Errorf("reorder sessions: %w", err)
+	}
+	defer stmt.Close()
+	for i, id := range ids {
+		if _, err := stmt.Exec(i+1, id, projectID); err != nil {
+			return fmt.Errorf("reorder sessions: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("reorder sessions: %w", err)
 	}
 	return nil
 }

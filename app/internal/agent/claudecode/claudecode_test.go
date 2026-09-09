@@ -136,3 +136,27 @@ func TestParseHandlesVeryLongLine(t *testing.T) {
 		t.Fatalf("long line truncated: got %d events", len(got))
 	}
 }
+
+// The context gauge needs the size of one prompt, so an assistant message's
+// own usage is reported separately from the turn's totals in the result.
+func TestParseAssistantUsageIsContextOnly(t *testing.T) {
+	line := `{"type":"assistant","message":{"usage":{"input_tokens":12,"output_tokens":40,` +
+		`"cache_read_input_tokens":30000,"cache_creation_input_tokens":500},"content":[]}}`
+	got := collect(t, line+"\n")
+	if len(got) != 1 || got[0].Type != agent.EventUsage {
+		t.Fatalf("got %+v", got)
+	}
+	if n := got[0].Usage.ContextTokens; n != 30512 {
+		t.Errorf("context tokens = %d, want 30512", n)
+	}
+	if got[0].Usage.OutputTokens != 0 {
+		t.Errorf("mid-turn usage must not carry turn totals: %+v", got[0].Usage)
+	}
+}
+
+func TestParseAssistantWithoutUsageEmitsNothing(t *testing.T) {
+	line := `{"type":"assistant","message":{"content":[{"type":"text","text":"hi"}]}}`
+	if got := collect(t, line+"\n"); len(got) != 0 {
+		t.Errorf("got %+v, want no events", got)
+	}
+}

@@ -33,6 +33,10 @@ func (p Permission) Valid() Permission {
 type Model struct {
 	ID    string `json:"id"`
 	Label string `json:"label"`
+	// ContextWindow is how many tokens the model can hold, which is what the
+	// prompt bar's gauge measures the live context against. 0 means unknown
+	// and the gauge shows the count without a total.
+	ContextWindow int64 `json:"context_window,omitempty"`
 }
 
 // TurnRequest is one prompt and the context needed to answer it.
@@ -72,6 +76,11 @@ type Usage struct {
 	CacheReadTokens  int64   `json:"cache_read_tokens"`
 	CacheWriteTokens int64   `json:"cache_write_tokens"`
 	CostUSD          float64 `json:"cost_usd"`
+
+	// ContextTokens is the size of one prompt the provider sent — cached
+	// blocks included — so it can be compared against the model's window.
+	// The counts above are summed over the turn; this one never is.
+	ContextTokens int64 `json:"context_tokens,omitempty"`
 }
 
 type Event struct {

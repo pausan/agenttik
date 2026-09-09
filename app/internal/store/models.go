@@ -32,6 +32,12 @@ type Session struct {
 	UpdatedAt         int64  `json:"updated_at"`
 	LastActiveAt      int64  `json:"last_active_at"`
 
+	// DoneAt is 0 while the session is open and the time it was ticked off
+	// otherwise. Position is the order the project view was dragged into; 0
+	// means never dragged, which sorts a new session to the top.
+	DoneAt   int64 `json:"done_at"`
+	Position int64 `json:"position"`
+
 	// Denormalised for list views.
 	ProjectName string `json:"project_name,omitempty"`
 	ProjectPath string `json:"project_path,omitempty"`
@@ -51,6 +57,10 @@ type Turn struct {
 	CostUSD          float64 `json:"cost_usd"`
 	Status           string  `json:"status"`
 	Error            string  `json:"error"`
+
+	// ContextTokens is the size of the last prompt sent during the turn, not a
+	// sum over the turn's requests. See the migration that adds the column.
+	ContextTokens int64 `json:"context_tokens"`
 }
 
 type Message struct {
@@ -72,6 +82,10 @@ type Stats struct {
 	CacheWriteTokens int64   `json:"cache_write_tokens"`
 	CostUSD          float64 `json:"cost_usd"`
 	DurationMS       int64   `json:"duration_ms"`
+
+	// ContextTokens is the last turn's context size, carried here so the
+	// prompt bar's gauge needs no second request. It is not summed.
+	ContextTokens int64 `json:"context_tokens"`
 }
 
 // ProjectStats is Stats over a whole project plus the session counts the

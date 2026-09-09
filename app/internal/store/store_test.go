@@ -203,3 +203,91 @@ func TestSetProjectName(t *testing.T) {
 		t.Errorf("rename missing project err = %v, want ErrNotFound", err)
 	}
 }
+
+func TestDoneSessionsLeaveProjectViewsOnly(t *testing.T) {
+	s := testStore(t)
+	p, _ := s.CreateProject("alpha", "/tmp/alpha")
+	must(t, s.CreateSession(&Session{ID: "open", ProjectID: p.ID, Provider: "claude", Model: "opus"}))
+	must(t, s.CreateSession(&Session{ID: "shut", ProjectID: p.ID, Provider: "claude", Model: "opus"}))
+	must(t, s.SetSessionDone("shut", true))
+
+	open, err := s.ListSessions(SessionFilter{ProjectID: p.ID, ExcludeDone: true})
+	must(t, err)
+	if len(open) != 1 || open[0].ID != "open" {
+		t.Errorf("project view = %+v, want only the open session", open)
+	}
+	all, err := s.ListSessions(SessionFilter{})
+	must(t, err)
+	if len(all) != 2 {
+		t.Errorf("Sessions list = %d rows, want 2: done sessions stay", len(all))
+	}
+	projects, err := s.ListProjects()
+	must(t, err)
+	if got := projects[0].RecentSessions; len(got) != 1 || got[0].ID != "open" {
+		t.Errorf("sidebar = %+v, want only the open session", got)
+	}
+
+	must(t, s.SetSessionDone("shut", false))
+	open, err = s.ListSessions(SessionFilter{ProjectID: p.ID, ExcludeDone: true})
+	must(t, err)
+	if len(open) != 2 {
+		t.Errorf("unticking should bring it back, got %d rows", len(open))
+	}
+}
+
+func TestReorderSessionsDrivesProjectOrder(t *testing.T) {
+	s := testStore(t)
+	p, _ := s.CreateProject("alpha", "/tmp/alpha")
+	other, _ := s.CreateProject("beta", "/tmp/beta")
+	for _, id := range []string{"a", "b", "c"} {
+		must(t, s.CreateSession(&Session{ID: id, ProjectID: p.ID, Provider: "claude", Model: "opus"}))
+	}
+	must(t, s.CreateSession(&Session{ID: "z", ProjectID: other.ID, Provider: "claude", Model: "opus"}))
+
+	// "z" belongs to another project and must not be moved into this one.
+	must(t, s.ReorderSessions(p.ID, []string{"c", "a", "b", "z"}))
+	got, err := s.ListSessions(SessionFilter{ProjectID: p.ID})
+	must(t, err)
+	if len(got) != 3 || got[0].ID != "c" || got[1].ID != "a" || got[2].ID != "b" {
+		t.Fatalf("order = %+v, want c a b", ids(got))
+	}
+	if z, err := s.GetSession("z"); err != nil || z.Position != 0 {
+		t.Errorf("session in another project was moved: %+v %v", z, err)
+	}
+
+	// A session created after a drag was never placed, so it sorts to the top.
+	must(t, s.CreateSession(&Session{ID: "new", ProjectID: p.ID, Provider: "claude", Model: "opus"}))
+	got, err = s.ListSessions(SessionFilter{ProjectID: p.ID})
+	must(t, err)
+	if got[0].ID != "new" {
+		t.Errorf("order = %+v, want the new session first", ids(got))
+	}
+}
+
+func TestContextTokensComeFromTheLastTurn(t *testing.T) {
+	s := testStore(t)
+	p, _ := s.CreateProject("alpha", "/tmp/alpha")
+	must(t, s.CreateSession(&Session{ID: "s1", ProjectID: p.ID, Provider: "claude", Model: "opus"}))
+	for _, n := range []int64{40_000, 90_000} {
+		turn, err := s.StartTurn("s1", "opus", "")
+		must(t, err)
+		turn.ContextTokens, turn.InputTokens, turn.Status = n, 10, "ok"
+		must(t, s.FinishTurn(turn))
+	}
+	stats, err := s.SessionStats("s1")
+	must(t, err)
+	if stats.ContextTokens != 90_000 {
+		t.Errorf("context tokens = %d, want the last turn's 90000, not a sum", stats.ContextTokens)
+	}
+	if stats.InputTokens != 20 {
+		t.Errorf("input tokens = %d, want the sum 20", stats.InputTokens)
+	}
+}
+
+func ids(sessions []Session) []string {
+	out := make([]string, len(sessions))
+	for i, s := range sessions {
+		out[i] = s.ID
+	}
+	return out
+}

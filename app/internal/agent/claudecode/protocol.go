@@ -61,3 +61,9 @@ type usage struct {
 	CacheReadInputTokens     int64 `json:"cache_read_input_tokens"`
 	CacheCreationInputTokens int64 `json:"cache_creation_input_tokens"`
 }
+
+// contextTokens is how much of the model's window one request filled: the
+// prompt, whether it was cached or sent again.
+func (u usage) contextTokens() int64 {
+	return u.InputTokens + u.CacheReadInputTokens + u.CacheCreationInputTokens
+}

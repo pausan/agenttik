@@ -188,7 +188,14 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, events <-chan ag
 				r.store.AddMessage(sess.ID, turn.ID, store.RoleTool,
 					toolSummary(ev.Tool))
 			}
-		case agent.EventUsage, agent.EventDone:
+		case agent.EventUsage:
+			// Mid-turn usage reports the size of one prompt, not the turn's
+			// totals, so it only moves the context gauge. The last one wins:
+			// it describes the context as it stands when the turn ends.
+			if ev.Usage != nil && ev.Usage.ContextTokens > 0 {
+				turn.ContextTokens = ev.Usage.ContextTokens
+			}
+		case agent.EventDone:
 			if ev.Usage != nil {
 				turn.InputTokens = ev.Usage.InputTokens
 				turn.OutputTokens = ev.Usage.OutputTokens

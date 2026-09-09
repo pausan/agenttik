@@ -68,6 +68,19 @@ CREATE TABLE starred_models (
     PRIMARY KEY (provider, model, effort)
 );
 `,
+	`
+-- A session can be ticked off. Done sessions leave the project views and stay
+-- in the Sessions list, so position only ever orders the ones still open.
+ALTER TABLE sessions ADD COLUMN done_at  INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE sessions ADD COLUMN position INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX idx_sessions_order ON sessions(project_id, position, last_active_at DESC);
+
+-- The size of the last prompt the provider actually sent, which is what the
+-- context gauge compares against the model's window. Unlike the token columns
+-- next to it this is not a sum: a turn with twenty tool calls sends twenty
+-- prompts, and only the last one describes the context in use now.
+ALTER TABLE turns ADD COLUMN context_tokens INTEGER NOT NULL DEFAULT 0;
+`,
 }
 
 func migrate(db *sql.DB) error {

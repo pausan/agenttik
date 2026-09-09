@@ -32,6 +32,9 @@ func (s *Server) listSessions(c *fiber.Ctx) error {
 		ProjectID: int64(c.QueryInt("project_id")),
 		Query:     c.Query("q"),
 		Limit:     c.QueryInt("limit", 200),
+		// The Sessions list keeps ticked-off sessions; the project views ask
+		// for them to be left out.
+		ExcludeDone: !c.QueryBool("include_done", true),
 	}
 	if d > 0 {
 		f.Since = time.Now().Add(-d).UnixMilli()
@@ -128,6 +131,7 @@ func (s *Server) updateSession(c *fiber.Ctx) error {
 		Model  *string `json:"model"`
 		Effort *string `json:"effort"`
 		Title  *string `json:"title"`
+		Done   *bool   `json:"done"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return badRequest("invalid body: %v", err)
@@ -149,11 +153,42 @@ func (s *Server) updateSession(c *fiber.Ctx) error {
 			return err
 		}
 	}
+	if body.Done != nil {
+		if err := s.store.SetSessionDone(id, *body.Done); err != nil {
+			return err
+		}
+	}
 	updated, err := s.store.GetSession(id)
 	if err != nil {
 		return err
 	}
 	return c.JSON(updated)
+}
+
+// reorderSessions records the order the project view was dragged into. The
+// body lists the project's sessions top to bottom; ids from another project
+// are ignored.
+func (s *Server) reorderSessions(c *fiber.Ctx) error {
+	id, err := projectID(c)
+	if err != nil {
+		return err
+	}
+	if _, err := s.store.GetProject(id); err != nil {
+		return err
+	}
+	var body struct {
+		IDs []string `json:"ids"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return badRequest("invalid body: %v", err)
+	}
+	if len(body.IDs) == 0 {
+		return badRequest("ids are required")
+	}
+	if err := s.store.ReorderSessions(id, body.IDs); err != nil {
+		return err
+	}
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
 func (s *Server) deleteSession(c *fiber.Ctx) error {

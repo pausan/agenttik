@@ -91,10 +91,13 @@ func (s *Store) ListProjects() ([]Project, error) {
 	return projects, nil
 }
 
+// recentSessions feeds the Projects sidebar, so it hides the ones ticked off
+// and follows the order the project view was dragged into.
 func (s *Store) recentSessions(projectID int64, limit int) ([]SessionRef, error) {
 	rows, err := s.db.Query(
 		`SELECT id, title, status FROM sessions
-		 WHERE project_id = ? ORDER BY last_active_at DESC LIMIT ?`, projectID, limit)
+		 WHERE project_id = ? AND done_at = 0
+		 ORDER BY position, last_active_at DESC LIMIT ?`, projectID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("recent sessions for project %d: %w", projectID, err)
 	}

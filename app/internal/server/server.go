@@ -79,10 +79,11 @@ func (s *Server) routes() {
 	api.Patch("/projects/:id", s.updateProject)
 	api.Delete("/projects/:id", s.deleteProject)
 	api.Get("/projects/:id/stats", s.projectStats)
-	api.Get("/projects/:id/stream", s.streamProject)
 	api.Get("/projects/:id/tree", s.projectTree)
 	api.Get("/projects/:id/changes", s.projectChanges)
 	api.Get("/projects/:id/file", s.projectFile)
+	api.Post("/projects/:id/sessions/order", s.reorderSessions)
+	api.Get("/projects/:id/stream", s.streamProject)
 
 	api.Get("/sessions", s.listSessions)
 	api.Post("/sessions", s.createSession)

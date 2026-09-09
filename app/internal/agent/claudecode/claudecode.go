@@ -30,13 +30,16 @@ func (p *Provider) Name() string        { return "claude" }
 func (p *Provider) DisplayName() string { return "Claude Code" }
 
 // Models are aliases rather than pinned ids, so they follow the latest release
-// without a code change here.
+// without a code change here. The windows are the default ones; a model run in
+// its 1M-context variant reports more context than the gauge expects, which
+// shows as a full bar rather than a wrong number.
 func (p *Provider) Models() []agent.Model {
+	const window = 200_000
 	return []agent.Model{
-		{ID: "fable", Label: "Fable"},
-		{ID: "opus", Label: "Opus"},
-		{ID: "sonnet", Label: "Sonnet"},
-		{ID: "haiku", Label: "Haiku"},
+		{ID: "fable", Label: "Fable", ContextWindow: window},
+		{ID: "opus", Label: "Opus", ContextWindow: window},
+		{ID: "sonnet", Label: "Sonnet", ContextWindow: window},
+		{ID: "haiku", Label: "Haiku", ContextWindow: window},
 	}
 }
 
@@ -187,6 +190,12 @@ func handleLine(line []byte, out chan<- agent.Event) {
 	case "stream_event":
 		handleStreamEvent(env.Event, out)
 	case "assistant":
+		// Every assistant message names the prompt that produced it, cached
+		// blocks included. That is the context in use right now, which the
+		// turn's summed totals cannot tell us.
+		if n := env.Message.Usage.contextTokens(); n > 0 {
+			out <- agent.Event{Type: agent.EventUsage, Usage: &agent.Usage{ContextTokens: n}}
+		}
 		// Text already arrived as deltas; take only tool calls from here.
 		for _, b := range env.Message.Content {
 			if b.Type == "tool_use" {

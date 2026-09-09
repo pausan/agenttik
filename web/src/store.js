@@ -1146,7 +1146,8 @@ export async function send(prompt) {
   tab.detail.running = true;
 
   try {
-    await api("POST", `/api/sessions/${tab.sessionID}/messages`, { prompt });
+    const turn = await api("POST", `/api/sessions/${tab.sessionID}/messages`, { prompt });
+    tab.detail.turns.push(turn);
     refreshSessions();
     refreshProjects();
   } catch (e) {

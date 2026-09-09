@@ -8,8 +8,8 @@
    live. S.detail and S.project are derived from whichever tab is in front.
 
    The strip only shows one project at a time — S.strip is S.tabs narrowed to
-   S.activeProjectID and grouped project, sessions, files — so switching
-   project switches the whole centre to that project's work. */
+   S.activeProjectID — so switching project switches the whole centre to that
+   project's work. */
 
 import { reactive, watch } from "vue";
 import { api } from "./api";
@@ -24,11 +24,6 @@ const FILE_MODE_KEY = "agenttik.fileMode";
 const DIFF_VIEW_KEY = "agenttik.diffView";
 const COLORS_KEY = "agenttik.colors";
 const LAYOUT_LIMITS = { left: [180, 520], right: [200, 620] };
-
-/* Tabs are kept in their groups: a project's page first, then its
-   conversations, then the files read from them. A new tab joins the end of
-   its own group, and a drag only moves a tab within it. */
-const TAB_RANK = { project: 0, session: 1, file: 2 };
 
 /* The letters Alt reaches a project with. The first eight rows of the
    sidebar get one, so dragging a project changes its letter. */
@@ -156,19 +151,16 @@ function addTab(tab) {
   resubscribe();
 }
 
-/* insertTab puts a tab at the end of its own group inside its project, so a
-   new conversation lands after the last one and always before the files. */
+/* insertTab puts every new tab at the end of its project's strip. Projects
+   share one flat array, so the insertion point is immediately after that
+   project's last tab rather than necessarily the end of the whole array. */
 function insertTab(tab) {
   const id = projectOfTab(tab);
-  const rank = TAB_RANK[tab.kind];
-  let at = -1;
-  let first = -1;
+  let at = S.tabs.length;
   S.tabs.forEach((t, i) => {
     if (projectOfTab(t) !== id) return;
-    if (first < 0) first = i;
-    if (TAB_RANK[t.kind] <= rank) at = i + 1;
+    at = i + 1;
   });
-  if (at < 0) at = first < 0 ? S.tabs.length : first;
   S.tabs.splice(at, 0, tab);
 }
 
@@ -210,8 +202,8 @@ function syncProjectSessionOrder(projectID, ids) {
 }
 
 /* moveTab is a tab dragged along the strip. Only tabs of the same kind trade
-   places: the groups keep their order, and the numbers follow the strip
-   rather than the strip following the numbers. */
+   places, and the numbers follow the strip rather than the strip following
+   the numbers. */
 export function moveTab(dragID, overID) {
   const from = S.tabs.findIndex((t) => t.id === dragID);
   const to = S.tabs.findIndex((t) => t.id === overID);
@@ -595,8 +587,7 @@ function sessionDefaults() {
 }
 
 /* A project page is where a session is started from, so it hands its tab over
-   to the new conversation rather than staying open behind it. The session
-   still lands at the end of the session group; only the page goes. */
+   to the new conversation rather than staying open behind it. */
 export async function startSession(project) {
   const cfg = sessionDefaults();
   if (!cfg) return fail(new Error("No agent CLI is available. Open Settings to see why."));

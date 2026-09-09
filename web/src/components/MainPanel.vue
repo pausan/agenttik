@@ -1,10 +1,9 @@
 <script setup>
 /* The centre: the tab strip over whatever the tab in front is.
 
-   The strip is the active project's tabs only, in three groups — the project
-   page, its conversations, then the files read from them — each with its own
-   colour. A tab is dragged within its group, and the numbers are simply
-   where a tab now sits, so rearranging changes what Alt+1 … Alt+9 reach. */
+   The strip is the active project's tabs only. Each kind has its own colour,
+   tabs can be dragged within their kind, and the numbers are simply where a
+   tab now sits, so rearranging changes what Alt+1 … Alt+9 reach. */
 import { computed, ref } from "vue";
 
 import { S, closeTab, moveTab, persistTabOrder, selectTab, startCurrentSession } from "../store";
@@ -47,7 +46,7 @@ const items = computed(() =>
 const dragging = ref("");
 
 /* The strip reorders under the pointer, so where a tab is when it is let go
-   is where it stays. moveTab refuses to mix the groups. */
+   is where it stays. moveTab refuses to mix kinds. */
 function onOver(e, id) {
   if (!dragging.value || dragging.value === id) return;
   e.preventDefault();

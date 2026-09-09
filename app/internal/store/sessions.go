@@ -34,11 +34,12 @@ func (s *Store) CreateSession(v *Session) error {
 	}
 	_, err := s.db.Exec(
 		`INSERT INTO sessions (id, project_id, title, provider, provider_session_id,
-		    model, effort, permission, source, status, created_at, updated_at, last_active_at)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		    model, effort, permission, source, status, created_at, updated_at, last_active_at, position)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,
+		    (SELECT COALESCE(MAX(position), 0) + 1 FROM sessions WHERE project_id = ?))`,
 		v.ID, v.ProjectID, v.Title, v.Provider, v.ProviderSessionID,
 		v.Model, v.Effort, v.Permission, v.Source, v.Status,
-		v.CreatedAt, v.UpdatedAt, v.LastActiveAt)
+		v.CreatedAt, v.UpdatedAt, v.LastActiveAt, v.ProjectID)
 	if err != nil {
 		return fmt.Errorf("create session: %w", err)
 	}
@@ -186,9 +187,7 @@ func (s *Store) SetSessionDone(id string, done bool) error {
 }
 
 // ReorderSessions numbers the given sessions 1..n in the order supplied. Ids
-// belonging to another project are ignored rather than moved. A session that
-// was never dragged keeps position 0 and so sorts above all of them, which is
-// what puts a new session at the top of the list.
+// belonging to another project are ignored rather than moved.
 func (s *Store) ReorderSessions(projectID int64, ids []string) error {
 	tx, err := s.db.Begin()
 	if err != nil {

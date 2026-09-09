@@ -24,7 +24,7 @@ All timestamps are **unix milliseconds**, so turn timings need no second table.
   `agenttik` today; the column exists so imported CLI history can be added later
   without a migration. `done_at` is 0 while the session is active and the time it
   was archived otherwise. `position` is the order the project session lists
-  were dragged into: 0 means never dragged, which sorts a new session to the top.
+  were dragged into. New sessions receive the next position, so they sort last.
 - **turns** — one row per prompt. `session_id, model, effort, started_at,
   ended_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
   cost_usd, context_tokens, status, error`. This is the metrics table.

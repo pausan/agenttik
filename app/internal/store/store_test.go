@@ -269,12 +269,12 @@ func TestReorderSessionsDrivesProjectOrder(t *testing.T) {
 		t.Errorf("session in another project was moved: %+v %v", z, err)
 	}
 
-	// A session created after a drag was never placed, so it sorts to the top.
+	// A session created after a drag is placed after every existing session.
 	must(t, s.CreateSession(&Session{ID: "new", ProjectID: p.ID, Provider: "claude", Model: "opus"}))
 	got, err = s.ListSessions(SessionFilter{ProjectID: p.ID})
 	must(t, err)
-	if got[0].ID != "new" {
-		t.Errorf("order = %+v, want the new session first", ids(got))
+	if got[len(got)-1].ID != "new" {
+		t.Errorf("order = %+v, want the new session last", ids(got))
 	}
 }
 

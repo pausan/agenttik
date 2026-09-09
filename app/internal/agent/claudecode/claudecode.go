@@ -141,7 +141,7 @@ func (p *Provider) Run(ctx context.Context, req agent.TurnRequest) (<-chan agent
 		}()
 		defer stop()
 
-		parse(stdout, events)
+		parse(stdout, req.Model, events)
 
 		if err := cmd.Wait(); err != nil && ctx.Err() == nil {
 			msg := strings.TrimSpace(stderr.String())
@@ -154,13 +154,15 @@ func (p *Provider) Run(ctx context.Context, req agent.TurnRequest) (<-chan agent
 	return events, nil
 }
 
-// parse turns the CLI's JSONL stream into provider-neutral events.
-func parse(r io.Reader, out chan<- agent.Event) {
+// parse turns the CLI's JSONL stream into provider-neutral events. model is
+// the alias the turn asked for, which the result line's per-model breakdown is
+// read against.
+func parse(r io.Reader, model string, out chan<- agent.Event) {
 	br := bufio.NewReaderSize(r, 64*1024)
 	for {
 		line, err := readLine(br)
 		if len(line) > 0 {
-			handleLine(line, out)
+			handleLine(line, model, out)
 		}
 		if err != nil {
 			return
@@ -184,7 +186,7 @@ func readLine(br *bufio.Reader) ([]byte, error) {
 	}
 }
 
-func handleLine(line []byte, out chan<- agent.Event) {
+func handleLine(line []byte, model string, out chan<- agent.Event) {
 	var env envelope
 	if err := json.Unmarshal(line, &env); err != nil {
 		// Non-JSON noise on stdout is not fatal; skip it.
@@ -197,6 +199,14 @@ func handleLine(line []byte, out chan<- agent.Event) {
 		}
 	case "stream_event":
 		handleStreamEvent(env.Event, out)
+	case "rate_limit_event":
+		// The CLI names its own subscription allowance here. It is the only
+		// place it does, and it only appears once a bucket is near its
+		// ceiling, so the reading is stored and shown with its age rather
+		// than expected on every turn.
+		if env.RateLimitInfo != nil {
+			out <- agent.Event{Type: agent.EventLimits, Limits: env.RateLimitInfo.limits()}
+		}
 	case "assistant":
 		// Every assistant message names the prompt that produced it, cached
 		// blocks included. That is the context in use right now, which the
@@ -232,7 +242,7 @@ func handleLine(line []byte, out chan<- agent.Event) {
 			CacheReadTokens:  env.Usage.CacheReadInputTokens,
 			CacheWriteTokens: env.Usage.CacheCreationInputTokens,
 			CostUSD:          env.TotalCostUSD,
-			ContextWindow:    env.contextWindow(),
+			ContextWindow:    env.contextWindow(model),
 		}}
 	}
 }

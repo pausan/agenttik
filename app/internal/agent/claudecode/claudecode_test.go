@@ -66,7 +66,7 @@ not json at all
 func collect(t *testing.T, stream string) []agent.Event {
 	t.Helper()
 	out := make(chan agent.Event, 64)
-	parse(strings.NewReader(stream), out)
+	parse(strings.NewReader(stream), "opus", out)
 	close(out)
 	var got []agent.Event
 	for ev := range out {

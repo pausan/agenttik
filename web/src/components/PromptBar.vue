@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, watch } from "vue";
 
 import { S, contextWindow, enqueue, fail, isStarred, providerOf, refreshSubscriptionLimits, send, setModel, stopTurn, toggleStar } from "../store";
+import { ago } from "../api";
 import ContextPane from "./ContextPane.vue";
 import { useTextHistory } from "../text-history";
 
@@ -135,7 +136,10 @@ const contextTone = computed(() => contextPct.value >= 90 ? "var(--color-red-500
 const subscriptionLimit = computed(() => (S.subscriptionLimits[S.detail?.session?.provider] || []).find((limit) => limit.limit_id === "codex") || (S.subscriptionLimits[S.detail?.session?.provider] || [])[0]);
 const subscriptionWindows = computed(() => [subscriptionLimit.value?.primary, subscriptionLimit.value?.secondary].filter(Boolean).map((window, index) => ({ ...window, label: allowanceLabel(window, index) })));
 
+/* A provider that names its own buckets wins; one that only sizes them gets
+   the duration turned into a name. */
 function allowanceLabel(window, index) {
+  if (window.label) return window.label;
   const minutes = window.window_duration_mins;
   if (minutes >= 6 * 24 * 60) return "Weekly";
   if (minutes >= 60 && minutes % 60 === 0) return `${minutes / 60}-hour`;
@@ -145,6 +149,13 @@ function allowanceLabel(window, index) {
 function resetAt(seconds) {
   return seconds ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(seconds * 1000) : "not reported";
 }
+
+/* Claude Code only names its allowance during a turn, so a reading can be
+   older than the panel it is shown in. Saying when it was taken is the honest
+   alternative to presenting a stale figure as current. */
+const reportedAgo = computed(() =>
+  subscriptionLimit.value?.reported_at ? ago(subscriptionLimit.value.reported_at) : "",
+);
 
 watch(
   () => S.detail?.session?.provider,
@@ -274,6 +285,10 @@ function onPromptKey(e) {
                   <div v-if="subscriptionLimit.reached_type" class="flex justify-between gap-3">
                     <dt class="text-muted">Status</dt>
                     <dd class="m-0 text-highlighted">{{ subscriptionLimit.reached_type }}</dd>
+                  </div>
+                  <div v-if="reportedAgo" class="flex justify-between gap-3">
+                    <dt class="text-muted">Reported</dt>
+                    <dd class="m-0 text-highlighted">{{ reportedAgo }}</dd>
                   </div>
                 </dl>
               </div>

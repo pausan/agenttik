@@ -78,6 +78,9 @@ type Turn struct {
 	// ContextWindow is the window the provider reported for this turn, or 0
 	// when it reported none. See the migration that adds the column.
 	ContextWindow int64 `json:"context_window"`
+	// RateLimits is the subscription allowance the provider volunteered during
+	// the turn, as the JSON the API serves, or empty when it volunteered none.
+	RateLimits string `json:"rate_limits,omitempty"`
 }
 
 type Message struct {

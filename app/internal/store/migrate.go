@@ -105,6 +105,15 @@ CREATE INDEX idx_queued_messages_session ON queued_messages(session_id, id);
 -- is not a sum; the newest turn that reported one describes the gauge now.
 ALTER TABLE turns ADD COLUMN context_window INTEGER NOT NULL DEFAULT 0;
 	`,
+	`
+-- The subscription allowance a provider volunteered during the turn, stored as
+-- the JSON the API serves. Claude Code only names its buckets on a
+-- rate_limit_event line mid-turn, so a reading has to be kept: without this
+-- the prompt bar has nothing to show until the next turn happens to report
+-- one. Like the two columns above it is never summed — the newest turn that
+-- reported a reading is the reading.
+ALTER TABLE turns ADD COLUMN rate_limits TEXT NOT NULL DEFAULT '';
+	`,
 }
 
 func migrate(db *sql.DB) error {

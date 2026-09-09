@@ -25,11 +25,12 @@ func (s *Store) FinishTurn(t *Turn) error {
 	_, err := s.db.Exec(
 		`UPDATE turns SET ended_at = ?, input_tokens = ?, output_tokens = ?,
 		    cache_read_tokens = ?, cache_write_tokens = ?, cost_usd = ?,
-		    context_tokens = ?, context_window = ?, status = ?, error = ?
+		    context_tokens = ?, context_window = ?, rate_limits = ?,
+		    status = ?, error = ?
 		 WHERE id = ?`,
 		nowMillis(), t.InputTokens, t.OutputTokens, t.CacheReadTokens,
 		t.CacheWriteTokens, t.CostUSD, t.ContextTokens, t.ContextWindow,
-		t.Status, t.Error, t.ID)
+		t.RateLimits, t.Status, t.Error, t.ID)
 	if err != nil {
 		return fmt.Errorf("finish turn %d: %w", t.ID, err)
 	}
@@ -90,6 +91,26 @@ func (s *Store) SessionStats(sessionID string) (*Stats, error) {
 	return st, nil
 }
 
+// LatestRateLimits is the newest subscription allowance any session of the
+// provider recorded, with when it was recorded. Empty means no turn has ever
+// volunteered one, which is the normal state before the first turn of a run.
+func (s *Store) LatestRateLimits(provider string) (string, int64, error) {
+	var body string
+	var at sql.NullInt64
+	err := s.db.QueryRow(
+		`SELECT t.rate_limits, COALESCE(t.ended_at, t.started_at)
+		 FROM turns t JOIN sessions s ON s.id = t.session_id
+		 WHERE s.provider = ? AND t.rate_limits <> ''
+		 ORDER BY t.id DESC LIMIT 1`, provider).Scan(&body, &at)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", 0, nil
+	}
+	if err != nil {
+		return "", 0, fmt.Errorf("latest rate limits for %s: %w", provider, err)
+	}
+	return body, at.Int64, nil
+}
+
 // ProjectStats aggregates every turn of every session in the project. A
 // running turn counts with its elapsed time so far.
 func (s *Store) ProjectStats(projectID int64) (*ProjectStats, error) {
@@ -115,7 +136,7 @@ func (s *Store) ListTurns(sessionID string) ([]Turn, error) {
 	rows, err := s.db.Query(
 		`SELECT id, session_id, model, effort, started_at, COALESCE(ended_at,0),
 		        input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-		        cost_usd, context_tokens, context_window, status, error
+		        cost_usd, context_tokens, context_window, rate_limits, status, error
 		 FROM turns WHERE session_id = ? ORDER BY id`, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("list turns: %w", err)
@@ -128,7 +149,7 @@ func (s *Store) ListTurns(sessionID string) ([]Turn, error) {
 		if err := rows.Scan(&t.ID, &t.SessionID, &t.Model, &t.Effort, &t.StartedAt,
 			&t.EndedAt, &t.InputTokens, &t.OutputTokens, &t.CacheReadTokens,
 			&t.CacheWriteTokens, &t.CostUSD, &t.ContextTokens, &t.ContextWindow,
-			&t.Status, &t.Error); err != nil {
+			&t.RateLimits, &t.Status, &t.Error); err != nil {
 			return nil, fmt.Errorf("list turns: %w", err)
 		}
 		out = append(out, t)

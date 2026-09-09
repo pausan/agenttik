@@ -8,27 +8,13 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/pausan/agenttik/app/internal/agent"
 )
 
-// RateLimitWindow is one rolling ChatGPT subscription allowance window.
-// Values come directly from Codex app-server; agenttik never sees the account
-// credential that app-server uses.
-type RateLimitWindow struct {
-	UsedPercent        float64 `json:"used_percent"`
-	WindowDurationMins int64   `json:"window_duration_mins"`
-	ResetsAt           int64   `json:"resets_at"`
-}
-
-// RateLimit is one metered subscription bucket. A provider can expose two
-// windows, normally the short rolling allowance and the weekly allowance.
-type RateLimit struct {
-	LimitID     string           `json:"limit_id"`
-	LimitName   string           `json:"limit_name,omitempty"`
-	PlanType    string           `json:"plan_type,omitempty"`
-	Primary     *RateLimitWindow `json:"primary,omitempty"`
-	Secondary   *RateLimitWindow `json:"secondary,omitempty"`
-	ReachedType string           `json:"reached_type,omitempty"`
-}
+// Codex reports its ChatGPT subscription allowance in the shape every
+// provider uses, agent.RateLimit. Values come straight from Codex app-server;
+// agenttik never sees the account credential that app-server uses.
 
 type appServerResponse struct {
 	ID     *int            `json:"id"`
@@ -58,25 +44,30 @@ type appServerRateLimitWindow struct {
 	ResetsAt           int64   `json:"resetsAt"`
 }
 
-func publicRateLimit(limit appServerRateLimit) RateLimit {
-	window := func(raw *appServerRateLimitWindow) *RateLimitWindow {
+func publicRateLimit(limit appServerRateLimit) agent.RateLimit {
+	window := func(raw *appServerRateLimitWindow) *agent.RateLimitWindow {
 		if raw == nil {
 			return nil
 		}
-		return &RateLimitWindow{
+		return &agent.RateLimitWindow{
 			UsedPercent: raw.UsedPercent, WindowDurationMins: raw.WindowDurationMins, ResetsAt: raw.ResetsAt,
 		}
 	}
-	return RateLimit{
+	return agent.RateLimit{
 		LimitID: limit.LimitID, LimitName: limit.LimitName, PlanType: limit.PlanType,
 		Primary: window(limit.Primary), Secondary: window(limit.Secondary), ReachedType: limit.ReachedType,
 	}
 }
 
-// ReadRateLimits asks the locally authenticated Codex app-server for its
-// current ChatGPT subscription buckets. The short-lived helper has no UI or
-// turn state, so it cannot alter the user's Codex conversations.
-func ReadRateLimits(ctx context.Context) ([]RateLimit, error) {
+// SubscriptionLimits asks the locally authenticated Codex app-server for its
+// current ChatGPT subscription buckets, which makes this provider the Metered
+// half of the contract. The short-lived helper has no UI or turn state, so it
+// cannot alter the user's Codex conversations.
+//
+// stdin stays open until the answer arrives: app-server fetches the figures
+// over the network and exits the moment its input closes, so a client that
+// writes and closes gets no response at all.
+func (p *Provider) SubscriptionLimits(ctx context.Context) ([]agent.RateLimit, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
@@ -131,10 +122,10 @@ func ReadRateLimits(ctx context.Context) ([]RateLimit, error) {
 			if result.RateLimits == nil {
 				return nil, nil
 			}
-			return []RateLimit{publicRateLimit(*result.RateLimits)}, nil
+			return []agent.RateLimit{publicRateLimit(*result.RateLimits)}, nil
 		}
 
-		limits := make([]RateLimit, 0, len(result.RateLimitsByLimitID))
+		limits := make([]agent.RateLimit, 0, len(result.RateLimitsByLimitID))
 		if limit, ok := result.RateLimitsByLimitID["codex"]; ok {
 			limits = append(limits, publicRateLimit(limit))
 		}

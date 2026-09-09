@@ -68,9 +68,36 @@ const (
 	EventToolUse        EventType = "tool_use"
 	EventToolResult     EventType = "tool_result"
 	EventUsage          EventType = "usage"
+	EventLimits         EventType = "limits"
 	EventError          EventType = "error"
 	EventDone           EventType = "done"
 )
+
+// RateLimitWindow is one rolling subscription allowance window, exactly as the
+// provider reports it. agenttik never estimates an allowance from token totals.
+type RateLimitWindow struct {
+	// Label names the window for providers that name their buckets instead of
+	// sizing them. Empty means read the duration below.
+	Label              string  `json:"label,omitempty"`
+	UsedPercent        float64 `json:"used_percent"`
+	WindowDurationMins int64   `json:"window_duration_mins,omitempty"`
+	ResetsAt           int64   `json:"resets_at,omitempty"`
+}
+
+// RateLimit is one metered subscription bucket. A provider can expose two
+// windows, normally a short rolling allowance and a weekly one.
+type RateLimit struct {
+	LimitID     string           `json:"limit_id"`
+	LimitName   string           `json:"limit_name,omitempty"`
+	PlanType    string           `json:"plan_type,omitempty"`
+	Primary     *RateLimitWindow `json:"primary,omitempty"`
+	Secondary   *RateLimitWindow `json:"secondary,omitempty"`
+	ReachedType string           `json:"reached_type,omitempty"`
+	// ReportedAt is when the figures were read, in Unix millis. Codex answers
+	// on demand, so its reading is current; Claude Code only volunteers one
+	// during a turn, so the panel says how old that reading is.
+	ReportedAt int64 `json:"reported_at,omitempty"`
+}
 
 // Usage is the provider's own token accounting, never an estimate.
 type Usage struct {
@@ -98,6 +125,9 @@ type Event struct {
 	Tool *ToolEvent `json:"tool,omitempty"`
 	// Usage is set on usage and done events.
 	Usage *Usage `json:"usage,omitempty"`
+	// Limits is set on a limits event: the subscription allowance the provider
+	// volunteered mid-turn.
+	Limits []RateLimit `json:"limits,omitempty"`
 	// ProviderSessionID is set on session_started.
 	ProviderSessionID string `json:"provider_session_id,omitempty"`
 }
@@ -122,6 +152,14 @@ type Provider interface {
 	// Run starts a turn and streams its events. The channel is closed when the
 	// turn ends. Cancelling ctx stops the turn.
 	Run(ctx context.Context, req TurnRequest) (<-chan Event, error)
+}
+
+// Metered is the optional half of Provider for backends that can be asked for
+// the signed-in account's own subscription allowance without holding its
+// credentials. A provider that only volunteers one mid-turn does not implement
+// it — see the limits event.
+type Metered interface {
+	SubscriptionLimits(ctx context.Context) ([]RateLimit, error)
 }
 
 // Registry holds the providers this build supports, in display order.

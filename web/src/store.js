@@ -116,12 +116,11 @@ export function contextWindow(session, stats) {
 }
 
 // Subscription allowances are provider-reported account limits, not guesses
-// from token totals. Providers without a safe local source return no buckets.
+// from token totals. Codex answers a local query; Claude Code only volunteers
+// a reading during a turn, and the server serves back the newest one it saw.
+// A provider that does neither returns no buckets.
 export async function refreshSubscriptionLimits(provider) {
-  if (provider !== "codex") {
-    S.subscriptionLimits[provider] = [];
-    return;
-  }
+  if (!provider) return;
   S.subscriptionLimits[provider] = await api(
     "GET",
     `/api/providers/${encodeURIComponent(provider)}/subscription-limits`,
@@ -1146,6 +1145,16 @@ function onSessionEvent(tab, msg) {
       // move while the turn runs.
       if (ev.usage?.context_tokens) tab.detail.stats.context_tokens = ev.usage.context_tokens;
       if (ev.usage?.context_window) tab.detail.stats.context_window = ev.usage.context_window;
+      break;
+    case "limits":
+      // The provider named its own allowance mid-turn, so the bars move now
+      // rather than after the next reload.
+      if (ev.limits?.length) {
+        S.subscriptionLimits[tab.detail.session.provider] = ev.limits.map((limit) => ({
+          ...limit,
+          reported_at: Date.now(),
+        }));
+      }
       break;
     case "error":
       endLive(tab);

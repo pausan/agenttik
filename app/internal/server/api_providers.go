@@ -1,12 +1,11 @@
 package server
 
 import (
-	"context"
+	"encoding/json"
 
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/pausan/agenttik/app/internal/agent"
-	"github.com/pausan/agenttik/app/internal/agent/codex"
 )
 
 type providerInfo struct {
@@ -36,16 +35,47 @@ func (s *Server) listProviders(c *fiber.Ctx) error {
 	return c.JSON(out)
 }
 
-// subscriptionLimits returns the signed-in CLI's own subscription allowance.
-// Only Codex currently offers this read-only app-server endpoint. Other
-// providers simply have no subscription gauge rather than a made-up estimate.
+// subscriptionLimits returns the signed-in CLI's own subscription allowance,
+// never an estimate from token totals. There are two ways to get one and a
+// provider has at most one of them:
+//
+//   - ask, if the CLI answers a read-only local query (Codex app-server);
+//   - remember, if it only volunteers a reading mid-turn (Claude Code, on a
+//     rate_limit_event line). The newest turn that reported one is served,
+//     stamped with when it was recorded so the panel can say how old it is.
+//
+// A provider with neither has no allowance bars at all.
 func (s *Server) subscriptionLimits(c *fiber.Ctx) error {
-	if c.Params("provider") != "codex" {
-		return c.JSON([]codex.RateLimit{})
+	name := c.Params("provider")
+	provider, ok := s.registry.Get(name)
+	if !ok {
+		return badRequest("unknown provider %q", name)
 	}
-	limits, err := codex.ReadRateLimits(context.Background())
+	if metered, ok := provider.(agent.Metered); ok {
+		limits, err := metered.SubscriptionLimits(c.UserContext())
+		if err != nil {
+			return err
+		}
+		if limits == nil {
+			limits = []agent.RateLimit{}
+		}
+		return c.JSON(limits)
+	}
+
+	body, at, err := s.store.LatestRateLimits(name)
 	if err != nil {
 		return err
+	}
+	limits := []agent.RateLimit{}
+	if body != "" {
+		if err := json.Unmarshal([]byte(body), &limits); err != nil {
+			// A reading we can no longer read is not worth an error: the panel
+			// simply shows no bars, as it does before the first turn.
+			return c.JSON([]agent.RateLimit{})
+		}
+		for i := range limits {
+			limits[i].ReportedAt = at
+		}
 	}
 	return c.JSON(limits)
 }

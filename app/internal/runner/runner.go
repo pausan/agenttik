@@ -4,6 +4,7 @@ package runner
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -273,6 +274,13 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, events <-chan ag
 			// it describes the context as it stands when the turn ends.
 			if ev.Usage != nil && ev.Usage.ContextTokens > 0 {
 				turn.ContextTokens = ev.Usage.ContextTokens
+			}
+		case agent.EventLimits:
+			// The allowance the provider volunteered. Kept on the turn so the
+			// prompt bar still has a reading after a restart; the event goes
+			// on to the UI so the bar moves while the turn runs.
+			if body, err := json.Marshal(ev.Limits); err == nil {
+				turn.RateLimits = string(body)
 			}
 		case agent.EventDone:
 			if ev.Usage != nil {

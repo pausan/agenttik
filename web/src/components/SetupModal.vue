@@ -95,7 +95,7 @@ async function star(provider, model, effort) {
               <span class="w-24 shrink-0 text-[13px] text-highlighted">{{ m.label }}</span>
               <div class="flex flex-wrap gap-1">
                 <UButton
-                  v-for="e in ['', ...p.efforts]"
+                  v-for="e in ['', ...(m.efforts || p.efforts)]"
                   :key="e || 'default'"
                   size="xs"
                   :color="isStarred(p.name, m.id, e) ? 'primary' : 'neutral'"

@@ -33,6 +33,9 @@ func (p Permission) Valid() Permission {
 type Model struct {
 	ID    string `json:"id"`
 	Label string `json:"label"`
+	// Efforts overrides the provider-wide list for models whose supported
+	// reasoning levels differ. An empty list uses Provider.Efforts instead.
+	Efforts []string `json:"efforts,omitempty"`
 	// ContextWindow is how many tokens the model can hold, which is what the
 	// prompt bar's gauge measures the live context against. 0 means unknown
 	// and the gauge shows the count without a total.

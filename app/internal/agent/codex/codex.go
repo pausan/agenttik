@@ -27,14 +27,21 @@ func (p *Provider) Name() string        { return "codex" }
 func (p *Provider) DisplayName() string { return "Codex" }
 
 func (p *Provider) Models() []agent.Model {
+	const window = 1_050_000
 	return []agent.Model{
-		{ID: "gpt-5-codex", Label: "GPT-5 Codex", ContextWindow: 400_000},
-		{ID: "gpt-5", Label: "GPT-5", ContextWindow: 400_000},
+		{ID: "gpt-6-astra", Label: "GPT-6 Astra", ContextWindow: window,
+			Efforts: []string{"low", "medium", "high", "xhigh", "max"}},
+		{ID: "gpt-5.6-sol", Label: "GPT-5.6 Sol", ContextWindow: window,
+			Efforts: []string{"none", "low", "medium", "high", "xhigh", "max"}},
+		{ID: "gpt-5.6-terra", Label: "GPT-5.6 Terra", ContextWindow: window,
+			Efforts: []string{"none", "low", "medium", "high", "xhigh", "max"}},
+		{ID: "gpt-5.6-luna", Label: "GPT-5.6 Luna", ContextWindow: window,
+			Efforts: []string{"none", "low", "medium", "high", "xhigh", "max"}},
 	}
 }
 
 func (p *Provider) Efforts() []string {
-	return []string{"minimal", "low", "medium", "high"}
+	return nil
 }
 
 func (p *Provider) Available() error {

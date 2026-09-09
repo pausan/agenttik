@@ -43,5 +43,6 @@ and a check that a session actually commits are still to run.
 
 Claude Code sessions stream into the transcript, record per-turn token metrics,
 and resume across turns. The Codex provider is implemented against the current
-CLI JSONL contract and compiles; its billable live-turn check remains pending.
+CLI JSONL contract and compiles; its picker exposes Astra, Sol, Terra, and Luna
+with their supported reasoning efforts. Its billable live-turn check remains pending.
 Several sessions can be open at once, each streaming into its own tab.

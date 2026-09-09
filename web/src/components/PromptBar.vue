@@ -30,6 +30,11 @@ const NONE = "__default";
 
 const provider = computed(() => providerOf(S.detail?.session.provider));
 const effort = computed(() => S.detail?.session.effort || "");
+const selectedModel = computed(() =>
+  provider.value?.models.find((m) => m.id === S.detail?.session.model),
+);
+const effortsFor = (model) => model?.efforts || provider.value?.efforts || [];
+const selectedEfforts = computed(() => effortsFor(selectedModel.value));
 
 const labelOf = (id) => provider.value?.models.find((m) => m.id === id)?.label || id;
 
@@ -73,14 +78,15 @@ const model = computed({
       const c = combos.value[Number(rest)];
       setModel(c.model, c.effort || "");
     } else {
-      setModel(rest, effort.value);
+      const next = provider.value?.models.find((m) => m.id === rest);
+      setModel(rest, effortsFor(next).includes(effort.value) ? effort.value : "");
     }
   },
 });
 
 const effortItems = computed(() => [
   { label: "default effort", value: NONE },
-  ...(provider.value?.efforts || []).map((e) => ({ label: e, value: e })),
+  ...selectedEfforts.value.map((e) => ({ label: e, value: e })),
 ]);
 
 const effortValue = computed({

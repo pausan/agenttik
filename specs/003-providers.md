@@ -6,8 +6,8 @@
 type Provider interface {
     Name() string                  // "claude" | "codex"
     DisplayName() string
-    Models() []Model
-    Efforts() []string
+    Models() []Model               // each may define its own efforts
+    Efforts() []string             // fallback for models without their own list
     Available() error              // binary on PATH and usable
     Run(ctx context.Context, req TurnRequest) (<-chan Event, error)
 }
@@ -79,6 +79,12 @@ codex exec --json --model <model> -c model_reasoning_effort=<effort> \
            --sandbox <mode> --cd <workdir>
 codex exec resume <session-id> --json ...
 ```
+
+The picker offers GPT-6 Astra, GPT-5.6 Sol, GPT-5.6 Terra, and GPT-5.6 Luna,
+each with its documented context window and reasoning levels. Astra offers
+`low` through `max`; Sol, Terra, and Luna also offer `none`. Model-specific
+efforts are returned with the model record, so the UI never offers an effort
+that the chosen model does not support.
 
 The prompt is sent on stdin. `resume` uses the session's original sandbox
 policy; the CLI does not accept a new `--sandbox` flag for that subcommand.

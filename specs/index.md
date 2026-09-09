@@ -8,14 +8,14 @@
 | [004-ui.md](004-ui.md) | Layout, panels, HTTP API |
 | [005-testing.md](005-testing.md) | The three test layers and how they are isolated |
 | [006-sidebar-ordering.md](006-sidebar-ordering.md) | Sidebar ordering, archiving, and Tree placement |
-| [007-session-closing.md](007-session-closing.md) | Closing disposable sessions and reopening tabs |
+| [007-session-closing.md](007-session-closing.md) | Closing and archiving sessions |
 | [008-project-workspaces.md](008-project-workspaces.md) | Per-project tab strips, tab groups, file diffs |
 | [009-model-picker.md](009-model-picker.md) | Cross-provider model and favourite selection |
 | [010-working-indicator.md](010-working-indicator.md) | Live turn progress in the transcript |
 
 Status: sidebar ordering, session archiving, collapsible project session lists,
 the project-scoped Tree, fuzzy go-to navigation, global conversation closing,
-remembered open tabs, disposable empty sessions, closed-session reopening, and
+remembered open tabs, disposable empty sessions, and
 renaming a session in its row are implemented. Earlier Go, web-unit, and
 targeted Sessions/Inspector browser runs pass; this prototype update does not
 add or run tests.

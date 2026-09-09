@@ -6,7 +6,6 @@ import {
   S,
   closeTab,
   init,
-  reopenClosedSession,
   selectAdjacentTab,
   saveActiveFile,
   selectProjectAt,
@@ -32,8 +31,8 @@ const sideBar = ref(null);
 
 useErrors(useToast());
 
-/* Ctrl+N/T, Ctrl+P, Ctrl+W, and Ctrl+Shift+T create, find, close, and reopen
-   conversations; Ctrl+PageUp/PageDown walk the tab strip and Alt+P/S/T move the
+/* Ctrl+N/T, Ctrl+P, and Ctrl+W create, find, and archive conversations;
+   Ctrl+PageUp/PageDown walk the tab strip and Alt+P/S/T move the
    left one. Alt+1 … Alt+9 goes straight to a tab and Alt+A … Alt+H to a project.
    The key is read from the physical code: on some layouts Alt and a digit
    produce a different character. */
@@ -63,10 +62,9 @@ function onKey(e) {
       // Always consume the chord so it never closes the browser tab.
       e.preventDefault();
       if (S.owner?.kind === "session") closeTab(S.owner.id);
-    } else if (e.code === "KeyT") {
+    } else if (e.code === "KeyT" && !e.shiftKey) {
       e.preventDefault();
-      if (e.shiftKey) reopenClosedSession();
-      else startCurrentSession();
+      startCurrentSession();
     }
     return;
   }

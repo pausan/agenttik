@@ -40,7 +40,6 @@ export const S = reactive({
   projects: [],
   sessions: [],
   tabs: [], // every open view, of every project
-  closedSessions: [], // most recently closed non-empty session ids
   activeTab: "",
   activeProjectID: null, // the project the strip and the sidebar show
   lastTab: {}, // per project, the tab it was last left on
@@ -286,7 +285,7 @@ export function selectProjectAt(i) {
 /* closeTab also closes the files opened from the tab, which have nothing to
    belong to once it is gone, and moves to the neighbour in the same project
    rather than back to the first tab. A never-used session is disposable;
-   every other session is kept in a most-recent-first reopen stack.
+   every other session is archived.
 
    Unsaved edits stop it: closing a file that has been typed into — or a
    conversation holding one — asks first, and resolveClosing comes back here
@@ -323,13 +322,7 @@ export async function closeTab(id, remember = true, force = false) {
   resubscribe();
 
   if (!remember || tab.kind !== "session") return;
-  if (tab.detail.messages.length) {
-    S.closedSessions = [
-      tab.sessionID,
-      ...S.closedSessions.filter((sessionID) => sessionID !== tab.sessionID),
-    ];
-    return;
-  }
+  if (tab.detail.messages.length) return setSessionArchived(tab.detail.session, true);
   try {
     await api("DELETE", "/api/sessions/" + tab.sessionID);
     await Promise.all([refreshProjects(), refreshSessions()]);
@@ -337,13 +330,6 @@ export async function closeTab(id, remember = true, force = false) {
   } catch (e) {
     fail(e);
   }
-}
-
-/* reopenClosedSession consumes one entry, so repeating Ctrl+Shift+T walks
-   backwards through the sessions closed in this browser window. */
-export async function reopenClosedSession() {
-  const id = S.closedSessions.shift();
-  if (id) await openSession(id);
 }
 
 /* currentProjectID is the project the right panel works against, whichever
@@ -644,8 +630,9 @@ export async function renameSession(session, title) {
   }
 }
 
-/* setSessionArchived removes a session from project views without deleting
-   it. The Sessions list keeps archived sessions so they can be restored. */
+/* setSessionArchived removes a session from project views and closes its tab
+   without deleting it. The Sessions list keeps archived sessions so they can
+   be restored. */
 export async function setSessionArchived(session, archived) {
   try {
     const updated = await api("PATCH", "/api/sessions/" + session.id, { done: archived });
@@ -653,6 +640,7 @@ export async function setSessionArchived(session, archived) {
     if (tab) tab.detail.session = updated;
     await Promise.all([refreshProjects(), refreshSessions()]);
     reloadProjects();
+    if (archived && tab) await closeTab(tab.id, false);
   } catch (e) {
     fail(e);
   }

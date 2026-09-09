@@ -21,6 +21,7 @@
 | [017-general-settings.md](017-general-settings.md) | The General section, and which key sends |
 | [018-readme-icon.md](018-readme-icon.md) | Concise project overview and shared SVG icon |
 | [019-file-watching.md](019-file-watching.md) | Tree and Changed following the disk as it moves |
+| [020-queued-session-titles.md](020-queued-session-titles.md) | Isolated small-model titles for queued sessions |
 
 Status: the tree and the changed list now follow the project folder as it
 moves on disk — see 019 for the watcher and what it deliberately ignores.

@@ -46,6 +46,12 @@ func (p *Provider) Efforts() []string {
 	return []string{"low", "medium", "high", "xhigh", "max"}
 }
 
+// TitleModel is the smallest Claude model the app offers. Naming a session is
+// a one-shot request, so it does not need the model chosen for its real turn.
+func (p *Provider) TitleModel() (model, effort string) {
+	return "haiku", "low"
+}
+
 func (p *Provider) Available() error {
 	if _, err := exec.LookPath(Binary); err != nil {
 		return fmt.Errorf("%s not found on PATH: %w", Binary, err)
@@ -80,6 +86,12 @@ func buildArgs(req agent.TurnRequest) []string {
 		"--output-format", "stream-json",
 		"--include-partial-messages",
 		"--verbose",
+	}
+	if req.Isolated {
+		// Title requests must not discover custom project context, use tools, or
+		// leave a disposable provider session behind.
+		args = append(args, "--no-session-persistence", "--safe-mode",
+			"--setting-sources", "user", "--tools", "")
 	}
 	if req.Model != "" {
 		args = append(args, "--model", req.Model)

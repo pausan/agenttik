@@ -44,6 +44,12 @@ func (p *Provider) Efforts() []string {
 	return nil
 }
 
+// TitleModel is the smallest Codex model the app offers. Naming a session is
+// a one-shot request, so it does not need the model chosen for its real turn.
+func (p *Provider) TitleModel() (model, effort string) {
+	return "gpt-5.6-luna", "none"
+}
+
 func (p *Provider) Available() error {
 	if _, err := exec.LookPath(Binary); err != nil {
 		return fmt.Errorf("%s not found on PATH: %w", Binary, err)
@@ -82,6 +88,11 @@ func buildArgs(req agent.TurnRequest) []string {
 		return args
 	}
 	args = append(args, "--json", "--cd", req.WorkDir)
+	if req.Isolated {
+		// Title requests have no project or conversation context and should not
+		// leave a disposable provider session behind.
+		args = append(args, "--skip-git-repo-check", "--ephemeral", "--ignore-rules")
+	}
 	if req.Model != "" {
 		args = append(args, "--model", req.Model)
 	}

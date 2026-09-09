@@ -49,6 +49,10 @@ type TurnRequest struct {
 	Model   string
 	Effort  string
 
+	// Isolated marks a one-shot request that must not inherit or persist a
+	// provider conversation.
+	Isolated bool
+
 	// SessionID is the id we chose for the session. Providers that let the
 	// caller pick one (Claude Code) use it verbatim.
 	SessionID string
@@ -152,6 +156,13 @@ type Provider interface {
 	// Run starts a turn and streams its events. The channel is closed when the
 	// turn ends. Cancelling ctx stops the turn.
 	Run(ctx context.Context, req TurnRequest) (<-chan Event, error)
+}
+
+// TitleGenerator optionally names a model suitable for a short, isolated
+// session-title request. The request is never resumed as part of the session
+// it names.
+type TitleGenerator interface {
+	TitleModel() (model, effort string)
 }
 
 // Metered is the optional half of Provider for backends that can be asked for

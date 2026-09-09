@@ -46,6 +46,10 @@ export const S = reactive({
   promptFocus: 0,
   inspector: { panes: ["changed", "stats"], active: "changed" },
   changed: [],
+  log: { branch: "", head: "", commits: [] },
+  logFilter: "",
+  logOpen: "", // the commit whose file list is expanded
+  logFiles: {}, // commit hash -> what it touched, fetched the first time it opens
   tree: [],
   treeFilter: "",
   query: "", // sidebar session filter
@@ -353,7 +357,7 @@ async function openSavedTab(tab) {
     if (open) open.draft = typeof tab.draft === "string" ? tab.draft : "";
   } else if (tab.kind === "file") {
     const owner = S.tabs.some((open) => open.id === tab.owner) ? tab.owner : "";
-    await openFileIn(tab.projectID, owner, tab.path, true);
+    await openFileIn(tab.projectID, owner, tab.path, true, tab.commit || "");
   }
   return S.tabs.some((open) => open.id === tab.id);
 }
@@ -765,10 +769,16 @@ export function openFile(path, silent = false) {
 
 /* openFileIn also rebuilds a saved tab, whose owner may be gone. A file
    belongs to the view it was opened from, but it belongs to its project even
-   when nothing else in that project is open. */
-async function openFileIn(projectID, ownerID, path, silent) {
+   when nothing else in that project is open.
+
+   commit names a revision when the tab is a file as one commit changed it.
+   Such a tab only ever shows a diff — the working copy is a different thing
+   from what was committed, and the commit itself cannot be edited — so it
+   opens read-only in Diff and stays there. Its id carries the revision, so
+   the same path can be open once per commit and once for the working tree. */
+async function openFileIn(projectID, ownerID, path, silent, commit = "") {
   if (!projectID) return;
-  const tabID = `file:${projectID}:${path}`;
+  const tabID = commit ? `file:${projectID}:${commit}:${path}` : `file:${projectID}:${path}`;
   if (S.tabs.some((t) => t.id === tabID)) return selectTab(tabID);
   const tab = {
     id: tabID,
@@ -777,14 +787,15 @@ async function openFileIn(projectID, ownerID, path, silent) {
     owner: ownerID,
     projectID,
     path,
+    commit,
     // Preview is remembered like the other two, but a file that renders as
     // nothing opens in the editor instead of on a blank pane.
-    mode: S.fileMode === "preview" && !canPreview(path) ? "edit" : S.fileMode,
+    mode: commit ? "diff" : S.fileMode === "preview" && !canPreview(path) ? "edit" : S.fileMode,
     content: null,
     diff: null,
     edited: null,
     // What was not read whole must never be written back over its source.
-    readOnly: false,
+    readOnly: !!commit,
     saving: false,
   };
   try {
@@ -802,6 +813,12 @@ async function loadFileTab(tab) {
   const id = projectOfTab(tab);
   if (!id) return;
   const query = `path=${encodeURIComponent(tab.path)}`;
+  if (tab.commit) {
+    if (tab.diff !== null) return;
+    const at = `hash=${encodeURIComponent(tab.commit)}`;
+    tab.diff = (await api("GET", `/api/projects/${id}/commit/diff?${at}&${query}`)).diff || "";
+    return;
+  }
   if (tab.mode === "diff") {
     if (tab.diff !== null) return;
     tab.diff = (await api("GET", `/api/projects/${id}/diff?${query}`)).diff || "";
@@ -817,7 +834,7 @@ async function loadFileTab(tab) {
    but only once the switch has worked, so a view that cannot be fetched puts
    the tab back rather than leaving it on an empty pane. */
 export async function setFileMode(tab, mode) {
-  if (tab?.kind !== "file" || tab.mode === mode || !FILE_MODES.includes(mode)) return;
+  if (tab?.kind !== "file" || tab.commit || tab.mode === mode || !FILE_MODES.includes(mode)) return;
   const previous = tab.mode;
   tab.mode = mode;
   try {
@@ -939,6 +956,7 @@ function savedTab(tab) {
       owner: tab.owner,
       projectID: tab.projectID,
       path: tab.path,
+      commit: tab.commit || "",
     };
   }
   return null;
@@ -988,7 +1006,7 @@ async function restoreOpenTabs() {
         if (open) open.draft = typeof tab.draft === "string" ? tab.draft : "";
       } else if (tab?.kind === "file" && typeof tab.path === "string") {
         const owner = S.tabs.some((open) => open.id === tab.owner) ? tab.owner : "";
-        await openFileIn(tab.projectID, owner, tab.path, true);
+        await openFileIn(tab.projectID, owner, tab.path, true, tab.commit || "");
       }
     }
     if (S.projects.some((p) => p.id === saved.activeProjectID)) {
@@ -1021,7 +1039,7 @@ function setInspectorPanes(panes) {
 }
 
 export async function refreshInspector() {
-  await Promise.all([refreshChanged(), refreshTree()]);
+  await Promise.all([refreshChanged(), refreshLog(), refreshTree()]);
 }
 
 export async function refreshChanged() {
@@ -1032,6 +1050,52 @@ export async function refreshChanged() {
   } catch {
     S.changed = [];
   }
+}
+
+/* refreshLog reads the history of the branch the project is on. A folder that
+   is not a repository answers with an empty log, so there is nothing to
+   special-case here. */
+export async function refreshLog() {
+  const id = currentProjectID();
+  if (!id) return (S.log = EMPTY_LOG());
+  try {
+    const log = await api("GET", `/api/projects/${id}/log`);
+    // A slow request for the project we just left must not replace the log of
+    // the one now in front.
+    if (currentProjectID() === id) S.log = log;
+  } catch {
+    if (currentProjectID() === id) S.log = EMPTY_LOG();
+  }
+}
+
+const EMPTY_LOG = () => ({ branch: "", head: "", commits: [] });
+
+/* toggleCommit expands one row into the files it touched. The list is fetched
+   once per commit: history does not change under us, so a row reopened later
+   costs nothing. */
+export async function toggleCommit(hash) {
+  if (S.logOpen === hash) {
+    S.logOpen = "";
+    return;
+  }
+  S.logOpen = hash;
+  if (S.logFiles[hash]) return;
+  const id = currentProjectID();
+  if (!id) return;
+  try {
+    const detail = await api("GET", `/api/projects/${id}/commit?hash=${hash}`);
+    S.logFiles[hash] = detail.files;
+  } catch (e) {
+    if (S.logOpen === hash) S.logOpen = "";
+    fail(e);
+  }
+}
+
+/* openCommitFile shows one file as that commit changed it. It opens the same
+   kind of tab a working-tree diff does, fixed to the Diff view: there is
+   nothing to edit in a commit that has already been made. */
+export function openCommitFile(hash, path) {
+  return openFileIn(currentProjectID(), S.owner?.id || "", path, false, hash);
 }
 
 async function refreshTree() {
@@ -1055,7 +1119,7 @@ watch(
   () => S.owner?.kind || "",
   (kind) =>
     setInspectorPanes(
-      kind === "project" ? ["options", "stats"] : ["changed", "stats"],
+      kind === "project" ? ["options", "logs", "stats"] : ["changed", "logs", "stats"],
     ),
   { immediate: true },
 );
@@ -1064,6 +1128,9 @@ watch(
   currentProjectID,
   () => {
     S.treeFilter = "";
+    S.logFilter = "";
+    S.logOpen = "";
+    S.logFiles = {};
     refreshInspector().catch(fail);
   },
   { immediate: true },
@@ -1165,7 +1232,11 @@ function onSessionEvent(tab, msg) {
       if (msg.stats) {
         tab.detail.stats = msg.stats;
         tab.detail.running = false;
-        if (tab.id === S.owner?.id) refreshChanged();
+        if (tab.id === S.owner?.id) {
+          refreshChanged();
+          // A turn that commits has changed the history as well as the tree.
+          refreshLog();
+        }
         refreshSessions();
         refreshProjects();
         refreshSubscriptionLimits(tab.detail.session.provider).catch(() => {});

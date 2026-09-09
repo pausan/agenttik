@@ -21,7 +21,11 @@ import FilePreview from "./FilePreview.vue";
 
 const props = defineProps({ tab: { type: Object, required: true } });
 
+/* A file opened from a commit has one view. There is nothing to edit in a
+   revision that has already been made, and its text is not what is on disk,
+   so offering Edit or Preview would only show the wrong thing. */
 const modes = computed(() => {
+  if (props.tab.commit) return [{ label: "Diff", value: "diff" }];
   const items = [
     { label: "Edit", value: "edit" },
     { label: "Diff", value: "diff" },
@@ -68,6 +72,9 @@ const stat = computed(() => {
       <span class="path-clip min-w-0 flex-1 truncate font-mono text-xs text-dimmed">
         <span>{{ tab.path }}</span>
       </span>
+      <span v-if="tab.commit" class="shrink-0 font-mono text-xs text-primary" title="Shown as this commit changed it">
+        @ {{ tab.commit }}
+      </span>
       <span
         v-if="dirty"
         class="shrink-0 font-mono text-base leading-none text-primary"
@@ -76,7 +83,7 @@ const stat = computed(() => {
         >*</span
       >
       <UButton
-        v-if="!tab.readOnly"
+        v-if="!tab.readOnly && !tab.commit"
         icon="i-lucide-save"
         size="xs"
         color="neutral"
@@ -112,7 +119,8 @@ const stat = computed(() => {
       class="flex shrink-0 items-center gap-3 border-t border-default px-5 py-1 text-xs text-dimmed"
     >
       <span>{{ langOf(tab.path) || "text" }}</span>
-      <span v-if="tab.readOnly" class="text-warning">read only</span>
+      <span v-if="tab.commit" class="text-dimmed">committed</span>
+      <span v-else-if="tab.readOnly" class="text-warning">read only</span>
       <span v-else-if="dirty" class="text-primary">unsaved</span>
       <span class="flex-1"></span>
       <template v-if="stat">

@@ -1,0 +1,259 @@
+package server
+
+import (
+	"path"
+	"regexp"
+	"strconv"
+	"strings"
+
+	"github.com/gofiber/fiber/v2"
+)
+
+// maxLogCommits bounds one Logs request. The pane filters what it already has,
+// so this is how far back it can look rather than a page size.
+const maxLogCommits = 500
+
+// Record and field separators for the log format. Both are control characters
+// git will never emit itself, which a subject line full of punctuation cannot
+// be trusted not to contain.
+const (
+	logRecordSep = "\x1e"
+	logFieldSep  = "\x1f"
+)
+
+// commitHash guards the one client-supplied value that reaches git as an argv
+// element. Anything but hex could be read as a flag rather than a revision.
+var commitHash = regexp.MustCompile(`^[0-9a-fA-F]{4,40}$`)
+
+// shortstat picks the numbers out of git's " 3 files changed, 9 insertions(+),
+// 2 deletions(-)" summary line.
+var shortstat = regexp.MustCompile(`(\d+) (files?|insertions?|deletions?)`)
+
+type commitEntry struct {
+	// Hash is abbreviated to the eight characters the row shows.
+	Hash    string `json:"hash"`
+	Subject string `json:"subject"`
+	Author  string `json:"author"`
+	// Date is already formatted as YYYY-MM-DD HH:MM in the committer's own
+	// zone: git knows the offset each commit was made in and the browser does
+	// not, so formatting it here is both cheaper and more truthful.
+	Date  string `json:"date"`
+	Files int    `json:"files"`
+	// Changes counts insertions and deletions together — an edited line is one
+	// of each, which is what makes the figure a measure of work rather than of
+	// growth.
+	Changes int `json:"changes"`
+}
+
+type projectLog struct {
+	// Branch is empty on a detached HEAD, where Head is all there is to say.
+	Branch  string        `json:"branch"`
+	Head    string        `json:"head"`
+	Commits []commitEntry `json:"commits"`
+}
+
+// projectLog is the history of the branch the project is on. A folder that is
+// not a repository, and one with no commits yet, both answer with an empty log
+// rather than an error: neither is a fault the pane can do anything about.
+func (s *Server) projectLog(c *fiber.Ctx) error {
+	root, err := s.projectRoot(c)
+	if err != nil {
+		return err
+	}
+	body := projectLog{Commits: []commitEntry{}}
+	if !isGitRepo(root) {
+		return c.JSON(body)
+	}
+	limit := c.QueryInt("limit", maxLogCommits)
+	if limit <= 0 || limit > maxLogCommits {
+		limit = maxLogCommits
+	}
+	if out, err := runGit(root, "rev-parse", "--abbrev-ref", "HEAD"); err == nil {
+		if name := strings.TrimSpace(out); name != "HEAD" {
+			body.Branch = name
+		}
+	}
+	if out, err := runGit(root, "rev-parse", "--short=8", "HEAD"); err == nil {
+		body.Head = strings.TrimSpace(out)
+	}
+	out, err := runGit(root, "log", "--no-color", "--max-count="+strconv.Itoa(limit),
+		"--pretty=format:"+logRecordSep+"%H"+logFieldSep+"%an"+logFieldSep+"%ad"+logFieldSep+"%s",
+		"--date=format:%Y-%m-%d %H:%M", "--shortstat")
+	if err != nil {
+		return c.JSON(body)
+	}
+	body.Commits = parseLog(out)
+	return c.JSON(body)
+}
+
+// parseLog reads the record-separated log. Each record is a header line and,
+// for a commit that touched anything, a shortstat line under it — a merge
+// reports no stat at all, and reads as zero files rather than being dropped.
+func parseLog(out string) []commitEntry {
+	commits := []commitEntry{}
+	for _, record := range strings.Split(out, logRecordSep) {
+		if strings.TrimSpace(record) == "" {
+			continue
+		}
+		lines := strings.Split(record, "\n")
+		fields := strings.Split(lines[0], logFieldSep)
+		if len(fields) < 4 {
+			continue
+		}
+		entry := commitEntry{
+			Hash:    shortHash(fields[0]),
+			Author:  fields[1],
+			Date:    fields[2],
+			Subject: fields[3],
+		}
+		for _, line := range lines[1:] {
+			if strings.Contains(line, "changed") {
+				entry.Files, entry.Changes = parseShortstat(line)
+				break
+			}
+		}
+		commits = append(commits, entry)
+	}
+	return commits
+}
+
+func parseShortstat(line string) (files, changes int) {
+	for _, m := range shortstat.FindAllStringSubmatch(line, -1) {
+		n, _ := strconv.Atoi(m[1])
+		if strings.HasPrefix(m[2], "file") {
+			files = n
+			continue
+		}
+		changes += n
+	}
+	return files, changes
+}
+
+func shortHash(hash string) string {
+	if len(hash) > 8 {
+		return hash[:8]
+	}
+	return hash
+}
+
+type commitFile struct {
+	Path      string `json:"path"`
+	Status    string `json:"status"`
+	Additions int    `json:"additions"`
+	Deletions int    `json:"deletions"`
+	Binary    bool   `json:"binary"`
+}
+
+type commitDetail struct {
+	Hash  string       `json:"hash"`
+	Files []commitFile `json:"files"`
+}
+
+// projectCommit lists what one commit touched, which is what a log row expands
+// into. Two git calls rather than one: --numstat and --name-status override
+// each other, and the counts and the status letter are both worth having.
+func (s *Server) projectCommit(c *fiber.Ctx) error {
+	root, hash, err := s.commitTarget(c)
+	if err != nil {
+		return err
+	}
+	body := commitDetail{Hash: shortHash(hash), Files: []commitFile{}}
+	out, err := runGit(root, "-c", "core.quotePath=false", "show", "--no-color",
+		"--format=", "--numstat", hash)
+	if err != nil && out == "" {
+		return err
+	}
+	byPath := map[string]int{}
+	for _, line := range splitLines(out) {
+		cols := strings.SplitN(line, "\t", 3)
+		if len(cols) < 3 {
+			continue
+		}
+		file := commitFile{Path: renamedTo(cols[2])}
+		// A binary file is counted as "-" rather than in lines.
+		file.Binary = cols[0] == "-" || cols[1] == "-"
+		file.Additions, _ = strconv.Atoi(cols[0])
+		file.Deletions, _ = strconv.Atoi(cols[1])
+		byPath[file.Path] = len(body.Files)
+		body.Files = append(body.Files, file)
+	}
+	status, err := runGit(root, "-c", "core.quotePath=false", "show", "--no-color",
+		"--format=", "--name-status", hash)
+	if err == nil {
+		for _, line := range splitLines(status) {
+			cols := strings.Split(line, "\t")
+			if len(cols) < 2 {
+				continue
+			}
+			// A rename names both paths; the new one is the file that exists.
+			to := cols[len(cols)-1]
+			if at, ok := byPath[to]; ok {
+				body.Files[at].Status = cols[0]
+			}
+		}
+	}
+	return c.JSON(body)
+}
+
+// projectCommitDiff is one file as that commit changed it. git show against a
+// path works on a root commit too, where there is no parent to diff against.
+func (s *Server) projectCommitDiff(c *fiber.Ctx) error {
+	root, hash, err := s.commitTarget(c)
+	if err != nil {
+		return err
+	}
+	rel := c.Query("path")
+	if _, err := resolveInRoot(root, rel); err != nil {
+		return err
+	}
+	out, _ := gitDiff(root, "-c", "core.quotePath=false", "show", "--no-color",
+		"--format=", hash, "--", rel)
+	body := fileDiff{Path: rel, Partial: len(out) > maxFileBytes}
+	if body.Partial {
+		out = out[:maxFileBytes]
+	}
+	body.Diff = out
+	return c.JSON(body)
+}
+
+// commitTarget resolves the project folder and checks the revision. The hash
+// is the only client value handed to git as a revision, so it is matched
+// against hex rather than merely escaped.
+func (s *Server) commitTarget(c *fiber.Ctx) (string, string, error) {
+	root, err := s.projectRoot(c)
+	if err != nil {
+		return "", "", err
+	}
+	if !isGitRepo(root) {
+		return "", "", badRequest("%s is not a git repository", root)
+	}
+	hash := c.Query("hash")
+	if !commitHash.MatchString(hash) {
+		return "", "", badRequest("invalid commit hash")
+	}
+	return root, hash, nil
+}
+
+// renamedTo takes the destination of a numstat rename. git writes the pair
+// either whole ("old => new") or with the common part factored out
+// ("dir/{a => b}/file"), and only the destination path exists to be opened.
+//
+// Either side of a factored pair can be empty — "web/{ui => }/index.html" is
+// a move up one level — so the result is cleaned rather than concatenated:
+// without that it reads "web//index.html", which matches neither the file on
+// disk nor the path --name-status reports the status letter under.
+func renamedTo(raw string) string {
+	i := strings.Index(raw, " => ")
+	if i < 0 {
+		return raw
+	}
+	to := raw[i+4:]
+	open := strings.LastIndex(raw[:i], "{")
+	if closing := strings.Index(to, "}"); open >= 0 && closing >= 0 {
+		to = raw[:open] + to[:closing] + to[closing+1:]
+	}
+	if to = path.Clean(to); to == "." {
+		return raw
+	}
+	return to
+}

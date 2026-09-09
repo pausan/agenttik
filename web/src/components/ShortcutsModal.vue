@@ -48,6 +48,7 @@ const groups = [
     label: "Prompt",
     rows: [
       { keys: "Enter", what: "Send" },
+      { keys: "Alt+Q", what: "Enqueue" },
       { keys: "Shift+Enter", what: "New line" },
       { keys: "Ctrl+Z / Ctrl+Y", what: "Undo / redo draft edits" },
     ],

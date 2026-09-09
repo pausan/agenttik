@@ -244,6 +244,7 @@ function onSessionDrop(e) {
             <SessionRow
               :title="s.title"
               :status="s.status"
+              :queued="s.queue_count"
               :active="S.detail?.session.id === s.id"
               :number="S.activeProjectID === p.id ? sessionIndex + 1 : 0"
               archive
@@ -281,6 +282,7 @@ function onSessionDrop(e) {
           :key="s.id"
           :title="s.title"
           :status="s.status"
+          :queued="s.queue_count"
           :sub="`${s.project_name} · ${s.project_path} · ${ago(s.last_active_at)}`"
           :active="S.detail?.session.id === s.id"
           :archived="isArchived(s)"

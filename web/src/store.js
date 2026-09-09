@@ -1116,12 +1116,17 @@ function onEvent(msg) {
   if (tab) onSessionEvent(tab, msg);
   // A turn ending anywhere in a project moves its totals, whether or not that
   // session is open here.
-  if (msg.event?.type === "done") reloadProjects();
+  if (["started", "done"].includes(msg.event?.type)) reloadProjects();
 }
 
 function onSessionEvent(tab, msg) {
   const ev = msg.event;
   switch (ev.type) {
+    case "started":
+      startLocal(tab, msg.prompt, msg.turn);
+      refreshSessions();
+      refreshProjects();
+      break;
     case "text":
       appendLive(tab, "assistant", ev.text);
       break;
@@ -1178,6 +1183,12 @@ function endLive(tab) {
 
 /* ---------------------------------------------------------------- prompt */
 
+function startLocal(tab, prompt, turn) {
+  if (turn && !tab.detail.turns.some((current) => current.id === turn.id)) tab.detail.turns.push(turn);
+  if (prompt && tab.detail.messages.at(-1)?.content !== prompt) push(tab, "user", prompt);
+  tab.detail.running = true;
+}
+
 export async function send(prompt) {
   const tab = S.owner;
   if (tab?.kind !== "session") return;
@@ -1186,16 +1197,30 @@ export async function send(prompt) {
 
   tab.draft = "";
   endLive(tab);
-  push(tab, "user", prompt);
-  tab.detail.running = true;
 
   try {
     const turn = await api("POST", `/api/sessions/${tab.sessionID}/messages`, { prompt });
-    tab.detail.turns.push(turn);
+    startLocal(tab, prompt, turn);
     refreshSessions();
     refreshProjects();
   } catch (e) {
     tab.detail.running = false;
+    fail(e);
+  }
+}
+
+export async function enqueue(prompt) {
+  const tab = S.owner;
+  if (tab?.kind !== "session") return;
+  prompt = prompt.trim();
+  if (!prompt) return;
+  try {
+    const result = await api("POST", `/api/sessions/${tab.sessionID}/queue`, { prompt });
+    tab.draft = "";
+    tab.detail.session.queue_count = result.queue_count;
+    refreshSessions();
+    refreshProjects();
+  } catch (e) {
     fail(e);
   }
 }

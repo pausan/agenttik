@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, ref, watch } from "vue";
 
-import { S, contextWindow, fail, isStarred, providerOf, refreshSubscriptionLimits, send, setModel, stopTurn, toggleStar } from "../store";
+import { S, contextWindow, enqueue, fail, isStarred, providerOf, refreshSubscriptionLimits, send, setModel, stopTurn, toggleStar } from "../store";
 import ContextPane from "./ContextPane.vue";
 import { useTextHistory } from "../text-history";
 
@@ -16,6 +16,7 @@ const text = computed({
 const history = useTextHistory(text, (value) => (text.value = value));
 const prompt = ref(null);
 const modelOpen = ref(false);
+const queueOpen = ref(false);
 
 /* New sessions can be made while another prompt bar is still mounted, so an
    explicit focus request is more reliable than the component's autofocus. */
@@ -175,7 +176,17 @@ function onPromptInput(e) {
   history.input(e);
 }
 
+function enqueuePrompt() {
+  queueOpen.value = false;
+  enqueue(text.value);
+}
+
 function onPromptKey(e) {
+  if (e.altKey && !e.ctrlKey && !e.metaKey && e.key.toLowerCase() === "q") {
+    e.preventDefault();
+    enqueuePrompt();
+    return;
+  }
   history.keydown(e);
 }
 </script>
@@ -278,11 +289,21 @@ function onPromptKey(e) {
           label="Stop"
           @click="stopTurn"
         />
-        <UButton type="submit" size="sm" :disabled="S.detail.running" label="Send" />
+        <div class="flex">
+          <UButton type="submit" size="sm" :disabled="S.detail.running" label="Send" />
+          <UPopover v-model:open="queueOpen">
+            <UButton type="button" size="sm" color="primary" variant="solid" icon="i-lucide-chevron-down" aria-label="Send options" />
+            <template #content>
+              <div class="p-1">
+                <UButton type="button" color="neutral" variant="ghost" block label="🕒 Enqueue" @click="enqueuePrompt" />
+              </div>
+            </template>
+          </UPopover>
+        </div>
       </div>
     </div>
     <p class="mx-auto mt-1.5 max-w-[860px] px-1 text-xs text-dimmed">
-      <UKbd value="enter" /> to send · <UKbd value="shift" /><UKbd value="enter" /> for a newline
+      <UKbd value="enter" /> to send · <UKbd value="alt" /><UKbd value="q" /> to enqueue · <UKbd value="shift" /><UKbd value="enter" /> for a newline
     </p>
   </form>
 </template>

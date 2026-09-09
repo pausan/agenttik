@@ -17,6 +17,7 @@ const props = defineProps({
   active: Boolean,
   archived: Boolean,
   archive: Boolean,
+  queued: { type: Number, default: 0 },
 });
 
 const emit = defineEmits(["select", "toggle-archive", "rename", "editing"]);
@@ -77,6 +78,7 @@ function commit() {
         >
           <span v-if="number" class="w-3 shrink-0 font-mono text-[10px] text-dimmed tabular-nums">{{ number }}</span>
           <StatusDot :status="status" />
+          <span v-if="queued" class="shrink-0" title="Queued prompt">🕒</span>
           <span class="truncate">{{ title || "Untitled session" }}</span>
         </span>
         <span v-if="sub" class="block truncate text-xs text-dimmed">{{ sub }}</span>

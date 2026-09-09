@@ -16,7 +16,7 @@ const elapsed = computed(() =>
   S.detail?.running && startedAt.value ? Math.max(0, Math.floor((now.value - startedAt.value) / 1000)) : 0,
 );
 const elapsedLabel = computed(() => `${elapsed.value} ${elapsed.value === 1 ? "second" : "seconds"}`);
-const clockFace = computed(() => CLOCK_FACES[elapsed.value % CLOCK_FACES.length]);
+const clockFace = computed(() => CLOCK_FACES[Math.floor(now.value / 250) % CLOCK_FACES.length]);
 
 /* The POST response normally supplies the running turn right away. The local
    timestamp still covers the small gap before it does, and a running session

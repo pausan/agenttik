@@ -87,6 +87,17 @@ ALTER TABLE turns ADD COLUMN context_tokens INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE projects ADD COLUMN position INTEGER NOT NULL DEFAULT 0;
 CREATE INDEX idx_projects_order ON projects(position, name);
 	`,
+	`
+-- Queued prompts wait for the project runner. They are separate from turns
+-- because a turn only exists once a provider is actually started.
+CREATE TABLE queued_messages (
+    id         INTEGER PRIMARY KEY,
+    session_id TEXT    NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    prompt     TEXT    NOT NULL,
+    created_at INTEGER NOT NULL
+);
+CREATE INDEX idx_queued_messages_session ON queued_messages(session_id, id);
+	`,
 }
 
 func migrate(db *sql.DB) error {

@@ -8,7 +8,8 @@ type Project struct {
 
 	// Position is the order the Projects sidebar was dragged into. A newly
 	// created project is 0, so it stays ahead of manually ordered projects.
-	Position int64 `json:"position"`
+	Position   int64 `json:"position"`
+	QueueCount int64 `json:"queue_count"`
 
 	// Filled by ListProjects: titles of the project's open sessions. Always
 	// encoded, empty included, so the UI can iterate it without a guard.
@@ -16,9 +17,10 @@ type Project struct {
 }
 
 type SessionRef struct {
-	ID     string `json:"id"`
-	Title  string `json:"title"`
-	Status string `json:"status"`
+	ID         string `json:"id"`
+	Title      string `json:"title"`
+	Status     string `json:"status"`
+	QueueCount int64  `json:"queue_count"`
 }
 
 type Session struct {
@@ -39,12 +41,20 @@ type Session struct {
 	// DoneAt is 0 while the session is open and the time it was ticked off
 	// otherwise. Position is the order the project view was dragged into; 0
 	// means never dragged, which sorts a new session to the top.
-	DoneAt   int64 `json:"done_at"`
-	Position int64 `json:"position"`
+	DoneAt     int64 `json:"done_at"`
+	Position   int64 `json:"position"`
+	QueueCount int64 `json:"queue_count"`
 
 	// Denormalised for list views.
 	ProjectName string `json:"project_name,omitempty"`
 	ProjectPath string `json:"project_path,omitempty"`
+}
+
+type QueuedMessage struct {
+	ID        int64  `json:"id"`
+	SessionID string `json:"session_id"`
+	Prompt    string `json:"prompt"`
+	CreatedAt int64  `json:"created_at"`
 }
 
 type Turn struct {

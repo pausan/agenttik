@@ -9,14 +9,15 @@ import (
 
 const sessionCols = `s.id, s.project_id, s.title, s.provider, s.provider_session_id,
 	s.model, s.effort, s.permission, s.source, s.status,
-	s.created_at, s.updated_at, s.last_active_at, s.done_at, s.position, p.name, p.path`
+	s.created_at, s.updated_at, s.last_active_at, s.done_at, s.position,
+	(SELECT COUNT(*) FROM queued_messages q WHERE q.session_id = s.id), p.name, p.path`
 
 func scanSession(sc interface{ Scan(...any) error }) (*Session, error) {
 	var v Session
 	err := sc.Scan(&v.ID, &v.ProjectID, &v.Title, &v.Provider, &v.ProviderSessionID,
 		&v.Model, &v.Effort, &v.Permission, &v.Source, &v.Status,
 		&v.CreatedAt, &v.UpdatedAt, &v.LastActiveAt, &v.DoneAt, &v.Position,
-		&v.ProjectName, &v.ProjectPath)
+		&v.QueueCount, &v.ProjectName, &v.ProjectPath)
 	if err != nil {
 		return nil, err
 	}
@@ -208,6 +209,76 @@ func (s *Store) ReorderSessions(projectID int64, ids []string) error {
 		return fmt.Errorf("reorder sessions: %w", err)
 	}
 	return nil
+}
+
+// EnqueueMessage persists a prompt until the project runner selects its
+// session. Queue order inside one session is always first in, first out.
+func (s *Store) EnqueueMessage(sessionID, prompt string) (*QueuedMessage, error) {
+	v := &QueuedMessage{SessionID: sessionID, Prompt: prompt, CreatedAt: nowMillis()}
+	res, err := s.db.Exec(`INSERT INTO queued_messages (session_id, prompt, created_at) VALUES (?, ?, ?)`,
+		v.SessionID, v.Prompt, v.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("enqueue message: %w", err)
+	}
+	v.ID, _ = res.LastInsertId()
+	return v, nil
+}
+
+// NextQueuedMessage returns the oldest prompt waiting in one session.
+func (s *Store) NextQueuedMessage(sessionID string) (*QueuedMessage, error) {
+	v := &QueuedMessage{}
+	err := s.db.QueryRow(`SELECT id, session_id, prompt, created_at FROM queued_messages
+		WHERE session_id = ? ORDER BY id LIMIT 1`, sessionID).
+		Scan(&v.ID, &v.SessionID, &v.Prompt, &v.CreatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("next queued message: %w", err)
+	}
+	return v, nil
+}
+
+// RemoveQueuedMessage is called immediately after its turn has claimed it.
+func (s *Store) RemoveQueuedMessage(id int64) error {
+	_, err := s.db.Exec(`DELETE FROM queued_messages WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("remove queued message: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) QueueCount(sessionID string) (int64, error) {
+	var count int64
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM queued_messages WHERE session_id = ?`, sessionID).Scan(&count); err != nil {
+		return 0, fmt.Errorf("queue count: %w", err)
+	}
+	return count, nil
+}
+
+// NextQueuedSession follows the projects visible session order. A preferred
+// session is returned first while it still has work, so a sessions own queue
+// drains before the scheduler returns to the projects top-to-bottom scan.
+func (s *Store) NextQueuedSession(projectID int64, preferredSessionID string) (*Session, error) {
+	if preferredSessionID != "" {
+		sess, err := s.GetSession(preferredSessionID)
+		if err != nil {
+			return nil, err
+		}
+		if sess.ProjectID == projectID && sess.QueueCount > 0 {
+			return sess, nil
+		}
+	}
+	rows, err := s.ListSessions(SessionFilter{ProjectID: projectID, ExcludeDone: true})
+	if err != nil {
+		return nil, err
+	}
+	for i := range rows {
+		if rows[i].QueueCount > 0 {
+			return &rows[i], nil
+		}
+	}
+	return nil, nil
 }
 
 func (s *Store) DeleteSession(id string) error {

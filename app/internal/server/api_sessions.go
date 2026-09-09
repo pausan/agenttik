@@ -238,6 +238,23 @@ func (s *Server) postMessage(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusAccepted).JSON(turn)
 }
 
+func (s *Server) enqueueMessage(c *fiber.Ctx) error {
+	var body struct {
+		Prompt string `json:"prompt"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return badRequest("invalid body: %v", err)
+	}
+	if strings.TrimSpace(body.Prompt) == "" {
+		return badRequest("prompt is required")
+	}
+	count, err := s.runner.Enqueue(c.Params("id"), body.Prompt)
+	if err != nil {
+		return err
+	}
+	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"queue_count": count})
+}
+
 func (s *Server) stopSession(c *fiber.Ctx) error {
 	if err := s.runner.Stop(c.Params("id")); err != nil {
 		return err

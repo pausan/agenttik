@@ -83,6 +83,7 @@ function onDrop() {
           class="min-w-0 flex-1"
           :title="s.title"
           :status="s.status"
+          :queued="s.queue_count"
           :sub="`${s.model}${s.effort ? ' · ' + s.effort : ''} · ${ago(s.last_active_at)}`"
           :active="S.detail?.session.id === s.id"
           archive

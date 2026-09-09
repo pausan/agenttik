@@ -29,7 +29,9 @@ type Event struct {
 	Event     agent.Event `json:"event"`
 	// Stats is attached to the done event so the panel can refresh without
 	// a second request.
-	Stats *store.Stats `json:"stats,omitempty"`
+	Stats  *store.Stats `json:"stats,omitempty"`
+	Turn   *store.Turn  `json:"turn,omitempty"`
+	Prompt string       `json:"prompt,omitempty"`
 }
 
 type Runner struct {
@@ -37,13 +39,14 @@ type Runner struct {
 	registry *agent.Registry
 	hub      *Hub
 
-	mu     sync.Mutex
-	active map[string]context.CancelFunc // session id -> cancel
+	mu         sync.Mutex
+	active     map[string]context.CancelFunc // session id -> cancel
+	scheduling map[int64]bool                // project id -> dispatch in progress
 }
 
 func New(s *store.Store, reg *agent.Registry, hub *Hub) *Runner {
 	return &Runner{store: s, registry: reg, hub: hub,
-		active: make(map[string]context.CancelFunc)}
+		active: make(map[string]context.CancelFunc), scheduling: make(map[int64]bool)}
 }
 
 func (r *Runner) Hub() *Hub { return r.hub }
@@ -87,6 +90,7 @@ func (r *Runner) Send(sessionID, prompt string) (*store.Turn, error) {
 		delete(r.active, sessionID)
 		r.mu.Unlock()
 		cancel()
+		go r.schedule(sess.ProjectID, sessionID)
 	}
 
 	// The first prompt names the session.
@@ -129,11 +133,70 @@ func (r *Runner) Send(sessionID, prompt string) (*store.Turn, error) {
 		return nil, err
 	}
 
+	started := Event{SessionID: sess.ID, ProjectID: sess.ProjectID, TurnID: turn.ID,
+		Event: agent.Event{Type: "started"}, Turn: turn, Prompt: prompt}
+	r.hub.Publish(sess.ID, started)
+	r.hub.Publish(ProjectTopic(sess.ProjectID), started)
+
 	go r.consume(sess, turn, events, release)
 	return turn, nil
 }
 
-// Stop cancels the running turn, which kills the CLI's process group.
+// Enqueue persists a prompt and starts the project queue when no turn is active.
+func (r *Runner) Enqueue(sessionID, prompt string) (int64, error) {
+	sess, err := r.store.GetSession(sessionID)
+	if err != nil {
+		return 0, err
+	}
+	if _, err := r.store.EnqueueMessage(sessionID, prompt); err != nil {
+		return 0, err
+	}
+	r.schedule(sess.ProjectID, "")
+	return r.store.QueueCount(sessionID)
+}
+
+// schedule runs one queued prompt only after every active turn in the project
+// has finished. A session that just ran stays preferred while it has work.
+func (r *Runner) schedule(projectID int64, preferredSessionID string) {
+	r.mu.Lock()
+	if r.scheduling[projectID] {
+		r.mu.Unlock()
+		return
+	}
+	for sessionID := range r.active {
+		sess, err := r.store.GetSession(sessionID)
+		if err == nil && sess.ProjectID == projectID {
+			r.mu.Unlock()
+			return
+		}
+	}
+	r.scheduling[projectID] = true
+	r.mu.Unlock()
+	defer func() {
+		r.mu.Lock()
+		delete(r.scheduling, projectID)
+		r.mu.Unlock()
+	}()
+
+	sess, err := r.store.NextQueuedSession(projectID, preferredSessionID)
+	if err != nil || sess == nil {
+		return
+	}
+	queued, err := r.store.NextQueuedMessage(sess.ID)
+	if err != nil || queued == nil {
+		return
+	}
+	if _, err := r.Send(sess.ID, queued.Prompt); err == ErrBusy {
+		return
+	} else if err != nil {
+		_ = r.store.RemoveQueuedMessage(queued.ID)
+		return
+	}
+	_ = r.store.RemoveQueuedMessage(queued.ID)
+}
+
+// Stop cancels the running turn, which kills the CLIs process group.
+
 func (r *Runner) Stop(sessionID string) error {
 	r.mu.Lock()
 	cancel, ok := r.active[sessionID]

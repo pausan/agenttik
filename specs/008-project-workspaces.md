@@ -33,6 +33,11 @@ its place in the list, so the digit there is the digit that reaches it. Rows
 whose conversation is not open, or that sit past the ninth tab, keep the blank
 column; rows of every other project have no column at all.
 
+`startSession` refuses to open a second blank conversation: while the one in
+front has no messages, no queued prompts and an empty draft, the chord, the
+strip's `+` and both New session buttons select it and focus the prompt
+instead.
+
 A project row shows its letter dimmed in front of the name, is highlighted when
 selected, and pulses a dot on the right while any of its sessions is mid-turn —
 `recent_sessions` already carries each session's status, so this costs nothing
@@ -66,6 +71,13 @@ not open at all. Positions in the two lists cannot be made to agree — the stri
 is a subset with two other kinds of tab in it — so a row shows the strip's
 number or nothing.
 
+**A blank conversation is reused rather than counted.** Refusing on the tab in
+front, rather than searching the project for any empty session, keeps the rule
+to what is visible: the answer to "why did nothing happen" is on screen. Draft
+text is what makes a conversation worth keeping — messages and the queue are
+already checked, and a session with neither is indistinguishable from the one
+the button would create.
+
 **A file tab carries its project id.** It used to be derived from the view it
 was opened from, which is nothing once that view closes — and files can now be
 opened from the Tree with no tab open at all, since the right panel and Tree
@@ -81,8 +93,11 @@ label, so a tab is addressable by its full name.
 `git diff --check` passed. Tests and builds were not run, per the current
 prototype policy.
 
-The numbering was browser-checked on a fresh database with three named
-conversations. With only the project page open every sidebar row showed a blank
-column; opening two of them numbered those rows 2 and 3, matching the strip,
-and `Alt+1`/`Alt+2`/`Alt+3` selected the page, the first and the second. The
-page logged no errors.
+The numbering and the blank-session rule were browser-checked on a fresh
+database with three named conversations. With only the project page open every
+sidebar row showed a blank column; opening two of them numbered those rows 2
+and 3, matching the strip, and `Alt+1`/`Alt+2`/`Alt+3` selected the page, the
+first and the second. `Ctrl+N` and `Ctrl+T` on a blank conversation left the
+session count at 3 and focused the textarea; typing one letter and pressing
+`Ctrl+N` made the fourth, and pressing it again on that blank one changed
+nothing. The page logged no errors.

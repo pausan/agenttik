@@ -600,9 +600,29 @@ function sessionDefaults() {
   return { provider: p.name, model: p.models[0].id, effort: "", permission: "workspace" };
 }
 
+/* blankSession is the conversation in front when it is still untouched:
+   nothing said, nothing queued, nothing typed. A single letter in the box
+   makes it worth keeping, and starting another is then a real request. */
+function blankSession(projectID) {
+  const tab = S.owner;
+  if (tab?.kind !== "session" || projectOfTab(tab) !== projectID) return null;
+  const { messages, queued } = tab.detail;
+  return messages.length || queued.length || tab.draft.trim() ? null : tab;
+}
+
 /* A project page is where a session is started from, so it hands its tab over
-   to the new conversation rather than staying open behind it. */
+   to the new conversation rather than staying open behind it.
+
+   An untouched conversation is already what this would produce, so every way
+   in — the chord, the strip's +, the page's button — stops at that one rather
+   than leaving a trail of empty tabs. It comes to the front with the cursor in
+   the box, which is what was being asked for. */
 export async function startSession(project) {
+  const blank = blankSession(project.id);
+  if (blank) {
+    selectTab(blank.id);
+    return focusPrompt();
+  }
   const cfg = sessionDefaults();
   if (!cfg) return fail(new Error("No agent CLI is available. Open Settings to see why."));
   const replaced = S.tab?.kind === "project" ? S.tab.id : "";

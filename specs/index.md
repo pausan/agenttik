@@ -41,6 +41,7 @@ Also changed, not compiled or run: workspace sessions now pass
 run commands rather than only edit files. `go test ./app/internal/agent/...`
 and a check that a session actually commits are still to run.
 
-A Claude Code session started from the UI streams into the transcript and
-records per-turn token metrics; resume across turns works. Several sessions can
-be open at once, each streaming into its own tab. The Codex provider is a stub.
+Claude Code sessions stream into the transcript, record per-turn token metrics,
+and resume across turns. The Codex provider is implemented against the current
+CLI JSONL contract and compiles; its billable live-turn check remains pending.
+Several sessions can be open at once, each streaming into its own tab.

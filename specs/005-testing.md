@@ -47,5 +47,4 @@ the git status and the folder picker all read something real.
 ## What is not covered
 
 A live turn. Running one spends a real subscription, so nothing in the suite
-sends a prompt; the transcript's streaming path is exercised by hand. The
-Codex provider is a stub, so only its command shape is unit tested.
+sends a prompt; the transcript's streaming path is exercised by hand.

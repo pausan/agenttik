@@ -29,7 +29,7 @@ kind, where holding a key is the point.
 | | |
 |---|---|
 | Claude Code provider | works — streaming, resume, token metrics |
-| Codex provider | stub — command shape written, event parsing not implemented |
+| Codex provider | implemented — streaming, resume, token metrics; live check pending |
 | OpenRouter / direct APIs | not started |
 
 ## Requirements
@@ -91,7 +91,7 @@ the posture is chosen per session, before the turn starts.
 | Mode | Claude Code | Codex |
 |------|-------------|-------|
 | Read only | `--permission-mode plan` | `--sandbox read-only` |
-| Edit inside the project (default) | `--permission-mode acceptEdits` | `--sandbox workspace-write` |
+| Edit inside the project (default) | `--permission-mode auto` | `--sandbox workspace-write` |
 | No guardrails | `--dangerously-skip-permissions` | `--dangerously-bypass-approvals-and-sandbox` |
 
 "No guardrails" lets the agent run anything as your user. It is there because it

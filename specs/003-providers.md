@@ -69,10 +69,10 @@ Events consumed from stdout JSONL:
 Models are aliases (`fable`, `opus`, `sonnet`, `haiku`) so they track the latest
 release without a code change. Efforts: `low`, `medium`, `high`, `xhigh`, `max`.
 
-## Codex — stub
+## Codex
 
-Command shape is written but event parsing is not implemented; `Run` returns
-`ErrNotImplemented`. The intended invocation:
+Codex runs through the locally authenticated CLI, so agenttik never reads or
+handles the account credentials. The invocation is:
 
 ```
 codex exec --json --model <model> -c model_reasoning_effort=<effort> \
@@ -80,9 +80,27 @@ codex exec --json --model <model> -c model_reasoning_effort=<effort> \
 codex exec resume <session-id> --json ...
 ```
 
-Codex JSONL event names differ between CLI versions, so the parser needs to be
-written against the installed version and pinned by a fixture test rather than
-guessed.
+The prompt is sent on stdin. `resume` uses the session's original sandbox
+policy; the CLI does not accept a new `--sandbox` flag for that subcommand.
+The process working directory remains the project's directory. The CLI's JSONL
+stream maps as follows:
+
+| Line | Mapped to |
+|------|-----------|
+| `{"type":"thread.started","thread_id":...}` | `session_started` |
+| `{"type":"item.started","item":{"type":"command_execution",...}}` | `tool_use` |
+| `{"type":"item.completed","item":{"type":"agent_message","text":...}}` | `text` |
+| `{"type":"item.completed","item":{"type":"reasoning",...}}` | `thinking` |
+| completed command, MCP, or web-search item | `tool_result` |
+| `{"type":"turn.completed","usage":...}` | `usage` + `done` |
+| `turn.failed` or `error` | `error` |
+
+`input_tokens` includes the cached portion reported separately as
+`cached_input_tokens`; the former is used as the current context size.
+
+Status: implementation compiles against Codex CLI 0.147.0's command syntax and
+the official JSONL event contract. A live subscription turn was not run because
+it would consume account usage.
 
 ## Later: key-based providers
 

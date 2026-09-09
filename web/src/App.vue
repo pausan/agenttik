@@ -5,6 +5,7 @@ import { useToast } from "@nuxt/ui/composables";
 import {
   S,
   closeTab,
+  hit,
   init,
   reopenClosedTab,
   selectAdjacentTab,
@@ -18,86 +19,65 @@ import SideBar from "./components/SideBar.vue";
 import MainPanel from "./components/MainPanel.vue";
 import InspectorPanel from "./components/InspectorPanel.vue";
 import AddProjectModal from "./components/AddProjectModal.vue";
-import SetupModal from "./components/SetupModal.vue";
-import ShortcutsModal from "./components/ShortcutsModal.vue";
+import SettingsModal from "./components/SettingsModal.vue";
 import GoToModal from "./components/GoToModal.vue";
 import Splitter from "./components/Splitter.vue";
 import UnsavedModal from "./components/UnsavedModal.vue";
 
 const addProject = ref(false);
-const setup = ref(false);
-const shortcuts = ref(false);
+const settings = ref(false);
+const settingsSection = ref("appearance");
 const goTo = ref(false);
 const sideBar = ref(null);
 
+/* Settings opens on the section that was asked for: the sidebar's keyboard
+   button and the launcher's shortcut entry both land on Shortcuts. */
+function openSettings(id) {
+  settingsSection.value = id;
+  settings.value = true;
+}
+
 useErrors(useToast());
 
-/* Ctrl+N/T, Ctrl+P, Ctrl+W, and Ctrl+Shift+T create, find, archive, and
-   restore conversations; Ctrl+PageUp/PageDown walk the tab strip and Alt+P/S/T move the
-   left one. Alt+1 … Alt+9 goes straight to a tab and Alt+A … Alt+H to a project.
-   The key is read from the physical code: on some layouts Alt and a digit
-   produce a different character. */
+/* The chords come from Settings, so this reads as a list of actions rather
+   than of keys; shortcuts.js does the comparing. Alt+1 … Alt+9 and
+   Alt+A … Alt+H are families rather than single chords and stay here. The key
+   is read from the physical code: on some layouts Alt and a digit produce a
+   different character. */
 function onKey(e) {
-  if (e.ctrlKey && !e.altKey && !e.metaKey) {
-    if (e.code === "PageUp") {
-      e.preventDefault();
-      selectAdjacentTab(-1);
-    } else if (e.code === "PageDown") {
-      e.preventDefault();
-      selectAdjacentTab(1);
-    } else if (e.code === "KeyN") {
-      e.preventDefault();
-      startCurrentSession();
-    } else if (e.code === "KeyP") {
-      e.preventDefault();
-      goTo.value = true;
-    } else if (e.code === "KeyS") {
-      // The editor handles its own Ctrl+S; this is the same chord with the
-      // caret anywhere else on a file tab.
-      if (S.tab?.kind === "file") {
-        e.preventDefault();
-        saveActiveFile();
-      }
-    } else if (e.code === "KeyW") {
-      // A file opened from a session still belongs to that conversation.
-      // Always consume the chord so it never closes the browser tab.
-      e.preventDefault();
-      if (S.owner?.kind === "session") closeTab(S.owner.id);
-    } else if (e.code === "KeyT") {
-      e.preventDefault();
-      if (e.shiftKey) reopenClosedTab();
-      else startCurrentSession();
-    }
+  if (hit(e, "tab.prev")) return run(e, () => selectAdjacentTab(-1));
+  if (hit(e, "tab.next")) return run(e, () => selectAdjacentTab(1));
+  if (hit(e, "session.new")) return run(e, startCurrentSession);
+  if (hit(e, "tab.reopen")) return run(e, reopenClosedTab);
+  if (hit(e, "goto")) return run(e, () => (goTo.value = true));
+  if (hit(e, "panel.tree")) return run(e, () => sideBar.value?.showTree());
+  if (hit(e, "panel.sessions")) return run(e, () => sideBar.value?.showSessions());
+  if (hit(e, "panel.projects")) return run(e, () => sideBar.value?.showProjects());
+  if (hit(e, "file.save")) {
+    // The editor handles its own save; this is the same chord with the caret
+    // anywhere else on a file tab.
+    if (S.tab?.kind === "file") run(e, saveActiveFile);
     return;
+  }
+  if (hit(e, "tab.close")) {
+    // A file opened from a session still belongs to that conversation.
+    // Always consume the chord so it never closes the browser tab.
+    return run(e, () => {
+      if (S.owner?.kind === "session") closeTab(S.owner.id);
+    });
   }
 
-  if (!e.altKey || e.ctrlKey || e.metaKey) return;
-  if (e.code === "KeyT") {
-    e.preventDefault();
-    sideBar.value?.showTree();
-    return;
-  }
-  if (e.code === "KeyS") {
-    e.preventDefault();
-    sideBar.value?.showSessions();
-    return;
-  }
-  if (e.code === "KeyP") {
-    e.preventDefault();
-    sideBar.value?.showProjects();
-    return;
-  }
+  if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
   const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
-  if (digit) {
-    e.preventDefault();
-    selectTabAt(Number(digit[1]));
-    return;
-  }
+  if (digit) return run(e, () => selectTabAt(Number(digit[1])));
   // A … H are the first eight projects, in sidebar order.
   const letter = /^Key([A-H])$/.exec(e.code);
-  if (!letter) return;
+  if (letter) run(e, () => selectProjectAt(letter[1].charCodeAt(0) - 65));
+}
+
+function run(e, action) {
   e.preventDefault();
-  selectProjectAt(letter[1].charCodeAt(0) - 65);
+  action();
 }
 
 onMounted(() => {
@@ -118,8 +98,8 @@ onUnmounted(() => window.removeEventListener("keydown", onKey));
       <SideBar
         ref="sideBar"
         @add-project="addProject = true"
-        @setup="setup = true"
-        @shortcuts="shortcuts = true"
+        @setup="openSettings('appearance')"
+        @shortcuts="openSettings('shortcuts')"
       />
       <Splitter side="left" />
       <MainPanel />
@@ -129,15 +109,15 @@ onUnmounted(() => window.removeEventListener("keydown", onKey));
 
     <UnsavedModal />
     <AddProjectModal v-model:open="addProject" />
-    <SetupModal v-model:open="setup" />
-    <ShortcutsModal v-model:open="shortcuts" />
+    <SettingsModal v-model:open="settings" v-model:section="settingsSection" />
     <GoToModal
       v-model:open="goTo"
       @projects="sideBar?.showProjects()"
       @sessions="sideBar?.showSessions()"
       @tree="sideBar?.showTree()"
       @add-project="addProject = true"
-      @settings="setup = true"
+      @settings="openSettings('appearance')"
+      @shortcuts="openSettings('shortcuts')"
     />
   </UApp>
 </template>

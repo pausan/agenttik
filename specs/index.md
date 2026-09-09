@@ -16,12 +16,13 @@
 | [012-session-queue.md](012-session-queue.md) | Queued prompts and project scheduling |
 | [013-project-logs.md](013-project-logs.md) | The Logs pane, commit files, commit diffs |
 | [014-transcript-messages.md](014-transcript-messages.md) | Copying messages, editing a prompt in place |
+| [015-settings-shortcuts.md](015-settings-shortcuts.md) | Settings sections, the filter, editable chords |
 
-Status: the Logs pane and its commit diffs, transcript message copying and
-prompt editing, queued prompts drawn in the transcript with their waiting
-timer, and the Claude Code subscription allowance are implemented and
-browser-checked — see 013, 014, 012 and 011 for what each was verified
-against.
+Status: the Settings rail with its fuzzy filter and editable shortcuts, the
+Logs pane and its commit diffs, transcript message copying and prompt editing,
+queued prompts drawn in the transcript with their waiting timer, and the Claude
+Code subscription allowance are implemented and browser-checked — see 015, 013,
+014, 012 and 011 for what each was verified against. Enqueue is Ctrl+Enter.
 Sidebar ordering, session archiving, collapsible project session lists, the
 project-scoped Tree, fuzzy go-to navigation, global conversation closing,
 remembered open tabs, project-scoped closed-tab reopening, prompt and file
@@ -31,7 +32,9 @@ implemented.
 
 `go build ./...`, `go vet ./...`, `make ui` and the web unit tests (32) pass.
 Two Go tests fail and did so before this work: `TestDoneReachesProjectTopic`
-in runner and `TestReorderSessionsDrivesProjectOrder` in store.
+in runner and `TestReorderSessionsDrivesProjectOrder` in store. Two e2e cases
+fail the same way, both driving the model picker as the `USelect` it stopped
+being — see 015.
 
 Claude Code sessions stream into the transcript, record per-turn token metrics,
 report their context window and subscription allowance, and resume across

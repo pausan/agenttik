@@ -1,8 +1,9 @@
 <script setup>
 import { computed, nextTick, ref, watch } from "vue";
 
-import { S, contextWindow, enqueue, fail, isStarred, providerOf, refreshSubscriptionLimits, send, setModel, stopTurn, toggleStar } from "../store";
+import { S, contextWindow, enqueue, fail, hit, isStarred, providerOf, refreshSubscriptionLimits, send, setModel, stopTurn, toggleStar } from "../store";
 import { ago } from "../api";
+import Chord from "./Chord.vue";
 import ContextPane from "./ContextPane.vue";
 import { useTextHistory } from "../text-history";
 
@@ -192,14 +193,28 @@ function enqueuePrompt() {
   enqueue(text.value);
 }
 
+/* Send and enqueue are bindings, so the box answers whatever Settings says.
+   Anything Enter is not bound to falls through to the textarea, which makes
+   the newline — including plain Enter, if send has been moved off it. */
 function onPromptKey(e) {
-  if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && e.key === "Enter") {
+  if (hit(e, "prompt.enqueue")) {
     e.preventDefault();
     enqueuePrompt();
     return;
   }
+  if (hit(e, "prompt.send")) {
+    e.preventDefault();
+    submit();
+    return;
+  }
   history.keydown(e);
 }
+
+const hints = computed(() => [
+  { chord: S.keys["prompt.send"][0], what: "to send" },
+  { chord: S.keys["prompt.enqueue"][0], what: "to enqueue" },
+  { chord: S.keys["prompt.newline"][0], what: "for a newline" },
+]);
 </script>
 
 <template>
@@ -217,7 +232,6 @@ function onPromptKey(e) {
         :ui="{ base: 'resize-y' }"
         @input="onPromptInput"
         @keydown="onPromptKey"
-        @keydown.enter.exact.prevent="submit"
       />
       <div class="flex items-center gap-1.5">
         <UPopover v-model:open="modelOpen">
@@ -317,8 +331,12 @@ function onPromptKey(e) {
         </div>
       </div>
     </div>
-    <p class="mx-auto mt-1.5 max-w-[860px] px-1 text-xs text-dimmed">
-      <UKbd value="enter" /> to send · <UKbd value="alt" /><UKbd value="enter" /> to enqueue · <UKbd value="shift" /><UKbd value="enter" /> for a newline
+    <p class="mx-auto mt-1.5 flex max-w-[860px] flex-wrap items-center gap-x-1.5 px-1 text-xs text-dimmed">
+      <template v-for="(hint, i) in hints" :key="hint.what">
+        <span v-if="i">·</span>
+        <Chord :chord="hint.chord" />
+        <span>{{ hint.what }}</span>
+      </template>
     </p>
   </form>
 </template>

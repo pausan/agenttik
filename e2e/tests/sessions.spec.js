@@ -7,7 +7,7 @@ test("a new session asks nothing and opens ready to prompt", async ({ page }) =>
 
   await expect(page.getByRole("tab", { name: "New session" })).toBeVisible();
   await expect(page.getByPlaceholder("Ask the agent…")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
   await expect(page.getByRole("button", { name: "Stop" })).toBeHidden();
   await expect(page.getByText("idle")).toBeVisible();
 
@@ -23,7 +23,7 @@ test("an empty prompt sends nothing", async ({ page }) => {
   await page.getByRole("button", { name: "New session" }).first().click();
 
   await page.getByPlaceholder("Ask the agent…").fill("   ");
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
 
   await expect(page.getByText("running…")).toBeHidden();
   await expect(page.getByText("You", { exact: true })).toHaveCount(0);
@@ -31,6 +31,7 @@ test("an empty prompt sends nothing", async ({ page }) => {
 
 test("setup lists the providers and whether their CLI is installed", async ({ page }) => {
   await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("button", { name: "Models" }).click();
 
   await expect(page.getByText("Claude Code", { exact: true })).toBeVisible();
   await expect(page.getByText("Codex", { exact: true })).toBeVisible();
@@ -41,6 +42,7 @@ test("setup lists the providers and whether their CLI is installed", async ({ pa
 
 test("a starred model and effort heads the picker and sets both at once", async ({ page }) => {
   await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("button", { name: "Models" }).click();
   const chip = page.getByRole("button", { name: "xhigh", exact: true }).first();
   await chip.click();
   await expect(page.getByRole("button", { name: "★ xhigh", exact: true }).first()).toBeVisible();

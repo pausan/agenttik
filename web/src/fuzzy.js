@@ -49,3 +49,17 @@ export function segments(name, hits) {
   if (at < name.length) out.push({ text: name.slice(at), hit: false });
   return out;
 }
+
+/* fuzzyAny scores the best of a row's fields, so a filter can search a label
+   and its keys without the two running together into one long string that
+   almost anything matches. Null means the row does not match; an empty
+   filter matches everything. */
+export function fuzzyAny(fields, needle) {
+  if (!needle) return 0;
+  let best = null;
+  for (const field of fields) {
+    const m = field && fuzzy(field, needle);
+    if (m && (best === null || m.score < best)) best = m.score;
+  }
+  return best;
+}

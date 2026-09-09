@@ -15,7 +15,7 @@ import {
 } from "../store";
 
 const open = defineModel("open", { type: Boolean, default: false });
-const emit = defineEmits(["projects", "sessions", "tree", "add-project", "settings"]);
+const emit = defineEmits(["projects", "sessions", "tree", "add-project", "settings", "shortcuts"]);
 
 function choose(action) {
   open.value = false;
@@ -108,6 +108,12 @@ const actions = computed(() => [
     label: "Settings",
     icon: "i-lucide-settings",
     onSelect: () => choose(() => emit("settings")),
+  },
+  {
+    label: "Keyboard shortcuts",
+    description: "Settings, and where to change them",
+    icon: "i-lucide-keyboard",
+    onSelect: () => choose(() => emit("shortcuts")),
   },
 ]);
 

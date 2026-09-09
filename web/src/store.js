@@ -15,6 +15,7 @@ import { reactive, watch } from "vue";
 import { api } from "./api";
 import { debounce } from "./debounce";
 import { ACCENTS, DEFAULT_COLORS, NEUTRALS, applyColors } from "./theme";
+import { ACTIONS, matches } from "./shortcuts";
 
 /* Sidebar widths are the user's, so they are kept across reloads. */
 const LAYOUT_KEY = "agenttik.layout";
@@ -23,6 +24,7 @@ const OPEN_TABS_KEY = "agenttik.openTabs";
 const FILE_MODE_KEY = "agenttik.fileMode";
 const DIFF_VIEW_KEY = "agenttik.diffView";
 const COLORS_KEY = "agenttik.colors";
+const KEYS_KEY = "agenttik.keys";
 const LAYOUT_LIMITS = { left: [180, 520], right: [200, 620] };
 
 /* The letters Alt reaches a project with. The first eight rows of the
@@ -57,6 +59,7 @@ export const S = reactive({
   lastUsed: null,
   layout: { left: 272, right: 312 },
   colors: { ...DEFAULT_COLORS }, // the accent and the grey, from Settings
+  keys: defaultKeys(), // action id -> the chords bound to it, from Settings
 
   get tab() {
     return this.tabs.find((t) => t.id === this.activeTab) || null;
@@ -1467,11 +1470,105 @@ export function setColor(key, name) {
   }
 }
 
+/* ------------------------------------------------------------- shortcuts */
+
+/* The chords live in one map so the handlers ask a question — "is this the
+   send chord?" — instead of spelling a key out. Only what differs from the
+   default is stored, so a default that changes later reaches everyone who
+   never touched it. */
+function defaultKeys() {
+  const bound = {};
+  for (const a of ACTIONS) bound[a.id] = a.keys;
+  return bound;
+}
+
+export function loadKeys() {
+  let saved = null;
+  try {
+    saved = JSON.parse(localStorage.getItem(KEYS_KEY));
+  } catch {
+    /* keep the defaults */
+  }
+  if (!saved) return;
+  for (const a of ACTIONS) {
+    const chords = saved[a.id];
+    if (a.fixed || !Array.isArray(chords) || !chords.length) continue;
+    if (chords.every((c) => typeof c === "string" && c)) S.keys[a.id] = chords;
+  }
+}
+
+function saveKeys() {
+  const overrides = {};
+  for (const a of ACTIONS) {
+    const chords = S.keys[a.id];
+    if (chords.length !== a.keys.length || chords.some((c, i) => c !== a.keys[i])) {
+      overrides[a.id] = chords;
+    }
+  }
+  try {
+    localStorage.setItem(KEYS_KEY, JSON.stringify(overrides));
+  } catch {
+    /* private mode, a full quota — the chords just do not persist */
+  }
+}
+
+/* hit answers the only question a handler has: was this event the chord bound
+   to this action? */
+export function hit(e, id) {
+  const chords = S.keys[id];
+  if (!chords) return false;
+  for (const chord of chords) if (matches(e, chord)) return true;
+  return false;
+}
+
+/* Recording replaces the whole binding: an action with two default chords
+   ("Ctrl+N" and "Ctrl+T") answers to the one that was pressed instead. */
+export function bindKey(id, chord) {
+  S.keys[id] = [chord];
+  saveKeys();
+}
+
+export function resetKey(id) {
+  S.keys[id] = actionKeys(id);
+  saveKeys();
+}
+
+export function resetAllKeys() {
+  S.keys = defaultKeys();
+  saveKeys();
+}
+
+function actionKeys(id) {
+  return ACTIONS.find((a) => a.id === id).keys;
+}
+
+export function isDefaultKey(id) {
+  const chords = S.keys[id];
+  const fallback = actionKeys(id);
+  return chords.length === fallback.length && chords.every((c, i) => c === fallback[i]);
+}
+
+/* keyConflicts maps a chord bound more than once to the actions that answer
+   to it, so Settings can say which one it now shares with. */
+export function keyConflicts() {
+  const byChord = new Map();
+  for (const a of ACTIONS) {
+    for (const chord of S.keys[a.id]) {
+      const ids = byChord.get(chord);
+      if (ids) ids.push(a.id);
+      else byChord.set(chord, [a.id]);
+    }
+  }
+  for (const [chord, ids] of byChord) if (ids.length < 2) byChord.delete(chord);
+  return byChord;
+}
+
 /* ------------------------------------------------------------------ init */
 
 export async function init() {
   loadLastUsed();
   loadLayout();
+  loadKeys();
   loadFileMode();
   // Open tabs are saved, but an edited file is not — it would put a whole
   // working copy in localStorage — so the browser's own warning is what

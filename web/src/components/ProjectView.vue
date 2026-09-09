@@ -14,6 +14,7 @@ import {
   reorderSessions,
   setSessionArchived,
   startSession,
+  stopSession,
 } from "../store";
 import { ago } from "../api";
 import SessionRow from "./SessionRow.vue";
@@ -86,7 +87,9 @@ function onDrop() {
           :queued="s.queue_count"
           :sub="`${s.model}${s.effort ? ' · ' + s.effort : ''} · ${ago(s.last_active_at)}`"
           :active="S.detail?.session.id === s.id"
-          archive
+          :stoppable="s.status === 'running' || s.queue_count > 0"
+          :archive="s.status !== 'running' && s.queue_count === 0"
+          @stop="stopSession(s.id)"
           @select="openSession(s.id)"
           @toggle-archive="setSessionArchived(s, true)"
           @rename="renameSession(s, $event)"

@@ -1531,8 +1531,22 @@ export async function forceQueued(queuedID) {
 export async function stopTurn() {
   const tab = S.owner;
   if (tab?.kind !== "session") return;
+  return stopSession(tab.sessionID);
+}
+
+// Stopping from a sidebar row works for an active turn and for work waiting in
+// the project queue. The server clears queued prompts in either case.
+export async function stopSession(sessionID) {
+  if (!sessionID) return;
   try {
-    await api("POST", `/api/sessions/${tab.sessionID}/stop`);
+    await api("POST", `/api/sessions/${sessionID}/stop`);
+    const tab = S.tabs.find((open) => open.kind === "session" && open.sessionID === sessionID);
+    if (tab) {
+      tab.detail.queued = [];
+      tab.detail.session.queue_count = 0;
+    }
+    await Promise.all([refreshProjects(), refreshSessions()]);
+    reloadProjects();
   } catch (e) {
     fail(e);
   }

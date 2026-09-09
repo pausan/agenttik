@@ -22,6 +22,7 @@
 | [018-readme-icon.md](018-readme-icon.md) | Concise project overview and shared SVG icon |
 | [019-file-watching.md](019-file-watching.md) | Tree and Changed following the disk as it moves |
 | [020-queued-session-titles.md](020-queued-session-titles.md) | Isolated small-model titles for queued sessions |
+| [021-stop-active-sessions.md](021-stop-active-sessions.md) | Stopping active or scheduled sessions from the sidebar |
 
 Status: the tree and the changed list now follow the project folder as it
 moves on disk — see 019 for the watcher and what it deliberately ignores.

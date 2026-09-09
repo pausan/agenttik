@@ -279,16 +279,34 @@ func (r *Runner) schedule(projectID int64, preferredSessionID string) {
 	_ = r.store.RemoveQueuedMessage(queued.ID)
 }
 
-// Stop cancels the running turn, which kills the CLIs process group.
+// Stop cancels the running turn and drops queued prompts, so the session is
+// not scheduled again after the current CLI process exits.
 
 func (r *Runner) Stop(sessionID string) error {
+	sess, err := r.store.GetSession(sessionID)
+	if err != nil {
+		return err
+	}
+	lock := r.dispatchLock(sess.ProjectID)
+	lock.Lock()
+	defer lock.Unlock()
 	r.mu.Lock()
 	cancel, ok := r.active[sessionID]
+	if ok {
+		// A forced prompt would otherwise start after cancellation.
+		delete(r.forced, sessionID)
+	}
 	r.mu.Unlock()
-	if !ok {
+	removed, err := r.store.RemoveQueuedMessages(sessionID)
+	if err != nil {
+		return err
+	}
+	if !ok && removed == 0 {
 		return ErrNotRunning
 	}
-	cancel()
+	if ok {
+		cancel()
+	}
 	return nil
 }
 

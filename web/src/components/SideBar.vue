@@ -14,6 +14,7 @@ import {
   reorderSidebarSessions,
   setSessionArchived,
   switchProject,
+  stopSession,
 } from "../store";
 import { ago } from "../api";
 import { debounce } from "../debounce";
@@ -268,7 +269,9 @@ function onSessionDrop(e) {
               :queued="s.queue_count"
               :active="S.detail?.session.id === s.id"
               :number="sessionNumber(p, s)"
-              archive
+              :stoppable="s.status === 'running' || s.queue_count > 0"
+              :archive="s.status !== 'running' && s.queue_count === 0"
+              @stop="stopSession(s.id)"
               @select="openSession(s.id)"
               @toggle-archive="setSessionArchived(s, true)"
               @rename="renameSession(s, $event)"
@@ -307,7 +310,9 @@ function onSessionDrop(e) {
           :sub="`${s.project_name} · ${s.project_path} · ${ago(s.last_active_at)}`"
           :active="S.detail?.session.id === s.id"
           :archived="isArchived(s)"
-          archive
+          :stoppable="!isArchived(s) && (s.status === 'running' || s.queue_count > 0)"
+          :archive="isArchived(s) || (s.status !== 'running' && s.queue_count === 0)"
+          @stop="stopSession(s.id)"
           @select="openSession(s.id)"
           @toggle-archive="setSessionArchived(s, !isArchived(s))"
           @rename="renameSession(s, $event)"

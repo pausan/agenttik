@@ -185,6 +185,9 @@ func (s *Server) updateSession(c *fiber.Ctx) error {
 		}
 	}
 	if body.Done != nil {
+		if *body.Done && (s.runner.Running(id) || sess.QueueCount > 0) {
+			return badRequest("stop the active or scheduled session before archiving it")
+		}
 		if err := s.store.SetSessionDone(id, *body.Done); err != nil {
 			return err
 		}

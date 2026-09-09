@@ -20,9 +20,10 @@ const props = defineProps({
   archived: Boolean,
   archive: Boolean,
   queued: { type: Number, default: 0 },
+  stoppable: Boolean,
 });
 
-const emit = defineEmits(["select", "toggle-archive", "rename", "editing"]);
+const emit = defineEmits(["select", "stop", "toggle-archive", "rename", "editing"]);
 
 const editing = ref(false);
 const draft = ref("");
@@ -97,6 +98,16 @@ function commit() {
         @click.stop="edit"
       >
         <UIcon name="i-lucide-pencil" class="size-3.5 block" />
+      </button>
+      <button
+        v-if="stoppable"
+        type="button"
+        class="mr-1 shrink-0 rounded p-1 text-dimmed hover:text-primary"
+        title="Stop session"
+        aria-label="Stop session"
+        @click.stop="$emit('stop')"
+      >
+        <UIcon name="i-lucide-square" class="size-3.5 block" />
       </button>
       <button
         v-if="archive"

@@ -285,6 +285,16 @@ func (s *Store) RemoveQueuedMessage(id int64) error {
 	return nil
 }
 
+// RemoveQueuedMessages drops every prompt waiting for one session. Stopping a
+// queued session uses this so the scheduler cannot pick it up later.
+func (s *Store) RemoveQueuedMessages(sessionID string) (int64, error) {
+	res, err := s.db.Exec(`DELETE FROM queued_messages WHERE session_id = ?`, sessionID)
+	if err != nil {
+		return 0, fmt.Errorf("remove queued messages: %w", err)
+	}
+	return res.RowsAffected()
+}
+
 func (s *Store) QueueCount(sessionID string) (int64, error) {
 	var count int64
 	if err := s.db.QueryRow(`SELECT COUNT(*) FROM queued_messages WHERE session_id = ?`, sessionID).Scan(&count); err != nil {

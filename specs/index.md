@@ -19,6 +19,7 @@
 | [015-settings-shortcuts.md](015-settings-shortcuts.md) | Settings sections, the filter, editable chords |
 | [016-file-tab-reuse.md](016-file-tab-reuse.md) | The temporary file tab a click reuses |
 | [017-general-settings.md](017-general-settings.md) | The General section, and which key sends |
+| [018-readme-icon.md](018-readme-icon.md) | Concise project overview and shared SVG icon |
 
 Status: the General settings section and the Enter / Ctrl+Enter swap, the
 temporary file tab that a click reuses and a double click keeps, the Settings

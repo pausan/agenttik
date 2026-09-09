@@ -1577,10 +1577,7 @@ export function loadKeys() {
 function saveKeys() {
   const overrides = {};
   for (const a of ACTIONS) {
-    const chords = S.keys[a.id];
-    if (chords.length !== a.keys.length || chords.some((c, i) => c !== a.keys[i])) {
-      overrides[a.id] = chords;
-    }
+    if (!sameChords(S.keys[a.id], a.keys)) overrides[a.id] = S.keys[a.id];
   }
   try {
     localStorage.setItem(KEYS_KEY, JSON.stringify(overrides));
@@ -1620,9 +1617,41 @@ function actionKeys(id) {
 }
 
 export function isDefaultKey(id) {
-  const chords = S.keys[id];
-  const fallback = actionKeys(id);
-  return chords.length === fallback.length && chords.every((c, i) => c === fallback[i]);
+  return sameChords(S.keys[id], actionKeys(id));
+}
+
+function sameChords(a, b) {
+  return a.length === b.length && a.every((c, i) => c === b[i]);
+}
+
+/* ---------------------------------------------------------- prompt keys */
+
+/* Send and enqueue share one pair of chords, and which action gets the plain
+   Enter is a preference rather than a rebinding. General offers the swap, and
+   it writes the two bindings instead of keeping a flag beside them: the pane
+   and the Shortcuts list are then one fact, not two that can disagree.
+
+   Moving either chord somewhere else in Shortcuts is still allowed, and reads
+   back here as neither arrangement. */
+export const PROMPT_CHORDS = { plain: "Enter", modified: "Ctrl+Enter" };
+
+/* enterDoes names what the plain Enter submits with: "send", "enqueue", or
+   "custom" once Shortcuts has moved one of them off this pair. */
+export function enterDoes() {
+  const send = S.keys["prompt.send"];
+  const queue = S.keys["prompt.enqueue"];
+  const on = (chords, chord) => sameChords(chords, [chord]);
+  if (on(send, PROMPT_CHORDS.plain) && on(queue, PROMPT_CHORDS.modified)) return "send";
+  if (on(queue, PROMPT_CHORDS.plain) && on(send, PROMPT_CHORDS.modified)) return "enqueue";
+  return "custom";
+}
+
+export function setEnterDoes(what) {
+  const plain = what === "enqueue" ? "prompt.enqueue" : "prompt.send";
+  const modified = what === "enqueue" ? "prompt.send" : "prompt.enqueue";
+  S.keys[plain] = [PROMPT_CHORDS.plain];
+  S.keys[modified] = [PROMPT_CHORDS.modified];
+  saveKeys();
 }
 
 /* keyConflicts maps a chord bound more than once to the actions that answer

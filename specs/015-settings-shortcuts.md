@@ -36,12 +36,13 @@ with the other action's name. Which one runs is whichever handler asks first,
 and that is not something to find out by accident.
 
 The dialog grew a rail to hold all this: **Appearance**, **Models**,
-**Shortcuts**, with a filter above them. The filter fuzzy-matches every row in
-every section — a palette name, a model, a shortcut and its keys — and each
-section reports how many it kept, so the count beside a section says where the
-answer is before you click. Filtering into a section that has no matches moves
-to one that does. All three panes stay mounted, which is what keeps those
-counts live; they are small enough that this costs nothing.
+**Shortcuts** — **General** joined them later, see 017 — with a filter above
+them. The filter fuzzy-matches every row in every section — a palette name, a
+model, a shortcut and its keys — and each section reports how many it kept, so
+the count beside a section says where the answer is before you click.
+Filtering into a section that has no matches moves to one that does. Every
+pane stays mounted, which is what keeps those counts live; they are small
+enough that this costs nothing.
 
 Matching is per field rather than over one joined string: a subsequence match
 against a label and its keys run together is loose enough to hit almost

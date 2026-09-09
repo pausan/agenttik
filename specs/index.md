@@ -18,13 +18,16 @@
 | [014-transcript-messages.md](014-transcript-messages.md) | Copying messages, editing a prompt in place |
 | [015-settings-shortcuts.md](015-settings-shortcuts.md) | Settings sections, the filter, editable chords |
 | [016-file-tab-reuse.md](016-file-tab-reuse.md) | The temporary file tab a click reuses |
+| [017-general-settings.md](017-general-settings.md) | The General section, and which key sends |
 
-Status: the temporary file tab that a click reuses and a double click keeps,
-the Settings rail with its fuzzy filter and editable shortcuts, the Logs pane
-and its commit diffs, transcript message copying and prompt editing, queued
-prompts drawn in the transcript with their waiting timer, and the Claude Code
-subscription allowance are implemented and browser-checked — see 016, 015,
-013, 014, 012 and 011 for what each was verified against. Enqueue is Ctrl+Enter.
+Status: the General settings section and the Enter / Ctrl+Enter swap, the
+temporary file tab that a click reuses and a double click keeps, the Settings
+rail with its fuzzy filter and editable shortcuts, the Logs pane and its commit
+diffs, transcript message copying and prompt editing, queued prompts drawn in
+the transcript with their waiting timer, and the Claude Code subscription
+allowance are implemented and browser-checked — see 017, 016, 015, 013, 014,
+012 and 011 for what each was verified against. Enqueue is Ctrl+Enter by
+default, and General swaps it with Enter.
 Sidebar ordering, session archiving, collapsible project session lists, the
 project-scoped Tree, fuzzy go-to navigation, global conversation closing,
 remembered open tabs, project-scoped closed-tab reopening, prompt and file

@@ -4,26 +4,28 @@
    section reports how many it kept, so the counts say where the answer is
    before you click.
 
-   All three panes stay mounted, which is what keeps those counts live while
+   Every pane stays mounted, which is what keeps those counts live while
    the filter changes. They are small enough that this costs nothing. */
 import { computed, reactive, ref, watch } from "vue";
 
 import { fail, loadProviders } from "../store";
 import AppearanceSettings from "./settings/AppearanceSettings.vue";
+import GeneralSettings from "./settings/GeneralSettings.vue";
 import ModelSettings from "./settings/ModelSettings.vue";
 import ShortcutSettings from "./settings/ShortcutSettings.vue";
 
 const open = defineModel("open", { type: Boolean, default: false });
-const section = defineModel("section", { type: String, default: "appearance" });
+const section = defineModel("section", { type: String, default: "general" });
 
 const SECTIONS = [
+  { id: "general", label: "General", icon: "i-lucide-settings" },
   { id: "appearance", label: "Appearance", icon: "i-lucide-palette" },
   { id: "models", label: "Models", icon: "i-lucide-sparkles" },
   { id: "shortcuts", label: "Shortcuts", icon: "i-lucide-keyboard" },
 ];
 
 const filter = ref("");
-const counts = reactive({ appearance: 0, models: 0, shortcuts: 0 });
+const counts = reactive({ general: 0, appearance: 0, models: 0, shortcuts: 0 });
 
 const shown = computed(() => (filter.value ? SECTIONS.filter((s) => counts[s.id]) : SECTIONS));
 
@@ -81,6 +83,11 @@ watch(open, async (on) => {
         </nav>
 
         <div class="min-h-0 flex-1 overflow-auto pr-1">
+          <GeneralSettings
+            v-show="section === 'general'"
+            :filter="filter"
+            @count="counts.general = $event"
+          />
           <AppearanceSettings
             v-show="section === 'appearance'"
             :filter="filter"

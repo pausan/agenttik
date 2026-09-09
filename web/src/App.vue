@@ -26,12 +26,13 @@ import UnsavedModal from "./components/UnsavedModal.vue";
 
 const addProject = ref(false);
 const settings = ref(false);
-const settingsSection = ref("appearance");
+const settingsSection = ref("general");
 const goTo = ref(false);
 const sideBar = ref(null);
 
 /* Settings opens on the section that was asked for: the sidebar's keyboard
-   button and the launcher's shortcut entry both land on Shortcuts. */
+   button and the launcher's shortcut entry both land on Shortcuts, and
+   everything else on General. */
 function openSettings(id) {
   settingsSection.value = id;
   settings.value = true;
@@ -98,7 +99,7 @@ onUnmounted(() => window.removeEventListener("keydown", onKey));
       <SideBar
         ref="sideBar"
         @add-project="addProject = true"
-        @setup="openSettings('appearance')"
+        @setup="openSettings('general')"
         @shortcuts="openSettings('shortcuts')"
       />
       <Splitter side="left" />
@@ -116,7 +117,7 @@ onUnmounted(() => window.removeEventListener("keydown", onKey));
       @sessions="sideBar?.showSessions()"
       @tree="sideBar?.showTree()"
       @add-project="addProject = true"
-      @settings="openSettings('appearance')"
+      @settings="openSettings('general')"
       @shortcuts="openSettings('shortcuts')"
     />
   </UApp>

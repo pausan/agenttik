@@ -1,14 +1,18 @@
 package server
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/pausan/agenttik/internal/agent"
 	"github.com/pausan/agenttik/internal/runner"
@@ -196,7 +200,230 @@ func TestIndexIsServed(t *testing.T) {
 	}
 }
 
+// A project with no sessions must still carry an empty list: the sidebar
+// iterates the field directly.
+func TestProjectListAlwaysCarriesRecentSessions(t *testing.T) {
+	s, st := newTestServer(t)
+	st.CreateProject("alpha", t.TempDir())
+
+	var got []map[string]any
+	body, _ := io.ReadAll(do(t, s, "GET", "/api/projects", nil).Body)
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	refs, ok := got[0]["recent_sessions"].([]any)
+	if !ok {
+		t.Fatalf("recent_sessions = %#v, want an array", got[0]["recent_sessions"])
+	}
+	if len(refs) != 0 {
+		t.Errorf("recent_sessions = %v, want empty", refs)
+	}
+}
+
+// The folder picker browses outside any project, so these check the listing
+// shape rather than containment.
+func TestBrowseListsDirectoriesOnly(t *testing.T) {
+	s, _ := newTestServer(t)
+	root := t.TempDir()
+	os.Mkdir(filepath.Join(root, "beta"), 0o755)
+	os.Mkdir(filepath.Join(root, "Alpha"), 0o755)
+	os.WriteFile(filepath.Join(root, "notes.txt"), []byte("x"), 0o644)
+
+	resp := do(t, s, "GET", "/api/fs?path="+root, nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	got := decode[dirListing](t, resp)
+	if len(got.Dirs) != 2 {
+		t.Fatalf("dirs = %+v, want 2 entries", got.Dirs)
+	}
+	// Case-insensitive order, so "Alpha" is not banished above "beta".
+	if got.Dirs[0].Name != "Alpha" || got.Dirs[1].Name != "beta" {
+		t.Errorf("dirs = %+v, want Alpha then beta", got.Dirs)
+	}
+	if got.Path != root || got.Parent != filepath.Dir(root) {
+		t.Errorf("path = %q parent = %q", got.Path, got.Parent)
+	}
+	if len(got.Crumbs) == 0 || got.Crumbs[0].Path != string(filepath.Separator) {
+		t.Errorf("crumbs = %+v, want root first", got.Crumbs)
+	}
+}
+
+func TestBrowseHidesDotDirsUnlessAsked(t *testing.T) {
+	s, _ := newTestServer(t)
+	root := t.TempDir()
+	os.Mkdir(filepath.Join(root, ".config"), 0o755)
+
+	got := decode[dirListing](t, do(t, s, "GET", "/api/fs?path="+root, nil))
+	if len(got.Dirs) != 0 {
+		t.Errorf("dirs = %+v, want dot folders hidden", got.Dirs)
+	}
+	got = decode[dirListing](t, do(t, s, "GET", "/api/fs?path="+root+"&hidden=true", nil))
+	if len(got.Dirs) != 1 || got.Dirs[0].Name != ".config" {
+		t.Errorf("dirs = %+v, want .config", got.Dirs)
+	}
+}
+
+func TestBrowseRejectsFiles(t *testing.T) {
+	s, _ := newTestServer(t)
+	file := filepath.Join(t.TempDir(), "notes.txt")
+	os.WriteFile(file, []byte("x"), 0o644)
+
+	resp := do(t, s, "GET", "/api/fs?path="+file, nil)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+// A live SSE stream never ends by itself. Fiber waits for every open
+// connection, so without releasing the streams first the window's close button
+// could not quit the app.
+func TestShutdownReturnsWithOpenStream(t *testing.T) {
+	s, st := newTestServer(t)
+	p, _ := st.CreateProject("alpha", t.TempDir())
+	if err := st.CreateSession(&store.Session{ID: "s1", ProjectID: p.ID, Provider: "claude"}); err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	go s.Listener(ln)
+
+	var resp *http.Response
+	for i := 0; i < 50 && resp == nil; i++ {
+		resp, err = http.Get("http://" + ln.Addr().String() + "/api/sessions/s1/stream")
+		if err != nil {
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	if resp == nil {
+		t.Fatalf("open stream: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Shutdown must release the stream itself, not fall back on its timeout,
+	// so it has to return cleanly and well inside the deadline.
+	done := make(chan error, 1)
+	start := time.Now()
+	go func() { done <- s.Shutdown() }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Shutdown: %v", err)
+		}
+		if elapsed := time.Since(start); elapsed >= shutdownTimeout {
+			t.Fatalf("Shutdown took %v, want well under the %v timeout", elapsed, shutdownTimeout)
+		}
+	case <-time.After(shutdownTimeout + 3*time.Second):
+		t.Fatal("Shutdown blocked while an SSE stream was open")
+	}
+}
+
 func itoa(v int64) string {
 	b, _ := json.Marshal(v)
 	return string(b)
+}
+
+func TestProjectStatsAndRename(t *testing.T) {
+	s, st := newTestServer(t)
+	p, _ := st.CreateProject("alpha", t.TempDir())
+	if err := st.CreateSession(&store.Session{ID: "s1", ProjectID: p.ID, Provider: "claude", Model: "m"}); err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	turn, _ := st.StartTurn("s1", "m", "")
+	turn.OutputTokens, turn.Status = 7, "ok"
+	st.FinishTurn(turn)
+
+	got := decode[store.ProjectStats](t, do(t, s, "GET", "/api/projects/"+itoa(p.ID)+"/stats", nil))
+	if got.Sessions != 1 || got.Turns != 1 || got.OutputTokens != 7 {
+		t.Errorf("stats = %+v", got)
+	}
+	if resp := do(t, s, "GET", "/api/projects/999/stats", nil); resp.StatusCode != http.StatusNotFound {
+		t.Errorf("unknown project status = %d, want 404", resp.StatusCode)
+	}
+
+	resp := do(t, s, "PATCH", "/api/projects/"+itoa(p.ID), map[string]string{"name": " beta "})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("rename status = %d, want 200", resp.StatusCode)
+	}
+	if renamed := decode[store.Project](t, resp); renamed.Name != "beta" {
+		t.Errorf("name = %q, want beta", renamed.Name)
+	}
+	if resp := do(t, s, "PATCH", "/api/projects/"+itoa(p.ID), map[string]string{"name": ""}); resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("empty name status = %d, want 400", resp.StatusCode)
+	}
+}
+
+// The project view watches one stream for every session in the project, so
+// several sessions running at once keep its totals current.
+func TestProjectStreamDeliversTurnEvents(t *testing.T) {
+	s, st := newTestServer(t)
+	p, _ := st.CreateProject("alpha", t.TempDir())
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	go s.Listener(ln)
+	t.Cleanup(func() { s.Shutdown() })
+
+	url := "http://" + ln.Addr().String() + "/api/projects/" + itoa(p.ID) + "/stream"
+	var resp *http.Response
+	for i := 0; i < 50 && resp == nil; i++ {
+		if resp, err = http.Get(url); err != nil {
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	if resp == nil {
+		t.Fatalf("open stream: %v", err)
+	}
+	defer resp.Body.Close()
+	if ct := resp.Header.Get("Content-Type"); ct != "text/event-stream" {
+		t.Fatalf("content type = %q, want text/event-stream", ct)
+	}
+
+	lines := make(chan string, 8)
+	go func() {
+		r := bufio.NewReader(resp.Body)
+		for {
+			line, err := r.ReadString('\n')
+			if err != nil {
+				close(lines)
+				return
+			}
+			lines <- line
+		}
+	}()
+
+	// The handler subscribes before it writes anything, so the opening
+	// comment means the publish below cannot be missed.
+	if open := <-lines; !strings.HasPrefix(open, ": open") {
+		t.Fatalf("first line = %q, want the opening comment", open)
+	}
+	s.runner.Hub().Publish(runner.ProjectTopic(p.ID),
+		runner.Event{SessionID: "s1", Stats: &store.Stats{Turns: 3}})
+
+	for {
+		select {
+		case line, ok := <-lines:
+			if !ok {
+				t.Fatal("stream closed before the event arrived")
+			}
+			if !strings.HasPrefix(line, "data: ") {
+				continue // blank separator or a heartbeat comment
+			}
+			var got runner.Event
+			if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &got); err != nil {
+				t.Fatalf("decode %q: %v", line, err)
+			}
+			if got.SessionID != "s1" || got.Stats == nil || got.Stats.Turns != 3 {
+				t.Fatalf("event = %+v, want session s1 with 3 turns", got)
+			}
+			return
+		case <-time.After(3 * time.Second):
+			t.Fatal("no event on the project stream")
+		}
+	}
 }

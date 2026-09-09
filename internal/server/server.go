@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/adaptor"
@@ -24,6 +26,12 @@ type Server struct {
 	store    *store.Store
 	runner   *runner.Runner
 	registry *agent.Registry
+
+	// closing is closed by Shutdown to release the SSE handlers. Fiber waits
+	// for every open connection, and a live stream never ends on its own, so
+	// without this the process could not quit.
+	closing   chan struct{}
+	closeOnce sync.Once
 }
 
 func New(s *store.Store, reg *agent.Registry, r *runner.Runner) *Server {
@@ -34,7 +42,7 @@ func New(s *store.Store, reg *agent.Registry, r *runner.Runner) *Server {
 	})
 	app.Use(recover.New())
 
-	srv := &Server{app: app, store: s, runner: r, registry: reg}
+	srv := &Server{app: app, store: s, runner: r, registry: reg, closing: make(chan struct{})}
 	srv.routes()
 
 	app.Use("/", filesystem.New(filesystem.Config{
@@ -50,10 +58,15 @@ func (s *Server) routes() {
 	api := s.app.Group("/api")
 
 	api.Get("/providers", s.listProviders)
+	api.Get("/fs", s.browseDir)
 
 	api.Get("/projects", s.listProjects)
 	api.Post("/projects", s.createProject)
+	api.Get("/projects/:id", s.getProject)
+	api.Patch("/projects/:id", s.updateProject)
 	api.Delete("/projects/:id", s.deleteProject)
+	api.Get("/projects/:id/stats", s.projectStats)
+	api.Get("/projects/:id/stream", s.streamProject)
 	api.Get("/projects/:id/tree", s.projectTree)
 	api.Get("/projects/:id/changes", s.projectChanges)
 	api.Get("/projects/:id/file", s.projectFile)
@@ -72,6 +85,9 @@ func (s *Server) routes() {
 	api.Delete("/stars", s.removeStar)
 }
 
+// shutdownTimeout bounds how long Shutdown waits for open connections.
+const shutdownTimeout = 3 * time.Second
+
 // Listen serves on addr until Shutdown is called.
 func (s *Server) Listen(addr string) error { return s.app.Listen(addr) }
 
@@ -79,7 +95,13 @@ func (s *Server) Listen(addr string) error { return s.app.Listen(addr) }
 // can learn the port before the window opens.
 func (s *Server) Listener(ln net.Listener) error { return s.app.Listener(ln) }
 
-func (s *Server) Shutdown() error { return s.app.Shutdown() }
+// Shutdown releases the live streams first, then waits briefly for the
+// remaining connections. The timeout is a backstop: a stuck client must never
+// keep the app alive after the window is closed.
+func (s *Server) Shutdown() error {
+	s.closeOnce.Do(func() { close(s.closing) })
+	return s.app.ShutdownWithTimeout(shutdownTimeout)
+}
 
 // Handler adapts the app to net/http, for the desktop shell's asset server.
 func (s *Server) Handler() http.Handler { return adaptor.FiberApp(s.app) }

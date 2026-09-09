@@ -41,6 +41,13 @@ Token counts come from the provider's own accounting, not an estimate:
 Session stats shown in the right panel are aggregates over `turns`:
 turn count, summed tokens by kind, summed cost, total agent time.
 
+Project stats are the same aggregate over every session in the project, plus
+the session count, how many are running, and the last activity. Sessions in a
+project run concurrently, so the summed agent time can exceed wall time — it
+answers "how much agent work went into this project", not "how long was I
+waiting". One query over `turns` filtered by the project's session ids; the
+`idx_sessions_project` index keeps that cheap.
+
 ## Migrations
 
 `PRAGMA user_version` plus an ordered `[]string` of DDL steps in

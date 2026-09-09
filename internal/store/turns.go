@@ -34,23 +34,54 @@ func (s *Store) FinishTurn(t *Turn) error {
 	return nil
 }
 
-func (s *Store) SessionStats(sessionID string) (*Stats, error) {
+// statsSelect aggregates a set of turns; the caller appends the WHERE clause.
+const statsSelect = `SELECT COUNT(*),
+	COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0),
+	COALESCE(SUM(cache_read_tokens),0), COALESCE(SUM(cache_write_tokens),0),
+	SUM(cost_usd), SUM(COALESCE(ended_at, started_at) - started_at)
+	FROM turns `
+
+func (s *Store) scanStats(where string, args ...any) (*Stats, error) {
 	var st Stats
 	var cost sql.NullFloat64
 	var dur sql.NullInt64
-	err := s.db.QueryRow(
-		`SELECT COUNT(*),
-		        COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0),
-		        COALESCE(SUM(cache_read_tokens),0), COALESCE(SUM(cache_write_tokens),0),
-		        SUM(cost_usd), SUM(COALESCE(ended_at, started_at) - started_at)
-		 FROM turns WHERE session_id = ?`, sessionID).
+	err := s.db.QueryRow(statsSelect+where, args...).
 		Scan(&st.Turns, &st.InputTokens, &st.OutputTokens,
 			&st.CacheReadTokens, &st.CacheWriteTokens, &cost, &dur)
 	if err != nil {
-		return nil, fmt.Errorf("session stats %s: %w", sessionID, err)
+		return nil, err
 	}
 	st.CostUSD, st.DurationMS = cost.Float64, dur.Int64
 	return &st, nil
+}
+
+func (s *Store) SessionStats(sessionID string) (*Stats, error) {
+	st, err := s.scanStats(`WHERE session_id = ?`, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("session stats %s: %w", sessionID, err)
+	}
+	return st, nil
+}
+
+// ProjectStats aggregates every turn of every session in the project. A
+// running turn counts with its elapsed time so far.
+func (s *Store) ProjectStats(projectID int64) (*ProjectStats, error) {
+	st, err := s.scanStats(
+		`WHERE session_id IN (SELECT id FROM sessions WHERE project_id = ?)`, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("project stats %d: %w", projectID, err)
+	}
+	ps := &ProjectStats{Stats: *st}
+	var last sql.NullInt64
+	err = s.db.QueryRow(
+		`SELECT COUNT(*), COALESCE(SUM(status = ?),0), MAX(last_active_at)
+		 FROM sessions WHERE project_id = ?`, StatusRunning, projectID).
+		Scan(&ps.Sessions, &ps.Running, &last)
+	if err != nil {
+		return nil, fmt.Errorf("project stats %d: %w", projectID, err)
+	}
+	ps.LastActiveAt = last.Int64
+	return ps, nil
 }
 
 func (s *Store) ListTurns(sessionID string) ([]Turn, error) {

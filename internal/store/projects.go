@@ -25,6 +25,7 @@ func (s *Store) CreateProject(name, path string) (*Project, error) {
 
 func (s *Store) GetProject(id int64) (*Project, error) {
 	var p Project
+	p.RecentSessions = []SessionRef{} // the field is always an array, never null
 	err := s.db.QueryRow(
 		`SELECT id, name, path, created_at FROM projects WHERE id = ?`, id).
 		Scan(&p.ID, &p.Name, &p.Path, &p.CreatedAt)
@@ -35,6 +36,17 @@ func (s *Store) GetProject(id int64) (*Project, error) {
 		return nil, fmt.Errorf("get project %d: %w", id, err)
 	}
 	return &p, nil
+}
+
+func (s *Store) SetProjectName(id int64, name string) error {
+	res, err := s.db.Exec(`UPDATE projects SET name = ? WHERE id = ?`, name, id)
+	if err != nil {
+		return fmt.Errorf("rename project %d: %w", id, err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (s *Store) DeleteProject(id int64) error {

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -45,6 +46,11 @@ func New(s *store.Store, reg *agent.Registry, hub *Hub) *Runner {
 }
 
 func (r *Runner) Hub() *Hub { return r.hub }
+
+// ProjectTopic is the hub topic that receives the done event of every turn
+// run in the project, so a project view can refresh its totals while several
+// sessions run at once.
+func ProjectTopic(projectID int64) string { return "project:" + strconv.FormatInt(projectID, 10) }
 
 // Running reports whether a turn is in flight for the session.
 func (r *Runner) Running(sessionID string) bool {
@@ -208,8 +214,10 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, events <-chan ag
 	r.store.SetSessionStatus(sess.ID, sessionStatus)
 
 	stats, _ := r.store.SessionStats(sess.ID)
-	r.hub.Publish(sess.ID, Event{SessionID: sess.ID, TurnID: turn.ID,
-		Event: agent.Event{Type: agent.EventDone}, Stats: stats})
+	done := Event{SessionID: sess.ID, TurnID: turn.ID,
+		Event: agent.Event{Type: agent.EventDone}, Stats: stats}
+	r.hub.Publish(sess.ID, done)
+	r.hub.Publish(ProjectTopic(sess.ProjectID), done)
 }
 
 // toolSummary is a one-line record of a tool call for the transcript. The full

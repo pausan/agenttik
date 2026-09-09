@@ -6,8 +6,9 @@ type Project struct {
 	Path      string `json:"path"`
 	CreatedAt int64  `json:"created_at"`
 
-	// Filled by ListProjects: titles of the most recent sessions.
-	RecentSessions []SessionRef `json:"recent_sessions,omitempty"`
+	// Filled by ListProjects: titles of the most recent sessions. Always
+	// encoded, empty included, so the UI can iterate it without a guard.
+	RecentSessions []SessionRef `json:"recent_sessions"`
 }
 
 type SessionRef struct {
@@ -61,7 +62,8 @@ type Message struct {
 	CreatedAt int64  `json:"created_at"`
 }
 
-// Stats aggregates every turn in a session.
+// Stats aggregates turns: every turn in a session, or every turn of every
+// session in a project.
 type Stats struct {
 	Turns            int64   `json:"turns"`
 	InputTokens      int64   `json:"input_tokens"`
@@ -70,6 +72,16 @@ type Stats struct {
 	CacheWriteTokens int64   `json:"cache_write_tokens"`
 	CostUSD          float64 `json:"cost_usd"`
 	DurationMS       int64   `json:"duration_ms"`
+}
+
+// ProjectStats is Stats over a whole project plus the session counts the
+// project view shows. Sessions may run concurrently, so Running can exceed 1
+// and DurationMS is summed agent time, not wall time.
+type ProjectStats struct {
+	Stats
+	Sessions     int64 `json:"sessions"`
+	Running      int64 `json:"running"`
+	LastActiveAt int64 `json:"last_active_at"`
 }
 
 type Star struct {

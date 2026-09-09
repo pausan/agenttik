@@ -70,6 +70,15 @@ therefore decided up front by the session's permission mode, not asked mid-fligh
 Dependencies point one way: `server` -> `runner` -> `agent` + `store`. `agent`
 knows nothing about HTTP or SQL.
 
+## Shutdown
+
+Closing the window, or Ctrl-C in web mode, has to end the process. A live SSE
+stream never finishes by itself and Fiber waits for every open connection, so
+`Server.Shutdown` closes a `closing` channel first — that releases the stream
+handlers — and only then waits, with a 3s cap, for what is left. Without the
+first step the window disappears while the process stays alive holding the port
+and the database, which is what the desktop shell's close button used to do.
+
 ## Concurrency
 
 - One turn at a time per session; a second prompt while running is rejected.

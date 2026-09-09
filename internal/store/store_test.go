@@ -148,3 +148,58 @@ func must(t *testing.T, err error) {
 		t.Fatal(err)
 	}
 }
+
+// Project stats span every session in the project, including one still
+// running, and ignore other projects.
+func TestProjectStatsSpanSessions(t *testing.T) {
+	s := testStore(t)
+	p, _ := s.CreateProject("alpha", "/tmp/alpha")
+	other, _ := s.CreateProject("beta", "/tmp/beta")
+	must(t, s.CreateSession(&Session{ID: "a1", ProjectID: p.ID, Provider: "claude", Model: "opus"}))
+	must(t, s.CreateSession(&Session{ID: "a2", ProjectID: p.ID, Provider: "claude", Model: "opus", Status: StatusRunning}))
+	must(t, s.CreateSession(&Session{ID: "b1", ProjectID: other.ID, Provider: "claude", Model: "opus"}))
+
+	for _, id := range []string{"a1", "a2", "b1"} {
+		turn, err := s.StartTurn(id, "opus", "")
+		if err != nil {
+			t.Fatalf("start turn: %v", err)
+		}
+		turn.InputTokens, turn.CostUSD, turn.Status = 10, 0.25, "ok"
+		must(t, s.FinishTurn(turn))
+	}
+	if _, err := s.StartTurn("a2", "opus", ""); err != nil { // still running
+		t.Fatalf("start turn: %v", err)
+	}
+
+	st, err := s.ProjectStats(p.ID)
+	if err != nil {
+		t.Fatalf("project stats: %v", err)
+	}
+	if st.Sessions != 2 || st.Running != 1 {
+		t.Errorf("sessions = %d running = %d, want 2 and 1", st.Sessions, st.Running)
+	}
+	if st.Turns != 3 || st.InputTokens != 20 || st.CostUSD != 0.5 {
+		t.Errorf("stats = %+v, want 3 turns, 20 input tokens, cost 0.5", st.Stats)
+	}
+	if st.LastActiveAt == 0 {
+		t.Error("last_active_at not set")
+	}
+
+	empty, _ := s.ProjectStats(other.ID + 1)
+	if empty.Sessions != 0 || empty.Turns != 0 {
+		t.Errorf("unknown project stats = %+v, want zeros", empty)
+	}
+}
+
+func TestSetProjectName(t *testing.T) {
+	s := testStore(t)
+	p, _ := s.CreateProject("alpha", "/tmp/alpha")
+	must(t, s.SetProjectName(p.ID, "renamed"))
+	got, _ := s.GetProject(p.ID)
+	if got.Name != "renamed" {
+		t.Errorf("name = %q, want renamed", got.Name)
+	}
+	if err := s.SetProjectName(p.ID+1, "x"); err != ErrNotFound {
+		t.Errorf("rename missing project err = %v, want ErrNotFound", err)
+	}
+}

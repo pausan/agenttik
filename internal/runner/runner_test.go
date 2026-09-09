@@ -261,3 +261,25 @@ func TestHubDropsSlowSubscriber(t *testing.T) {
 		t.Errorf("drained %d, want at most %d", drained, subscriberBuffer)
 	}
 }
+
+// The project view watches one topic for the whole project, so the done event
+// has to reach it as well as the session's own subscribers.
+func TestDoneReachesProjectTopic(t *testing.T) {
+	fp := &fakeProvider{script: []agent.Event{{Type: agent.EventDone, Usage: &agent.Usage{}}}}
+	r, _, sess := setup(t, fp)
+
+	ch, unsub := r.Hub().Subscribe(ProjectTopic(sess.ProjectID))
+	defer unsub()
+
+	if _, err := r.Send(sess.ID, "hi"); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	select {
+	case ev := <-ch:
+		if ev.SessionID != sess.ID || ev.Event.Type != agent.EventDone || ev.Stats == nil {
+			t.Errorf("got %+v, want the session's done event with stats", ev)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("no event on the project topic")
+	}
+}

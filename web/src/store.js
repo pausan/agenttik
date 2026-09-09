@@ -38,6 +38,7 @@ export const S = reactive({
   providers: [],
   stars: [],
   projects: [],
+  subscriptionLimits: {}, // provider -> its latest subscription allowance buckets
   sessions: [],
   tabs: [], // every open view, of every project
   activeTab: "",
@@ -113,6 +114,19 @@ export function contextWindow(session) {
   return model?.context_window || 0;
 }
 
+
+// Subscription allowances are provider-reported account limits, not guesses
+// from token totals. Providers without a safe local source return no buckets.
+export async function refreshSubscriptionLimits(provider) {
+  if (provider !== "codex") {
+    S.subscriptionLimits[provider] = [];
+    return;
+  }
+  S.subscriptionLimits[provider] = await api(
+    "GET",
+    `/api/providers/${encodeURIComponent(provider)}/subscription-limits`,
+  );
+}
 export function isStarred(provider, model, effort) {
   return S.stars.some(
     (s) => s.provider === provider && s.model === model && (s.effort || "") === (effort || ""),
@@ -1094,6 +1108,7 @@ function onSessionEvent(tab, msg) {
         if (tab.id === S.owner?.id) refreshChanged();
         refreshSessions();
         refreshProjects();
+        refreshSubscriptionLimits(tab.detail.session.provider).catch(() => {});
       }
       break;
   }

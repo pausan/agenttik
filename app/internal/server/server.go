@@ -71,6 +71,7 @@ func (s *Server) routes() {
 	api := s.app.Group("/api")
 
 	api.Get("/providers", s.listProviders)
+	api.Get("/providers/:provider/subscription-limits", s.subscriptionLimits)
 	api.Get("/fs", s.browseDir)
 
 	api.Get("/projects", s.listProjects)

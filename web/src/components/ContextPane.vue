@@ -1,6 +1,6 @@
 <script setup>
-/* What the cog on the prompt bar opens: how full the model's context is, and
-   the session's totals underneath.
+/* What the prompt bar's context ring reveals: how full the model's context
+   is, and the session's totals underneath.
 
    Context used is the size of the last prompt the CLI actually sent, cached
    blocks included — not a sum over the turn. A turn with twenty tool calls
@@ -16,9 +16,6 @@ const total = computed(() => contextWindow(S.detail?.session));
 const pct = computed(() =>
   total.value ? Math.min(100, Math.round((used.value / total.value) * 100)) : 0,
 );
-/* Getting close to the window is worth noticing before the CLI has to
-   compact, so the bar changes colour rather than only growing. */
-const tone = computed(() => (pct.value >= 90 ? "error" : pct.value >= 70 ? "warning" : "primary"));
 
 const rows = computed(() => {
   const stats = S.detail?.stats;
@@ -37,20 +34,13 @@ const rows = computed(() => {
 
 <template>
   <div v-if="S.detail" class="w-64 p-3">
-    <div class="mb-1 flex items-baseline justify-between gap-2">
+    <div class="flex items-baseline justify-between gap-2">
       <span class="text-xs font-medium text-muted">Context</span>
       <span class="text-xs text-dimmed tabular-nums">
         {{ total ? pct + "%" : "window unknown" }}
       </span>
     </div>
-    <div class="h-1.5 overflow-hidden rounded-full bg-accented">
-      <div
-        class="h-full rounded-full transition-[width]"
-        :class="{ primary: 'bg-primary', warning: 'bg-warning', error: 'bg-error' }[tone]"
-        :style="{ width: (total ? pct : 0) + '%' }"
-      />
-    </div>
-    <p class="mt-1.5 text-xs text-dimmed tabular-nums">
+    <p class="mt-0.5 text-xs text-dimmed tabular-nums">
       {{ tokens(used) }}<template v-if="total"> / {{ tokens(total) }}</template> tokens
       <template v-if="!used"> · nothing sent yet</template>
     </p>

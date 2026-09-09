@@ -34,6 +34,51 @@ button:not(:disabled) { cursor: pointer; }
 button[draggable="true"] { cursor: grab; }
 button[draggable="true"]:active { cursor: grabbing; }
 
+
+/* A compact context gauge belongs beside the prompt controls. Its text stays
+   legible without colour, while the full context and session totals live in
+   the hover tooltip. */
+.context-ring {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 9999px;
+  background: conic-gradient(var(--context-tone) var(--context-pct), var(--ui-bg-accented) 0);
+  color: var(--ui-text-muted);
+}
+.context-ring::before {
+  grid-area: 1 / 1;
+  width: calc(100% - 4px);
+  height: calc(100% - 4px);
+  border-radius: inherit;
+  background: var(--ui-bg);
+  content: "";
+}
+.context-ring-value {
+  z-index: 1;
+  grid-area: 1 / 1;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+.subscription-limits {
+  display: grid;
+  width: 2.5rem;
+  gap: 2px;
+}
+.subscription-limit-track {
+  height: 2px;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: var(--ui-bg-accented);
+}
+.subscription-limit-fill {
+  height: 100%;
+  border-radius: inherit;
+  transition: width 150ms ease;
+}
 /* A path is more readable clipped at the front than at the end, and rtl is
    the only way to move an ellipsis there. The inner span keeps the text
    itself in logical order. */

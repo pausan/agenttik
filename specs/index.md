@@ -12,6 +12,7 @@
 | [008-project-workspaces.md](008-project-workspaces.md) | Per-project tab strips, tab groups, file diffs |
 | [009-model-picker.md](009-model-picker.md) | Cross-provider model and favourite selection |
 | [010-working-indicator.md](010-working-indicator.md) | Live turn progress in the transcript |
+| [011-prompt-bar-usage.md](011-prompt-bar-usage.md) | Fuzzy models, context ring, subscription allowance |
 
 Status: sidebar ordering, session archiving, collapsible project session lists,
 the project-scoped Tree, fuzzy go-to navigation, global conversation closing,

@@ -1,9 +1,12 @@
 package server
 
 import (
+	"context"
+
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/pausan/agenttik/app/internal/agent"
+	"github.com/pausan/agenttik/app/internal/agent/codex"
 )
 
 type providerInfo struct {
@@ -31,6 +34,20 @@ func (s *Server) listProviders(c *fiber.Ctx) error {
 		out = append(out, info)
 	}
 	return c.JSON(out)
+}
+
+// subscriptionLimits returns the signed-in CLI's own subscription allowance.
+// Only Codex currently offers this read-only app-server endpoint. Other
+// providers simply have no subscription gauge rather than a made-up estimate.
+func (s *Server) subscriptionLimits(c *fiber.Ctx) error {
+	if c.Params("provider") != "codex" {
+		return c.JSON([]codex.RateLimit{})
+	}
+	limits, err := codex.ReadRateLimits(context.Background())
+	if err != nil {
+		return err
+	}
+	return c.JSON(limits)
 }
 
 func (s *Server) listStars(c *fiber.Ctx) error {

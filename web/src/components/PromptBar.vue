@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, ref, watch } from "vue";
 
-import { S, fail, isStarred, providerOf, send, setModel, stopTurn, toggleStar } from "../store";
+import { S, contextWindow, fail, isStarred, providerOf, refreshSubscriptionLimits, send, setModel, stopTurn, toggleStar } from "../store";
 import ContextPane from "./ContextPane.vue";
 
 /* The unsent prompt belongs to the conversation, not to this bar: one bar
@@ -13,6 +13,7 @@ const text = computed({
   },
 });
 const prompt = ref(null);
+const modelOpen = ref(false);
 
 /* New sessions can be made while another prompt bar is still mounted, so an
    explicit focus request is more reliable than the component's autofocus. */
@@ -56,24 +57,30 @@ const onCombo = computed(() =>
   ),
 );
 
-const modelItems = computed(() => {
-  const items = combos.value.map((c, i) => ({
-    label: `★ ${providerOf(c.provider)?.display_name || c.provider} · ${labelOf(c.provider, c.model)} · ${c.effort || "default"}`,
-    value: "combo:" + i,
-    disabled: !providerOf(c.provider)?.available,
-  }));
-  if (items.length) items.push({ type: "separator" });
-  return items.concat(
-    S.providers.flatMap((p) => [
-      { type: "label", label: p.display_name },
-      ...p.models.map((m) => ({
-        label: m.label,
-        value: `model:${p.name}:${m.id}`,
-        disabled: !p.available,
-      })),
-    ]),
-  );
-});
+const modelGroups = computed(() => [
+  ...(combos.value.length
+    ? [{
+        id: "favourites",
+        label: "Favourites",
+        items: combos.value.map((c, i) => ({
+          label: `★ ${labelOf(c.provider, c.model)} · ${c.effort || "default"}`,
+          description: providerOf(c.provider)?.display_name || c.provider,
+          value: "combo:" + i,
+          disabled: !providerOf(c.provider)?.available,
+        })),
+      }]
+    : []),
+  ...S.providers.map((p) => ({
+    id: p.name,
+    label: p.display_name,
+    items: p.models.map((m) => ({
+      label: m.label,
+      description: m.id,
+      value: `model:${p.name}:${m.id}`,
+      disabled: !p.available,
+    })),
+  })),
+]);
 
 const model = computed({
   get: () =>
@@ -111,6 +118,39 @@ const effortValue = computed({
   set: (v) => setModel(S.detail.session.provider, S.detail.session.model, v === NONE ? "" : v),
 });
 
+
+function pickModel(value) {
+  model.value = value;
+  modelOpen.value = false;
+}
+
+const contextUsed = computed(() => S.detail?.stats.context_tokens || 0);
+const contextTotal = computed(() => contextWindow(S.detail?.session));
+const contextPct = computed(() => contextTotal.value ? Math.min(100, Math.round((contextUsed.value / contextTotal.value) * 100)) : 0);
+const contextTone = computed(() => contextPct.value >= 90 ? "var(--color-red-500)" : contextPct.value >= 70 ? "var(--color-amber-500)" : "var(--ui-primary)");
+
+const subscriptionLimit = computed(() => (S.subscriptionLimits[S.detail?.session?.provider] || []).find((limit) => limit.limit_id === "codex") || (S.subscriptionLimits[S.detail?.session?.provider] || [])[0]);
+const subscriptionWindows = computed(() => [subscriptionLimit.value?.primary, subscriptionLimit.value?.secondary].filter(Boolean).map((window, index) => ({ ...window, label: allowanceLabel(window, index) })));
+
+function allowanceLabel(window, index) {
+  const minutes = window.window_duration_mins;
+  if (minutes >= 6 * 24 * 60) return "Weekly";
+  if (minutes >= 60 && minutes % 60 === 0) return `${minutes / 60}-hour`;
+  return index === 0 ? "Hourly" : "Allowance";
+}
+
+function resetAt(seconds) {
+  return seconds ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(seconds * 1000) : "not reported";
+}
+
+watch(
+  () => S.detail?.session?.provider,
+  (provider) => {
+    if (provider) refreshSubscriptionLimits(provider).catch(() => {});
+  },
+  { immediate: true },
+);
+
 const starred = computed(() =>
   isStarred(S.detail.session.provider, S.detail.session.model, effort.value),
 );
@@ -146,7 +186,27 @@ function submit() {
         @keydown.enter.exact.prevent="submit"
       />
       <div class="flex items-center gap-1.5">
-        <USelect v-model="model" :items="modelItems" size="sm" title="Model" />
+        <UPopover v-model:open="modelOpen">
+          <UButton
+            type="button"
+            color="neutral"
+            variant="outline"
+            size="sm"
+            trailing-icon="i-lucide-chevron-down"
+            :label="labelOf(S.detail.session.provider, S.detail.session.model)"
+            title="Choose model"
+          />
+          <template #content>
+            <UCommandPalette
+              class="w-80"
+              :groups="modelGroups"
+              value-key="value"
+              placeholder="Search models…"
+              :fuse="{ fuseOptions: { keys: ['label', 'description'], threshold: 0.35, ignoreLocation: true }, resultLimit: 20 }"
+              @update:model-value="pickModel"
+            />
+          </template>
+        </UPopover>
         <USelect v-model="effortValue" :items="effortItems" size="sm" title="Effort" />
         <UButton
           color="neutral"
@@ -157,18 +217,46 @@ function submit() {
           :label="starred ? '★' : '☆'"
           @click="star"
         />
-        <UPopover>
-          <UButton
-            color="neutral"
-            variant="ghost"
-            size="sm"
-            icon="i-lucide-settings"
-            title="Context and session totals"
-            aria-label="Context and session totals"
-          />
-          <template #content><ContextPane /></template>
-        </UPopover>
         <span class="flex-1" />
+        <UTooltip :content="{ side: 'top', sideOffset: 8 }">
+          <button
+            type="button"
+            class="context-ring"
+            :style="{ '--context-pct': contextPct + '%', '--context-tone': contextTone }"
+            aria-label="Context and session totals"
+          >
+            <span class="context-ring-value">{{ contextTotal ? contextPct + '%' : '—' }}</span>
+          </button>
+          <template #content><ContextPane /></template>
+        </UTooltip>
+        <UTooltip v-if="subscriptionWindows.length" :content="{ side: 'top', sideOffset: 8 }">
+          <div class="subscription-limits" aria-label="Subscription allowance">
+            <div v-for="window in subscriptionWindows" :key="window.label" class="subscription-limit-track">
+              <div
+                class="subscription-limit-fill"
+                :class="window.used_percent >= 90 ? 'bg-error' : window.used_percent >= 70 ? 'bg-warning' : 'bg-primary'"
+                :style="{ width: Math.min(100, window.used_percent) + '%' }"
+              />
+            </div>
+          </div>
+          <template #content>
+            <div class="w-64 p-3">
+              <p class="m-0 text-xs font-medium text-muted">
+                {{ subscriptionLimit.plan_type ? subscriptionLimit.plan_type + ' subscription' : 'Subscription allowance' }}
+              </p>
+              <dl class="mt-1.5 mb-0 space-y-1 text-xs tabular-nums">
+                <div v-for="window in subscriptionWindows" :key="window.label" class="flex justify-between gap-3">
+                  <dt class="text-muted">{{ window.label }}</dt>
+                  <dd class="m-0 text-highlighted">{{ Math.round(window.used_percent) }}% used · resets {{ resetAt(window.resets_at) }}</dd>
+                </div>
+                <div v-if="subscriptionLimit.reached_type" class="flex justify-between gap-3">
+                  <dt class="text-muted">Status</dt>
+                  <dd class="m-0 text-highlighted">{{ subscriptionLimit.reached_type }}</dd>
+                </div>
+              </dl>
+            </div>
+          </template>
+        </UTooltip>
         <span v-if="S.detail.running" class="text-xs text-dimmed">running…</span>
         <UButton
           v-if="S.detail.running"

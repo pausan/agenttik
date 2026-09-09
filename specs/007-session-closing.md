@@ -7,7 +7,10 @@ session tab or `Ctrl+W` only closes that tab and any files it owns; the session
 remains active. `Ctrl+Shift+T` restores closed entries newest-first for the
 active project, including more than one close. Archiving a session removes it
 from the project sidebar and closes any open tab and owned files. Restoring
-that archived entry unarchives the session before reopening its tab.
+that archived entry unarchives the session before reopening its tab. An
+untitled session with no transcript, turns, queued work, or draft is deleted
+when archived instead, so it does not appear in the Sessions list or restore
+stack.
 
 ## Validation
 

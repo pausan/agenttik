@@ -722,21 +722,36 @@ export async function renameSession(session, title) {
   }
 }
 
-/* setSessionArchived removes a session from project views and closes its tab
-   without deleting it. The Sessions list keeps archived sessions so they can
-   be restored. An open session is added to the same restore stack as a
-   manually closed tab, marked so restoration first unarchives it. */
+/* A default session with no history, queued work, or local draft is just an
+   abandoned placeholder. Drop it rather than making it an archived row the
+   user has to find later. Checking the detail also keeps a titled or used
+   session safe when archive is clicked from a compact project-list row. */
+async function shouldDeleteBlankSession(session, tab) {
+  if (session.title || tab?.draft?.trim() || (tab && unsavedUnder(tab.id).length)) return false;
+  const detail = tab?.detail || await api("GET", "/api/sessions/" + session.id);
+  return !detail.session.title &&
+    !detail.messages.length &&
+    !detail.turns.length &&
+    !detail.queued.length &&
+    !detail.running;
+}
+/* setSessionArchived removes a session from project views and closes its tab.
+   Archived sessions remain restorable; an untouched untitled placeholder is
+   deleted instead. */
 export async function setSessionArchived(session, archived) {
   try {
-    const updated = await api("PATCH", "/api/sessions/" + session.id, { done: archived });
     const tab = S.tabs.find((t) => t.kind === "session" && t.sessionID === session.id);
+    const deleted = archived && await shouldDeleteBlankSession(session, tab);
+    const updated = deleted
+      ? await api("DELETE", "/api/sessions/" + session.id)
+      : await api("PATCH", "/api/sessions/" + session.id, { done: archived });
     const dependents = tab ? S.tabs.filter((t) => t.owner === tab.id) : [];
-    if (tab) tab.detail.session = updated;
+    if (tab && !deleted) tab.detail.session = updated;
     await Promise.all([refreshProjects(), refreshSessions()]);
     reloadProjects();
     if (archived && tab) {
       await closeTab(tab.id, false);
-      if (!S.tabs.some((open) => open.id === tab.id)) {
+      if (!deleted && !S.tabs.some((open) => open.id === tab.id)) {
         rememberClosedTab(projectOfTab(tab), tab, dependents, true);
       }
     }

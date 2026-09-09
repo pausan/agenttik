@@ -151,10 +151,16 @@ func (s *Store) SetSessionTitle(id, title string) error {
 	return nil
 }
 
-// SetSessionModel records a mid-session switch of model or effort.
-func (s *Store) SetSessionModel(id, model, effort string) error {
-	_, err := s.db.Exec(`UPDATE sessions SET model = ?, effort = ?, updated_at = ? WHERE id = ?`,
-		model, effort, nowMillis(), id)
+// SetSessionModel records a mid-session model choice. Changing provider also
+// clears its opaque thread id: a Codex thread cannot be resumed by Claude,
+// and vice versa.
+func (s *Store) SetSessionModel(id, provider, model, effort string, resetProviderSession bool) error {
+	query := `UPDATE sessions SET provider = ?, model = ?, effort = ?, updated_at = ? WHERE id = ?`
+	args := []any{provider, model, effort, nowMillis(), id}
+	if resetProviderSession {
+		query = `UPDATE sessions SET provider = ?, provider_session_id = '', model = ?, effort = ?, updated_at = ? WHERE id = ?`
+	}
+	_, err := s.db.Exec(query, args...)
 	if err != nil {
 		return fmt.Errorf("set session model: %w", err)
 	}

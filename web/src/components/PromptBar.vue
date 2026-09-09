@@ -36,32 +36,43 @@ const selectedModel = computed(() =>
 const effortsFor = (model) => model?.efforts || provider.value?.efforts || [];
 const selectedEfforts = computed(() => effortsFor(selectedModel.value));
 
-const labelOf = (id) => provider.value?.models.find((m) => m.id === id)?.label || id;
+const modelOf = (providerName, id) => providerOf(providerName)?.models.find((m) => m.id === id);
+const labelOf = (providerName, id) => modelOf(providerName, id)?.label || id;
 
 /* A favourite is a model and an effort together — an effort on its own is
    never starred — so starred combinations head the model picker as single
    entries that set both. The effort picker below stays free to change either
    way, starred or not. */
 const combos = computed(() =>
-  !provider.value
-    ? []
-    : S.stars.filter(
-        (s) => s.provider === provider.value.name && provider.value.models.some((m) => m.id === s.model),
-      ),
+  S.stars.filter((s) => modelOf(s.provider, s.model)),
 );
 
 const onCombo = computed(() =>
-  combos.value.some((c) => c.model === S.detail.session.model && (c.effort || "") === effort.value),
+  combos.value.some(
+    (c) =>
+      c.provider === S.detail.session.provider &&
+      c.model === S.detail.session.model &&
+      (c.effort || "") === effort.value,
+  ),
 );
 
 const modelItems = computed(() => {
-  if (!provider.value) return [];
   const items = combos.value.map((c, i) => ({
-    label: `★ ${labelOf(c.model)} · ${c.effort || "default"}`,
+    label: `★ ${providerOf(c.provider)?.display_name || c.provider} · ${labelOf(c.provider, c.model)} · ${c.effort || "default"}`,
     value: "combo:" + i,
+    disabled: !providerOf(c.provider)?.available,
   }));
   if (items.length) items.push({ type: "separator" });
-  return items.concat(provider.value.models.map((m) => ({ label: m.label, value: "model:" + m.id })));
+  return items.concat(
+    S.providers.flatMap((p) => [
+      { type: "label", label: p.display_name },
+      ...p.models.map((m) => ({
+        label: m.label,
+        value: `model:${p.name}:${m.id}`,
+        disabled: !p.available,
+      })),
+    ]),
+  );
 });
 
 const model = computed({
@@ -69,17 +80,23 @@ const model = computed({
     onCombo.value
       ? "combo:" +
         combos.value.findIndex(
-          (c) => c.model === S.detail.session.model && (c.effort || "") === effort.value,
+          (c) =>
+            c.provider === S.detail.session.provider &&
+            c.model === S.detail.session.model &&
+            (c.effort || "") === effort.value,
         )
-      : "model:" + S.detail.session.model,
+      : `model:${S.detail.session.provider}:${S.detail.session.model}`,
   set: (v) => {
     const [kind, rest] = [v.slice(0, v.indexOf(":")), v.slice(v.indexOf(":") + 1)];
     if (kind === "combo") {
       const c = combos.value[Number(rest)];
-      setModel(c.model, c.effort || "");
+      setModel(c.provider, c.model, c.effort || "");
     } else {
-      const next = provider.value?.models.find((m) => m.id === rest);
-      setModel(rest, effortsFor(next).includes(effort.value) ? effort.value : "");
+      const [providerName, modelID] = rest.split(":", 2);
+      const nextProvider = providerOf(providerName);
+      const next = nextProvider?.models.find((m) => m.id === modelID);
+      const nextEfforts = next?.efforts || nextProvider?.efforts || [];
+      setModel(providerName, modelID, nextEfforts.includes(effort.value) ? effort.value : "");
     }
   },
 });
@@ -91,7 +108,7 @@ const effortItems = computed(() => [
 
 const effortValue = computed({
   get: () => effort.value || NONE,
-  set: (v) => setModel(S.detail.session.model, v === NONE ? "" : v),
+  set: (v) => setModel(S.detail.session.provider, S.detail.session.model, v === NONE ? "" : v),
 });
 
 const starred = computed(() =>
@@ -136,7 +153,7 @@ function submit() {
           variant="ghost"
           size="sm"
           :class="starred ? 'text-yellow-500' : ''"
-          :title="`${starred ? 'Unstar' : 'Star'} ${labelOf(S.detail.session.model)} · ${effort || 'default'}`"
+          :title="`${starred ? 'Unstar' : 'Star'} ${labelOf(S.detail.session.provider, S.detail.session.model)} · ${effort || 'default'}`"
           :label="starred ? '★' : '☆'"
           @click="star"
         />

@@ -85,7 +85,7 @@ const favourites = computed(() =>
         description: "Apply to the current session",
         icon: "i-lucide-star",
         disabled: !S.detail,
-        onSelect: () => choose(() => setModel(star.model, star.effort || "")),
+        onSelect: () => choose(() => setModel(star.provider, star.model, star.effort || "")),
       },
     ];
   }),

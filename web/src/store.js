@@ -548,11 +548,15 @@ export async function openSession(id, silent = false) {
   await Promise.all([refreshProjects(), refreshSessions()]).catch(fail);
 }
 
-export async function setModel(model, effort) {
+export async function setModel(provider, model, effort) {
   const tab = S.owner;
   if (tab?.kind !== "session") return;
   try {
-    tab.detail.session = await api("PATCH", "/api/sessions/" + tab.sessionID, { model, effort });
+    tab.detail.session = await api("PATCH", "/api/sessions/" + tab.sessionID, {
+      provider,
+      model,
+      effort,
+    });
     rememberUsed(tab.detail.session);
   } catch (e) {
     fail(e);

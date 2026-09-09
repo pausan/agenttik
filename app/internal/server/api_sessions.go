@@ -128,23 +128,44 @@ func (s *Server) updateSession(c *fiber.Ctx) error {
 		return err
 	}
 	var body struct {
-		Model  *string `json:"model"`
-		Effort *string `json:"effort"`
-		Title  *string `json:"title"`
-		Done   *bool   `json:"done"`
+		Provider *string `json:"provider"`
+		Model    *string `json:"model"`
+		Effort   *string `json:"effort"`
+		Title    *string `json:"title"`
+		Done     *bool   `json:"done"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return badRequest("invalid body: %v", err)
 	}
-	if body.Model != nil || body.Effort != nil {
-		model, effort := sess.Model, sess.Effort
+	if body.Provider != nil || body.Model != nil || body.Effort != nil {
+		providerName, model, effort := sess.Provider, sess.Model, sess.Effort
+		if body.Provider != nil {
+			providerName = *body.Provider
+		}
+		provider, ok := s.registry.Get(providerName)
+		if !ok {
+			return badRequest("unknown provider %q", providerName)
+		}
+		if err := provider.Available(); err != nil {
+			return badRequest("provider %q is unavailable: %v", providerName, err)
+		}
 		if body.Model != nil {
 			model = *body.Model
 		}
 		if body.Effort != nil {
 			effort = *body.Effort
 		}
-		if err := s.store.SetSessionModel(id, model, effort); err != nil {
+		knownModel := false
+		for _, candidate := range provider.Models() {
+			if candidate.ID == model {
+				knownModel = true
+				break
+			}
+		}
+		if !knownModel {
+			return badRequest("unknown model %q for provider %q", model, providerName)
+		}
+		if err := s.store.SetSessionModel(id, providerName, model, effort, providerName != sess.Provider); err != nil {
 			return err
 		}
 	}

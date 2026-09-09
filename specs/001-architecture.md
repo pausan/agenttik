@@ -57,17 +57,20 @@ therefore decided up front by the session's permission mode, not asked mid-fligh
 
 ## Packages
 
+Two top-level directories hold code: `app/` is the Go application, `web/` the
+Vue UI and its embed glue.
+
 | Package | Responsibility |
 |---------|----------------|
-| `cmd/agenttik` | flags, wiring, graceful shutdown |
-| `internal/config` | data dir resolution (XDG), listen address |
-| `internal/store` | SQLite access and migrations. No business logic |
-| `internal/agent` | provider-neutral `Event`/`TurnRequest` types, `Provider` interface, registry |
-| `internal/agent/claudecode` | Claude Code CLI adapter |
-| `internal/agent/codex` | Codex CLI adapter (stub) |
-| `internal/runner` | turn lifecycle: spawn, consume events, persist, fan out |
-| `internal/server` | Fiber routes, SSE, project file access |
-| `web` | the embedded UI: `ui/` is the Vite source, `dist/` the build |
+| `app/cmd/agenttik` | flags, wiring, graceful shutdown |
+| `app/internal/config` | data dir resolution (XDG), listen address |
+| `app/internal/store` | SQLite access and migrations. No business logic |
+| `app/internal/agent` | provider-neutral `Event`/`TurnRequest` types, `Provider` interface, registry |
+| `app/internal/agent/claudecode` | Claude Code CLI adapter |
+| `app/internal/agent/codex` | Codex CLI adapter (stub) |
+| `app/internal/runner` | turn lifecycle: spawn, consume events, persist, fan out |
+| `app/internal/server` | Fiber routes, SSE, project file access |
+| `web` | the Vue source, and `embed.go` compiling `dist/` into the binary |
 
 Dependencies point one way: `server` -> `runner` -> `agent` + `store`. `agent`
 knows nothing about HTTP or SQL.

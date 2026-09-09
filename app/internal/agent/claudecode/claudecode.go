@@ -16,7 +16,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/pausan/agenttik/internal/agent"
+	"github.com/pausan/agenttik/app/internal/agent"
 )
 
 // Binary is the CLI we shell out to. A variable so tests can point at a fake.

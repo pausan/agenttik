@@ -14,7 +14,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 
-	"github.com/pausan/agenttik/internal/server"
+	"github.com/pausan/agenttik/app/internal/server"
 )
 
 // runDesktop opens a native window over the same HTTP server the web mode

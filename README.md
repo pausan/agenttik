@@ -116,13 +116,14 @@ from the providers' own accounting, never an estimate.
 ## Layout
 
 ```
-cmd/agenttik        flags, wiring, desktop vs web shell
-internal/config     data dir and listen address
-internal/store      SQLite schema, migrations, queries
-internal/agent      provider contract; claudecode/ and codex/ adapters
-internal/runner     turn lifecycle and SSE fan-out
-internal/server     Fiber routes, SSE, project file access
-web/ui              the Vue UI (Vite); built into web/dist and embedded
+app/                the Go application
+  cmd/agenttik      flags, wiring, desktop vs web shell
+  internal/config   data dir and listen address
+  internal/store    SQLite schema, migrations, queries
+  internal/agent    provider contract; claudecode/ and codex/ adapters
+  internal/runner   turn lifecycle and SSE fan-out
+  internal/server   Fiber routes, SSE, project file access
+web/                the Vue UI (Vite); dist/ is built and embedded by embed.go
 specs/              design notes — start at specs/index.md
 ```
 

@@ -7,8 +7,8 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 
-	"github.com/pausan/agenttik/internal/agent"
-	"github.com/pausan/agenttik/internal/store"
+	"github.com/pausan/agenttik/app/internal/agent"
+	"github.com/pausan/agenttik/app/internal/store"
 )
 
 // windows are the choices offered by the Sessions sidebar.

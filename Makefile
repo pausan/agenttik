@@ -1,6 +1,6 @@
 BIN      := bin/agenttik
-PKG      := ./cmd/agenttik
-UI       := web/ui
+PKG      := ./app/cmd/agenttik
+UI       := web
 
 # Wails needs to know which webkit2gtk is installed. 4.1 is the current one;
 # older distros still ship 4.0.

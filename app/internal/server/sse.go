@@ -9,7 +9,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/valyala/fasthttp"
 
-	"github.com/pausan/agenttik/internal/runner"
+	"github.com/pausan/agenttik/app/internal/runner"
 )
 
 // heartbeat keeps proxies and idle connections from timing the stream out.

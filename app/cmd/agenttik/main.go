@@ -15,13 +15,13 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/pausan/agenttik/internal/agent"
-	"github.com/pausan/agenttik/internal/agent/claudecode"
-	"github.com/pausan/agenttik/internal/agent/codex"
-	"github.com/pausan/agenttik/internal/config"
-	"github.com/pausan/agenttik/internal/runner"
-	"github.com/pausan/agenttik/internal/server"
-	"github.com/pausan/agenttik/internal/store"
+	"github.com/pausan/agenttik/app/internal/agent"
+	"github.com/pausan/agenttik/app/internal/agent/claudecode"
+	"github.com/pausan/agenttik/app/internal/agent/codex"
+	"github.com/pausan/agenttik/app/internal/config"
+	"github.com/pausan/agenttik/app/internal/runner"
+	"github.com/pausan/agenttik/app/internal/server"
+	"github.com/pausan/agenttik/app/internal/store"
 )
 
 // errNoDesktop is returned by runDesktop in web-only builds.

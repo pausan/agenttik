@@ -15,9 +15,9 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/filesystem"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 
-	"github.com/pausan/agenttik/internal/agent"
-	"github.com/pausan/agenttik/internal/runner"
-	"github.com/pausan/agenttik/internal/store"
+	"github.com/pausan/agenttik/app/internal/agent"
+	"github.com/pausan/agenttik/app/internal/runner"
+	"github.com/pausan/agenttik/app/internal/store"
 	"github.com/pausan/agenttik/web"
 )
 

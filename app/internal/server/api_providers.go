@@ -3,7 +3,7 @@ package server
 import (
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/pausan/agenttik/internal/agent"
+	"github.com/pausan/agenttik/app/internal/agent"
 )
 
 type providerInfo struct {

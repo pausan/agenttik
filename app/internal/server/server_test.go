@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pausan/agenttik/internal/agent"
-	"github.com/pausan/agenttik/internal/runner"
-	"github.com/pausan/agenttik/internal/store"
+	"github.com/pausan/agenttik/app/internal/agent"
+	"github.com/pausan/agenttik/app/internal/runner"
+	"github.com/pausan/agenttik/app/internal/store"
 )
 
 func newTestServer(t *testing.T) (*Server, *store.Store) {

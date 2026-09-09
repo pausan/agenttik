@@ -10,8 +10,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pausan/agenttik/internal/agent"
-	"github.com/pausan/agenttik/internal/store"
+	"github.com/pausan/agenttik/app/internal/agent"
+	"github.com/pausan/agenttik/app/internal/store"
 )
 
 var (

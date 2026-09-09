@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"os/exec"
 
-	"github.com/pausan/agenttik/internal/agent"
+	"github.com/pausan/agenttik/app/internal/agent"
 )
 
 var Binary = "codex"

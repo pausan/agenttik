@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pausan/agenttik/internal/agent"
-	"github.com/pausan/agenttik/internal/store"
+	"github.com/pausan/agenttik/app/internal/agent"
+	"github.com/pausan/agenttik/app/internal/store"
 )
 
 // fakeProvider replays a fixed script and blocks until released, so tests can

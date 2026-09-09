@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pausan/agenttik/internal/agent"
+	"github.com/pausan/agenttik/app/internal/agent"
 )
 
 func TestBuildArgsFirstTurnPicksSessionID(t *testing.T) {

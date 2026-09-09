@@ -6,14 +6,14 @@ import ui from "@nuxt/ui/vite";
 
 // The UI is embedded in the Go binary, so it builds to web/dist and everything
 // it needs — icons, fonts, styles — is bundled. Nothing is fetched at runtime.
-/* web/dist is generated, but `//go:embed all:dist` needs the directory to hold
+/* dist/ is generated, but `//go:embed all:dist` in embed.go needs the directory to hold
    at least one file even before the UI is built — so a placeholder is tracked.
    Vite empties the directory on every build, so put it back afterwards. */
 function keepPlaceholder() {
   return {
     name: "agenttik:keep-placeholder",
     closeBundle() {
-      writeFileSync(fileURLToPath(new URL("../dist/.gitkeep", import.meta.url)), "");
+      writeFileSync(fileURLToPath(new URL("./dist/.gitkeep", import.meta.url)), "");
     },
   };
 }
@@ -28,7 +28,7 @@ export default defineConfig({
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
   },
   build: {
-    outDir: fileURLToPath(new URL("../dist", import.meta.url)),
+    outDir: fileURLToPath(new URL("./dist", import.meta.url)),
     emptyOutDir: true,
   },
   // `npm run dev` serves the UI with hot reload and sends the API — SSE

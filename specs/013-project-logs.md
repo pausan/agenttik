@@ -2,7 +2,7 @@
 
 ## Outcome
 
-The right-hand panel carries a **Logs** pane beside Changed and Stats — the
+The right-hand panel carries a **Commits** pane beside Changed and Stats — the
 history of the branch the project is on, for the project page and for every
 session in it. The branch name and the short head hash sit above a filter box;
 under it, one row per commit.

@@ -8,7 +8,7 @@ import StatsPane from "./StatsPane.vue";
 import OptionsPane from "./OptionsPane.vue";
 import { SEGMENTED } from "../ui";
 
-const LABELS = { changed: "Changed", options: "Options", logs: "Logs", stats: "Stats" };
+const LABELS = { changed: "Changed", options: "Options", logs: "Commits", stats: "Stats" };
 
 const items = computed(() => S.inspector.panes.map((p) => ({ label: LABELS[p], value: p })));
 

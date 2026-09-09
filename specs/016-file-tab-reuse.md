@@ -3,7 +3,7 @@
 ## Outcome
 
 Reading through files no longer fills the strip. A click on a file — in the
-Tree, in Changed, or on a commit's file list in Logs — opens it in the
+Tree, in Changed, or on a commit's file list in Commits — opens it in the
 project's *temporary* tab, and the next file clicked takes that tab over: same
 place in the strip, same `Alt` number, one tab. A double click opens the file
 to keep, and so does typing in it. Kept tabs are only closed by hand.
@@ -55,6 +55,6 @@ one character into that tab took its italic off too, and the next click opened
 a third. Clicking a kept file's row selected its tab and left it kept.
 
 Clicking a file in Changed, then one in the Tree, then one under a commit in
-Logs reused the same single tab across all three, and a double click on the
+Commits reused the same single tab across all three, and a double click on the
 commit's file kept it. After a reload the kept tab came back kept and the
 italic one came back italic.

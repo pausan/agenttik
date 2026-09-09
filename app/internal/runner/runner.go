@@ -39,14 +39,14 @@ type Runner struct {
 	registry *agent.Registry
 	hub      *Hub
 
-	mu         sync.Mutex
-	active     map[string]context.CancelFunc // session id -> cancel
-	scheduling map[int64]bool                // project id -> dispatch in progress
+	mu     sync.Mutex
+	active map[string]context.CancelFunc // session id -> cancel
+	sched  map[int64]*sync.Mutex         // project id -> serializes queue dispatch
 }
 
 func New(s *store.Store, reg *agent.Registry, hub *Hub) *Runner {
 	return &Runner{store: s, registry: reg, hub: hub,
-		active: make(map[string]context.CancelFunc), scheduling: make(map[int64]bool)}
+		active: make(map[string]context.CancelFunc), sched: make(map[int64]*sync.Mutex)}
 }
 
 func (r *Runner) Hub() *Hub { return r.hub }
@@ -133,13 +133,17 @@ func (r *Runner) Send(sessionID, prompt string) (*store.Turn, error) {
 		return nil, err
 	}
 
+	// consume owns the turn from here and keeps writing token counts into it,
+	// so everyone else gets a frozen copy: a subscriber serialising the event
+	// must not read fields while they are being updated.
+	snapshot := *turn
 	started := Event{SessionID: sess.ID, ProjectID: sess.ProjectID, TurnID: turn.ID,
-		Event: agent.Event{Type: "started"}, Turn: turn, Prompt: prompt}
+		Event: agent.Event{Type: "started"}, Turn: &snapshot, Prompt: prompt}
 	r.hub.Publish(sess.ID, started)
 	r.hub.Publish(ProjectTopic(sess.ProjectID), started)
 
 	go r.consume(sess, turn, events, release)
-	return turn, nil
+	return &snapshot, nil
 }
 
 // Enqueue persists a prompt and starts the project queue when no turn is active.
@@ -155,14 +159,31 @@ func (r *Runner) Enqueue(sessionID, prompt string) (int64, error) {
 	return r.store.QueueCount(sessionID)
 }
 
+// dispatchLock serializes queue dispatch within one project. One lock per
+// project is kept for the life of the runner; projects are few and long-lived.
+func (r *Runner) dispatchLock(projectID int64) *sync.Mutex {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	lock, ok := r.sched[projectID]
+	if !ok {
+		lock = &sync.Mutex{}
+		r.sched[projectID] = lock
+	}
+	return lock
+}
+
 // schedule runs one queued prompt only after every active turn in the project
 // has finished. A session that just ran stays preferred while it has work.
+//
+// A caller that arrives mid-dispatch waits for it instead of giving up. The
+// turn the other dispatch started can already have ended by then, and the
+// queue would sit there with nobody left to drain it.
 func (r *Runner) schedule(projectID int64, preferredSessionID string) {
+	lock := r.dispatchLock(projectID)
+	lock.Lock()
+	defer lock.Unlock()
+
 	r.mu.Lock()
-	if r.scheduling[projectID] {
-		r.mu.Unlock()
-		return
-	}
 	for sessionID := range r.active {
 		sess, err := r.store.GetSession(sessionID)
 		if err == nil && sess.ProjectID == projectID {
@@ -170,13 +191,7 @@ func (r *Runner) schedule(projectID int64, preferredSessionID string) {
 			return
 		}
 	}
-	r.scheduling[projectID] = true
 	r.mu.Unlock()
-	defer func() {
-		r.mu.Lock()
-		delete(r.scheduling, projectID)
-		r.mu.Unlock()
-	}()
 
 	sess, err := r.store.NextQueuedSession(projectID, preferredSessionID)
 	if err != nil || sess == nil {

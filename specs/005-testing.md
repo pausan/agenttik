@@ -18,7 +18,7 @@ Only the pure logic is worth unit testing, and there are three pieces of it:
 
 - `fuzzy.js` — the folder picker's matcher, where the ranking rules are easy to
   break and hard to eyeball.
-- `tree.js` — building the inspector's tree from a flat listing, and filtering
+- `tree.js` — building the sidebar Tree from a flat listing, and filtering
   it. The per-node highlight offsets in particular are invisible to the eye and
   trivial to get wrong.
 - `markdown.js` — the transcript's renderer. It is small and hand-written, so

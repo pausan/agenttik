@@ -1,5 +1,5 @@
 /* Nuxt UI's pill tabs default to a filled primary indicator. The side and
-   inspector strips want the quieter version — a raised neutral pill — so both
+   tab strips want the quieter version — a raised neutral pill — so both
    pass this. */
 export const SEGMENTED = {
   indicator: "bg-default shadow-xs",

@@ -6,7 +6,11 @@ type Project struct {
 	Path      string `json:"path"`
 	CreatedAt int64  `json:"created_at"`
 
-	// Filled by ListProjects: titles of the most recent sessions. Always
+	// Position is the order the Projects sidebar was dragged into. A newly
+	// created project is 0, so it stays ahead of manually ordered projects.
+	Position int64 `json:"position"`
+
+	// Filled by ListProjects: titles of the project's open sessions. Always
 	// encoded, empty included, so the UI can iterate it without a guard.
 	RecentSessions []SessionRef `json:"recent_sessions"`
 }

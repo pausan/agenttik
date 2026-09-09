@@ -11,7 +11,7 @@ test("a project appears in the sidebar with its folder underneath", async ({ pag
   await expect(sidebar(page).getByText(REPO)).toBeVisible();
 });
 
-test("opening a project puts it in the centre with Options | Stats | Tree", async ({ page }) => {
+test("opening a project puts its panes on the right and Tree on the left", async ({ page }) => {
   await addProject(page);
   await openProject(page);
 
@@ -19,9 +19,10 @@ test("opening a project puts it in the centre with Options | Stats | Tree", asyn
   await expect(page.getByRole("heading", { name: "agenttik" })).toBeVisible();
   await expect(page.getByText("No sessions yet in this project.")).toBeVisible();
 
-  for (const pane of ["Options", "Stats", "Tree"]) {
+  for (const pane of ["Options", "Stats"]) {
     await expect(inspector(page).getByRole("tab", { name: pane })).toBeVisible();
   }
+  await expect(sidebar(page).getByRole("tab", { name: "Tree" })).toBeVisible();
   // A project has no prompt bar: there is no conversation to prompt.
   await expect(page.getByPlaceholder("Ask the agent…")).toBeHidden();
 });

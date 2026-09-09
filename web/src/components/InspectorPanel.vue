@@ -3,12 +3,11 @@ import { computed } from "vue";
 
 import { S } from "../store";
 import FileList from "./FileList.vue";
-import FileTree from "./FileTree.vue";
 import StatsPane from "./StatsPane.vue";
 import OptionsPane from "./OptionsPane.vue";
 import { SEGMENTED } from "../ui";
 
-const LABELS = { changed: "Changed", options: "Options", stats: "Stats", tree: "Tree" };
+const LABELS = { changed: "Changed", options: "Options", stats: "Stats" };
 
 const items = computed(() => S.inspector.panes.map((p) => ({ label: LABELS[p], value: p })));
 
@@ -32,7 +31,6 @@ const active = computed({
       <StatsPane v-if="active === 'stats'" />
       <OptionsPane v-else-if="active === 'options'" />
       <FileList v-else-if="active === 'changed'" :files="S.changed" empty="No edited files." />
-      <FileTree v-else-if="active === 'tree'" />
     </div>
   </aside>
 </template>

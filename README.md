@@ -78,9 +78,10 @@ not expose it.
 3. **Prompt** — the reply streams into the transcript. Star a model + effort
    combination and it sorts to the top of the picker next time.
 
-The right panel carries **Stats** (tokens, cost, agent time, turn count),
-**Changed** (files git reports as edited) and **Tree** (the repo's files).
-Clicking a file opens it as a tab beside the conversation.
+The right panel carries **Stats** (tokens, cost, agent time, turn count) and
+**Changed** (files git reports as edited). The left panel's **Tree** tab shows
+the repo for the active conversation or selected project; clicking a file opens
+it as a tab beside the conversation.
 
 ## Permission modes
 
@@ -113,6 +114,10 @@ turn and no mid-turn interaction.
 
 State lives in SQLite at `$XDG_DATA_HOME/agenttik/agenttik.db`. Token counts come
 from the providers' own accounting, never an estimate.
+
+## License
+
+[MIT](LICENSE)
 
 ## Layout
 

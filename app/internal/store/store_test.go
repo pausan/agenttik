@@ -27,13 +27,13 @@ func TestMigrateIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestProjectWithRecentSessions(t *testing.T) {
+func TestProjectWithOpenSessions(t *testing.T) {
 	s := testStore(t)
 	p, err := s.CreateProject("agenttik", "/home/u/agenttik")
 	if err != nil {
 		t.Fatalf("create project: %v", err)
 	}
-	// Six sessions, but the sidebar only shows five.
+	// The sidebar keeps every open session so each can be reordered there.
 	for i := 0; i < 6; i++ {
 		sess := &Session{ID: string(rune('a' + i)), ProjectID: p.ID,
 			Title: "session", Provider: "claude", Model: "opus"}
@@ -48,8 +48,22 @@ func TestProjectWithRecentSessions(t *testing.T) {
 	if len(projects) != 1 {
 		t.Fatalf("got %d projects, want 1", len(projects))
 	}
-	if got := len(projects[0].RecentSessions); got != recentSessionsPerProject {
-		t.Errorf("got %d recent sessions, want %d", got, recentSessionsPerProject)
+	if got := len(projects[0].RecentSessions); got != 6 {
+		t.Errorf("got %d open sessions, want 6", got)
+	}
+}
+
+func TestReorderProjectsDrivesSidebarOrder(t *testing.T) {
+	s := testStore(t)
+	a, _ := s.CreateProject("alpha", "/tmp/alpha")
+	b, _ := s.CreateProject("beta", "/tmp/beta")
+	c, _ := s.CreateProject("charlie", "/tmp/charlie")
+
+	must(t, s.ReorderProjects([]int64{c.ID, a.ID, b.ID}))
+	projects, err := s.ListProjects()
+	must(t, err)
+	if got := []int64{projects[0].ID, projects[1].ID, projects[2].ID}; got[0] != c.ID || got[1] != a.ID || got[2] != b.ID {
+		t.Errorf("project order = %v, want [%d %d %d]", got, c.ID, a.ID, b.ID)
 	}
 }
 

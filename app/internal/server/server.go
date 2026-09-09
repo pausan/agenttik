@@ -75,6 +75,7 @@ func (s *Server) routes() {
 
 	api.Get("/projects", s.listProjects)
 	api.Post("/projects", s.createProject)
+	api.Post("/projects/order", s.reorderProjects)
 	api.Get("/projects/:id", s.getProject)
 	api.Patch("/projects/:id", s.updateProject)
 	api.Delete("/projects/:id", s.deleteProject)

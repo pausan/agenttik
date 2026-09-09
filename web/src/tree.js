@@ -1,4 +1,4 @@
-/* The inspector's Tree pane. The server sends a flat list of paths; this
+/* The sidebar Tree pane. The server sends a flat list of paths; this
    turns it into folders and files and filters it as you type.
 
    Filtering matches the *whole* path, not the file name, so "wesst" finds

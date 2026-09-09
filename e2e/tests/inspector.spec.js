@@ -1,4 +1,4 @@
-import { addProject, expect, inspector, openProject, test } from "../fixtures.js";
+import { addProject, expect, inspector, openProject, sidebar, test } from "../fixtures.js";
 
 test.beforeEach(async ({ page }) => {
   await addProject(page);
@@ -6,17 +6,17 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("the tree lists the repo's files", async ({ page }) => {
-  await inspector(page).getByRole("tab", { name: "Tree" }).click();
+  await sidebar(page).getByRole("tab", { name: "Tree" }).click();
 
-  await expect(inspector(page).getByRole("button", { name: "go.mod" })).toBeVisible();
-  await expect(inspector(page).getByRole("button", { name: "Makefile" })).toBeVisible();
+  await expect(sidebar(page).getByRole("button", { name: "go.mod" })).toBeVisible();
+  await expect(sidebar(page).getByRole("button", { name: "Makefile" })).toBeVisible();
   // .git and gitignored paths are excluded.
-  await expect(inspector(page).getByRole("button", { name: /^\.git\// })).toHaveCount(0);
+  await expect(sidebar(page).getByRole("button", { name: /^\.git\// })).toHaveCount(0);
 });
 
 test("clicking a file opens it as a closable tab beside the first one", async ({ page }) => {
-  await inspector(page).getByRole("tab", { name: "Tree" }).click();
-  await inspector(page).getByRole("button", { name: "go.mod" }).click();
+  await sidebar(page).getByRole("tab", { name: "Tree" }).click();
+  await sidebar(page).getByRole("button", { name: "go.mod" }).click();
 
   await expect(page.getByRole("tab", { name: /go\.mod/ })).toBeVisible();
   await expect(page.getByText("module github.com/pausan/agenttik")).toBeVisible();

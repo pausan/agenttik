@@ -8,9 +8,6 @@ import (
 
 var ErrNotFound = errors.New("not found")
 
-// recentSessionsPerProject is how many session titles the Projects sidebar shows.
-const recentSessionsPerProject = 5
-
 func (s *Store) CreateProject(name, path string) (*Project, error) {
 	p := &Project{Name: name, Path: path, CreatedAt: nowMillis()}
 	res, err := s.db.Exec(
@@ -27,8 +24,8 @@ func (s *Store) GetProject(id int64) (*Project, error) {
 	var p Project
 	p.RecentSessions = []SessionRef{} // the field is always an array, never null
 	err := s.db.QueryRow(
-		`SELECT id, name, path, created_at FROM projects WHERE id = ?`, id).
-		Scan(&p.ID, &p.Name, &p.Path, &p.CreatedAt)
+		`SELECT id, name, path, created_at, position FROM projects WHERE id = ?`, id).
+		Scan(&p.ID, &p.Name, &p.Path, &p.CreatedAt, &p.Position)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -60,10 +57,9 @@ func (s *Store) DeleteProject(id int64) error {
 	return nil
 }
 
-// ListProjects returns every project with the titles of its most recent
-// sessions attached.
+// ListProjects returns every project with its open session titles attached.
 func (s *Store) ListProjects() ([]Project, error) {
-	rows, err := s.db.Query(`SELECT id, name, path, created_at FROM projects ORDER BY name`)
+	rows, err := s.db.Query(`SELECT id, name, path, created_at, position FROM projects ORDER BY position, name`)
 	if err != nil {
 		return nil, fmt.Errorf("list projects: %w", err)
 	}
@@ -72,7 +68,7 @@ func (s *Store) ListProjects() ([]Project, error) {
 	projects := []Project{}
 	for rows.Next() {
 		var p Project
-		if err := rows.Scan(&p.ID, &p.Name, &p.Path, &p.CreatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Path, &p.CreatedAt, &p.Position); err != nil {
 			return nil, fmt.Errorf("list projects: %w", err)
 		}
 		projects = append(projects, p)
@@ -82,7 +78,7 @@ func (s *Store) ListProjects() ([]Project, error) {
 	}
 
 	for i := range projects {
-		refs, err := s.recentSessions(projects[i].ID, recentSessionsPerProject)
+		refs, err := s.recentSessions(projects[i].ID, 0)
 		if err != nil {
 			return nil, err
 		}
@@ -91,13 +87,18 @@ func (s *Store) ListProjects() ([]Project, error) {
 	return projects, nil
 }
 
-// recentSessions feeds the Projects sidebar, so it hides the ones ticked off
-// and follows the order the project view was dragged into.
+// recentSessions feeds the Projects sidebar, so it hides ticked-off sessions
+// and follows the order its sessions were dragged into. A limit of 0 means all.
 func (s *Store) recentSessions(projectID int64, limit int) ([]SessionRef, error) {
-	rows, err := s.db.Query(
-		`SELECT id, title, status FROM sessions
+	query := `SELECT id, title, status FROM sessions
 		 WHERE project_id = ? AND done_at = 0
-		 ORDER BY position, last_active_at DESC LIMIT ?`, projectID, limit)
+		 ORDER BY position, last_active_at DESC`
+	args := []any{projectID}
+	if limit > 0 {
+		query += ` LIMIT ?`
+		args = append(args, limit)
+	}
+	rows, err := s.db.Query(query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("recent sessions for project %d: %w", projectID, err)
 	}
@@ -112,4 +113,29 @@ func (s *Store) recentSessions(projectID int64, limit int) ([]SessionRef, error)
 		refs = append(refs, r)
 	}
 	return refs, rows.Err()
+}
+
+// ReorderProjects numbers the supplied projects 1..n. The caller sends the
+// whole visible list, so a freshly created project can retain its 0 position
+// until the user explicitly places it.
+func (s *Store) ReorderProjects(ids []int64) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("reorder projects: %w", err)
+	}
+	defer tx.Rollback()
+	stmt, err := tx.Prepare(`UPDATE projects SET position = ? WHERE id = ?`)
+	if err != nil {
+		return fmt.Errorf("reorder projects: %w", err)
+	}
+	defer stmt.Close()
+	for i, id := range ids {
+		if _, err := stmt.Exec(i+1, id); err != nil {
+			return fmt.Errorf("reorder projects: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("reorder projects: %w", err)
+	}
+	return nil
 }

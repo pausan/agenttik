@@ -80,7 +80,13 @@ CREATE INDEX idx_sessions_order ON sessions(project_id, position, last_active_at
 -- next to it this is not a sum: a turn with twenty tool calls sends twenty
 -- prompts, and only the last one describes the context in use now.
 ALTER TABLE turns ADD COLUMN context_tokens INTEGER NOT NULL DEFAULT 0;
-`,
+	`,
+	`
+-- Projects follow the order set in the sidebar. As with sessions, 0 leaves a
+-- newly created project ahead of a manually ordered list.
+ALTER TABLE projects ADD COLUMN position INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX idx_projects_order ON projects(position, name);
+	`,
 }
 
 func migrate(db *sql.DB) error {

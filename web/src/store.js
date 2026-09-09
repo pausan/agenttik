@@ -24,7 +24,7 @@ export const S = reactive({
   sessions: [],
   tabs: [], // every open view, in strip order
   activeTab: "",
-  inspector: { panes: ["changed", "stats", "tree"], active: "changed" },
+  inspector: { panes: ["changed", "stats"], active: "changed" },
   changed: [],
   tree: [],
   treeFilter: "",
@@ -146,6 +146,18 @@ export function currentProjectID() {
 
 export async function refreshProjects() {
   S.projects = await api("GET", "/api/projects");
+}
+
+/* reorderProjects persists the sidebar order after it has already moved under
+   the pointer. Re-reading on failure is the one reliable way to undo a drag. */
+export async function reorderProjects(ids) {
+  try {
+    await api("POST", "/api/projects/order", { ids });
+    await refreshProjects();
+  } catch (e) {
+    fail(e);
+    refreshProjects().catch(() => {});
+  }
 }
 
 /* openProject puts the project in a tab: everything still open in it, with
@@ -397,6 +409,19 @@ export async function reorderSessions(tab, ids) {
   }
 }
 
+/* The sidebar has the same project session order as the centre project view,
+   but owns a different array. It can therefore use the same endpoint without
+   coupling a sidebar drag to an open project tab. */
+export async function reorderSidebarSessions(project, ids) {
+  try {
+    await api("POST", `/api/projects/${project.id}/sessions/order`, { ids });
+    await refreshProjects();
+  } catch (e) {
+    fail(e);
+    refreshProjects().catch(() => {});
+  }
+}
+
 /* ------------------------------------------------------------------ files */
 
 export async function openFile(path) {
@@ -448,9 +473,12 @@ async function refreshTree() {
   const id = currentProjectID();
   if (!id) return (S.tree = []);
   try {
-    S.tree = await api("GET", `/api/projects/${id}/tree`);
+    const tree = await api("GET", `/api/projects/${id}/tree`);
+    // A slow request for the tab we just left must not replace the active
+    // project's sidebar Tree.
+    if (currentProjectID() === id) S.tree = tree;
   } catch {
-    S.tree = [];
+    if (currentProjectID() === id) S.tree = [];
   }
 }
 
@@ -462,7 +490,7 @@ watch(
   () => S.owner?.kind || "",
   (kind) =>
     setInspectorPanes(
-      kind === "project" ? ["options", "stats", "tree"] : ["changed", "stats", "tree"],
+      kind === "project" ? ["options", "stats"] : ["changed", "stats"],
     ),
   { immediate: true },
 );

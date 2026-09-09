@@ -66,6 +66,23 @@ func (s *Server) getProject(c *fiber.Ctx) error {
 	return c.JSON(p)
 }
 
+// reorderProjects records the order the Projects sidebar was dragged into.
+func (s *Server) reorderProjects(c *fiber.Ctx) error {
+	var body struct {
+		IDs []int64 `json:"ids"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return badRequest("invalid body: %v", err)
+	}
+	if len(body.IDs) == 0 {
+		return badRequest("ids are required")
+	}
+	if err := s.store.ReorderProjects(body.IDs); err != nil {
+		return err
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
 // updateProject renames a project; the folder is fixed for its lifetime.
 func (s *Server) updateProject(c *fiber.Ctx) error {
 	id, err := projectID(c)

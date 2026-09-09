@@ -58,7 +58,9 @@ const rows = computed(() => {
       </template>
     </UInput>
 
-    <p v-if="!S.tree.length" class="px-3 py-5 text-center text-dimmed">No files.</p>
+    <p v-if="!S.tree.length" class="px-3 py-5 text-center text-dimmed">
+      {{ S.owner ? "No files." : "Pick a project or session to browse its files." }}
+    </p>
     <p v-else-if="!rows.length" class="px-3 py-5 text-center text-dimmed">
       Nothing matches “{{ S.treeFilter }}”.
     </p>

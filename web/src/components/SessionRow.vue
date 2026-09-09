@@ -1,9 +1,9 @@
 <script setup>
 /* One session in a list: the sidebar's, or a project's.
 
-   The checkmark is only offered where ticking off makes sense — the Sessions
-   list and a project's own view — and is a button of its own so the row stays
-   one click away from opening the conversation. */
+   The checkmark is its own button, so the row stays one click away from
+   opening the conversation. A completed session needs no extra treatment:
+   the tick itself is the feedback. */
 import StatusDot from "./StatusDot.vue";
 
 defineProps({
@@ -37,7 +37,6 @@ defineEmits(["select", "toggle-done"]);
     <button
       type="button"
       class="min-w-0 flex-1 px-2 py-1 text-left"
-      :class="done ? 'opacity-55' : ''"
       @click="$emit('select')"
     >
       <span
@@ -45,7 +44,7 @@ defineEmits(["select", "toggle-done"]);
         :class="active ? 'text-primary' : 'text-highlighted'"
       >
         <StatusDot :status="status" />
-        <span class="truncate" :class="done ? 'line-through' : ''">{{ title }}</span>
+        <span class="truncate">{{ title }}</span>
       </span>
       <span v-if="sub" class="block truncate text-xs text-dimmed">{{ sub }}</span>
     </button>

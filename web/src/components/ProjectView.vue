@@ -1,35 +1,87 @@
 <script setup>
-import { S, openSession, startSession } from "../store";
+/* A project in the centre: its open sessions, in the order you put them.
+
+   Rows are dragged with the browser's own drag and drop rather than pointer
+   maths. The list reorders under the cursor as you go, so where the row is
+   when you let go is where it lands, and the new order is sent once on drop.
+   Ticked-off sessions are not here at all — they stay in the Sessions list. */
+import { ref } from "vue";
+
+import { S, markDone, openSession, reorderSessions, startSession } from "../store";
 import { ago } from "../api";
 import SessionRow from "./SessionRow.vue";
+
+const props = defineProps({ tab: { type: Object, required: true } });
+
+const dragging = ref("");
+
+function onStart(e, id) {
+  dragging.value = id;
+  e.dataTransfer.effectAllowed = "move";
+  // Firefox starts no drag at all without data on the transfer.
+  e.dataTransfer.setData("text/plain", id);
+}
+
+/* onOver moves the dragged row to where the pointer is, so the list shows the
+   result before the drop rather than after it. */
+function onOver(e, overID) {
+  if (!dragging.value || overID === dragging.value) return;
+  e.preventDefault();
+  const sessions = props.tab.data.sessions;
+  const from = sessions.findIndex((s) => s.id === dragging.value);
+  const to = sessions.findIndex((s) => s.id === overID);
+  if (from < 0 || to < 0) return;
+  sessions.splice(to, 0, ...sessions.splice(from, 1));
+}
+
+function onDrop() {
+  if (!dragging.value) return;
+  dragging.value = "";
+  reorderSessions(props.tab, props.tab.data.sessions.map((s) => s.id));
+}
 </script>
 
 <template>
-  <div v-if="S.project" class="min-h-0 flex-1 overflow-auto">
+  <div class="min-h-0 flex-1 overflow-auto">
     <div class="mx-auto max-w-[860px] px-6 py-5">
       <div class="mb-3.5 flex items-start gap-3 border-b border-default pb-3">
         <div class="min-w-0">
-          <h2 class="m-0 text-[17px] tracking-tight text-highlighted">{{ S.project.project.name }}</h2>
-          <div class="truncate text-xs text-dimmed">{{ S.project.project.path }}</div>
+          <h2 class="m-0 text-[17px] tracking-tight text-highlighted">{{ tab.data.project.name }}</h2>
+          <div class="truncate text-xs text-dimmed">{{ tab.data.project.path }}</div>
         </div>
-        <UButton
-          class="ml-auto shrink-0"
-          label="New session"
-          @click="startSession(S.project.project)"
-        />
+        <UButton class="ml-auto shrink-0" label="New session" @click="startSession(tab.data.project)" />
       </div>
 
-      <p v-if="!S.project.sessions.length" class="px-3 py-5 text-center text-dimmed">
-        No sessions yet in this project.
+      <p v-if="!tab.data.sessions.length" class="px-3 py-5 text-center text-dimmed">
+        Nothing open in this project.
       </p>
-      <SessionRow
-        v-for="s in S.project.sessions"
+      <div
+        v-for="s in tab.data.sessions"
         :key="s.id"
-        :title="s.title || 'Untitled session'"
-        :status="s.status"
-        :sub="`${s.model}${s.effort ? ' · ' + s.effort : ''} · ${ago(s.last_active_at)}`"
-        @click="openSession(s.id)"
-      />
+        class="flex items-center gap-1"
+        :class="dragging === s.id ? 'opacity-40' : ''"
+        draggable="true"
+        @dragstart="onStart($event, s.id)"
+        @dragover="onOver($event, s.id)"
+        @drop.prevent="onDrop"
+        @dragend="onDrop"
+      >
+        <UIcon
+          name="i-lucide-grip-vertical"
+          class="size-3.5 shrink-0 cursor-grab text-dimmed"
+          title="Drag to reorder"
+        />
+        <SessionRow
+          class="min-w-0 flex-1"
+          :title="s.title || 'Untitled session'"
+          :status="s.status"
+          :sub="`${s.model}${s.effort ? ' · ' + s.effort : ''} · ${ago(s.last_active_at)}`"
+          :active="S.detail?.session.id === s.id"
+          tick
+          @select="openSession(s.id)"
+          @toggle-done="markDone(s, true)"
+        />
+      </div>
     </div>
   </div>
 </template>

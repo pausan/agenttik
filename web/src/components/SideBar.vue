@@ -1,7 +1,7 @@
 <script setup>
 import { ref, watch } from "vue";
 
-import { S, openProject, openSession, refreshSessions } from "../store";
+import { S, isDone, markDone, openProject, openSession, refreshSessions } from "../store";
 import { ago } from "../api";
 import { debounce } from "../debounce";
 import { SEGMENTED } from "../ui";
@@ -30,7 +30,7 @@ watch(() => S.window, () => refreshSessions().catch(() => {}));
 </script>
 
 <template>
-  <aside class="flex min-h-0 flex-col border-r border-default bg-muted">
+  <aside class="flex min-h-0 flex-col bg-muted">
     <header class="flex items-center gap-2 px-3.5 pt-3 pb-2.5">
       <span class="size-4.5 rounded-[5px] bg-linear-[140deg] from-primary to-sky-500" aria-hidden="true" />
       <span class="font-semibold tracking-tight text-highlighted">agenttik</span>
@@ -77,7 +77,7 @@ watch(() => S.window, () => refreshSessions().catch(() => {}));
             :title="s.title || 'Untitled session'"
             :status="s.status"
             :active="S.detail?.session.id === s.id"
-            @click="openSession(s.id)"
+            @select="openSession(s.id)"
           />
         </div>
       </div>
@@ -102,7 +102,10 @@ watch(() => S.window, () => refreshSessions().catch(() => {}));
           :status="s.status"
           :sub="`${s.project_name} · ${s.project_path} · ${ago(s.last_active_at)}`"
           :active="S.detail?.session.id === s.id"
-          @click="openSession(s.id)"
+          :done="isDone(s)"
+          tick
+          @select="openSession(s.id)"
+          @toggle-done="markDone(s, !isDone(s))"
         />
       </div>
     </template>

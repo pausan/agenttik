@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 
 import { S, fail, isStarred, providerOf, send, setModel, stopTurn, toggleStar } from "../store";
+import ContextPane from "./ContextPane.vue";
 
 const text = ref("");
 
@@ -115,6 +116,17 @@ function submit() {
           :label="starred ? '★' : '☆'"
           @click="star"
         />
+        <UPopover>
+          <UButton
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            icon="i-lucide-settings"
+            title="Context and session totals"
+            aria-label="Context and session totals"
+          />
+          <template #content><ContextPane /></template>
+        </UPopover>
         <span class="flex-1" />
         <span v-if="S.detail.running" class="text-xs text-dimmed">running…</span>
         <UButton

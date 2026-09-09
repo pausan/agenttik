@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -15,29 +16,46 @@ import (
 // heartbeat keeps proxies and idle connections from timing the stream out.
 const heartbeat = 25 * time.Second
 
-func (s *Server) streamSession(c *fiber.Ctx) error {
-	id := c.Params("id")
-	if _, err := s.store.GetSession(id); err != nil {
-		return err
+// streamAll serves everything the UI is watching over one connection:
+// `?sessions=<id>,<id>&projects=<id>`. Sessions carry their own live events
+// and a project carries the end of every turn run in it, from any number of
+// sessions at once.
+//
+// The topics travel in the query rather than one connection per tab because a
+// browser holds only a handful of connections to one origin, and a dozen open
+// conversations would use them all up and stall the API. The UI reopens this
+// stream when a tab opens or closes.
+func (s *Server) streamAll(c *fiber.Ctx) error {
+	var topics []string
+	for _, id := range splitList(c.Query("sessions")) {
+		topics = append(topics, id)
 	}
-	return s.stream(c, id)
+	for _, id := range splitList(c.Query("projects")) {
+		n, err := strconv.ParseInt(id, 10, 64)
+		if err != nil {
+			return badRequest("invalid project id %q", id)
+		}
+		topics = append(topics, runner.ProjectTopic(n))
+	}
+	// Unknown ids are not an error: a session deleted in another window would
+	// otherwise break the whole stream. They simply never fire.
+	return s.stream(c, topics)
 }
 
-// streamProject delivers the done event of every turn in the project.
-func (s *Server) streamProject(c *fiber.Ctx) error {
-	id, err := strconv.ParseInt(c.Params("id"), 10, 64)
-	if err != nil {
-		return badRequest("invalid project id")
+func splitList(v string) []string {
+	var out []string
+	for _, part := range strings.Split(v, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
 	}
-	if _, err := s.store.GetProject(id); err != nil {
-		return err
-	}
-	return s.stream(c, runner.ProjectTopic(id))
+	return out
 }
 
-// stream serves one hub topic as SSE until the client leaves or the app quits.
-func (s *Server) stream(c *fiber.Ctx, topic string) error {
-	events, unsubscribe := s.runner.Hub().Subscribe(topic)
+// stream serves a set of hub topics as SSE until the client leaves or the app
+// quits.
+func (s *Server) stream(c *fiber.Ctx, topics []string) error {
+	events, unsubscribe := s.runner.Hub().SubscribeMany(topics)
 
 	c.Set(fiber.HeaderContentType, "text/event-stream")
 	c.Set(fiber.HeaderCacheControl, "no-cache")

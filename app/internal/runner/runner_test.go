@@ -283,3 +283,51 @@ func TestDoneReachesProjectTopic(t *testing.T) {
 		t.Fatal("no event on the project topic")
 	}
 }
+
+// The UI holds one connection for every tab it has open, so one channel is
+// registered under many topics. Unsubscribing it must not close the channel
+// once per topic.
+func TestHubSubscribeManyUsesOneChannel(t *testing.T) {
+	h := NewHub()
+	ch, unsub := h.SubscribeMany([]string{"a", "b", "b", ""})
+
+	h.Publish("a", Event{SessionID: "a"})
+	h.Publish("b", Event{SessionID: "b"})
+	h.Publish("c", Event{SessionID: "c"}) // nobody is watching this one
+
+	for _, want := range []string{"a", "b"} {
+		select {
+		case ev := <-ch:
+			if ev.SessionID != want {
+				t.Errorf("got %q, want %q", ev.SessionID, want)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("no event for topic %q", want)
+		}
+	}
+
+	unsub()
+	unsub() // idempotent: a stream torn down twice must not panic
+	if _, open := <-ch; open {
+		t.Error("channel still carries events after unsubscribing")
+	}
+}
+
+// A subscriber dropped for falling behind on one topic is gone from all of
+// them, and closed exactly once.
+func TestHubDropsSlowSubscriberFromEveryTopic(t *testing.T) {
+	h := NewHub()
+	ch, unsub := h.SubscribeMany([]string{"a", "b"})
+	defer unsub()
+	for i := 0; i < subscriberBuffer+10; i++ {
+		h.Publish("a", Event{SessionID: "a"})
+	}
+	h.Publish("b", Event{SessionID: "b"}) // must not panic on a closed channel
+	drained := 0
+	for range ch {
+		drained++
+	}
+	if drained > subscriberBuffer {
+		t.Errorf("drained %d, want at most %d", drained, subscriberBuffer)
+	}
+}

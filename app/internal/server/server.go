@@ -83,7 +83,6 @@ func (s *Server) routes() {
 	api.Get("/projects/:id/changes", s.projectChanges)
 	api.Get("/projects/:id/file", s.projectFile)
 	api.Post("/projects/:id/sessions/order", s.reorderSessions)
-	api.Get("/projects/:id/stream", s.streamProject)
 
 	api.Get("/sessions", s.listSessions)
 	api.Post("/sessions", s.createSession)
@@ -92,7 +91,9 @@ func (s *Server) routes() {
 	api.Patch("/sessions/:id", s.updateSession)
 	api.Post("/sessions/:id/messages", s.postMessage)
 	api.Post("/sessions/:id/stop", s.stopSession)
-	api.Get("/sessions/:id/stream", s.streamSession)
+
+	// One stream for every open tab. See streamAll.
+	api.Get("/stream", s.streamAll)
 
 	api.Get("/stars", s.listStars)
 	api.Post("/stars", s.addStar)

@@ -14,10 +14,20 @@ separate so the fast loop stays fast.
 
 ## UI unit tests
 
-Only the pure logic is worth unit testing — the folder picker's fuzzy matcher,
-where the ranking rules are easy to break and hard to eyeball. Everything else
-is rendering, which the browser tests cover for real. Plain `node:test`, no
-runner to install.
+Only the pure logic is worth unit testing, and there are three pieces of it:
+
+- `fuzzy.js` — the folder picker's matcher, where the ranking rules are easy to
+  break and hard to eyeball.
+- `tree.js` — building the inspector's tree from a flat listing, and filtering
+  it. The per-node highlight offsets in particular are invisible to the eye and
+  trivial to get wrong.
+- `markdown.js` — the transcript's renderer. It is small and hand-written, so
+  its tests are what stand in for a library's own suite; they cover the block
+  and inline forms and, as much as anything, that source HTML is escaped and
+  unsafe link schemes are dropped.
+
+Everything else is rendering, which the browser tests cover for real. Plain
+`node:test`, no runner to install.
 
 ## Browser tests
 

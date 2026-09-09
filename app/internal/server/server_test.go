@@ -302,7 +302,7 @@ func TestShutdownReturnsWithOpenStream(t *testing.T) {
 
 	var resp *http.Response
 	for i := 0; i < 50 && resp == nil; i++ {
-		resp, err = http.Get("http://" + ln.Addr().String() + "/api/sessions/s1/stream")
+		resp, err = http.Get("http://" + ln.Addr().String() + "/api/stream?sessions=s1")
 		if err != nil {
 			time.Sleep(20 * time.Millisecond)
 		}
@@ -365,8 +365,8 @@ func TestProjectStatsAndRename(t *testing.T) {
 	}
 }
 
-// The project view watches one stream for every session in the project, so
-// several sessions running at once keep its totals current.
+// A project topic carries the end of every turn run in it, so a project view
+// keeps its totals current while several of its sessions run at once.
 func TestProjectStreamDeliversTurnEvents(t *testing.T) {
 	s, st := newTestServer(t)
 	p, _ := st.CreateProject("alpha", t.TempDir())
@@ -378,7 +378,7 @@ func TestProjectStreamDeliversTurnEvents(t *testing.T) {
 	go s.Listener(ln)
 	t.Cleanup(func() { s.Shutdown() })
 
-	url := "http://" + ln.Addr().String() + "/api/projects/" + itoa(p.ID) + "/stream"
+	url := "http://" + ln.Addr().String() + "/api/stream?projects=" + itoa(p.ID)
 	var resp *http.Response
 	for i := 0; i < 50 && resp == nil; i++ {
 		if resp, err = http.Get(url); err != nil {

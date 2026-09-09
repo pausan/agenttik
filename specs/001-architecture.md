@@ -90,3 +90,7 @@ and the database, which is what the desktop shell's close button used to do.
 - Any number of sessions run concurrently, including several in one project.
 - The hub fans events out to SSE subscribers with buffered per-subscriber
   channels. A slow browser gets dropped, never blocks the turn.
+- One subscriber channel may be registered under many topics, which is how a UI
+  with a dozen tabs open watches them all over one connection. A browser holds
+  only a handful of connections to one origin, so a stream per tab would stall
+  the API — see [004-ui.md](004-ui.md#live-updates).

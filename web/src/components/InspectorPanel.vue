@@ -3,6 +3,7 @@ import { computed } from "vue";
 
 import { S } from "../store";
 import FileList from "./FileList.vue";
+import FileTree from "./FileTree.vue";
 import StatsPane from "./StatsPane.vue";
 import OptionsPane from "./OptionsPane.vue";
 import { SEGMENTED } from "../ui";
@@ -15,12 +16,10 @@ const active = computed({
   get: () => S.inspector.active,
   set: (v) => (S.inspector.active = v),
 });
-
-const tree = computed(() => S.tree.map((path) => ({ path })));
 </script>
 
 <template>
-  <aside class="flex min-h-0 flex-col border-l border-default bg-muted">
+  <aside class="flex min-h-0 flex-col bg-muted">
     <UTabs
       v-model="active"
       :items="items"
@@ -33,7 +32,7 @@ const tree = computed(() => S.tree.map((path) => ({ path })));
       <StatsPane v-if="active === 'stats'" />
       <OptionsPane v-else-if="active === 'options'" />
       <FileList v-else-if="active === 'changed'" :files="S.changed" empty="No edited files." />
-      <FileList v-else-if="active === 'tree'" :files="tree" empty="No files." />
+      <FileTree v-else-if="active === 'tree'" />
     </div>
   </aside>
 </template>

@@ -1,8 +1,15 @@
 <script setup>
 import { computed } from "vue";
 
-import { S } from "../store";
+import { S, contextWindow } from "../store";
 import { ago, cost, duration, nf, tokens } from "../api";
+
+/* The context row is the last prompt's size against the model's window, not a
+   sum — see ContextPane.vue, which shows the same number as a gauge. */
+function context(session, stats) {
+  const total = contextWindow(session);
+  return tokens(stats.context_tokens) + (total ? " / " + tokens(total) : "");
+}
 
 /* Sessions in a project run concurrently, so agent time is summed across
    them and can exceed the wall clock. */
@@ -34,6 +41,7 @@ const rows = computed(() => {
     ["Project", s.project_name],
     ["Folder", s.project_path],
     ["Turns", nf.format(stats.turns)],
+    ["Context", context(s, stats)],
     ["Input tokens", tokens(stats.input_tokens)],
     ["Output tokens", tokens(stats.output_tokens)],
     ["Cache read", tokens(stats.cache_read_tokens)],

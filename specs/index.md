@@ -10,4 +10,5 @@
 
 Status: scaffold, verified end to end. A Claude Code session started from the
 UI streams into the transcript and records per-turn token metrics; resume across
-turns works. The Codex provider is a stub.
+turns works. Several sessions can be open at once, each streaming into its own
+tab. The Codex provider is a stub.

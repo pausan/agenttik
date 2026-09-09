@@ -8,8 +8,19 @@ import FileView from "./FileView.vue";
 import PromptBar from "./PromptBar.vue";
 import StatusDot from "./StatusDot.vue";
 
+/* A session title can be a whole sentence, and the strip has to stay
+   readable with a dozen of them open. */
+const MAX_LABEL = 22;
+
 const items = computed(() =>
-  S.tabs.map((t) => ({ label: t.label, value: t.id, closable: t.closable })),
+  S.tabs.map((t, i) => ({
+    label: t.label.length > MAX_LABEL ? t.label.slice(0, MAX_LABEL - 1) + "…" : t.label,
+    value: t.id,
+    title: t.label + (i < 9 ? `  (Alt+${i + 1})` : ""),
+    // Only the first nine are one chord away, so only those show a number.
+    hint: i < 9 ? String(i + 1) : "",
+    running: t.kind === "session" && t.detail.running,
+  })),
 );
 
 const active = computed({
@@ -17,7 +28,7 @@ const active = computed({
   set: (v) => selectTab(v),
 });
 
-const current = computed(() => S.tabs.find((t) => t.id === S.activeTab));
+const current = computed(() => S.tab);
 const running = computed(() => !!S.detail?.running);
 </script>
 
@@ -31,13 +42,27 @@ const running = computed(() => !!S.detail?.running);
         :content="false"
         variant="link"
         class="min-w-0 flex-1"
+        :ui="{ list: 'overflow-x-auto' }"
       >
+        <template #leading="{ item }">
+          <span
+            v-if="item.hint"
+            class="-mr-0.5 font-mono text-[10px] text-dimmed tabular-nums"
+            aria-hidden="true"
+            >{{ item.hint }}</span
+          >
+          <StatusDot v-if="item.running" status="running" />
+        </template>
+        <template #default="{ item }">
+          <span :title="item.title">{{ item.label }}</span>
+        </template>
         <template #trailing="{ item }">
           <span
-            v-if="item.closable"
             class="-mr-1 inline-flex size-4 items-center justify-center rounded text-dimmed hover:bg-accented hover:text-highlighted"
+            :title="`Close ${item.label}`"
             @click.stop="closeTab(item.value)"
-          >×</span>
+            >×</span
+          >
         </template>
       </UTabs>
       <span v-else class="flex-1" />
@@ -69,8 +94,8 @@ const running = computed(() => !!S.detail?.running);
       </div>
     </div>
 
-    <ProjectView v-if="current?.id === 'project'" />
-    <FileView v-else-if="current?.content !== undefined" :content="current.content" />
+    <ProjectView v-if="current?.kind === 'project'" :tab="current" />
+    <FileView v-else-if="current?.kind === 'file'" :content="current.content" />
     <Transcript v-else />
 
     <PromptBar v-if="S.detail" />

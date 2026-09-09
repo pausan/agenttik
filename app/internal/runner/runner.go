@@ -24,6 +24,7 @@ var (
 // session it belongs to, plus the ids needed to reconcile with stored rows.
 type Event struct {
 	SessionID string      `json:"session_id"`
+	ProjectID int64       `json:"project_id,omitempty"`
 	TurnID    int64       `json:"turn_id,omitempty"`
 	Event     agent.Event `json:"event"`
 	// Stats is attached to the done event so the panel can refresh without
@@ -207,7 +208,8 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, events <-chan ag
 			failure = ev.Text
 			r.store.AddMessage(sess.ID, turn.ID, store.RoleError, ev.Text)
 		}
-		r.hub.Publish(sess.ID, Event{SessionID: sess.ID, TurnID: turn.ID, Event: ev})
+		r.hub.Publish(sess.ID, Event{SessionID: sess.ID, ProjectID: sess.ProjectID,
+			TurnID: turn.ID, Event: ev})
 	}
 	flushText()
 
@@ -221,7 +223,7 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, events <-chan ag
 	r.store.SetSessionStatus(sess.ID, sessionStatus)
 
 	stats, _ := r.store.SessionStats(sess.ID)
-	done := Event{SessionID: sess.ID, TurnID: turn.ID,
+	done := Event{SessionID: sess.ID, ProjectID: sess.ProjectID, TurnID: turn.ID,
 		Event: agent.Event{Type: agent.EventDone}, Stats: stats}
 	r.hub.Publish(sess.ID, done)
 	r.hub.Publish(ProjectTopic(sess.ProjectID), done)

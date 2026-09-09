@@ -12,7 +12,7 @@ import { S, contextWindow } from "../store";
 import { cost, duration, nf, tokens } from "../api";
 
 const used = computed(() => S.detail?.stats.context_tokens || 0);
-const total = computed(() => contextWindow(S.detail?.session));
+const total = computed(() => contextWindow(S.detail?.session, S.detail?.stats));
 const pct = computed(() =>
   total.value ? Math.min(100, Math.round((used.value / total.value) * 100)) : 0,
 );

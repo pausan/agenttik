@@ -7,7 +7,7 @@ import { cost, duration, isoDate, nf, tokens } from "../api";
 /* The context row is the last prompt's size against the model's window, not a
    sum — see ContextPane.vue, which shows the same number as a gauge. */
 function context(session, stats) {
-  const total = contextWindow(session);
+  const total = contextWindow(session, stats);
   return tokens(stats.context_tokens) + (total ? " / " + tokens(total) : "");
 }
 

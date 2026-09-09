@@ -128,7 +128,7 @@ function pickModel(value) {
 }
 
 const contextUsed = computed(() => S.detail?.stats.context_tokens || 0);
-const contextTotal = computed(() => contextWindow(S.detail?.session));
+const contextTotal = computed(() => contextWindow(S.detail?.session, S.detail?.stats));
 const contextPct = computed(() => contextTotal.value ? Math.min(100, Math.round((contextUsed.value / contextTotal.value) * 100)) : 0);
 const contextTone = computed(() => contextPct.value >= 90 ? "var(--color-red-500)" : contextPct.value >= 70 ? "var(--color-amber-500)" : "var(--ui-primary)");
 

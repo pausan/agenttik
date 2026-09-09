@@ -98,6 +98,13 @@ CREATE TABLE queued_messages (
 );
 CREATE INDEX idx_queued_messages_session ON queued_messages(session_id, id);
 	`,
+	`
+-- The window the provider says it ran the model in. The static per-model
+-- figure is only a guess: the same alias runs in a 200k or a 1M variant, and
+-- --autocompact moves the ceiling again. Like context_tokens next to it this
+-- is not a sum; the newest turn that reported one describes the gauge now.
+ALTER TABLE turns ADD COLUMN context_window INTEGER NOT NULL DEFAULT 0;
+	`,
 }
 
 func migrate(db *sql.DB) error {

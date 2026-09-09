@@ -84,6 +84,10 @@ type Usage struct {
 	// blocks included — so it can be compared against the model's window.
 	// The counts above are summed over the turn; this one never is.
 	ContextTokens int64 `json:"context_tokens,omitempty"`
+	// ContextWindow is the window the provider says it ran the model in. It
+	// beats the static figure in Model.ContextWindow, which is only a guess
+	// until a turn reports one. 0 means the provider did not say.
+	ContextWindow int64 `json:"context_window,omitempty"`
 }
 
 type Event struct {

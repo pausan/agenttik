@@ -103,13 +103,17 @@ export function providerOf(name) {
 }
 
 /* contextWindow is how many tokens the session's model holds, which the
-   prompt bar's gauge measures the live context against. 0 means unknown. */
-export function contextWindow(session) {
+   prompt bar's gauge measures the live context against. 0 means unknown.
+
+   The window the provider reported for the last turn wins: the same model
+   alias runs in a 200k or a 1M variant, so the per-model figure is only what
+   to show until a turn says otherwise. */
+export function contextWindow(session, stats) {
+  if (stats?.context_window) return stats.context_window;
   if (!session) return 0;
   const model = providerOf(session.provider)?.models.find((m) => m.id === session.model);
   return model?.context_window || 0;
 }
-
 
 // Subscription allowances are provider-reported account limits, not guesses
 // from token totals. Providers without a safe local source return no buckets.
@@ -1141,6 +1145,7 @@ function onSessionEvent(tab, msg) {
       // Mid-turn usage only reports the context in use, so the gauge can
       // move while the turn runs.
       if (ev.usage?.context_tokens) tab.detail.stats.context_tokens = ev.usage.context_tokens;
+      if (ev.usage?.context_window) tab.detail.stats.context_window = ev.usage.context_window;
       break;
     case "error":
       endLive(tab);

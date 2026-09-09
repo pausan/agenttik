@@ -75,6 +75,9 @@ type Turn struct {
 	// ContextTokens is the size of the last prompt sent during the turn, not a
 	// sum over the turn's requests. See the migration that adds the column.
 	ContextTokens int64 `json:"context_tokens"`
+	// ContextWindow is the window the provider reported for this turn, or 0
+	// when it reported none. See the migration that adds the column.
+	ContextWindow int64 `json:"context_window"`
 }
 
 type Message struct {
@@ -100,6 +103,9 @@ type Stats struct {
 	// ContextTokens is the last turn's context size, carried here so the
 	// prompt bar's gauge needs no second request. It is not summed.
 	ContextTokens int64 `json:"context_tokens"`
+	// ContextWindow is the window the provider last reported, which the gauge
+	// prefers over the static per-model figure. 0 falls back to that figure.
+	ContextWindow int64 `json:"context_window"`
 }
 
 // ProjectStats is Stats over a whole project plus the session counts the

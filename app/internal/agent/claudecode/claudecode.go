@@ -30,16 +30,15 @@ func (p *Provider) Name() string        { return "claude" }
 func (p *Provider) DisplayName() string { return "Claude Code" }
 
 // Models are aliases rather than pinned ids, so they follow the latest release
-// without a code change here. The windows are the default ones; a model run in
-// its 1M-context variant reports more context than the gauge expects, which
-// shows as a full bar rather than a wrong number.
+// without a code change here. The windows are only what to show before the
+// first turn reports one: every result line names the window the CLI actually
+// used, and that is what the gauge measures against from then on.
 func (p *Provider) Models() []agent.Model {
-	const window = 200_000
 	return []agent.Model{
-		{ID: "fable", Label: "Fable", ContextWindow: window},
-		{ID: "opus", Label: "Opus", ContextWindow: window},
-		{ID: "sonnet", Label: "Sonnet", ContextWindow: window},
-		{ID: "haiku", Label: "Haiku", ContextWindow: window},
+		{ID: "fable", Label: "Fable", ContextWindow: 1_000_000},
+		{ID: "opus", Label: "Opus", ContextWindow: 1_000_000},
+		{ID: "sonnet", Label: "Sonnet", ContextWindow: 1_000_000},
+		{ID: "haiku", Label: "Haiku", ContextWindow: 200_000},
 	}
 }
 
@@ -233,6 +232,7 @@ func handleLine(line []byte, out chan<- agent.Event) {
 			CacheReadTokens:  env.Usage.CacheReadInputTokens,
 			CacheWriteTokens: env.Usage.CacheCreationInputTokens,
 			CostUSD:          env.TotalCostUSD,
+			ContextWindow:    env.contextWindow(),
 		}}
 	}
 }

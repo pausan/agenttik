@@ -18,10 +18,31 @@ type envelope struct {
 	Message message `json:"message"`
 
 	// type=result
-	IsError      bool    `json:"is_error"`
-	Result       string  `json:"result"`
-	TotalCostUSD float64 `json:"total_cost_usd"`
-	Usage        usage   `json:"usage"`
+	IsError      bool                  `json:"is_error"`
+	Result       string                `json:"result"`
+	TotalCostUSD float64               `json:"total_cost_usd"`
+	Usage        usage                 `json:"usage"`
+	ModelUsage   map[string]modelUsage `json:"modelUsage"`
+}
+
+// modelUsage is the per-model breakdown on a result line. Only the window is
+// read: it is the CLI's own figure for the model it just ran, so it follows a
+// 1M-context variant or an --autocompact ceiling without a code change here.
+type modelUsage struct {
+	ContextWindow int64 `json:"contextWindow"`
+}
+
+// contextWindow is the largest window any model reported for the turn. A turn
+// normally runs one model; a subagent on a smaller one must not shrink the
+// gauge the main conversation is measured against.
+func (e envelope) contextWindow() int64 {
+	var window int64
+	for _, m := range e.ModelUsage {
+		if m.ContextWindow > window {
+			window = m.ContextWindow
+		}
+	}
+	return window
 }
 
 type message struct {

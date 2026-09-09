@@ -25,10 +25,11 @@ func (s *Store) FinishTurn(t *Turn) error {
 	_, err := s.db.Exec(
 		`UPDATE turns SET ended_at = ?, input_tokens = ?, output_tokens = ?,
 		    cache_read_tokens = ?, cache_write_tokens = ?, cost_usd = ?,
-		    context_tokens = ?, status = ?, error = ?
+		    context_tokens = ?, context_window = ?, status = ?, error = ?
 		 WHERE id = ?`,
 		nowMillis(), t.InputTokens, t.OutputTokens, t.CacheReadTokens,
-		t.CacheWriteTokens, t.CostUSD, t.ContextTokens, t.Status, t.Error, t.ID)
+		t.CacheWriteTokens, t.CostUSD, t.ContextTokens, t.ContextWindow,
+		t.Status, t.Error, t.ID)
 	if err != nil {
 		return fmt.Errorf("finish turn %d: %w", t.ID, err)
 	}
@@ -73,6 +74,19 @@ func (s *Store) SessionStats(sessionID string) (*Stats, error) {
 		return nil, fmt.Errorf("session stats %s: %w", sessionID, err)
 	}
 	st.ContextTokens = ctx.Int64
+
+	// The window is read the same way and from its own row: only a finished
+	// turn reports one, so the newest turn with a context size often has none
+	// yet. Zero leaves the gauge on the static per-model figure.
+	var window sql.NullInt64
+	err = s.db.QueryRow(
+		`SELECT context_window FROM turns
+		 WHERE session_id = ? AND context_window > 0 ORDER BY id DESC LIMIT 1`,
+		sessionID).Scan(&window)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("session stats %s: %w", sessionID, err)
+	}
+	st.ContextWindow = window.Int64
 	return st, nil
 }
 
@@ -101,7 +115,7 @@ func (s *Store) ListTurns(sessionID string) ([]Turn, error) {
 	rows, err := s.db.Query(
 		`SELECT id, session_id, model, effort, started_at, COALESCE(ended_at,0),
 		        input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-		        cost_usd, context_tokens, status, error
+		        cost_usd, context_tokens, context_window, status, error
 		 FROM turns WHERE session_id = ? ORDER BY id`, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("list turns: %w", err)
@@ -113,7 +127,7 @@ func (s *Store) ListTurns(sessionID string) ([]Turn, error) {
 		var t Turn
 		if err := rows.Scan(&t.ID, &t.SessionID, &t.Model, &t.Effort, &t.StartedAt,
 			&t.EndedAt, &t.InputTokens, &t.OutputTokens, &t.CacheReadTokens,
-			&t.CacheWriteTokens, &t.CostUSD, &t.ContextTokens,
+			&t.CacheWriteTokens, &t.CostUSD, &t.ContextTokens, &t.ContextWindow,
 			&t.Status, &t.Error); err != nil {
 			return nil, fmt.Errorf("list turns: %w", err)
 		}

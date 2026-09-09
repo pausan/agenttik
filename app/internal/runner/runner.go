@@ -281,6 +281,7 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, events <-chan ag
 				turn.CacheReadTokens = ev.Usage.CacheReadTokens
 				turn.CacheWriteTokens = ev.Usage.CacheWriteTokens
 				turn.CostUSD = ev.Usage.CostUSD
+				turn.ContextWindow = ev.Usage.ContextWindow
 			}
 		case agent.EventError:
 			failure = ev.Text

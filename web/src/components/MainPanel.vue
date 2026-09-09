@@ -43,10 +43,15 @@ const items = computed(() =>
       t.kind === "session" && t.label.length > MAX_SESSION_LABEL
         ? t.label.slice(0, MAX_SESSION_LABEL - 3) + "..."
         : t.label,
-    title: t.label + (i < TAB_CHORDS ? `  (Alt+${i + 1})` : ""),
+    title:
+      t.label +
+      (i < TAB_CHORDS ? `  (Alt+${i + 1})` : "") +
+      (t.temp ? "  (temporary — double click the file to keep it)" : ""),
     // Only the first nine are one chord away, so only those show a number.
     hint: i < TAB_CHORDS ? String(i + 1) : "",
     running: t.kind === "session" && t.detail.running,
+    // Italic says "this one goes when the next file is clicked".
+    temp: !!t.temp,
     colors: KINDS[t.kind],
   })),
 );
@@ -110,7 +115,11 @@ const running = computed(() => !!S.detail?.running);
           <StatusDot v-if="item.running" status="running" />
           <span
             class="truncate"
-            :class="[item.colors.text, item.id === S.activeTab ? 'font-medium' : 'opacity-75']"
+            :class="[
+              item.colors.text,
+              item.id === S.activeTab ? 'font-medium' : 'opacity-75',
+              item.temp ? 'italic' : '',
+            ]"
             >{{ item.label }}</span
           >
           <span

@@ -79,10 +79,11 @@ const rows = computed(() => {
       >
         <button
           type="button"
-          class="flex w-full min-w-0 items-center gap-1 rounded-[var(--ui-radius)] px-1 py-0.5 text-left hover:bg-elevated hover:text-highlighted"
+          class="flex w-full min-w-0 select-none items-center gap-1 rounded-[var(--ui-radius)] px-1 py-0.5 text-left hover:bg-elevated hover:text-highlighted"
           :title="row.node.path"
           :aria-expanded="row.node.dir ? row.open : undefined"
           @click="row.node.dir ? toggle(row.node.path) : openFile(row.node.path)"
+          @dblclick="row.node.dir || openFile(row.node.path, true)"
         >
           <UIcon
             v-if="row.node.dir"

@@ -178,6 +178,17 @@ function insertTab(tab) {
   S.tabs.splice(at, 0, tab);
 }
 
+/* swapTab puts a new tab where an old one sat, which is what reusing the
+   temporary tab looks like: the strip keeps its length and its order, so the
+   numbers do not shift under the pointer mid-click. */
+function swapTab(id, tab) {
+  const at = S.tabs.findIndex((t) => t.id === id);
+  if (at < 0) return addTab(tab);
+  S.tabs.splice(at, 1, tab);
+  selectTab(tab.id);
+  resubscribe();
+}
+
 /* The sidebar owns a project's complete session order. Project pages and the
    open subset in the tab strip are projections of it, so every drag starts by
    bringing those projections into the same order. Entries absent from a list
@@ -364,7 +375,7 @@ async function openSavedTab(tab) {
     if (open) open.draft = typeof tab.draft === "string" ? tab.draft : "";
   } else if (tab.kind === "file") {
     const owner = S.tabs.some((open) => open.id === tab.owner) ? tab.owner : "";
-    await openFileIn(tab.projectID, owner, tab.path, true, tab.commit || "");
+    await openFileIn(tab.projectID, owner, tab.path, restoreOpts(tab));
   }
   return S.tabs.some((open) => open.id === tab.id);
 }
@@ -790,8 +801,29 @@ export function isDirty(tab) {
   return tab?.kind === "file" && tab.edited !== null && tab.edited !== tab.content;
 }
 
-export function openFile(path, silent = false) {
-  return openFileIn(currentProjectID(), S.owner?.id || "", path, silent);
+/* One click opens a file in the project's temporary tab, which the next file
+   clicked takes over. Reading through a tree then leaves one tab behind
+   rather than twenty. A double click pins the tab instead, and so does typing
+   in it; a pinned tab is only closed by hand. */
+export function openFile(path, pin = false) {
+  return openFileIn(currentProjectID(), S.owner?.id || "", path, { pin });
+}
+
+/* At most one temporary tab per project, because the strip is per project:
+   the tab a click takes over is one the user can see. */
+function tempFileIn(projectID) {
+  return S.tabs.find((t) => t.kind === "file" && t.temp && projectOfTab(t) === projectID);
+}
+
+/* selectOpenFile brings a file already open to the front, pinning it when
+   that is what the click asked for — never the other way round, so clicking
+   a kept file's row does not make it temporary again. */
+function selectOpenFile(tabID, pin) {
+  const open = S.tabs.find((t) => t.id === tabID);
+  if (!open) return false;
+  if (pin) open.temp = false;
+  selectTab(tabID);
+  return true;
 }
 
 /* openFileIn also rebuilds a saved tab, whose owner may be gone. A file
@@ -803,10 +835,11 @@ export function openFile(path, silent = false) {
    from what was committed, and the commit itself cannot be edited — so it
    opens read-only in Diff and stays there. Its id carries the revision, so
    the same path can be open once per commit and once for the working tree. */
-async function openFileIn(projectID, ownerID, path, silent, commit = "") {
+async function openFileIn(projectID, ownerID, path, opts = {}) {
+  const { silent = false, commit = "", pin = false } = opts;
   if (!projectID) return;
   const tabID = commit ? `file:${projectID}:${commit}:${path}` : `file:${projectID}:${path}`;
-  if (S.tabs.some((t) => t.id === tabID)) return selectTab(tabID);
+  if (selectOpenFile(tabID, pin)) return;
   const tab = {
     id: tabID,
     kind: "file",
@@ -815,6 +848,9 @@ async function openFileIn(projectID, ownerID, path, silent, commit = "") {
     projectID,
     path,
     commit,
+    // temp is the tab a click opens: the next file clicked takes it over,
+    // until a double click or a keystroke pins it.
+    temp: !pin,
     // Preview is remembered like the other two, but a file that renders as
     // nothing opens in the editor instead of on a blank pane.
     mode: commit ? "diff" : S.fileMode === "preview" && !canPreview(path) ? "edit" : S.fileMode,
@@ -831,7 +867,12 @@ async function openFileIn(projectID, ownerID, path, silent, commit = "") {
     if (!silent) fail(e);
     return;
   }
-  addTab(tab);
+  // A double click is two clicks, so the second call can arrive while this
+  // one is still fetching: whichever tab is open by now is the tab.
+  if (selectOpenFile(tabID, pin)) return;
+  const previous = tab.temp ? tempFileIn(projectID) : null;
+  if (previous) swapTab(previous.id, tab);
+  else addTab(tab);
 }
 
 /* loadFileTab fetches the view the tab is showing, once. The tab may not be
@@ -887,6 +928,10 @@ export function setDiffView(view) {
 export function editFile(tab, text) {
   if (tab?.kind !== "file" || tab.readOnly) return;
   tab.edited = text === tab.content ? null : text;
+  // A file typed into is worth keeping, so the next file clicked opens its
+  // own tab rather than taking this one's place. Taking the edit back does
+  // not hand the tab over again.
+  tab.temp = false;
 }
 
 /* saveFile writes the edits back and moves the tab's own baseline with them.
@@ -984,9 +1029,17 @@ function savedTab(tab) {
       projectID: tab.projectID,
       path: tab.path,
       commit: tab.commit || "",
+      temp: !!tab.temp,
     };
   }
   return null;
+}
+
+/* A rebuilt file tab opens as it was saved, silently. Tabs saved before
+   there was a temporary one have no flag, and a tab the user chose to keep is
+   the safer reading of those. */
+function restoreOpts(tab) {
+  return { silent: true, commit: tab.commit || "", pin: !tab.temp };
 }
 
 let restoringTabs = false;
@@ -1033,7 +1086,7 @@ async function restoreOpenTabs() {
         if (open) open.draft = typeof tab.draft === "string" ? tab.draft : "";
       } else if (tab?.kind === "file" && typeof tab.path === "string") {
         const owner = S.tabs.some((open) => open.id === tab.owner) ? tab.owner : "";
-        await openFileIn(tab.projectID, owner, tab.path, true, tab.commit || "");
+        await openFileIn(tab.projectID, owner, tab.path, restoreOpts(tab));
       }
     }
     if (S.projects.some((p) => p.id === saved.activeProjectID)) {
@@ -1121,8 +1174,8 @@ export async function toggleCommit(hash) {
 /* openCommitFile shows one file as that commit changed it. It opens the same
    kind of tab a working-tree diff does, fixed to the Diff view: there is
    nothing to edit in a commit that has already been made. */
-export function openCommitFile(hash, path) {
-  return openFileIn(currentProjectID(), S.owner?.id || "", path, false, hash);
+export function openCommitFile(hash, path, pin = false) {
+  return openFileIn(currentProjectID(), S.owner?.id || "", path, { commit: hash, pin });
 }
 
 async function refreshTree() {

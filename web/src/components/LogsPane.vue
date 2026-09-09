@@ -112,9 +112,10 @@ function meta(commit) {
             v-for="file in filesOf(commit.hash) || []"
             :key="file.path"
             type="button"
-            class="flex w-full items-center gap-1.5 rounded-[var(--ui-radius)] px-1.5 py-0.5 text-left font-mono text-xs hover:bg-elevated hover:text-highlighted"
+            class="flex w-full select-none items-center gap-1.5 rounded-[var(--ui-radius)] px-1.5 py-0.5 text-left font-mono text-xs hover:bg-elevated hover:text-highlighted"
             :title="file.path"
             @click="openCommitFile(commit.hash, file.path)"
+            @dblclick="openCommitFile(commit.hash, file.path, true)"
           >
             <span class="w-8 shrink-0 text-primary">{{ file.status }}</span>
             <span class="path-clip min-w-0 flex-1 truncate"><span>{{ file.path }}</span></span>

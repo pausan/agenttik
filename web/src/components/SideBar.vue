@@ -53,6 +53,13 @@ watch(() => S.window, () => refreshSessions().catch(() => {}));
 
 const draggingProject = ref(0);
 const draggingSession = ref(null);
+const collapsedProjects = ref(new Set());
+
+function toggleProject(id) {
+  const collapsed = collapsedProjects.value;
+  if (collapsed.has(id)) collapsed.delete(id);
+  else collapsed.add(id);
+}
 
 function beginDrag(e, value) {
   e.dataTransfer.effectAllowed = "move";
@@ -150,20 +157,28 @@ function onSessionDrop(e) {
           <button
             type="button"
             draggable="true"
-            title="Project stats, files and options"
+            :title="`${collapsedProjects.has(p.id) ? 'Expand' : 'Collapse'} sessions and open project`"
             class="mb-0.5 block w-full cursor-grab rounded-[var(--ui-radius)] px-2 py-1 text-left active:cursor-grabbing hover:bg-elevated"
             :class="draggingProject === p.id ? 'opacity-40' : ''"
             @dragstart="onProjectStart($event, p.id)"
             @dragend="onProjectDrop"
-            @click="openProject(p.id)"
+            @click="toggleProject(p.id); openProject(p.id)"
           >
-            <span
-              class="block truncate font-semibold"
-              :class="S.project?.project.id === p.id ? 'text-primary' : 'text-highlighted'"
-            >{{ p.name }}</span>
-            <span class="block truncate text-xs text-dimmed">{{ p.path }}</span>
+            <span class="flex items-center gap-1.5">
+              <UIcon
+                :name="collapsedProjects.has(p.id) ? 'i-lucide-chevron-right' : 'i-lucide-chevron-down'"
+                class="size-3.5 shrink-0 text-dimmed"
+                aria-hidden="true"
+              />
+              <span
+                class="min-w-0 flex-1 truncate font-semibold"
+                :class="S.project?.project.id === p.id ? 'text-primary' : 'text-highlighted'"
+              >{{ p.name }}</span>
+            </span>
+            <span class="block truncate pl-5 text-xs text-dimmed">{{ p.path }}</span>
           </button>
           <div
+            v-if="!collapsedProjects.has(p.id)"
             v-for="s in p.recent_sessions"
             :key="s.id"
             class="cursor-grab active:cursor-grabbing"

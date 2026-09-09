@@ -15,6 +15,7 @@ import { debounce } from "./debounce";
 /* Sidebar widths are the user's, so they are kept across reloads. */
 const LAYOUT_KEY = "agenttik.layout";
 const LAST_USED_KEY = "agenttik.lastUsed";
+const OPEN_TABS_KEY = "agenttik.openTabs";
 const LAYOUT_LIMITS = { left: [180, 520], right: [200, 620] };
 
 export const S = reactive({
@@ -24,6 +25,7 @@ export const S = reactive({
   sessions: [],
   tabs: [], // every open view, in strip order
   activeTab: "",
+  promptFocus: 0,
   inspector: { panes: ["changed", "stats"], active: "changed" },
   changed: [],
   tree: [],
@@ -111,6 +113,13 @@ function addTab(tab) {
   resubscribe();
 }
 
+/* The prompt bar watches this counter. A counter, rather than a Boolean,
+   makes each newly created session request focus even when one is already
+   active. */
+function focusPrompt() {
+  S.promptFocus += 1;
+}
+
 export function selectTab(id) {
   S.activeTab = id;
 }
@@ -162,7 +171,7 @@ export async function reorderProjects(ids) {
 
 /* openProject puts the project in a tab: everything still open in it, with
    its totals, files and options on the right. */
-export async function openProject(id) {
+export async function openProject(id, silent = false) {
   const tabID = "project:" + id;
   const open = S.tabs.find((t) => t.id === tabID);
   if (open) return selectTab(tabID);
@@ -175,7 +184,8 @@ export async function openProject(id) {
       projectSessions(id),
     ]);
   } catch (e) {
-    return fail(e);
+    if (!silent) fail(e);
+    return;
   }
   addTab({
     id: tabID,
@@ -335,6 +345,7 @@ export async function startSession(project) {
     const sess = await api("POST", "/api/sessions", { project_id: project.id, ...cfg });
     await Promise.all([refreshProjects(), refreshSessions()]);
     await openSession(sess.id);
+    focusPrompt();
     reloadProjects();
   } catch (e) {
     fail(e);
@@ -353,7 +364,7 @@ export function startCurrentSession() {
   return startSession(project);
 }
 
-export async function openSession(id) {
+export async function openSession(id, silent = false) {
   const tabID = "session:" + id;
   if (S.tabs.some((t) => t.id === tabID)) return selectTab(tabID);
 
@@ -361,7 +372,8 @@ export async function openSession(id) {
   try {
     detail = await api("GET", "/api/sessions/" + id);
   } catch (e) {
-    return fail(e);
+    if (!silent) fail(e);
+    return;
   }
   rememberUsed(detail.session);
   addTab({
@@ -435,7 +447,7 @@ export async function reorderSidebarSessions(project, ids) {
 
 /* ------------------------------------------------------------------ files */
 
-export async function openFile(path) {
+export async function openFile(path, silent = false) {
   const owner = S.owner;
   const projectID = currentProjectID();
   if (!owner || !projectID) return;
@@ -452,9 +464,73 @@ export async function openFile(path) {
       content: f.binary ? "(binary file)" : f.content + (f.partial ? "\n\n… truncated" : ""),
     });
   } catch (e) {
-    fail(e);
+    if (!silent) fail(e);
   }
 }
+
+/* ---------------------------------------------------------- saved tabs */
+
+/* Tabs contain live API data, so only save the small identifiers needed to
+   rebuild them. This avoids restoring an old transcript over the server's
+   current version after the app is relaunched. */
+function savedTab(tab) {
+  if (tab.kind === "project") return { id: tab.id, kind: tab.kind, projectID: tab.projectID };
+  if (tab.kind === "session") return { id: tab.id, kind: tab.kind, sessionID: tab.sessionID };
+  if (tab.kind === "file") return { id: tab.id, kind: tab.kind, owner: tab.owner, path: tab.path };
+  return null;
+}
+
+let restoringTabs = false;
+
+function saveOpenTabs() {
+  if (restoringTabs) return;
+  try {
+    localStorage.setItem(
+      OPEN_TABS_KEY,
+      JSON.stringify({ tabs: S.tabs.map(savedTab).filter(Boolean), activeTab: S.activeTab }),
+    );
+  } catch {
+    /* private mode or a full quota just means tabs open fresh next time */
+  }
+}
+
+/* Restoring opens the same kinds of tabs through the ordinary actions, so
+   their data is fetched anew and missing projects or sessions are skipped. A
+   file's owner is always opened before it, because files can only be opened
+   from an already-open session or project. */
+async function restoreOpenTabs() {
+  let saved;
+  try {
+    saved = JSON.parse(localStorage.getItem(OPEN_TABS_KEY));
+  } catch {
+    return;
+  }
+  if (!Array.isArray(saved?.tabs)) return;
+
+  restoringTabs = true;
+  try {
+    for (const tab of saved.tabs) {
+      if (tab?.kind === "project" && tab.projectID) {
+        await openProject(tab.projectID, true);
+      } else if (tab?.kind === "session" && tab.sessionID) {
+        await openSession(tab.sessionID, true);
+      } else if (tab?.kind === "file" && tab.owner && typeof tab.path === "string") {
+        if (!S.tabs.some((open) => open.id === tab.owner)) continue;
+        selectTab(tab.owner);
+        await openFile(tab.path, true);
+      }
+    }
+    if (S.tabs.some((tab) => tab.id === saved.activeTab)) S.activeTab = saved.activeTab;
+  } finally {
+    restoringTabs = false;
+    saveOpenTabs();
+  }
+}
+
+watch(
+  () => ({ activeTab: S.activeTab, tabs: S.tabs.map(savedTab) }),
+  saveOpenTabs,
+);
 
 /* ------------------------------------------------------------- inspector */
 
@@ -698,6 +774,7 @@ export async function init() {
     await loadProviders();
     await refreshProjects();
     await refreshSessions();
+    await restoreOpenTabs();
   } catch (e) {
     fail(e);
   }

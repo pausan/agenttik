@@ -1,10 +1,21 @@
 <script setup>
-import { computed, ref } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 
 import { S, fail, isStarred, providerOf, send, setModel, stopTurn, toggleStar } from "../store";
 import ContextPane from "./ContextPane.vue";
 
 const text = ref("");
+const prompt = ref(null);
+
+/* New sessions can be made while another prompt bar is still mounted, so an
+   explicit focus request is more reliable than the component's autofocus. */
+watch(
+  () => S.promptFocus,
+  async () => {
+    await nextTick();
+    prompt.value?.textareaRef?.focus();
+  },
+);
 
 /* The effort picker cannot carry an empty value, so "no effort" travels as a
    sentinel and is turned back into "" on the way to the API. */
@@ -96,6 +107,7 @@ function submit() {
       class="mx-auto max-w-[860px] rounded-[var(--ui-radius-lg,10px)] bg-default p-2 shadow-xs inset-ring inset-ring-accented focus-within:inset-ring-2 focus-within:inset-ring-primary"
     >
       <UTextarea
+        ref="prompt"
         v-model="text"
         :rows="3"
         variant="none"

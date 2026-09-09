@@ -54,6 +54,15 @@ func (p *Provider) Available() error {
 	return nil
 }
 
+// permissionFlag maps our posture onto the CLI's --permission-mode.
+//
+// Workspace uses `auto`, not `acceptEdits`. Both auto-approve file edits, but
+// acceptEdits still asks before running a command, and under `-p` there is no
+// prompt to answer, so every Bash call is refused — the agent can edit files
+// but never build, test, or commit. `auto` is the mode the IDE extensions use
+// for their Auto setting: it approves ordinary work and keeps asking for the
+// genuinely destructive things, which under `-p` means those are refused
+// instead of everything.
 func permissionFlag(p agent.Permission) []string {
 	switch p.Valid() {
 	case agent.PermissionPlan:
@@ -61,7 +70,7 @@ func permissionFlag(p agent.Permission) []string {
 	case agent.PermissionFull:
 		return []string{"--dangerously-skip-permissions"}
 	default:
-		return []string{"--permission-mode", "acceptEdits"}
+		return []string{"--permission-mode", "auto"}
 	}
 }
 

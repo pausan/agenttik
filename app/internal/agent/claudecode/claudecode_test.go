@@ -15,7 +15,7 @@ func TestBuildArgsFirstTurnPicksSessionID(t *testing.T) {
 	for _, want := range []string{
 		"--output-format stream-json", "--include-partial-messages",
 		"--model opus", "--effort high",
-		"--permission-mode acceptEdits", "--session-id abc",
+		"--permission-mode auto", "--session-id abc",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("args %q missing %q", got, want)
@@ -40,9 +40,9 @@ func TestBuildArgsResumesWithProviderSessionID(t *testing.T) {
 func TestPermissionMapping(t *testing.T) {
 	cases := map[agent.Permission]string{
 		agent.PermissionPlan:      "--permission-mode plan",
-		agent.PermissionWorkspace: "--permission-mode acceptEdits",
+		agent.PermissionWorkspace: "--permission-mode auto",
 		agent.PermissionFull:      "--dangerously-skip-permissions",
-		agent.Permission("junk"):  "--permission-mode acceptEdits",
+		agent.Permission("junk"):  "--permission-mode auto",
 	}
 	for perm, want := range cases {
 		got := strings.Join(permissionFlag(perm), " ")

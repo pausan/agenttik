@@ -8,6 +8,7 @@ import {
   init,
   reopenClosedSession,
   selectAdjacentTab,
+  saveActiveFile,
   selectProjectAt,
   selectTabAt,
   startCurrentSession,
@@ -21,6 +22,7 @@ import SetupModal from "./components/SetupModal.vue";
 import ShortcutsModal from "./components/ShortcutsModal.vue";
 import GoToModal from "./components/GoToModal.vue";
 import Splitter from "./components/Splitter.vue";
+import UnsavedModal from "./components/UnsavedModal.vue";
 
 const addProject = ref(false);
 const setup = ref(false);
@@ -49,6 +51,13 @@ function onKey(e) {
     } else if (e.code === "KeyP") {
       e.preventDefault();
       goTo.value = true;
+    } else if (e.code === "KeyS") {
+      // The editor handles its own Ctrl+S; this is the same chord with the
+      // caret anywhere else on a file tab.
+      if (S.tab?.kind === "file") {
+        e.preventDefault();
+        saveActiveFile();
+      }
     } else if (e.code === "KeyW") {
       // A file opened from a session still belongs to that conversation.
       // Always consume the chord so it never closes the browser tab.
@@ -118,6 +127,7 @@ onUnmounted(() => window.removeEventListener("keydown", onKey));
       <InspectorPanel />
     </div>
 
+    <UnsavedModal />
     <AddProjectModal v-model:open="addProject" />
     <SetupModal v-model:open="setup" />
     <ShortcutsModal v-model:open="shortcuts" />

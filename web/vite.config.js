@@ -21,7 +21,8 @@ function keepPlaceholder() {
 export default defineConfig({
   plugins: [
     vue(),
-    ui({ ui: { colors: { primary: "green", neutral: "zinc" } } }),
+    // The defaults; Settings changes both at runtime through the same config.
+    ui({ ui: { colors: { primary: "agenttik", neutral: "zinc" } } }),
     keepPlaceholder(),
   ],
   resolve: {

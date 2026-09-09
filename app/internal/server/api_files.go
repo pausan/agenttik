@@ -260,6 +260,94 @@ func (s *Server) projectFile(c *fiber.Ctx) error {
 	return c.JSON(body)
 }
 
+type savedFile struct {
+	Path string `json:"path"`
+	Size int64  `json:"size"`
+}
+
+// saveProjectFile writes an edited file back. What was never read whole is
+// never written back: a truncated or binary read saved over its source would
+// destroy the file, so both are refused here as well as disabled in the UI.
+func (s *Server) saveProjectFile(c *fiber.Ctx) error {
+	root, err := s.projectRoot(c)
+	if err != nil {
+		return err
+	}
+	rel := c.Query("path")
+	abs, err := resolveInRoot(root, rel)
+	if err != nil {
+		return err
+	}
+	var body struct {
+		Content *string `json:"content"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return badRequest("invalid body: %v", err)
+	}
+	if body.Content == nil {
+		return badRequest("content is required")
+	}
+	if len(*body.Content) > maxFileBytes {
+		return badRequest("%s is larger than the %d MiB edit limit", rel, maxFileBytes>>20)
+	}
+
+	// A new file inherits the usual 0644; an existing one keeps its own bits.
+	mode := fs.FileMode(0o644)
+	if info, err := os.Stat(abs); err == nil {
+		if info.IsDir() {
+			return badRequest("%s is a directory", rel)
+		}
+		if info.Size() > int64(maxFileBytes) {
+			return badRequest("%s is too large to edit", rel)
+		}
+		if binary, err := looksBinary(abs); err != nil || binary {
+			return badRequest("%s is not a text file", rel)
+		}
+		mode = info.Mode().Perm()
+	} else if !os.IsNotExist(err) {
+		return badRequest("cannot write %s: %v", rel, err)
+	}
+
+	if err := writeAtomic(abs, []byte(*body.Content), mode); err != nil {
+		return badRequest("cannot write %s: %v", rel, err)
+	}
+	return c.JSON(savedFile{Path: rel, Size: int64(len(*body.Content))})
+}
+
+// writeAtomic replaces a file in one step, so a failed write leaves the
+// original where it was rather than half of the new contents.
+func writeAtomic(abs string, data []byte, mode fs.FileMode) error {
+	tmp, err := os.CreateTemp(filepath.Dir(abs), "."+filepath.Base(abs)+".*")
+	if err != nil {
+		return err
+	}
+	name := tmp.Name()
+	defer os.Remove(name) // a no-op once the rename has moved it
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(name, mode); err != nil {
+		return err
+	}
+	return os.Rename(name, abs)
+}
+
+// looksBinary reads the same prefix the browser's null check would see.
+func looksBinary(abs string) (bool, error) {
+	f, err := os.Open(abs)
+	if err != nil {
+		return false, err
+	}
+	defer f.Close()
+	buf := make([]byte, 8<<10)
+	n, _ := f.Read(buf)
+	return bytes.IndexByte(buf[:n], 0) >= 0, nil
+}
+
 func isGitRepo(root string) bool {
 	_, err := os.Stat(filepath.Join(root, ".git"))
 	return err == nil

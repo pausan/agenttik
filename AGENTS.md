@@ -12,4 +12,4 @@
 7. **Performance matters.** Memory and CPU cycles are not free. Let's design
 with this in mind. Fast is a feature.
 8. **Document in `specs/`.** Technical details, approaches tried and their outcome, and status. Keep an index file, keep index short, keep files short and organized.
-9. **Commits.** Small, regular, descriptive. No AI tool mentions in commit messages.
+9. **Commits.** Commit each self-contained change as you finish it, without asking. Small, regular, descriptive. No AI tool mentions in commit messages. Never push.

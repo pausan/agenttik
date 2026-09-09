@@ -7,7 +7,7 @@
    where a tab now sits, so rearranging changes what Alt+1 … Alt+9 reach. */
 import { computed, ref } from "vue";
 
-import { S, closeTab, moveTab, selectTab } from "../store";
+import { S, closeTab, moveTab, selectTab, startCurrentSession } from "../store";
 import Transcript from "./Transcript.vue";
 import ProjectView from "./ProjectView.vue";
 import FileView from "./FileView.vue";
@@ -106,6 +106,20 @@ const running = computed(() => !!S.detail?.running);
         </div>
       </div>
 
+      <!-- Sits outside the scrolling strip so it stays reachable with a
+           dozen tabs open. -->
+      <UButton
+        v-if="S.activeProjectID"
+        icon="i-lucide-plus"
+        color="neutral"
+        variant="ghost"
+        size="xs"
+        class="shrink-0"
+        title="New session  (Ctrl+N)"
+        aria-label="New session"
+        @click="startCurrentSession()"
+      />
+
       <div class="flex shrink-0 items-center gap-1.5">
         <template v-if="S.project">
           <UBadge
@@ -137,6 +151,8 @@ const running = computed(() => !!S.detail?.running);
     <FileView v-else-if="current?.kind === 'file'" :tab="current" />
     <Transcript v-else />
 
-    <PromptBar v-if="S.detail" />
+    <!-- A file carries its own bar. The prompt box belongs to a conversation,
+         and under a file it is only in the way. -->
+    <PromptBar v-if="S.detail && current?.kind !== 'file'" />
   </main>
 </template>

@@ -29,8 +29,20 @@ approval prompt, so the posture is set before the turn starts.
 | agenttik | claude | codex |
 |----------|--------|-------|
 | `plan` | `--permission-mode plan` | `--sandbox read-only` |
-| `workspace` (default) | `--permission-mode acceptEdits` | `--sandbox workspace-write` |
+| `workspace` (default) | `--permission-mode auto` | `--sandbox workspace-write` |
 | `full` | `--dangerously-skip-permissions` | `--dangerously-bypass-approvals-and-sandbox` |
+
+`workspace` maps to claude's `auto`, the mode the IDE extensions use for their
+Auto setting, and deliberately not to `acceptEdits`. Both auto-approve file
+edits, but `acceptEdits` still asks before running a command; under `-p` there
+is nobody to ask, so the call is refused. That made workspace sessions able to
+edit files but never build, test, or commit — an agent told to commit its work
+silently did not. `auto` approves ordinary work and still asks for the
+destructive cases, so only those are refused.
+
+If `auto` turns out to withhold something a session needs, the lever is
+`--allowedTools` (a space- or comma-separated list such as `"Bash(git commit:*)
+Edit"`) rather than widening the whole session to `full`.
 
 ## Claude Code
 

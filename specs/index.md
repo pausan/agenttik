@@ -23,9 +23,23 @@ shortcut list under the sidebar, focusing the Sessions and Tree filters when
 their pane is shown, a project page handing its tab over to the session started
 from it, and the per-project tab strip — draggable tabs in three coloured
 groups, Alt+A…H to switch project, the pulsing dot and shortcut letter on a
-project row, `File | Diff` on a file tab over `/api/projects/:id/diff`, and a
-per-session prompt draft. None of it has been compiled: `make ui`, `go vet` and
-a browser check are still to run.
+project row, and a per-session prompt draft. The accent and grey pickers in
+Settings are the same.
+
+Also written, not compiled: the file tab's three views. `Edit | Diff |
+Preview` replaces `File | Diff` — an in-place editor with hand-written syntax
+colouring, a `*` and a Save button over `PUT /api/projects/:id/file`, and a
+Save / Don't save / Continue editing dialog on close; the diff as unified or
+side by side; markdown and HTML preview. A file tab now carries its own status
+bar instead of the conversation's prompt box.
+
+None of it has been compiled: `make ui`, `go vet` and a browser check are
+still to run.
+
+Also changed, not compiled or run: workspace sessions now pass
+`--permission-mode auto` instead of `acceptEdits`, so a Claude Code session can
+run commands rather than only edit files. `go test ./app/internal/agent/...`
+and a check that a session actually commits are still to run.
 
 A Claude Code session started from the UI streams into the transcript and
 records per-turn token metrics; resume across turns works. Several sessions can

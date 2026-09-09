@@ -14,12 +14,15 @@
 import { reactive, watch } from "vue";
 import { api } from "./api";
 import { debounce } from "./debounce";
+import { ACCENTS, DEFAULT_COLORS, NEUTRALS, applyColors } from "./theme";
 
 /* Sidebar widths are the user's, so they are kept across reloads. */
 const LAYOUT_KEY = "agenttik.layout";
 const LAST_USED_KEY = "agenttik.lastUsed";
 const OPEN_TABS_KEY = "agenttik.openTabs";
 const FILE_MODE_KEY = "agenttik.fileMode";
+const DIFF_VIEW_KEY = "agenttik.diffView";
+const COLORS_KEY = "agenttik.colors";
 const LAYOUT_LIMITS = { left: [180, 520], right: [200, 620] };
 
 /* Tabs are kept in their groups: a project's page first, then its
@@ -41,7 +44,9 @@ export const S = reactive({
   activeTab: "",
   activeProjectID: null, // the project the strip and the sidebar show
   lastTab: {}, // per project, the tab it was last left on
-  fileMode: "file", // "file" or "diff", carried to the next file opened
+  fileMode: "edit", // "edit", "diff" or "preview", carried to the next file
+  diffView: "unified", // "unified" or "split", likewise
+  closing: null, // a close waiting on what to do with unsaved edits
   promptFocus: 0,
   inspector: { panes: ["changed", "stats"], active: "changed" },
   changed: [],
@@ -51,6 +56,7 @@ export const S = reactive({
   window: "3d",
   lastUsed: null,
   layout: { left: 272, right: 312 },
+  colors: { ...DEFAULT_COLORS }, // the accent and the grey, from Settings
 
   get tab() {
     return this.tabs.find((t) => t.id === this.activeTab) || null;
@@ -223,10 +229,20 @@ export function selectProjectAt(i) {
 /* closeTab also closes the files opened from the tab, which have nothing to
    belong to once it is gone, and moves to the neighbour in the same project
    rather than back to the first tab. A never-used session is disposable;
-   every other session is kept in a most-recent-first reopen stack. */
-export async function closeTab(id, remember = true) {
+   every other session is kept in a most-recent-first reopen stack.
+
+   Unsaved edits stop it: closing a file that has been typed into — or a
+   conversation holding one — asks first, and resolveClosing comes back here
+   once the answer has been carried out. `force` is for a project being
+   deleted, which has already been confirmed and takes everything with it. */
+export async function closeTab(id, remember = true, force = false) {
   const tab = S.tabs.find((t) => t.id === id);
   if (!tab) return;
+  const unsaved = force ? [] : unsavedUnder(id);
+  if (unsaved.length) {
+    S.closing = { id, remember, tabs: unsaved };
+    return;
+  }
   const projectID = projectOfTab(tab);
   // Its own project's list, not the strip: a project being deleted closes
   // tabs that are not on screen.
@@ -366,9 +382,10 @@ export async function removeProject(p) {
     // and an emptied workspace must not try to reopen its page.
     const wasShowing = S.activeProjectID === p.id;
     if (wasShowing) S.activeProjectID = null;
-    // Its sessions went with it, so their tabs cannot stay open.
+    // Its sessions went with it, so their tabs cannot stay open. The project
+    // is already gone by here, so an unsaved file has nowhere to be saved to.
     for (const t of [...S.tabs]) {
-      if (projectOfTab(t) === p.id) closeTab(t.id, false);
+      if (projectOfTab(t) === p.id) closeTab(t.id, false, true);
     }
     await Promise.all([refreshProjects(), refreshSessions()]);
     if (wasShowing && S.projects.length) await switchProject(S.projects[0].id);
@@ -613,9 +630,25 @@ export async function reorderSidebarSessions(project, ids) {
 
 /* ------------------------------------------------------------------ files */
 
-/* A file tab shows either the file or its diff, and opens in whichever was
-   read last: looking at one diff usually means the next changed file wants a
-   diff too. Both halves are fetched only when they are first asked for. */
+/* A file tab shows the file, its diff, or — for markdown and HTML — what it
+   renders as, and opens in whichever was read last: looking at one diff
+   usually means the next changed file wants a diff too. Each view is fetched
+   only when it is first asked for.
+
+   Editing lives on the tab, in `edited`: null until a key is pressed, so a
+   file that has only been read carries nothing extra and switching tabs and
+   coming back finds the edits where they were left. */
+const FILE_MODES = ["edit", "diff", "preview"];
+const PREVIEWABLE = /\.(md|markdown|html?)$/i;
+
+export function canPreview(path) {
+  return PREVIEWABLE.test(String(path || ""));
+}
+
+export function isDirty(tab) {
+  return tab?.kind === "file" && tab.edited !== null && tab.edited !== tab.content;
+}
+
 export function openFile(path, silent = false) {
   return openFileIn(currentProjectID(), S.owner?.id || "", path, silent);
 }
@@ -634,9 +667,15 @@ async function openFileIn(projectID, ownerID, path, silent) {
     owner: ownerID,
     projectID,
     path,
-    mode: S.fileMode,
+    // Preview is remembered like the other two, but a file that renders as
+    // nothing opens in the editor instead of on a blank pane.
+    mode: S.fileMode === "preview" && !canPreview(path) ? "edit" : S.fileMode,
     content: null,
     diff: null,
+    edited: null,
+    // What was not read whole must never be written back over its source.
+    readOnly: false,
+    saving: false,
   };
   try {
     await loadFileTab(tab);
@@ -647,7 +686,7 @@ async function openFileIn(projectID, ownerID, path, silent) {
   addTab(tab);
 }
 
-/* loadFileTab fetches the half the tab is showing, once. The tab may not be
+/* loadFileTab fetches the view the tab is showing, once. The tab may not be
    open yet — a file that cannot be read opens no tab at all. */
 async function loadFileTab(tab) {
   const id = projectOfTab(tab);
@@ -660,14 +699,15 @@ async function loadFileTab(tab) {
   }
   if (tab.content !== null) return;
   const f = await api("GET", `/api/projects/${id}/file?${query}`);
+  tab.readOnly = !!(f.binary || f.partial);
   tab.content = f.binary ? "(binary file)" : f.content + (f.partial ? "\n\n… truncated" : "");
 }
 
 /* setFileMode switches one tab and remembers the choice for the next file —
-   but only once the switch has worked, so a half that cannot be fetched puts
+   but only once the switch has worked, so a view that cannot be fetched puts
    the tab back rather than leaving it on an empty pane. */
 export async function setFileMode(tab, mode) {
-  if (tab?.kind !== "file" || tab.mode === mode) return;
+  if (tab?.kind !== "file" || tab.mode === mode || !FILE_MODES.includes(mode)) return;
   const previous = tab.mode;
   tab.mode = mode;
   try {
@@ -677,8 +717,85 @@ export async function setFileMode(tab, mode) {
     return fail(e);
   }
   S.fileMode = mode;
+  persist(FILE_MODE_KEY, mode);
+}
+
+/* The two shapes of the same diff, on the same toggle, remembered the same
+   way. Nothing is refetched: it is one parse of text already here. */
+export function setDiffView(view) {
+  if (view !== "unified" && view !== "split") return;
+  S.diffView = view;
+  persist(DIFF_VIEW_KEY, view);
+}
+
+/* editFile compares against what was loaded rather than latching a flag, so
+   typing something and taking it back leaves the tab clean again. */
+export function editFile(tab, text) {
+  if (tab?.kind !== "file" || tab.readOnly) return;
+  tab.edited = text === tab.content ? null : text;
+}
+
+/* saveFile writes the edits back and moves the tab's own baseline with them.
+   The diff is dropped rather than patched: the working tree has changed, and
+   git is the only thing that knows what it now says. */
+export async function saveFile(tab) {
+  if (!isDirty(tab) || tab.saving) return !isDirty(tab);
+  const id = projectOfTab(tab);
+  if (!id) return false;
+  const content = tab.edited;
+  tab.saving = true;
   try {
-    localStorage.setItem(FILE_MODE_KEY, mode);
+    await api("PUT", `/api/projects/${id}/file?path=${encodeURIComponent(tab.path)}`, { content });
+  } catch (e) {
+    fail(e);
+    return false;
+  } finally {
+    tab.saving = false;
+  }
+  // Only what was actually sent is now on disk: anything typed while the
+  // request was in flight is still an edit.
+  tab.content = content;
+  if (tab.edited === content) tab.edited = null;
+  tab.diff = null;
+  if (tab.mode === "diff") await loadFileTab(tab).catch(fail);
+  refreshChanged().catch(() => {});
+  return true;
+}
+
+/* saveActiveFile is Ctrl+S, which belongs to whatever file is in front. */
+export function saveActiveFile() {
+  const tab = S.tab;
+  if (tab?.kind === "file") return saveFile(tab);
+}
+
+/* unsavedUnder is a tab and everything that would close with it, narrowed to
+   the files carrying edits — what the close dialog is about. */
+function unsavedUnder(id) {
+  return S.tabs.filter((t) => (t.id === id || t.owner === id) && isDirty(t));
+}
+
+/* resolveClosing answers the dialog. Saving that fails leaves it open, since
+   the alternative is throwing the edits away on the user's behalf. */
+export async function resolveClosing(action) {
+  const pending = S.closing;
+  if (!pending) return;
+  if (action === "cancel") {
+    S.closing = null;
+    return selectTab(pending.tabs[0].id);
+  }
+  if (action === "save") {
+    for (const tab of pending.tabs) if (!(await saveFile(tab))) return;
+  } else {
+    for (const tab of pending.tabs) tab.edited = null;
+  }
+  S.closing = null;
+  await closeTab(pending.id, pending.remember);
+}
+
+/* Not named `remember`: closeTab already takes a parameter by that name. */
+function persist(key, value) {
+  try {
+    localStorage.setItem(key, value);
   } catch {
     /* private mode or a full quota only costs the remembered choice */
   }
@@ -686,9 +803,12 @@ export async function setFileMode(tab, mode) {
 
 function loadFileMode() {
   try {
-    if (localStorage.getItem(FILE_MODE_KEY) === "diff") S.fileMode = "diff";
+    const mode = localStorage.getItem(FILE_MODE_KEY);
+    // "file" is what the editor used to be called.
+    if (mode === "diff" || mode === "preview") S.fileMode = mode;
+    if (localStorage.getItem(DIFF_VIEW_KEY) === "split") S.diffView = "split";
   } catch {
-    /* keep the default */
+    /* keep the defaults */
   }
 }
 
@@ -1014,12 +1134,46 @@ export function saveLayout() {
   }
 }
 
+/* --------------------------------------------------------------- colours */
+
+/* The accent and the grey are the user's too, and they are read before the
+   app mounts so the first paint is already in the chosen colours. A name
+   that is no longer offered is dropped rather than passed on: an unknown
+   palette resolves to no colour at all. */
+export function loadColors() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(COLORS_KEY));
+    if (ACCENTS.some((c) => c.name === saved?.accent)) S.colors.accent = saved.accent;
+    if (NEUTRALS.some((c) => c.name === saved?.neutral)) S.colors.neutral = saved.neutral;
+  } catch {
+    /* keep the defaults */
+  }
+  applyColors(S.colors);
+}
+
+/* key is "accent" or "neutral". */
+export function setColor(key, name) {
+  S.colors[key] = name;
+  applyColors(S.colors);
+  try {
+    localStorage.setItem(COLORS_KEY, JSON.stringify(S.colors));
+  } catch {
+    /* private mode, a full quota — the colours just do not persist */
+  }
+}
+
 /* ------------------------------------------------------------------ init */
 
 export async function init() {
   loadLastUsed();
   loadLayout();
   loadFileMode();
+  // Open tabs are saved, but an edited file is not — it would put a whole
+  // working copy in localStorage — so the browser's own warning is what
+  // stands between unsaved edits and a reload.
+  window.addEventListener("beforeunload", (e) => {
+    if (S.tabs.some(isDirty)) e.preventDefault();
+  });
   try {
     await loadProviders();
     await refreshProjects();

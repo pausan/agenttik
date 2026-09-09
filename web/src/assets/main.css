@@ -1,13 +1,25 @@
 @import "tailwindcss";
 @import "@nuxt/ui";
 
-/* Nuxt UI's own tokens, nudged to agenttik's green. Everything else — the
-   neutral scale, the text and surface tokens — is Nuxt UI's default. */
-:root {
-  --ui-primary: #00a968;
-}
-.dark {
-  --ui-primary: #00dc82;
+/* agenttik's green, as a Tailwind palette rather than an override of
+   `--ui-primary`, so Settings can pick it the same way it picks Nuxt UI's own
+   colours. Nuxt UI reads 500 in light mode and 400 in dark, which are the two
+   greens the app has always used; the rest of the ramp is Nuxt's.
+
+   `static` emits the whole ramp: which shade is read is decided at runtime,
+   where Tailwind cannot see it and would drop the rest as unused. */
+@theme static {
+  --color-agenttik-50: #effdf5;
+  --color-agenttik-100: #d9fbe8;
+  --color-agenttik-200: #b3f5d1;
+  --color-agenttik-300: #75edae;
+  --color-agenttik-400: #00dc82;
+  --color-agenttik-500: #00a968;
+  --color-agenttik-600: #00a155;
+  --color-agenttik-700: #007f45;
+  --color-agenttik-800: #016538;
+  --color-agenttik-900: #0a5331;
+  --color-agenttik-950: #052e16;
 }
 
 html, body, #app { height: 100%; }
@@ -45,6 +57,85 @@ button[draggable="true"]:active { cursor: grabbing; }
 }
 @keyframes agenttik-pulse {
   50% { opacity: 0.3; }
+}
+
+/* The file editor: a transparent textarea over a coloured copy of the same
+   text. The two layers must break lines in exactly the same places, so every
+   property that decides where a line wraps is set on both — and the textarea
+   is the one in flow, sized to its content, so revealing the caret scrolls
+   the pane rather than the field. */
+.editor { position: relative; }
+.editor > pre,
+.editor > textarea {
+  margin: 0;
+  padding: 1rem 1.25rem;
+  font: inherit;
+  line-height: 1.55;
+  letter-spacing: normal;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  tab-size: 2;
+}
+.editor > pre {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  color: var(--ui-text-highlighted);
+  pointer-events: none;
+}
+.editor > textarea {
+  position: relative;
+  display: block;
+  width: 100%;
+  border: 0;
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--ui-primary);
+}
+.editor > textarea::selection {
+  background: color-mix(in oklab, var(--ui-primary) 28%, transparent);
+}
+
+/* Token colours, from src/highlight.js. Deliberately few — comment, string,
+   number, keyword, call, tag, attribute — which is enough to read structure
+   at a glance without turning a file into a colour chart.
+
+   Written out rather than taken from Tailwind's palette: these are the one
+   set of colours the accent picker must not move, and a `var(--color-*)`
+   that Tailwind decides is unused resolves to nothing at all. */
+.hl-c { color: var(--ui-text-dimmed); font-style: italic; }
+.hl-s { color: #a16207; }
+.hl-n { color: #c2410c; }
+.hl-k { color: #7c3aed; }
+.hl-f { color: #2563eb; }
+.hl-t { color: #be123c; }
+.hl-a { color: #0f766e; }
+.dark .hl-s { color: #fcd34d; }
+.dark .hl-n { color: #fdba74; }
+.dark .hl-k { color: #c4b5fd; }
+.dark .hl-f { color: #93c5fd; }
+.dark .hl-t { color: #fda4af; }
+.dark .hl-a { color: #5eead4; }
+
+/* A side-by-side diff row. The number is a gutter, not text: it is not part
+   of the file and must not be picked up by a copy. */
+.diff-cell {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0 0.5rem;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+.diff-n {
+  flex: none;
+  text-align: right;
+  color: var(--ui-text-dimmed);
+  user-select: none;
 }
 
 /* Agent replies are markdown, rendered by src/markdown.js. Nuxt UI's reset

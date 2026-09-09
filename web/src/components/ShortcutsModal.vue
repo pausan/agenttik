@@ -37,6 +37,13 @@ const groups = [
     ],
   },
   {
+    label: "Files",
+    rows: [
+      { keys: "Ctrl+S", what: "Save the file in front" },
+      { keys: "Tab", what: "Indent, with the caret in a file" },
+    ],
+  },
+  {
     label: "Prompt",
     rows: [
       { keys: "Enter", what: "Send" },

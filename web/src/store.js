@@ -24,6 +24,7 @@ export const S = reactive({
   projects: [],
   sessions: [],
   tabs: [], // every open view, in strip order
+  closedSessions: [], // most recently closed non-empty session ids
   activeTab: "",
   promptFocus: 0,
   inspector: { panes: ["changed", "stats"], active: "changed" },
@@ -132,15 +133,40 @@ export function selectTabAt(n) {
 
 /* closeTab also closes the files opened from the tab, which have nothing to
    belong to once it is gone, and moves to the neighbour rather than back to
-   the first tab. */
-export function closeTab(id) {
+   the first tab. A never-used session is disposable; every other session is
+   kept in a most-recent-first reopen stack. */
+export async function closeTab(id, remember = true) {
   const at = S.tabs.findIndex((t) => t.id === id);
   if (at < 0) return;
+  const tab = S.tabs[at];
   S.tabs = S.tabs.filter((t) => t.id !== id && t.owner !== id);
   if (S.activeTab === id || !S.tabs.some((t) => t.id === S.activeTab)) {
     S.activeTab = S.tabs[Math.min(at, S.tabs.length - 1)]?.id || "";
   }
   resubscribe();
+
+  if (!remember || tab.kind !== "session") return;
+  if (tab.detail.messages.length) {
+    S.closedSessions = [
+      tab.sessionID,
+      ...S.closedSessions.filter((sessionID) => sessionID !== tab.sessionID),
+    ];
+    return;
+  }
+  try {
+    await api("DELETE", "/api/sessions/" + tab.sessionID);
+    await Promise.all([refreshProjects(), refreshSessions()]);
+    reloadProjects();
+  } catch (e) {
+    fail(e);
+  }
+}
+
+/* reopenClosedSession consumes one entry, so repeating Ctrl+Shift+T walks
+   backwards through the sessions closed in this browser window. */
+export async function reopenClosedSession() {
+  const id = S.closedSessions.shift();
+  if (id) await openSession(id);
 }
 
 /* currentProjectID is the project the right panel works against, whichever
@@ -233,7 +259,7 @@ export async function removeProject(p) {
     await api("DELETE", "/api/projects/" + p.id);
     // Its sessions went with it, so their tabs cannot stay open.
     for (const t of [...S.tabs]) {
-      if (projectOfTab(t) === p.id) closeTab(t.id);
+      if (projectOfTab(t) === p.id) closeTab(t.id, false);
     }
     await Promise.all([refreshProjects(), refreshSessions()]);
   } catch (e) {

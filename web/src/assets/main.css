@@ -28,8 +28,11 @@ body {
   unicode-bidi: embed;
 }
 
-/* The bubble taking streamed text carries a cursor until the turn ends. */
-.streaming::after {
+/* The bubble taking streamed text carries a cursor until the turn ends. In a
+   rendered reply the text sits inside blocks, so the cursor goes at the end of
+   the last one rather than on a line of its own beneath them. */
+.streaming:not(.markdown)::after,
+.markdown.streaming > :last-child::after {
   content: "▍";
   color: var(--ui-primary);
   animation: agenttik-pulse 1s infinite;
@@ -37,3 +40,73 @@ body {
 @keyframes agenttik-pulse {
   50% { opacity: 0.3; }
 }
+
+/* Agent replies are markdown, rendered by src/markdown.js. Nuxt UI's reset
+   strips the browser's own spacing, so the tags it emits are styled here —
+   only those tags, and nothing else can appear. */
+.markdown > :first-child { margin-top: 0; }
+.markdown > :last-child { margin-bottom: 0; }
+.markdown p,
+.markdown ul,
+.markdown ol,
+.markdown blockquote,
+.markdown pre,
+.markdown table { margin: 0 0 0.7em; }
+.markdown h1, .markdown h2, .markdown h3,
+.markdown h4, .markdown h5, .markdown h6 {
+  margin: 1.1em 0 0.45em;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--ui-text-highlighted);
+}
+.markdown h1 { font-size: 1.35em; }
+.markdown h2 { font-size: 1.2em; }
+.markdown h3 { font-size: 1.08em; }
+.markdown h4, .markdown h5, .markdown h6 { font-size: 1em; }
+.markdown ul, .markdown ol { padding-left: 1.35em; }
+.markdown ul { list-style: disc; }
+.markdown ol { list-style: decimal; }
+.markdown li { margin: 0.15em 0; }
+.markdown li > ul, .markdown li > ol { margin: 0.15em 0; }
+.markdown strong { font-weight: 600; color: var(--ui-text-highlighted); }
+.markdown a { color: var(--ui-primary); text-decoration: underline; }
+.markdown code {
+  padding: 0.1em 0.32em;
+  border-radius: 4px;
+  background: var(--ui-bg-muted);
+  box-shadow: inset 0 0 0 1px var(--ui-border);
+  font-family: var(--font-mono, ui-monospace), monospace;
+  font-size: 0.88em;
+}
+.markdown pre {
+  overflow-x: auto;
+  padding: 0.6em 0.75em;
+  border-radius: var(--ui-radius);
+  background: var(--ui-bg-muted);
+  box-shadow: inset 0 0 0 1px var(--ui-border);
+}
+/* Inside a block the frame belongs to the pre, not to every line. */
+.markdown pre code {
+  padding: 0;
+  background: none;
+  box-shadow: none;
+  font-size: 0.85em;
+}
+.markdown blockquote {
+  padding-left: 0.75em;
+  border-left: 2px solid var(--ui-border-accented);
+  color: var(--ui-text-muted);
+}
+.markdown hr { margin: 1em 0; border: 0; border-top: 1px solid var(--ui-border); }
+.markdown table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+.markdown th, .markdown td {
+  padding: 0.25em 0.6em;
+  border: 1px solid var(--ui-border);
+  text-align: left;
+}
+.markdown th { background: var(--ui-bg-muted); font-weight: 600; }

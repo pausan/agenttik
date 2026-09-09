@@ -14,6 +14,7 @@ const groups = [
     rows: [
       { keys: "Ctrl+N / Ctrl+T", what: "New session in the current project" },
       { keys: "Ctrl+W", what: "Close the current conversation" },
+      { keys: "Ctrl+Shift+T", what: "Restore the last closed session in this project" },
     ],
   },
   {

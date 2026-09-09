@@ -41,6 +41,7 @@ export const S = reactive({
   subscriptionLimits: {}, // provider -> its latest subscription allowance buckets
   sessions: [],
   tabs: [], // every open view, of every project
+  closedSessions: {}, // project id -> most recently closed non-empty session ids
   activeTab: "",
   activeProjectID: null, // the project the strip and the sidebar show
   lastTab: {}, // per project, the tab it was last left on
@@ -336,7 +337,7 @@ export async function closeTab(id, remember = true, force = false) {
   resubscribe();
 
   if (!remember || tab.kind !== "session") return;
-  if (tab.detail.messages.length) return setSessionArchived(tab.detail.session, true);
+  if (tab.detail.messages.length) return setSessionArchived(tab.detail.session, true, projectID);
   try {
     await api("DELETE", "/api/sessions/" + tab.sessionID);
     await Promise.all([refreshProjects(), refreshSessions()]);
@@ -344,6 +345,19 @@ export async function closeTab(id, remember = true, force = false) {
   } catch (e) {
     fail(e);
   }
+}
+
+/* reopenClosedSession restores the newest session closed in the active
+   project. Each project keeps its own history, so switching workspaces never
+   restores a conversation from somewhere else. */
+export async function reopenClosedSession() {
+  const closed = S.closedSessions[S.activeProjectID];
+  const id = closed?.[0];
+  if (!id) return;
+  const restored = await setSessionArchived({ id }, false);
+  if (!restored) return;
+  closed.shift();
+  await openSession(id);
 }
 
 /* currentProjectID is the project the right panel works against, whichever
@@ -647,7 +661,7 @@ export async function renameSession(session, title) {
 /* setSessionArchived removes a session from project views and closes its tab
    without deleting it. The Sessions list keeps archived sessions so they can
    be restored. */
-export async function setSessionArchived(session, archived) {
+export async function setSessionArchived(session, archived, closedProjectID = null) {
   try {
     const updated = await api("PATCH", "/api/sessions/" + session.id, { done: archived });
     const tab = S.tabs.find((t) => t.kind === "session" && t.sessionID === session.id);
@@ -655,6 +669,14 @@ export async function setSessionArchived(session, archived) {
     await Promise.all([refreshProjects(), refreshSessions()]);
     reloadProjects();
     if (archived && tab) await closeTab(tab.id, false);
+    if (archived && closedProjectID) {
+      const closed = S.closedSessions[closedProjectID] || [];
+      S.closedSessions[closedProjectID] = [
+        session.id,
+        ...closed.filter((sessionID) => sessionID !== session.id),
+      ];
+    }
+    return updated;
   } catch (e) {
     fail(e);
   }

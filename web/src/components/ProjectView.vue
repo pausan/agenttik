@@ -7,13 +7,21 @@
    Archived sessions are not here at all — they stay in the Sessions list. */
 import { ref } from "vue";
 
-import { S, openSession, reorderSessions, setSessionArchived, startSession } from "../store";
+import {
+  S,
+  openSession,
+  renameSession,
+  reorderSessions,
+  setSessionArchived,
+  startSession,
+} from "../store";
 import { ago } from "../api";
 import SessionRow from "./SessionRow.vue";
 
 const props = defineProps({ tab: { type: Object, required: true } });
 
 const dragging = ref("");
+const renaming = ref(""); // the session whose title is being edited
 
 function onStart(e, id) {
   dragging.value = id;
@@ -60,7 +68,7 @@ function onDrop() {
         :key="s.id"
         class="flex items-center gap-1"
         :class="dragging === s.id ? 'opacity-40' : ''"
-        draggable="true"
+        :draggable="renaming !== s.id"
         @dragstart="onStart($event, s.id)"
         @dragover="onOver($event, s.id)"
         @drop.prevent="onDrop"
@@ -73,13 +81,15 @@ function onDrop() {
         />
         <SessionRow
           class="min-w-0 flex-1"
-          :title="s.title || 'Untitled session'"
+          :title="s.title"
           :status="s.status"
           :sub="`${s.model}${s.effort ? ' · ' + s.effort : ''} · ${ago(s.last_active_at)}`"
           :active="S.detail?.session.id === s.id"
           archive
           @select="openSession(s.id)"
           @toggle-archive="setSessionArchived(s, true)"
+          @rename="renameSession(s, $event)"
+          @editing="renaming = $event ? s.id : ''"
         />
       </div>
     </div>

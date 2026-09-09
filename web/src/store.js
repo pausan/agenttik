@@ -2,11 +2,14 @@
    SSE connection that keeps it current. Components read S and call these;
    none of them touch the DOM.
 
-   Everything open is a tab in S.tabs, in the order the strip shows them: a
-   session (transcript and prompt bar), a project (its sessions) or a file.
-   Several of each can be open at once, including several sessions from the
-   same project, and all of them stay live. S.detail and S.project are derived
-   from whichever tab is in front. */
+   Everything open is a tab in S.tabs: a session (transcript and prompt bar),
+   a project (its sessions) or a file. Several of each can be open at once,
+   including several sessions from the same project, and all of them stay
+   live. S.detail and S.project are derived from whichever tab is in front.
+
+   The strip only shows one project at a time — S.strip is S.tabs narrowed to
+   S.activeProjectID and grouped project, sessions, files — so switching
+   project switches the whole centre to that project's work. */
 
 import { reactive, watch } from "vue";
 import { api } from "./api";
@@ -16,16 +19,29 @@ import { debounce } from "./debounce";
 const LAYOUT_KEY = "agenttik.layout";
 const LAST_USED_KEY = "agenttik.lastUsed";
 const OPEN_TABS_KEY = "agenttik.openTabs";
+const FILE_MODE_KEY = "agenttik.fileMode";
 const LAYOUT_LIMITS = { left: [180, 520], right: [200, 620] };
+
+/* Tabs are kept in their groups: a project's page first, then its
+   conversations, then the files read from them. A new tab joins the end of
+   its own group, and a drag only moves a tab within it. */
+const TAB_RANK = { project: 0, session: 1, file: 2 };
+
+/* The letters Alt reaches a project with. The first eight rows of the
+   sidebar get one, so dragging a project changes its letter. */
+export const PROJECT_KEYS = "ABCDEFGH";
 
 export const S = reactive({
   providers: [],
   stars: [],
   projects: [],
   sessions: [],
-  tabs: [], // every open view, in strip order
+  tabs: [], // every open view, of every project
   closedSessions: [], // most recently closed non-empty session ids
   activeTab: "",
+  activeProjectID: null, // the project the strip and the sidebar show
+  lastTab: {}, // per project, the tab it was last left on
+  fileMode: "file", // "file" or "diff", carried to the next file opened
   promptFocus: 0,
   inspector: { panes: ["changed", "stats"], active: "changed" },
   changed: [],
@@ -38,6 +54,12 @@ export const S = reactive({
 
   get tab() {
     return this.tabs.find((t) => t.id === this.activeTab) || null;
+  },
+  /* strip is what the tab bar draws: the active project's tabs, in the order
+     they were dragged into. Everything else stays open and live, it is just
+     not on screen. */
+  get strip() {
+    return this.tabs.filter((t) => projectOfTab(t) === this.activeProjectID);
   },
   /* A file belongs to the view that opened it, so reading one keeps the
      prompt bar and the right-hand panel it came from. */
@@ -106,12 +128,40 @@ export async function toggleStar(provider, model, effort) {
 
 /* ------------------------------------------------------------------ tabs */
 
-/* addTab appends unless the tab is already open, in which case it just comes
+/* addTab inserts unless the tab is already open, in which case it just comes
    to the front — clicking a session twice must not open it twice. */
 function addTab(tab) {
-  if (!S.tabs.some((t) => t.id === tab.id)) S.tabs.push(tab);
-  S.activeTab = tab.id;
+  if (!S.tabs.some((t) => t.id === tab.id)) insertTab(tab);
+  selectTab(tab.id);
   resubscribe();
+}
+
+/* insertTab puts a tab at the end of its own group inside its project, so a
+   new conversation lands after the last one and always before the files. */
+function insertTab(tab) {
+  const id = projectOfTab(tab);
+  const rank = TAB_RANK[tab.kind];
+  let at = -1;
+  let first = -1;
+  S.tabs.forEach((t, i) => {
+    if (projectOfTab(t) !== id) return;
+    if (first < 0) first = i;
+    if (TAB_RANK[t.kind] <= rank) at = i + 1;
+  });
+  if (at < 0) at = first < 0 ? S.tabs.length : first;
+  S.tabs.splice(at, 0, tab);
+}
+
+/* moveTab is a tab dragged along the strip. Only tabs of the same kind trade
+   places: the groups keep their order, and the numbers follow the strip
+   rather than the strip following the numbers. */
+export function moveTab(dragID, overID) {
+  const from = S.tabs.findIndex((t) => t.id === dragID);
+  const to = S.tabs.findIndex((t) => t.id === overID);
+  if (from < 0 || to < 0 || from === to) return;
+  if (S.tabs[from].kind !== S.tabs[to].kind) return;
+  if (projectOfTab(S.tabs[from]) !== projectOfTab(S.tabs[to])) return;
+  S.tabs.splice(to, 0, ...S.tabs.splice(from, 1));
 }
 
 /* The prompt bar watches this counter. A counter, rather than a Boolean,
@@ -121,27 +171,81 @@ function focusPrompt() {
   S.promptFocus += 1;
 }
 
+/* Selecting a tab selects its project with it, and the project remembers
+   where it was left so coming back lands on the same tab. */
 export function selectTab(id) {
+  const tab = S.tabs.find((t) => t.id === id);
+  if (!tab) return;
   S.activeTab = id;
+  const projectID = projectOfTab(tab);
+  if (!projectID) return;
+  S.activeProjectID = projectID;
+  S.lastTab[projectID] = id;
 }
 
-/* selectTabAt is Alt+1 … Alt+9, so the number matches what the strip shows. */
+/* selectTabAt is Alt+1 … Alt+9, so the number matches what the strip shows —
+   which is this project's tabs, not every tab open. */
 export function selectTabAt(n) {
-  const tab = S.tabs[n - 1];
-  if (tab) S.activeTab = tab.id;
+  const tab = S.strip[n - 1];
+  if (tab) selectTab(tab.id);
+}
+
+/* selectAdjacentTab is Ctrl+PageUp and Ctrl+PageDown: one step along the
+   strip, wrapping at both ends so every tab is reachable without turning
+   round. */
+export function selectAdjacentTab(step) {
+  const strip = S.strip;
+  const n = strip.length;
+  if (!n) return;
+  const at = strip.findIndex((t) => t.id === S.activeTab);
+  selectTab(strip[at < 0 ? (step > 0 ? 0 : n - 1) : (at + step + n) % n].id);
+}
+
+/* switchProject is Alt+A … Alt+H and a click on a project row: the strip
+   becomes that project's, on the tab it was last left on. A project with
+   nothing open shows its own page rather than an empty centre. */
+export async function switchProject(id) {
+  S.activeProjectID = id;
+  const mine = S.strip;
+  const last = mine.find((t) => t.id === S.lastTab[id]) || mine[0];
+  if (last) return selectTab(last.id);
+  S.activeTab = "";
+  await openProject(id);
+}
+
+/* Alt+A … Alt+H address the first eight projects by where they sit in the
+   sidebar, so dragging one changes the letter that reaches it. */
+export function selectProjectAt(i) {
+  const p = S.projects[i];
+  if (p) switchProject(p.id);
 }
 
 /* closeTab also closes the files opened from the tab, which have nothing to
-   belong to once it is gone, and moves to the neighbour rather than back to
-   the first tab. A never-used session is disposable; every other session is
-   kept in a most-recent-first reopen stack. */
+   belong to once it is gone, and moves to the neighbour in the same project
+   rather than back to the first tab. A never-used session is disposable;
+   every other session is kept in a most-recent-first reopen stack. */
 export async function closeTab(id, remember = true) {
-  const at = S.tabs.findIndex((t) => t.id === id);
-  if (at < 0) return;
-  const tab = S.tabs[at];
+  const tab = S.tabs.find((t) => t.id === id);
+  if (!tab) return;
+  const projectID = projectOfTab(tab);
+  // Its own project's list, not the strip: a project being deleted closes
+  // tabs that are not on screen.
+  const at = S.tabs.filter((t) => projectOfTab(t) === projectID).findIndex((t) => t.id === id);
   S.tabs = S.tabs.filter((t) => t.id !== id && t.owner !== id);
+  if (S.lastTab[projectID] === id) delete S.lastTab[projectID];
   if (S.activeTab === id || !S.tabs.some((t) => t.id === S.activeTab)) {
-    S.activeTab = S.tabs[Math.min(at, S.tabs.length - 1)]?.id || "";
+    const left = S.tabs.filter((t) => projectOfTab(t) === projectID);
+    const next = left[Math.min(at, left.length - 1)];
+    if (next) selectTab(next.id);
+    else {
+      S.activeTab = "";
+      // Emptying a workspace falls back to its project page, which is where
+      // the next conversation is started from. Closing the page itself does
+      // not bring it back — that one is deliberate.
+      if (tab.kind !== "project" && projectID === S.activeProjectID) {
+        openProject(projectID, true);
+      }
+    }
   }
   resubscribe();
 
@@ -170,11 +274,12 @@ export async function reopenClosedSession() {
 }
 
 /* currentProjectID is the project the right panel works against, whichever
-   kind of view is in front. */
+   kind of view is in front — and the selected project when the strip is
+   empty, so closing the last tab does not empty the Tree as well. */
 export function currentProjectID() {
   if (S.detail) return S.detail.session.project_id;
   if (S.project) return S.project.project.id;
-  return null;
+  return S.activeProjectID;
 }
 
 /* -------------------------------------------------------------- projects */
@@ -257,21 +362,27 @@ export async function addProject(path, name) {
 export async function removeProject(p) {
   try {
     await api("DELETE", "/api/projects/" + p.id);
+    // Deselect before closing: the strip cannot show a project that is gone,
+    // and an emptied workspace must not try to reopen its page.
+    const wasShowing = S.activeProjectID === p.id;
+    if (wasShowing) S.activeProjectID = null;
     // Its sessions went with it, so their tabs cannot stay open.
     for (const t of [...S.tabs]) {
       if (projectOfTab(t) === p.id) closeTab(t.id, false);
     }
     await Promise.all([refreshProjects(), refreshSessions()]);
+    if (wasShowing && S.projects.length) await switchProject(S.projects[0].id);
   } catch (e) {
     fail(e);
   }
 }
 
+/* Every tab names its project: a file carries one of its own because the view
+   it was opened from can be closed while it stays open. */
 function projectOfTab(t) {
   if (t.kind === "project") return t.projectID;
   if (t.kind === "session") return t.detail.session.project_id;
-  const owner = S.tabs.find((x) => x.id === t.owner);
-  return owner ? projectOfTab(owner) : null;
+  return t.projectID || null;
 }
 
 export async function renameProject(p, name) {
@@ -364,13 +475,18 @@ function sessionDefaults() {
   return { provider: p.name, model: p.models[0].id, effort: "", permission: "workspace" };
 }
 
+/* A project page is where a session is started from, so it hands its tab over
+   to the new conversation rather than staying open behind it. The session
+   still lands at the end of the session group; only the page goes. */
 export async function startSession(project) {
   const cfg = sessionDefaults();
   if (!cfg) return fail(new Error("No agent CLI is available. Open Settings to see why."));
+  const replaced = S.tab?.kind === "project" ? S.tab.id : "";
   try {
     const sess = await api("POST", "/api/sessions", { project_id: project.id, ...cfg });
     await Promise.all([refreshProjects(), refreshSessions()]);
     await openSession(sess.id);
+    if (replaced) closeTab(replaced, false);
     focusPrompt();
     reloadProjects();
   } catch (e) {
@@ -408,6 +524,9 @@ export async function openSession(id, silent = false) {
     label: tabLabel(detail.session),
     sessionID: id,
     detail,
+    // Unsent text belongs to the conversation, not to the prompt bar, so it
+    // survives every tab switch and only closing throws it away.
+    draft: "",
   });
   await Promise.all([refreshProjects(), refreshSessions()]).catch(fail);
 }
@@ -418,6 +537,27 @@ export async function setModel(model, effort) {
   try {
     tab.detail.session = await api("PATCH", "/api/sessions/" + tab.sessionID, { model, effort });
     rememberUsed(tab.detail.session);
+  } catch (e) {
+    fail(e);
+  }
+}
+
+/* renameSession retitles a session. The same session shows in the sidebar, in
+   its project's view and on the tab strip, so every list is re-read; the tab
+   label is set here too, because a session outside the sidebar's window is
+   not in the list that would otherwise carry the new name back. */
+export async function renameSession(session, title) {
+  title = title.trim();
+  if (!title || title === session.title) return;
+  try {
+    const updated = await api("PATCH", "/api/sessions/" + session.id, { title });
+    const tab = S.tabs.find((t) => t.kind === "session" && t.sessionID === session.id);
+    if (tab) {
+      tab.detail.session = updated;
+      tab.label = tabLabel(updated);
+    }
+    await Promise.all([refreshProjects(), refreshSessions()]);
+    reloadProjects();
   } catch (e) {
     fail(e);
   }
@@ -473,24 +613,82 @@ export async function reorderSidebarSessions(project, ids) {
 
 /* ------------------------------------------------------------------ files */
 
-export async function openFile(path, silent = false) {
-  const owner = S.owner;
-  const projectID = currentProjectID();
-  if (!owner || !projectID) return;
+/* A file tab shows either the file or its diff, and opens in whichever was
+   read last: looking at one diff usually means the next changed file wants a
+   diff too. Both halves are fetched only when they are first asked for. */
+export function openFile(path, silent = false) {
+  return openFileIn(currentProjectID(), S.owner?.id || "", path, silent);
+}
+
+/* openFileIn also rebuilds a saved tab, whose owner may be gone. A file
+   belongs to the view it was opened from, but it belongs to its project even
+   when nothing else in that project is open. */
+async function openFileIn(projectID, ownerID, path, silent) {
+  if (!projectID) return;
   const tabID = `file:${projectID}:${path}`;
   if (S.tabs.some((t) => t.id === tabID)) return selectTab(tabID);
+  const tab = {
+    id: tabID,
+    kind: "file",
+    label: path.split("/").pop(),
+    owner: ownerID,
+    projectID,
+    path,
+    mode: S.fileMode,
+    content: null,
+    diff: null,
+  };
   try {
-    const f = await api("GET", `/api/projects/${projectID}/file?path=${encodeURIComponent(path)}`);
-    addTab({
-      id: tabID,
-      kind: "file",
-      label: path.split("/").pop(),
-      owner: owner.id,
-      path,
-      content: f.binary ? "(binary file)" : f.content + (f.partial ? "\n\n… truncated" : ""),
-    });
+    await loadFileTab(tab);
   } catch (e) {
     if (!silent) fail(e);
+    return;
+  }
+  addTab(tab);
+}
+
+/* loadFileTab fetches the half the tab is showing, once. The tab may not be
+   open yet — a file that cannot be read opens no tab at all. */
+async function loadFileTab(tab) {
+  const id = projectOfTab(tab);
+  if (!id) return;
+  const query = `path=${encodeURIComponent(tab.path)}`;
+  if (tab.mode === "diff") {
+    if (tab.diff !== null) return;
+    tab.diff = (await api("GET", `/api/projects/${id}/diff?${query}`)).diff || "";
+    return;
+  }
+  if (tab.content !== null) return;
+  const f = await api("GET", `/api/projects/${id}/file?${query}`);
+  tab.content = f.binary ? "(binary file)" : f.content + (f.partial ? "\n\n… truncated" : "");
+}
+
+/* setFileMode switches one tab and remembers the choice for the next file —
+   but only once the switch has worked, so a half that cannot be fetched puts
+   the tab back rather than leaving it on an empty pane. */
+export async function setFileMode(tab, mode) {
+  if (tab?.kind !== "file" || tab.mode === mode) return;
+  const previous = tab.mode;
+  tab.mode = mode;
+  try {
+    await loadFileTab(tab);
+  } catch (e) {
+    tab.mode = previous;
+    return fail(e);
+  }
+  S.fileMode = mode;
+  try {
+    localStorage.setItem(FILE_MODE_KEY, mode);
+  } catch {
+    /* private mode or a full quota only costs the remembered choice */
+  }
+}
+
+function loadFileMode() {
+  try {
+    if (localStorage.getItem(FILE_MODE_KEY) === "diff") S.fileMode = "diff";
+  } catch {
+    /* keep the default */
   }
 }
 
@@ -501,29 +699,45 @@ export async function openFile(path, silent = false) {
    current version after the app is relaunched. */
 function savedTab(tab) {
   if (tab.kind === "project") return { id: tab.id, kind: tab.kind, projectID: tab.projectID };
-  if (tab.kind === "session") return { id: tab.id, kind: tab.kind, sessionID: tab.sessionID };
-  if (tab.kind === "file") return { id: tab.id, kind: tab.kind, owner: tab.owner, path: tab.path };
+  if (tab.kind === "session") {
+    return { id: tab.id, kind: tab.kind, sessionID: tab.sessionID, draft: tab.draft || "" };
+  }
+  if (tab.kind === "file") {
+    return {
+      id: tab.id,
+      kind: tab.kind,
+      owner: tab.owner,
+      projectID: tab.projectID,
+      path: tab.path,
+    };
+  }
   return null;
 }
 
 let restoringTabs = false;
 
-function saveOpenTabs() {
+/* Debounced because an unsent prompt is saved with the tabs, and a keystroke
+   is not worth a trip through JSON and localStorage. */
+const saveOpenTabs = debounce(() => {
   if (restoringTabs) return;
   try {
     localStorage.setItem(
       OPEN_TABS_KEY,
-      JSON.stringify({ tabs: S.tabs.map(savedTab).filter(Boolean), activeTab: S.activeTab }),
+      JSON.stringify({
+        tabs: S.tabs.map(savedTab).filter(Boolean),
+        activeTab: S.activeTab,
+        activeProjectID: S.activeProjectID,
+      }),
     );
   } catch {
     /* private mode or a full quota just means tabs open fresh next time */
   }
-}
+}, 300);
 
 /* Restoring opens the same kinds of tabs through the ordinary actions, so
    their data is fetched anew and missing projects or sessions are skipped. A
-   file's owner is always opened before it, because files can only be opened
-   from an already-open session or project. */
+   file is restored against its own project, and keeps the view it was opened
+   from only if that one came back too. */
 async function restoreOpenTabs() {
   let saved;
   try {
@@ -540,13 +754,17 @@ async function restoreOpenTabs() {
         await openProject(tab.projectID, true);
       } else if (tab?.kind === "session" && tab.sessionID) {
         await openSession(tab.sessionID, true);
-      } else if (tab?.kind === "file" && tab.owner && typeof tab.path === "string") {
-        if (!S.tabs.some((open) => open.id === tab.owner)) continue;
-        selectTab(tab.owner);
-        await openFile(tab.path, true);
+        const open = S.tabs.find((t) => t.id === tab.id);
+        if (open) open.draft = typeof tab.draft === "string" ? tab.draft : "";
+      } else if (tab?.kind === "file" && typeof tab.path === "string") {
+        const owner = S.tabs.some((open) => open.id === tab.owner) ? tab.owner : "";
+        await openFileIn(tab.projectID, owner, tab.path, true);
       }
     }
-    if (S.tabs.some((tab) => tab.id === saved.activeTab)) S.activeTab = saved.activeTab;
+    if (S.projects.some((p) => p.id === saved.activeProjectID)) {
+      S.activeProjectID = saved.activeProjectID;
+    }
+    if (S.tabs.some((tab) => tab.id === saved.activeTab)) selectTab(saved.activeTab);
   } finally {
     restoringTabs = false;
     saveOpenTabs();
@@ -554,7 +772,11 @@ async function restoreOpenTabs() {
 }
 
 watch(
-  () => ({ activeTab: S.activeTab, tabs: S.tabs.map(savedTab) }),
+  () => ({
+    activeTab: S.activeTab,
+    activeProjectID: S.activeProjectID,
+    tabs: S.tabs.map(savedTab),
+  }),
   saveOpenTabs,
 );
 
@@ -734,6 +956,7 @@ export async function send(prompt) {
   prompt = prompt.trim();
   if (!prompt) return;
 
+  tab.draft = "";
   endLive(tab);
   push(tab, "user", prompt);
   tab.detail.running = true;
@@ -796,11 +1019,15 @@ export function saveLayout() {
 export async function init() {
   loadLastUsed();
   loadLayout();
+  loadFileMode();
   try {
     await loadProviders();
     await refreshProjects();
     await refreshSessions();
     await restoreOpenTabs();
+    // A first launch has no tabs to say which project is selected, and the
+    // sidebar, the Tree and Ctrl+N all want one.
+    if (!S.activeProjectID && S.projects.length) S.activeProjectID = S.projects[0].id;
   } catch (e) {
     fail(e);
   }

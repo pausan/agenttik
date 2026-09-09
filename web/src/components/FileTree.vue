@@ -23,6 +23,11 @@ const matches = computed(() => countFiles(shown.value));
 const collapsed = ref(new Set());
 watch(() => S.treeFilter, () => collapsed.value.clear());
 
+/* Opening the pane is asking to search it, so the sidebar puts the cursor
+   here. */
+const filter = ref(null);
+defineExpose({ focus: () => filter.value?.inputRef?.focus() });
+
 function toggle(path) {
   const open = collapsed.value;
   open.has(path) ? open.delete(path) : open.add(path);
@@ -47,6 +52,7 @@ const rows = computed(() => {
 <template>
   <div class="flex min-h-0 flex-col gap-2">
     <UInput
+      ref="filter"
       v-model="S.treeFilter"
       icon="i-lucide-search"
       placeholder="Filter files"

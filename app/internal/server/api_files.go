@@ -163,6 +163,58 @@ func parseStatus(out string) []changedFile {
 	return files
 }
 
+type fileDiff struct {
+	Path    string `json:"path"`
+	Diff    string `json:"diff"`
+	Partial bool   `json:"partial"`
+}
+
+// projectDiff is the working-tree diff of one file, for the Diff half of a
+// file tab. An untracked file has nothing to diff against HEAD, so it is
+// compared with an empty file and reads as entirely new rather than as no
+// change at all.
+func (s *Server) projectDiff(c *fiber.Ctx) error {
+	root, err := s.projectRoot(c)
+	if err != nil {
+		return err
+	}
+	rel := c.Query("path")
+	if _, err := resolveInRoot(root, rel); err != nil {
+		return err
+	}
+	if !isGitRepo(root) {
+		return c.JSON(fileDiff{Path: rel})
+	}
+
+	var out string
+	if _, err := runGit(root, "ls-files", "--error-unmatch", "--", rel); err == nil {
+		// HEAD covers staged and unstaged together; a repository with no
+		// commits has no HEAD, and there the index is the only baseline.
+		if out, err = gitDiff(root, "diff", "--no-color", "HEAD", "--", rel); err != nil {
+			out, _ = gitDiff(root, "diff", "--no-color", "--cached", "--", rel)
+		}
+	} else {
+		out, _ = gitDiff(root, "diff", "--no-color", "--no-index", "--", os.DevNull, rel)
+	}
+
+	body := fileDiff{Path: rel, Partial: len(out) > maxFileBytes}
+	if body.Partial {
+		out = out[:maxFileBytes]
+	}
+	body.Diff = out
+	return c.JSON(body)
+}
+
+// gitDiff runs one diff. Diff exits 1 when it finds differences, which is the
+// normal case here, so output that git actually produced is never an error.
+func gitDiff(root string, args ...string) (string, error) {
+	out, err := runGit(root, args...)
+	if err != nil && out == "" {
+		return "", err
+	}
+	return out, nil
+}
+
 type fileContent struct {
 	Path    string `json:"path"`
 	Size    int64  `json:"size"`
@@ -220,8 +272,10 @@ func runGit(dir string, args ...string) (string, error) {
 	cmd.Dir = dir
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	// Output is returned even on a non-zero status: git diff signals "there
+	// are differences" that way, and the caller decides what that means.
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("git %s: %v: %s", strings.Join(args, " "), err,
+		return stdout.String(), fmt.Errorf("git %s: %v: %s", strings.Join(args, " "), err,
 			strings.TrimSpace(stderr.String()))
 	}
 	return stdout.String(), nil

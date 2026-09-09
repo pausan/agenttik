@@ -1,11 +1,16 @@
 <script setup>
-/* One session in a list: the sidebar's, or a project's. Its archive control
-   is separate from the row button, so opening a conversation stays one click
-   away. */
+/* One session in a list: the sidebar's, or a project's. Its rename and archive
+   controls are separate from the row button, so opening a conversation stays
+   one click away.
+
+   Renaming happens in the row: the title becomes a field, Enter or leaving it
+   saves, Escape puts it back. */
+import { nextTick, ref } from "vue";
+
 import StatusDot from "./StatusDot.vue";
 
-defineProps({
-  title: { type: String, required: true },
+const props = defineProps({
+  title: { type: String, default: "" },
   status: { type: String, default: "idle" },
   sub: { type: String, default: "" },
   active: Boolean,
@@ -13,7 +18,34 @@ defineProps({
   archive: Boolean,
 });
 
-defineEmits(["select", "toggle-archive"]);
+const emit = defineEmits(["select", "toggle-archive", "rename", "editing"]);
+
+const editing = ref(false);
+const draft = ref("");
+const field = ref(null);
+
+/* A row in a project list is a drag handle, and dragging inside a field there
+   would move the row instead of selecting text, so the lists are told when
+   the field is open and stop being draggable while it is. */
+function setEditing(on) {
+  editing.value = on;
+  emit("editing", on);
+}
+
+function edit() {
+  draft.value = props.title;
+  setEditing(true);
+  // Selected rather than just focused: a rename usually replaces the title.
+  nextTick(() => field.value?.inputRef?.select());
+}
+
+/* Escape closes the field before the blur it causes reaches commit, so a
+   cancelled rename is not saved on the way out. */
+function commit() {
+  if (!editing.value) return;
+  setEditing(false);
+  emit("rename", draft.value);
+}
 </script>
 
 <template>
@@ -21,30 +53,51 @@ defineEmits(["select", "toggle-archive"]);
     class="mb-px flex items-center rounded-[var(--ui-radius)]"
     :class="active ? 'bg-primary/10' : 'hover:bg-elevated'"
   >
-    <button
-      type="button"
-      class="min-w-0 flex-1 px-2 py-1 text-left"
-      @click="$emit('select')"
-    >
-      <span
-        class="flex items-center gap-2 overflow-hidden"
-        :class="active ? 'text-primary' : 'text-highlighted'"
+    <UInput
+      v-if="editing"
+      ref="field"
+      v-model="draft"
+      size="sm"
+      placeholder="Untitled session"
+      class="min-w-0 flex-1 cursor-text"
+      @blur="commit"
+      @keydown.enter.prevent="commit"
+      @keydown.esc.prevent="setEditing(false)"
+    />
+    <template v-else>
+      <button
+        type="button"
+        class="min-w-0 flex-1 px-2 py-1 text-left"
+        @click="$emit('select')"
       >
-        <StatusDot :status="status" />
-        <span class="truncate">{{ title }}</span>
-      </span>
-      <span v-if="sub" class="block truncate text-xs text-dimmed">{{ sub }}</span>
-    </button>
-    <button
-      v-if="archive"
-      type="button"
-      class="mr-1 shrink-0 rounded p-1 text-dimmed hover:text-primary"
-      :class="archived ? 'text-primary' : ''"
-      :aria-pressed="archived"
-      :title="archived ? 'Unarchive session' : 'Archive session'"
-      @click.stop="$emit('toggle-archive')"
-    >
-      <UIcon :name="archived ? 'i-lucide-archive-restore' : 'i-lucide-archive'" class="size-3.5 block" />
-    </button>
+        <span
+          class="flex items-center gap-2 overflow-hidden"
+          :class="active ? 'text-primary' : 'text-highlighted'"
+        >
+          <StatusDot :status="status" />
+          <span class="truncate">{{ title || "Untitled session" }}</span>
+        </span>
+        <span v-if="sub" class="block truncate text-xs text-dimmed">{{ sub }}</span>
+      </button>
+      <button
+        type="button"
+        class="mr-1 shrink-0 rounded p-1 text-dimmed hover:text-primary"
+        title="Rename session"
+        @click.stop="edit"
+      >
+        <UIcon name="i-lucide-pencil" class="size-3.5 block" />
+      </button>
+      <button
+        v-if="archive"
+        type="button"
+        class="mr-1 shrink-0 rounded p-1 text-dimmed hover:text-primary"
+        :class="archived ? 'text-primary' : ''"
+        :aria-pressed="archived"
+        :title="archived ? 'Unarchive session' : 'Archive session'"
+        @click.stop="$emit('toggle-archive')"
+      >
+        <UIcon :name="archived ? 'i-lucide-archive-restore' : 'i-lucide-archive'" class="size-3.5 block" />
+      </button>
+    </template>
   </div>
 </template>

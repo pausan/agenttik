@@ -7,6 +7,8 @@ import {
   closeTab,
   init,
   reopenClosedSession,
+  selectAdjacentTab,
+  selectProjectAt,
   selectTabAt,
   startCurrentSession,
   useErrors,
@@ -16,22 +18,32 @@ import MainPanel from "./components/MainPanel.vue";
 import InspectorPanel from "./components/InspectorPanel.vue";
 import AddProjectModal from "./components/AddProjectModal.vue";
 import SetupModal from "./components/SetupModal.vue";
+import ShortcutsModal from "./components/ShortcutsModal.vue";
 import GoToModal from "./components/GoToModal.vue";
 import Splitter from "./components/Splitter.vue";
 
 const addProject = ref(false);
 const setup = ref(false);
+const shortcuts = ref(false);
 const goTo = ref(false);
 const sideBar = ref(null);
 
 useErrors(useToast());
 
 /* Ctrl+N/T, Ctrl+P, Ctrl+W, and Ctrl+Shift+T create, find, close, and reopen
-   conversations; Alt+P/S/T move the left strip. Alt+1 … Alt+9 goes straight to a tab. The key is read from the physical
-   code: on some layouts Alt and a digit produce a different character. */
+   conversations; Ctrl+PageUp/PageDown walk the tab strip and Alt+P/S/T move the
+   left one. Alt+1 … Alt+9 goes straight to a tab and Alt+A … Alt+H to a project.
+   The key is read from the physical code: on some layouts Alt and a digit
+   produce a different character. */
 function onKey(e) {
   if (e.ctrlKey && !e.altKey && !e.metaKey) {
-    if (e.code === "KeyN") {
+    if (e.code === "PageUp") {
+      e.preventDefault();
+      selectAdjacentTab(-1);
+    } else if (e.code === "PageDown") {
+      e.preventDefault();
+      selectAdjacentTab(1);
+    } else if (e.code === "KeyN") {
       e.preventDefault();
       startCurrentSession();
     } else if (e.code === "KeyP") {
@@ -67,9 +79,16 @@ function onKey(e) {
     return;
   }
   const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
-  if (!digit) return;
+  if (digit) {
+    e.preventDefault();
+    selectTabAt(Number(digit[1]));
+    return;
+  }
+  // A … H are the first eight projects, in sidebar order.
+  const letter = /^Key([A-H])$/.exec(e.code);
+  if (!letter) return;
   e.preventDefault();
-  selectTabAt(Number(digit[1]));
+  selectProjectAt(letter[1].charCodeAt(0) - 65);
 }
 
 onMounted(() => {
@@ -87,7 +106,12 @@ onUnmounted(() => window.removeEventListener("keydown", onKey));
         gridTemplateColumns: `${S.layout.left}px 1px minmax(0,1fr) 1px ${S.layout.right}px`,
       }"
     >
-      <SideBar ref="sideBar" @add-project="addProject = true" @setup="setup = true" />
+      <SideBar
+        ref="sideBar"
+        @add-project="addProject = true"
+        @setup="setup = true"
+        @shortcuts="shortcuts = true"
+      />
       <Splitter side="left" />
       <MainPanel />
       <Splitter side="right" />
@@ -96,6 +120,7 @@ onUnmounted(() => window.removeEventListener("keydown", onKey));
 
     <AddProjectModal v-model:open="addProject" />
     <SetupModal v-model:open="setup" />
+    <ShortcutsModal v-model:open="shortcuts" />
     <GoToModal
       v-model:open="goTo"
       @projects="sideBar?.showProjects()"

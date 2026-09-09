@@ -4,7 +4,14 @@ import { computed, nextTick, ref, watch } from "vue";
 import { S, fail, isStarred, providerOf, send, setModel, stopTurn, toggleStar } from "../store";
 import ContextPane from "./ContextPane.vue";
 
-const text = ref("");
+/* The unsent prompt belongs to the conversation, not to this bar: one bar
+   serves every session, so text kept here would follow you between tabs. */
+const text = computed({
+  get: () => S.owner?.draft || "",
+  set: (v) => {
+    if (S.owner) S.owner.draft = v;
+  },
+});
 const prompt = ref(null);
 
 /* New sessions can be made while another prompt bar is still mounted, so an
@@ -94,10 +101,9 @@ async function star() {
   }
 }
 
+/* send clears the draft itself, and only when it really sends. */
 function submit() {
-  const prompt = text.value;
-  text.value = "";
-  send(prompt);
+  send(text.value);
 }
 </script>
 

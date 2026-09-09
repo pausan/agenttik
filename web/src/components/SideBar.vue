@@ -2,25 +2,30 @@
 import { nextTick, ref, watch } from "vue";
 
 import {
+  PROJECT_KEYS,
   S,
   isArchived,
   openProject,
   openSession,
   refreshSessions,
+  renameSession,
   reorderProjects,
   reorderSidebarSessions,
   setSessionArchived,
+  switchProject,
 } from "../store";
 import { ago } from "../api";
 import { debounce } from "../debounce";
 import { SEGMENTED } from "../ui";
 import FileTree from "./FileTree.vue";
 import SessionRow from "./SessionRow.vue";
+import StatusDot from "./StatusDot.vue";
 
-defineEmits(["add-project", "setup"]);
+defineEmits(["add-project", "setup", "shortcuts"]);
 
 const tab = ref("projects");
 const sessionFilter = ref(null);
+const fileTree = ref(null);
 
 const tabs = [
   { label: "Projects", value: "projects" },
@@ -28,14 +33,21 @@ const tabs = [
   { label: "Tree", value: "tree" },
 ];
 
-function show(which, focus = false) {
+/* Sessions and Tree are each a filter over a list, so showing either one puts
+   the cursor in that filter — the pane is opened to search it. Every way in
+   goes through here, the strip's own clicks included, and repeating the chord
+   on the pane already in front focuses it again rather than doing nothing. */
+function show(which) {
   tab.value = which;
-  if (focus) nextTick(() => sessionFilter.value?.inputRef?.focus());
+  if (which === "projects") return;
+  nextTick(() =>
+    which === "sessions" ? sessionFilter.value?.inputRef?.focus() : fileTree.value?.focus(),
+  );
 }
 
 defineExpose({
   showProjects: () => show("projects"),
-  showSessions: () => show("sessions", true),
+  showSessions: () => show("sessions"),
   showTree: () => show("tree"),
 });
 
@@ -53,12 +65,29 @@ watch(() => S.window, () => refreshSessions().catch(() => {}));
 
 const draggingProject = ref(0);
 const draggingSession = ref(null);
+const renaming = ref(""); // the session whose title is being edited
 const collapsedProjects = ref(new Set());
 
 function toggleProject(id) {
   const collapsed = collapsedProjects.value;
   if (collapsed.has(id)) collapsed.delete(id);
   else collapsed.add(id);
+}
+
+/* The first eight rows answer to Alt and a letter, so the letter is where the
+   row is, and dragging a project changes it. */
+const projectKey = (i) => PROJECT_KEYS[i] || "";
+
+/* A project is lit while any of its sessions is mid-turn, whether or not that
+   conversation is the one on screen. */
+const busy = (p) => p.recent_sessions.some((s) => s.status === "running");
+
+/* Clicking a project selects it, which is what makes its tabs the ones on
+   screen. Clicking the one already selected opens its page, since that is
+   the only way back to it once conversations are open on top. */
+function chooseProject(p) {
+  if (S.activeProjectID === p.id) openProject(p.id);
+  else switchProject(p.id);
 }
 
 function beginDrag(e, value) {
@@ -124,12 +153,13 @@ function onSessionDrop(e) {
     </header>
 
     <UTabs
-      v-model="tab"
+      :model-value="tab"
       :items="tabs"
       :content="false"
       size="sm"
       class="mx-2.5 mb-2 shrink-0"
       :ui="SEGMENTED"
+      @update:model-value="show(String($event))"
     >
       <template #default="{ item }">
         <template v-if="item.value === 'projects'"><span class="underline">P</span>rojects</template>
@@ -148,54 +178,78 @@ function onSessionDrop(e) {
           No projects yet. Add the folder you want to work in.
         </p>
         <div
-          v-for="p in S.projects"
+          v-for="(p, i) in S.projects"
           :key="p.id"
           class="px-2.5 pt-1 pb-2.5 not-first:mt-2.5 not-first:border-t not-first:border-default"
           @dragover="onProjectOver($event, p.id)"
           @drop.prevent="onProjectDrop"
         >
-          <button
-            type="button"
+          <div
             draggable="true"
-            :title="`${collapsedProjects.has(p.id) ? 'Expand' : 'Collapse'} sessions and open project`"
-            class="mb-0.5 block w-full cursor-grab rounded-[var(--ui-radius)] px-2 py-1 text-left active:cursor-grabbing hover:bg-elevated"
-            :class="draggingProject === p.id ? 'opacity-40' : ''"
+            class="mb-0.5 flex cursor-grab items-start gap-1 rounded-[var(--ui-radius)] px-1.5 py-1 active:cursor-grabbing"
+            :class="[
+              draggingProject === p.id ? 'opacity-40' : '',
+              S.activeProjectID === p.id ? 'bg-primary/10' : 'hover:bg-elevated',
+            ]"
             @dragstart="onProjectStart($event, p.id)"
             @dragend="onProjectDrop"
-            @click="toggleProject(p.id); openProject(p.id)"
           >
-            <span class="flex items-center gap-1.5">
+            <button
+              type="button"
+              class="mt-0.5 shrink-0"
+              :title="`${collapsedProjects.has(p.id) ? 'Expand' : 'Collapse'} sessions`"
+              :aria-expanded="!collapsedProjects.has(p.id)"
+              @click.stop="toggleProject(p.id)"
+            >
               <UIcon
                 :name="collapsedProjects.has(p.id) ? 'i-lucide-chevron-right' : 'i-lucide-chevron-down'"
-                class="size-3.5 shrink-0 text-dimmed"
-                aria-hidden="true"
+                class="size-3.5 block text-dimmed"
               />
-              <span
-                class="min-w-0 flex-1 truncate font-semibold"
-                :class="S.project?.project.id === p.id ? 'text-primary' : 'text-highlighted'"
-              >{{ p.name }}</span>
-            </span>
-            <span class="block truncate pl-5 text-xs text-dimmed">{{ p.path }}</span>
-          </button>
+            </button>
+            <button
+              type="button"
+              class="min-w-0 flex-1 text-left"
+              :title="projectKey(i) ? `${p.name}  (Alt+${projectKey(i)})` : p.name"
+              @click="chooseProject(p)"
+            >
+              <span class="flex items-center gap-1.5">
+                <span
+                  class="w-2.5 shrink-0 font-mono text-[10px] text-dimmed"
+                  aria-hidden="true"
+                  >{{ projectKey(i) }}</span
+                >
+                <span
+                  class="min-w-0 flex-1 truncate font-semibold"
+                  :class="S.activeProjectID === p.id ? 'text-primary' : 'text-highlighted'"
+                >{{ p.name }}</span>
+                <StatusDot v-if="busy(p)" status="running" />
+              </span>
+              <span class="block truncate pl-4 text-xs text-dimmed">{{ p.path }}</span>
+            </button>
+          </div>
           <div
             v-if="!collapsedProjects.has(p.id)"
             v-for="s in p.recent_sessions"
             :key="s.id"
-            class="cursor-grab active:cursor-grabbing"
-            draggable="true"
-            :class="draggingSession?.sessionID === s.id ? 'opacity-40' : ''"
+            :class="[
+              draggingSession?.sessionID === s.id ? 'opacity-40' : '',
+              renaming === s.id ? '' : 'cursor-grab active:cursor-grabbing',
+            ]"
+            :draggable="renaming !== s.id"
             @dragstart.stop="onSessionStart($event, p.id, s.id)"
             @dragover="onSessionOver($event, p.id, s.id)"
             @drop="onSessionDrop"
             @dragend="onSessionDrop"
           >
             <SessionRow
-              :title="s.title || 'Untitled session'"
+              :title="s.title"
               :status="s.status"
               :active="S.detail?.session.id === s.id"
               archive
               @select="openSession(s.id)"
               @toggle-archive="setSessionArchived(s, true)"
+              @rename="renameSession(s, $event)"
+              @editing="renaming = $event ? s.id : ''"
             />
           </div>
         </div>
@@ -224,7 +278,7 @@ function onSessionDrop(e) {
         <SessionRow
           v-for="s in S.sessions"
           :key="s.id"
-          :title="s.title || 'Untitled session'"
+          :title="s.title"
           :status="s.status"
           :sub="`${s.project_name} · ${s.project_path} · ${ago(s.last_active_at)}`"
           :active="S.detail?.session.id === s.id"
@@ -232,6 +286,7 @@ function onSessionDrop(e) {
           archive
           @select="openSession(s.id)"
           @toggle-archive="setSessionArchived(s, !isArchived(s))"
+          @rename="renameSession(s, $event)"
         />
       </div>
     </template>
@@ -239,18 +294,27 @@ function onSessionDrop(e) {
     <!-- Tree -->
     <template v-else>
       <div class="min-h-0 flex-1 overflow-auto p-2.5">
-        <FileTree class="min-h-0 flex-1" />
+        <FileTree ref="fileTree" class="min-h-0 flex-1" />
       </div>
     </template>
 
-    <footer class="shrink-0 border-t border-default p-2.5">
+    <footer class="flex shrink-0 items-center gap-1 border-t border-default p-2.5">
       <UButton
         block
         color="neutral"
         variant="ghost"
         icon="i-lucide-settings"
         label="Settings"
+        class="min-w-0 flex-1"
         @click="$emit('setup')"
+      />
+      <UButton
+        color="neutral"
+        variant="ghost"
+        icon="i-lucide-keyboard"
+        title="Keyboard shortcuts"
+        aria-label="Keyboard shortcuts"
+        @click="$emit('shortcuts')"
       />
     </footer>
   </aside>

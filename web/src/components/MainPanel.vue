@@ -1,7 +1,13 @@
 <script setup>
-import { computed } from "vue";
+/* The centre: the tab strip over whatever the tab in front is.
 
-import { S, closeTab, selectTab } from "../store";
+   The strip is the active project's tabs only, in three groups — the project
+   page, its conversations, then the files read from them — each with its own
+   colour. A tab is dragged within its group, and the numbers are simply
+   where a tab now sits, so rearranging changes what Alt+1 … Alt+9 reach. */
+import { computed, ref } from "vue";
+
+import { S, closeTab, moveTab, selectTab } from "../store";
 import Transcript from "./Transcript.vue";
 import ProjectView from "./ProjectView.vue";
 import FileView from "./FileView.vue";
@@ -12,21 +18,45 @@ import StatusDot from "./StatusDot.vue";
    readable with a dozen of them open. */
 const MAX_LABEL = 22;
 
+/* One colour per kind, so what a tab is reads before its label does. */
+const KINDS = {
+  project: { text: "text-sky-500", edge: "border-sky-500" },
+  session: { text: "text-primary", edge: "border-primary" },
+  file: { text: "text-amber-500", edge: "border-amber-500" },
+};
+
 const items = computed(() =>
-  S.tabs.map((t, i) => ({
+  S.strip.map((t, i) => ({
+    id: t.id,
+    kind: t.kind,
+    // The tab is named by its whole label even when the strip shows less of
+    // it, so a truncated tab is still addressable.
+    name: t.label,
     label: t.label.length > MAX_LABEL ? t.label.slice(0, MAX_LABEL - 1) + "…" : t.label,
-    value: t.id,
     title: t.label + (i < 9 ? `  (Alt+${i + 1})` : ""),
     // Only the first nine are one chord away, so only those show a number.
     hint: i < 9 ? String(i + 1) : "",
     running: t.kind === "session" && t.detail.running,
+    colors: KINDS[t.kind],
   })),
 );
 
-const active = computed({
-  get: () => S.activeTab,
-  set: (v) => selectTab(v),
-});
+const dragging = ref("");
+
+/* The strip reorders under the pointer, so where a tab is when it is let go
+   is where it stays. moveTab refuses to mix the groups. */
+function onOver(e, id) {
+  if (!dragging.value || dragging.value === id) return;
+  e.preventDefault();
+  moveTab(dragging.value, id);
+}
+
+function onStart(e, id) {
+  dragging.value = id;
+  e.dataTransfer.effectAllowed = "move";
+  // Firefox starts no drag at all without data on the transfer.
+  e.dataTransfer.setData("text/plain", id);
+}
 
 const current = computed(() => S.tab);
 const running = computed(() => !!S.detail?.running);
@@ -35,37 +65,46 @@ const running = computed(() => !!S.detail?.running);
 <template>
   <main class="flex min-h-0 min-w-0 flex-col">
     <div class="flex shrink-0 items-center gap-2.5 border-b border-default pr-3">
-      <UTabs
-        v-if="items.length"
-        v-model="active"
-        :items="items"
-        :content="false"
-        variant="link"
-        class="min-w-0 flex-1"
-        :ui="{ list: 'overflow-x-auto' }"
-      >
-        <template #leading="{ item }">
+      <div role="tablist" class="flex min-w-0 flex-1 items-center overflow-x-auto">
+        <div
+          v-for="item in items"
+          :key="item.id"
+          role="tab"
+          draggable="true"
+          :aria-selected="item.id === S.activeTab"
+          :aria-label="item.name"
+          :title="item.title"
+          class="flex shrink-0 cursor-grab items-center gap-1.5 border-b-2 px-2.5 py-2 active:cursor-grabbing"
+          :class="[
+            item.id === S.activeTab ? item.colors.edge : 'border-transparent',
+            dragging === item.id ? 'opacity-40' : '',
+          ]"
+          @click="selectTab(item.id)"
+          @dragstart="onStart($event, item.id)"
+          @dragover="onOver($event, item.id)"
+          @dragend="dragging = ''"
+          @drop.prevent="dragging = ''"
+        >
           <span
             v-if="item.hint"
-            class="-mr-0.5 font-mono text-[10px] text-dimmed tabular-nums"
+            class="font-mono text-[10px] text-dimmed tabular-nums"
             aria-hidden="true"
             >{{ item.hint }}</span
           >
           <StatusDot v-if="item.running" status="running" />
-        </template>
-        <template #default="{ item }">
-          <span :title="item.title">{{ item.label }}</span>
-        </template>
-        <template #trailing="{ item }">
           <span
-            class="-mr-1 inline-flex size-4 cursor-pointer items-center justify-center rounded text-dimmed hover:bg-accented hover:text-highlighted"
-            :title="`Close ${item.label}`"
-            @click.stop="closeTab(item.value)"
+            class="truncate"
+            :class="[item.colors.text, item.id === S.activeTab ? 'font-medium' : 'opacity-75']"
+            >{{ item.label }}</span
+          >
+          <span
+            class="inline-flex size-4 cursor-pointer items-center justify-center rounded text-dimmed hover:bg-accented hover:text-highlighted"
+            title="Close"
+            @click.stop="closeTab(item.id)"
             >×</span
           >
-        </template>
-      </UTabs>
-      <span v-else class="flex-1" />
+        </div>
+      </div>
 
       <div class="flex shrink-0 items-center gap-1.5">
         <template v-if="S.project">
@@ -95,7 +134,7 @@ const running = computed(() => !!S.detail?.running);
     </div>
 
     <ProjectView v-if="current?.kind === 'project'" :tab="current" />
-    <FileView v-else-if="current?.kind === 'file'" :content="current.content" />
+    <FileView v-else-if="current?.kind === 'file'" :tab="current" />
     <Transcript v-else />
 
     <PromptBar v-if="S.detail" />

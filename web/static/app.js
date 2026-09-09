@@ -144,10 +144,10 @@ async function refreshProjects() {
     const box = el("div", "project");
     const head = el("div", "project-head");
     head.append(el("span", "project-name", p.name));
-    const nu = el("button", "ghost new", "+");
+    const nu = el("button", "btn btn-ghost btn-icon", "+");
     nu.title = "New session in this project";
     nu.onclick = () => openNewSessionDialog(p);
-    const del = el("button", "ghost del", "×");
+    const del = el("button", "btn btn-ghost btn-icon", "×");
     del.title = "Remove project";
     del.onclick = () => removeProject(p);
     head.append(nu, del);
@@ -174,7 +174,7 @@ function sessionRow(id, title, status, sub) {
   const row = el("button", "row");
   if (S.detail && S.detail.session.id === id) row.classList.add("active");
   const t = el("span", "title");
-  t.append(el("span", "dot " + (status || "idle")), document.createTextNode(title));
+  t.append(el("span", "dot " + (status || "idle")), el("span", null, title));
   row.append(t);
   if (sub) row.append(el("span", "sub", sub));
   row.onclick = () => openSession(id);
@@ -275,6 +275,7 @@ function closeSession() {
 /* ---------------------------------------------------------------- tabs */
 
 function renderTabs() {
+  renderSessionMeta();
   const strip = $("#main-tabs");
   strip.innerHTML = "";
   if (!S.detail) return;
@@ -289,6 +290,19 @@ function renderTabs() {
     b.onclick = () => { S.activeTab = tab.id; renderTabs(); renderBody(); };
     strip.append(b);
   }
+}
+
+/* renderSessionMeta shows what the open session is running as, to the right
+   of the tab strip. */
+function renderSessionMeta() {
+  const meta = $("#session-meta");
+  meta.innerHTML = "";
+  if (!S.detail) return;
+  const s = S.detail.session;
+  const state = el("span", "badge" + (S.detail.running ? " primary" : ""));
+  state.append(el("span", "dot " + (S.detail.running ? "running" : "idle")),
+    document.createTextNode(S.detail.running ? "running" : "idle"));
+  meta.append(state, el("span", "badge", s.model), el("span", "badge", s.effort || "default"));
 }
 
 function closeTab(id) {
@@ -434,6 +448,7 @@ function updateTurnControls() {
   $("#stop-btn").hidden = !running;
   $("#turn-state").textContent = !S.detail ? "" : running ? "running…" : "";
   $("#prompt").disabled = !S.detail;
+  renderSessionMeta();
 }
 
 async function send() {
@@ -515,7 +530,9 @@ async function refreshChanged() {
   for (const f of files) {
     const b = el("button", "file-row");
     b.append(el("span", "st", f.status));
-    b.append(el("span", null, f.path));
+    const name = el("span", "name");
+    name.append(el("span", null, f.path));
+    b.append(name);
     b.onclick = () => openFile(f.path);
     pane.append(b);
   }
@@ -535,7 +552,9 @@ async function refreshTree() {
   }
   for (const p of paths) {
     const b = el("button", "file-row");
-    b.append(el("span", null, p));
+    const name = el("span", "name");
+    name.append(el("span", null, p));
+    b.append(name);
     b.onclick = () => openFile(p);
     pane.append(b);
   }

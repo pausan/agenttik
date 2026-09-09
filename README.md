@@ -3,7 +3,7 @@
 A local control panel for agent coding sessions. Run many sessions across many
 projects, from one window, on the subscriptions you already pay for.
 
-Go + Fiber backend, SQLite, no-build vanilla web UI, Wails desktop shell.
+Go + Fiber backend, SQLite, a Vue 3 + Nuxt UI frontend, Wails desktop shell.
 Linux only for now.
 
 ## Why
@@ -35,6 +35,7 @@ kind, where holding a key is the point.
 ## Requirements
 
 - Go 1.22+
+- Node 20+ (the UI is a Vite build)
 - [`claude`](https://claude.com/claude-code) on `PATH`, already logged in
 - For the desktop build: `gcc`, `libgtk-3-dev`, `libwebkit2gtk-4.1-dev`
   (`make deps` installs these on Debian/Ubuntu)
@@ -42,14 +43,20 @@ kind, where holding a key is the point.
 ## Build and run
 
 ```sh
-make build      # desktop app  -> bin/agenttik
+make build      # UI + desktop app  -> bin/agenttik
 make run        # build and open the window
 
-make build-web  # server only  -> bin/agenttik-web  (CGO_ENABLED=0)
+make build-web  # UI + server only  -> bin/agenttik-web  (CGO_ENABLED=0)
 make run-web    # build and serve on http://127.0.0.1:7717
 
+make ui         # just the UI    -> web/dist
 make test
 ```
+
+Both build targets compile the UI first, so a plain `make build` is all you
+need. To work on the frontend, run `make run-web` in one shell and `make ui-dev`
+in another: Vite serves the UI on :5173 with hot reload and proxies the API to
+the Go server.
 
 Flags:
 
@@ -115,7 +122,7 @@ internal/store      SQLite schema, migrations, queries
 internal/agent      provider contract; claudecode/ and codex/ adapters
 internal/runner     turn lifecycle and SSE fan-out
 internal/server     Fiber routes, SSE, project file access
-web/static          the UI, embedded into the binary
+web/ui              the Vue UI (Vite); built into web/dist and embedded
 specs/              design notes — start at specs/index.md
 ```
 

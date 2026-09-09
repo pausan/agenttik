@@ -45,13 +45,26 @@ func New(s *store.Store, reg *agent.Registry, r *runner.Runner) *Server {
 	srv := &Server{app: app, store: s, runner: r, registry: reg, closing: make(chan struct{})}
 	srv.routes()
 
-	app.Use("/", filesystem.New(filesystem.Config{
-		Root:         http.FS(web.Assets()),
-		Index:        "index.html",
-		MaxAge:       0,
-		NotFoundFile: "index.html",
-	}))
+	// The UI is a Vite build, so a binary made without it says so rather than
+	// serving a blank page.
+	if web.Built() {
+		app.Use("/", filesystem.New(filesystem.Config{
+			Root:         http.FS(web.Assets()),
+			Index:        "index.html",
+			MaxAge:       0,
+			NotFoundFile: "index.html",
+		}))
+	} else {
+		app.Use("/", uiMissing)
+	}
 	return srv
+}
+
+// uiMissing answers when the binary carries no compiled UI.
+func uiMissing(c *fiber.Ctx) error {
+	c.Type("txt")
+	return c.Status(fiber.StatusServiceUnavailable).SendString(
+		"The web UI is not built into this binary. Run `make ui`, rebuild, and start agenttik again.\n")
 }
 
 func (s *Server) routes() {

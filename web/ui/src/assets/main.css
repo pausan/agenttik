@@ -1,0 +1,39 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+/* Nuxt UI's own tokens, nudged to agenttik's green. Everything else — the
+   neutral scale, the text and surface tokens — is Nuxt UI's default. */
+:root {
+  --ui-primary: #00a968;
+}
+.dark {
+  --ui-primary: #00dc82;
+}
+
+html, body, #app { height: 100%; }
+body {
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* A path is more readable clipped at the front than at the end, and rtl is
+   the only way to move an ellipsis there. The inner span keeps the text
+   itself in logical order. */
+.path-clip {
+  direction: rtl;
+  text-align: left;
+}
+.path-clip > * {
+  direction: ltr;
+  unicode-bidi: embed;
+}
+
+/* The bubble taking streamed text carries a cursor until the turn ends. */
+.streaming::after {
+  content: "▍";
+  color: var(--ui-primary);
+  animation: agenttik-pulse 1s infinite;
+}
+@keyframes agenttik-pulse {
+  50% { opacity: 0.3; }
+}

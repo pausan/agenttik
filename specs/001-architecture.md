@@ -23,15 +23,17 @@ One binary, two ways to show the same UI:
   `FlushInterval = -1`, so SSE still streams. Needs cgo, gtk3 and
   webkit2gtk; built with `-tags "desktop production webkit2_41"`.
 - **Web (`--web`)** — the HTTP server only, prints its URL. Builds with
-  `CGO_ENABLED=0` and no system dependencies.
+  `CGO_ENABLED=0` and no system dependencies beyond node for the UI.
 
 A binary built without the `desktop` tag falls back to web mode with a notice
-rather than failing, so `go build ./...` works anywhere.
+rather than failing, so `go build ./...` works anywhere. The UI is a Vite build
+(`make ui`), and a binary made without it says so rather than serving a blank
+page — see [004-ui.md](004-ui.md).
 
 ## Process model
 
-One Go binary. Fiber serves the HTTP API and the embedded static UI. Each agent
-turn is a short-lived child process:
+One Go binary. Fiber serves the HTTP API and the embedded UI. Each agent turn
+is a short-lived child process:
 
 ```
 browser ──HTTP──> fiber ──> runner ──> exec: claude -p --output-format stream-json
@@ -65,7 +67,7 @@ therefore decided up front by the session's permission mode, not asked mid-fligh
 | `internal/agent/codex` | Codex CLI adapter (stub) |
 | `internal/runner` | turn lifecycle: spawn, consume events, persist, fan out |
 | `internal/server` | Fiber routes, SSE, project file access |
-| `web` | embedded static UI |
+| `web` | the embedded UI: `ui/` is the Vite source, `dist/` the build |
 
 Dependencies point one way: `server` -> `runner` -> `agent` + `store`. `agent`
 knows nothing about HTTP or SQL.

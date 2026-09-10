@@ -372,9 +372,9 @@ func (s *Server) updateQueuedMessage(c *fiber.Ctx) error {
 		Provider: body.Provider, Model: body.Model, Effort: body.Effort, CreatedAt: queued.CreatedAt})
 }
 
-// forceQueuedMessage interrupts whatever turn the project is running and runs
-// the selected queued prompt next. That turn is usually this session's own,
-// but a prompt can also be waiting behind another session in the project.
+// forceQueuedMessage runs the selected queued prompt now rather than when the
+// project's queue reaches it. It starts beside the project's other turns, and
+// interrupts only this session's own turn, which cannot host a second prompt.
 func (s *Server) forceQueuedMessage(c *fiber.Ctx) error {
 	var body struct {
 		QueuedID int64 `json:"queued_id"`

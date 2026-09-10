@@ -54,13 +54,13 @@ type Runner struct {
 	mu     sync.Mutex
 	active map[string]activeTurn // session id -> turn in flight
 	sched  map[int64]*sync.Mutex // project id -> serializes queue dispatch
-	forced map[int64]int64       // project id -> queued message to run next
+	forced map[string]int64      // session id -> queued message to run next
 }
 
 func New(s *store.Store, reg *agent.Registry, hub *Hub) *Runner {
 	return &Runner{store: s, registry: reg, hub: hub,
 		active: make(map[string]activeTurn), sched: make(map[int64]*sync.Mutex),
-		forced: make(map[int64]int64)}
+		forced: make(map[string]int64)}
 }
 
 func (r *Runner) Hub() *Hub { return r.hub }
@@ -112,14 +112,10 @@ func (r *Runner) Send(sessionID, prompt string) (*store.Turn, error) {
 	release := func() {
 		r.mu.Lock()
 		delete(r.active, sessionID)
-		// Whichever turn in the project exits last takes the forced prompt:
-		// the others are still shutting down and cannot start one.
-		var forcedID int64
-		var forced bool
-		if len(r.activeInProject(sess.ProjectID)) == 0 {
-			forcedID, forced = r.forced[sess.ProjectID]
-			delete(r.forced, sess.ProjectID)
-		}
+		// A forced prompt waits on the session it belongs to, not on the
+		// project: only this session's own turn could ever be in its way.
+		forcedID, forced := r.forced[sessionID]
+		delete(r.forced, sessionID)
 		r.mu.Unlock()
 		cancel()
 		if forced {
@@ -204,11 +200,14 @@ func (r *Runner) Enqueue(sessionID, prompt string) ([]store.QueuedMessage, error
 	return r.store.ListQueuedMessages(sessionID)
 }
 
-// ForceQueued makes one of a session's waiting prompts the next turn in its
-// project. The prompt can be waiting behind that session's own turn or behind
-// another session's, so every turn in flight in the project is cancelled and
-// the prompt starts once the last of them exits. The message stays in the
-// queue until Send has accepted it, so a failed launch cannot lose it.
+// ForceQueued runs one of a session's waiting prompts now instead of when the
+// project's queue reaches it. Turns elsewhere in the project keep running: the
+// prompt starts beside them, since a session waiting behind another session is
+// only waiting on an ordering rule, not on a process it has to share. The one
+// turn that genuinely is in the way is the session's own — a provider cannot
+// take a second prompt in place — so that one is cancelled and the prompt
+// starts as it exits. The message stays in the queue until Send has accepted
+// it, so a failed launch cannot lose it.
 func (r *Runner) ForceQueued(sessionID string, queuedID int64) error {
 	queued, err := r.store.GetQueuedMessage(queuedID)
 	if err != nil {
@@ -223,39 +222,39 @@ func (r *Runner) ForceQueued(sessionID string, queuedID int64) error {
 	}
 
 	r.mu.Lock()
-	if _, pending := r.forced[sess.ProjectID]; pending {
+	if _, pending := r.forced[sessionID]; pending {
 		r.mu.Unlock()
 		return ErrForcePending
 	}
-	cancels := r.activeInProject(sess.ProjectID)
-	if len(cancels) > 0 {
-		r.forced[sess.ProjectID] = queuedID
+	turn, running := r.active[sessionID]
+	if running {
+		r.forced[sessionID] = queuedID
 	}
 	r.mu.Unlock()
 
-	for _, cancel := range cancels {
-		cancel()
+	if running {
+		turn.cancel()
+		return nil
 	}
-	// Nothing to interrupt: the prompt is only waiting for the scheduler, so
-	// take it here instead of waiting for a turn that is not coming.
-	if len(cancels) == 0 {
-		go r.runForced(sess.ProjectID, queuedID)
-	}
+	// Nothing of this session's own is in the way, so start it here rather
+	// than waiting for a turn that is not coming.
+	go r.runForced(sess.ProjectID, queuedID)
 	return nil
 }
 
-// runForced starts the chosen queued prompt after the cancelled turns have
-// fully released their provider processes. It bypasses normal project
-// ordering exactly once; the rest of the queue resumes its ordinary scheduler
-// order. The dispatch lock is what keeps it from racing a scheduler that is
-// already draining the same project.
+// runForced starts the chosen queued prompt, once the session's own cancelled
+// turn has fully released its provider process. It bypasses normal project
+// ordering exactly once — it does not wait for the project to fall idle, which
+// is the whole point of forcing it — and the rest of the queue resumes its
+// ordinary scheduler order. The dispatch lock is what keeps it from racing a
+// scheduler that is already draining the same project.
 func (r *Runner) runForced(projectID int64, queuedID int64) {
 	lock := r.dispatchLock(projectID)
 	lock.Lock()
 	defer lock.Unlock()
 
 	queued, err := r.store.GetQueuedMessage(queuedID)
-	if err == nil && !r.projectBusy(projectID) {
+	if err == nil {
 		if _, err := r.sendQueued(queued); err == nil {
 			_ = r.store.RemoveQueuedMessage(queued.ID)
 			return

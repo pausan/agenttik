@@ -13,21 +13,28 @@ long it has waited. Without it, clicking into a session said nothing about the
 text that had been accepted.
 
 Every waiting prompt also offers to run now, from the conversation it belongs
-to. A session that is running its own turn calls it **Force send**; a session
-that is only waiting in the project queue calls it **Send now**. Both do the
-same thing: cancel the turns the project has in flight, then start the chosen
-prompt when the last of them exits. A running CLI cannot safely accept another
-prompt in place, so this is deliberately an interruption rather than an in-turn
-message. The selected prompt remains queued until its replacement turn starts,
-which keeps it visible if cancellation or startup fails.
+to. What that costs depends on what the prompt is waiting behind, and the two
+words say which:
 
-The interruption is a project-wide intent rather than a note on one running
-session, because the turn in the way usually belongs to a *different* session:
-that is what queueing behind a project means. The runner holds one forced
-prompt per project, whichever cancelled turn exits last claims it, and the
-project dispatch lock keeps it from racing the scheduler that is draining the
-same project. Nothing to interrupt means the prompt starts straight away
-rather than waiting for a turn that is not coming.
+- **Send now**, when the session itself is idle. The prompt is held only by the
+  project's ordering rule, not by a process it has to share, so it starts
+  *beside* whatever else the project is running and interrupts nothing. This is
+  the common case — the turn in the way usually belongs to a *different*
+  session, which is what queueing behind a project means, and cancelling a
+  stranger's work to jump a queue is a price nobody asked to pay.
+- **Force send**, when the session is running its own turn. A provider takes
+  one prompt at a time, so that turn really is in the way: it is cancelled and
+  the prompt starts as it exits. Only that session's turn — the rest of the
+  project keeps going.
+
+Either way the prompt bypasses ordering exactly once; the queue behind it
+resumes its ordinary scheduler order. The selected prompt remains queued until
+its replacement turn starts, which keeps it visible if cancellation or startup
+fails.
+
+The runner holds one forced prompt per *session*, claimed by that session's
+turn as it releases, and the project dispatch lock keeps it from racing the
+scheduler draining the same project.
 
 The sidebar keeps its own **Stop** for a queued session ([021](021-stop-active-sessions.md)); running now
 and dropping the queue are different intents and both are worth one click.
@@ -79,8 +86,8 @@ queued row before normal scheduling resumes.
 Browser-checked headlessly with a fake `claude` that sleeps: session A runs a
 turn while session B queues two prompts in the same project. B is not running,
 so both its bubbles read **Send now**. Clicking the *second* one cancels A's
-turn, starts B on that prompt, and leaves the first still queued — the forced
-prompt really does jump the order. B's remaining bubble then reads **Force
+turn (superseded — see below; it no longer does), starts B on that prompt, and
+leaves the first still queued — the forced prompt really does jump the order. B's remaining bubble then reads **Force
 send**, since B is the running session now. No console or page errors.
 
 Fixed on the way: `api()` parsed the body of a bare `202 Accepted` as JSON, so
@@ -91,3 +98,25 @@ a JSON content type; failures are always JSON.
 
 `go build ./...` and `npm run build` passed. Tests were not run, per the
 prototype workflow.
+
+## Parallel send-now validation
+
+Forcing used to be a project-wide interruption: **Send now** cancelled every
+turn in the project, so a prompt queued in an idle session killed the turn of
+whatever else was running — including a scheduled job's run
+([028](028-scheduled-jobs.md)), whose session is an ordinary one. Waiting for a
+stranger to be cancelled was never the point of the button; jumping the queue
+was.
+
+`go build ./...`, `go vet ./...` and `make ui` pass.
+
+Probed against the running app with a fake `claude` that sleeps:
+
+- Session A running, a prompt queued in idle session B: **Send now** left A
+  running and started B beside it. Two provider processes, both sessions
+  `running`, B's queue empty.
+- A prompt queued in B while B itself runs: **Force send** replaced B's turn
+  with it and left A's turn alone — A's transcript still held only its
+  original prompt.
+- A schedule's run in flight, **Send now** in another session: the run survived
+  and was still `running` afterwards, which is the case that was reported.

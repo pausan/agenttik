@@ -1987,10 +1987,11 @@ export async function updateQueuedModel(queuedID, provider, model, effort) {
   }
 }
 
-// forceQueued interrupts the turn the project is running — this session's own
-// or the one it is queued behind — then the runner starts this waiting prompt
-// next. The queue stays untouched here until the started event claims it, so
-// the UI cannot hide a prompt if cancellation or startup fails.
+// forceQueued runs a waiting prompt now instead of when the project's queue
+// reaches it. Other sessions keep running; only this session's own turn, which
+// a second prompt cannot share, is interrupted. The queue stays untouched here
+// until the started event claims it, so the UI cannot hide a prompt if
+// cancellation or startup fails.
 export async function forceQueued(queuedID) {
   const tab = S.owner;
   if (tab?.kind !== "session" || !queuedID) return;

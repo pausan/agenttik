@@ -68,15 +68,15 @@ const modelGroups = computed(() => S.providers.map((provider) => ({
   })),
 })));
 
-/* Sending a queued prompt now always interrupts something: this session's own
-   turn, or the turn elsewhere in the project it is waiting behind. Only the
-   wording differs, so the session that is running says "Force send" and one
-   that is merely waiting in the project queue says "Send now". */
+/* A prompt waiting behind *another* session starts beside it and interrupts
+   nothing, so it says "Send now". One waiting behind its own session's turn
+   cannot: a provider takes one prompt at a time, that turn is cancelled to
+   make room, and the stronger word says so. */
 const sendNowLabel = computed(() => (S.detail?.running ? "Force send" : "Send now"));
 const sendNowHint = computed(() =>
   S.detail?.running
-    ? "Stop the current turn and send this queued prompt next"
-    : "Stop the turn this project is running and send this prompt next",
+    ? "Stop this session's turn and send this queued prompt next"
+    : "Send this prompt now, beside whatever else the project is running",
 );
 
 function waitLabel(since) {

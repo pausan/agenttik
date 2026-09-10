@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="i13v2-t i13v2-d">
+  <title id="i13v2-t">agenttik icon</title>
+  <desc id="i13v2-d">A coordinating agent linked to four project nodes, raised with layered shadows and an ambient green glow on a dark plate.</desc>
+  <defs>
+    <linearGradient id="i13v2-plate" x1="32" y1="0" x2="32" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2c2c34"/><stop offset="1" stop-color="#0b0b0e"/>
+    </linearGradient>
+    <radialGradient id="i13v2-spot" cx="30" cy="22" r="36" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#00dc82" stop-opacity=".20"/><stop offset="1" stop-color="#00dc82" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="i13v2-mark" x1="14" y1="12" x2="50" y2="52" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7df9c2"/><stop offset=".5" stop-color="#00dc82"/><stop offset="1" stop-color="#009a59"/>
+    </linearGradient>
+    <linearGradient id="i13v2-alt" x1="14" y1="12" x2="50" y2="52" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#c3e6d5"/>
+    </linearGradient>
+    <radialGradient id="i13v2-node" cx=".34" cy=".28" r=".92">
+      <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#a5cab7"/>
+    </radialGradient>
+    <linearGradient id="i13v2-gloss" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".5"/><stop offset=".62" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="i13v2-lift" x="-55%" y="-55%" width="210%" height="210%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="4.5" result="gb"/>
+      <feFlood flood-color="#00dc82" flood-opacity=".40"/>
+      <feComposite in2="gb" operator="in" result="glow"/>
+      <feGaussianBlur in="SourceAlpha" stdDeviation="2.4"/>
+      <feOffset dy="2.6" result="sb"/>
+      <feFlood flood-color="#000000" flood-opacity=".55"/>
+      <feComposite in2="sb" operator="in" result="shadow"/>
+      <feMerge><feMergeNode in="glow"/><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#i13v2-plate)"/>
+  <rect width="64" height="64" rx="16" fill="url(#i13v2-spot)"/>
+  <g filter="url(#i13v2-lift)">
+    <path d="M32 32 18 20M32 32 46 20M32 32 46 44M32 32 18 44" fill="none" stroke="url(#i13v2-mark)" stroke-width="4" stroke-linecap="round"/>
+    <g fill="url(#i13v2-node)">
+      <circle cx="18" cy="20" r="5.2"/><circle cx="46" cy="20" r="5.2"/>
+      <circle cx="46" cy="44" r="5.2"/><circle cx="18" cy="44" r="5.2"/>
+    </g>
+    <circle cx="32" cy="32" r="7.6" fill="url(#i13v2-mark)"/>
+  </g>
+  <circle cx="32" cy="32" r="7.6" fill="url(#i13v2-gloss)"/>
+  <circle cx="32" cy="32" r="2.7" fill="#111116"/>
+  <rect x=".75" y=".75" width="62.5" height="62.5" rx="15.25" fill="none" stroke="#ffffff" stroke-opacity=".12"/>
+</svg>

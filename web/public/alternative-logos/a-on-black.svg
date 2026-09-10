@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="i3v2-t i3v2-d">
+  <title id="i3v2-t">agenttik icon</title>
+  <desc id="i3v2-d">A solid letter A with a crossbar, raised with layered shadows and an ambient green glow on a dark plate.</desc>
+  <defs>
+    <linearGradient id="i3v2-plate" x1="32" y1="0" x2="32" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2c2c34"/><stop offset="1" stop-color="#0b0b0e"/>
+    </linearGradient>
+    <radialGradient id="i3v2-spot" cx="30" cy="22" r="36" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#00dc82" stop-opacity=".20"/><stop offset="1" stop-color="#00dc82" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="i3v2-mark" x1="14" y1="12" x2="50" y2="52" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7df9c2"/><stop offset=".5" stop-color="#00dc82"/><stop offset="1" stop-color="#009a59"/>
+    </linearGradient>
+    <linearGradient id="i3v2-alt" x1="14" y1="12" x2="50" y2="52" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#c3e6d5"/>
+    </linearGradient>
+    <radialGradient id="i3v2-node" cx=".34" cy=".28" r=".92">
+      <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#a5cab7"/>
+    </radialGradient>
+    <linearGradient id="i3v2-gloss" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".5"/><stop offset=".62" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="i3v2-lift" x="-55%" y="-55%" width="210%" height="210%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="4.5" result="gb"/>
+      <feFlood flood-color="#00dc82" flood-opacity=".40"/>
+      <feComposite in2="gb" operator="in" result="glow"/>
+      <feGaussianBlur in="SourceAlpha" stdDeviation="2.4"/>
+      <feOffset dy="2.6" result="sb"/>
+      <feFlood flood-color="#000000" flood-opacity=".55"/>
+      <feComposite in2="sb" operator="in" result="shadow"/>
+      <feMerge><feMergeNode in="glow"/><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#i3v2-plate)"/>
+  <rect width="64" height="64" rx="16" fill="url(#i3v2-spot)"/>
+  <g filter="url(#i3v2-lift)">
+    <path d="M32 13.5 50 50.5 40.6 50.5 32 26 23.4 50.5 14 50.5Z" fill="url(#i3v2-alt)" stroke="url(#i3v2-alt)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <path d="M32 13.5 50 50.5 40.6 50.5 32 26 23.4 50.5 14 50.5Z" fill="url(#i3v2-gloss)"/>
+  <g filter="url(#i3v2-lift)">
+    <rect x="19" y="34.2" width="26" height="6" rx="3" fill="url(#i3v2-mark)"/>
+  </g>
+  <rect x="20.4" y="35.15" width="23.2" height="1.8" rx=".9" fill="url(#i3v2-gloss)"/>
+  <rect x=".75" y=".75" width="62.5" height="62.5" rx="15.25" fill="none" stroke="#ffffff" stroke-opacity=".12"/>
+</svg>

@@ -84,7 +84,7 @@ export const inspector = (page) => page.locator("aside").last();
 export const REPO = fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
 
 export async function addProject(page, path = REPO) {
-  await page.getByRole("button", { name: "+ Add project" }).click();
+  await page.getByRole("button", { name: "Add project" }).click();
   const field = page.getByPlaceholder("~/code/myproject");
   await expect(field).toHaveValue(/.+/); // the picker prefills it with $HOME
   await field.fill(path);

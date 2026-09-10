@@ -11,7 +11,7 @@ const field = (page) => page.getByPlaceholder("~/code/myproject");
 const rows = (page) => page.getByRole("dialog").locator("div.h-\\[190px\\] button");
 
 test.beforeEach(async ({ page }) => {
-  await page.getByRole("button", { name: "+ Add project" }).click();
+  await page.getByRole("button", { name: "Add project" }).click();
   await expect(field(page)).toHaveValue(/.+/);
 });
 

@@ -176,9 +176,6 @@ function onTaskDrop(e) {
 
     <!-- Projects -->
     <template v-if="tab === 'projects'">
-      <div class="shrink-0 px-2.5 pb-2">
-        <UButton block color="primary" variant="soft" label="+ Add project" @click="$emit('add-project')" />
-      </div>
       <div class="min-h-0 flex-1 overflow-auto">
         <p v-if="!S.projects.length" class="px-3 py-5 text-center text-dimmed">
           No projects yet. Add the folder you want to work in.
@@ -286,6 +283,14 @@ function onTaskDrop(e) {
     </template>
 
     <footer class="flex shrink-0 items-center gap-1 border-t border-default p-2.5">
+      <UButton
+        color="primary"
+        variant="ghost"
+        icon="i-lucide-folder-plus"
+        title="Add project"
+        aria-label="Add project"
+        @click="$emit('add-project')"
+      />
       <UButton
         block
         color="neutral"

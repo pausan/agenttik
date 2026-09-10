@@ -90,10 +90,11 @@ function toggleHidden() {
   browseTyped(path.value);
 }
 
-/* open re-lists the folder in view: it may have changed since last time. */
-function open() {
+/* open re-lists a folder: the one asked for, or else the one in view, which
+   may have changed since last time. */
+function open(to) {
   key = null;
-  browse(at);
+  browse(to || at);
 }
 
 defineExpose({ open });

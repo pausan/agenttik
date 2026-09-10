@@ -41,10 +41,12 @@
 | [037-linux-releases.md](037-linux-releases.md) | Tagged Linux amd64 and arm64 desktop builds and releases |
 | [038-task-naming.md](038-task-naming.md) | Task naming and hover-popup content |
 | [039-single-instance.md](039-single-instance.md) | One app per data directory, and the window a second launch raises |
-| [040-editable-project-path.md](040-editable-project-path.md) | Repointing a project at a moved folder from the Options pane |
+| [040-editable-project-path.md](040-editable-project-path.md) | Repointing a project at a moved folder, by typing or by browsing |
 
 Status: A project's folder can now be repointed after it is added, from the
-Options pane's Folder field, for when it has moved on disk; see 040.
+Options pane's Folder field — typed, or browsed for with the same picker Add
+project uses — for when it has moved on disk. Two projects still cannot share
+a folder, and now say so rather than leaking SQLite's wording; see 040.
 Launching agenttik while it is already open now raises the window
 that is running and exits, instead of starting a second copy that shared the
 database and cleared the first one's live turns; see 039. A project page now holds every task it has in one list under Tasks —

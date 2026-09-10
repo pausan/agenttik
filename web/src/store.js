@@ -681,7 +681,10 @@ export async function renameProject(p, name) {
    otherwise, so a successful move refreshes them like switching projects
    does. */
 export async function updateProjectPath(p, path) {
-  path = path.trim();
+  // The picker hands back a trailing slash so the next keystroke filters
+  // inside the folder; a stored path never has one, and without stripping it
+  // here re-picking the folder already in use would look like a change.
+  path = path.trim().replace(/(?!^)\/+$/, "");
   if (!path || path === p.path) return;
   try {
     const updated = await api("PATCH", "/api/projects/" + p.id, { path });

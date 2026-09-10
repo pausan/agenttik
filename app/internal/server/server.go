@@ -175,6 +175,8 @@ func errorHandler(c *fiber.Ctx, err error) error {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		code = fiber.StatusNotFound
+	case errors.Is(err, store.ErrPathInUse):
+		code = fiber.StatusConflict
 	case errors.Is(err, runner.ErrBusy):
 		code = fiber.StatusConflict
 	case errors.Is(err, runner.ErrNotRunning):

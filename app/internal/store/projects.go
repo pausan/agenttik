@@ -4,15 +4,34 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+
+	"modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 )
 
 var ErrNotFound = errors.New("not found")
+
+// ErrPathInUse is returned when a folder is already another project's. The
+// path column is unique: two projects on one folder would give its Tree, its
+// Changed pane and its turns two owners.
+var ErrPathInUse = errors.New("another project already uses that folder")
+
+// pathTaken tells the unique-path constraint apart from a real database
+// failure, so the one the user can act on does not reach them as SQLite's
+// own wording.
+func pathTaken(err error) bool {
+	var se *sqlite.Error
+	return errors.As(err, &se) && se.Code() == sqlite3.SQLITE_CONSTRAINT_UNIQUE
+}
 
 func (s *Store) CreateProject(name, path string) (*Project, error) {
 	p := &Project{Name: name, Path: path, CreatedAt: nowMillis()}
 	res, err := s.db.Exec(
 		`INSERT INTO projects (name, path, created_at) VALUES (?, ?, ?)`,
 		p.Name, p.Path, p.CreatedAt)
+	if pathTaken(err) {
+		return nil, ErrPathInUse
+	}
 	if err != nil {
 		return nil, fmt.Errorf("create project: %w", err)
 	}
@@ -52,6 +71,9 @@ func (s *Store) SetProjectName(id int64, name string) error {
 // the Tree and the Changed pane look for it changes.
 func (s *Store) SetProjectPath(id int64, path string) error {
 	res, err := s.db.Exec(`UPDATE projects SET path = ? WHERE id = ?`, path, id)
+	if pathTaken(err) {
+		return ErrPathInUse
+	}
 	if err != nil {
 		return fmt.Errorf("update project %d path: %w", id, err)
 	}

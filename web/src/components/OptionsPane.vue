@@ -1,11 +1,15 @@
 <script setup>
-import { ref, watch } from "vue";
+import { nextTick, ref, watch } from "vue";
 
 import { S, removeProject, renameProject, startTask, updateProjectPath } from "../store";
+import FolderPicker from "./FolderPicker.vue";
 
 const name = ref("");
 const path = ref("");
 const confirming = ref(false);
+const browsing = ref(false);
+const picked = ref("");
+const picker = ref(null);
 
 watch(
   () => S.project?.project.name,
@@ -18,6 +22,22 @@ watch(
   (v) => (path.value = v || ""),
   { immediate: true },
 );
+
+/* The picker opens on the folder the project points at now, so the common
+   case — it moved next door — is a click or two rather than a walk from
+   home. */
+watch(browsing, async (on) => {
+  if (!on) return;
+  picked.value = "";
+  await nextTick();
+  picker.value?.open(S.project?.project.path);
+});
+
+async function choose() {
+  if (!picked.value.trim()) return;
+  browsing.value = false;
+  await updateProjectPath(S.project.project, picked.value);
+}
 
 async function remove() {
   confirming.value = false;
@@ -37,15 +57,26 @@ async function remove() {
       />
     </label>
 
-    <label class="mb-3 block text-xs font-medium text-muted">
-      Folder
-      <UInput
-        v-model="path"
-        class="mt-1 w-full font-mono text-xs font-normal"
-        @change="updateProjectPath(S.project.project, path)"
-        @keydown.enter="$event.target.blur()"
-      />
-    </label>
+    <div class="mb-3 text-xs font-medium text-muted">
+      <label for="project-folder">Folder</label>
+      <div class="mt-1 flex gap-1">
+        <UInput
+          id="project-folder"
+          v-model="path"
+          class="min-w-0 flex-1 font-mono text-xs font-normal"
+          @change="updateProjectPath(S.project.project, path)"
+          @keydown.enter="$event.target.blur()"
+        />
+        <UButton
+          color="neutral"
+          variant="subtle"
+          icon="i-lucide-folder-open"
+          title="Browse for a folder"
+          aria-label="Browse for a folder"
+          @click="browsing = true"
+        />
+      </div>
+    </div>
 
     <UButton block label="New task" @click="startTask(S.project.project)" />
 
@@ -53,6 +84,18 @@ async function remove() {
       Deleting removes its tasks and history from agenttik. The folder on disk is untouched.
     </p>
     <UButton block color="error" variant="soft" label="Delete project" @click="confirming = true" />
+
+    <UModal v-model:open="browsing" title="Project folder" :ui="{ content: 'max-w-lg' }">
+      <template #body>
+        <FolderPicker ref="picker" v-model="picked" @submit="choose" />
+      </template>
+      <template #footer>
+        <div class="flex w-full justify-end gap-2">
+          <UButton color="neutral" variant="ghost" label="Cancel" @click="browsing = false" />
+          <UButton label="Select" @click="choose" />
+        </div>
+      </template>
+    </UModal>
 
     <UModal v-model:open="confirming" title="Delete project">
       <template #body>

@@ -55,6 +55,11 @@ export const S = reactive({
   stars: [],
   projects: [],
   subscriptionLimits: {}, // provider -> its latest subscription allowance buckets
+  /* sessionID -> unsent prompt, for a conversation with no tab of its own.
+     A project has one context slot, so opening anything else in it drops the
+     session tab the text was typed into; the text is the user's and outlives
+     that tab. */
+  drafts: {},
   sessions: [],
   schedules: [], // repeating prompts, drawn above the sessions in both lists
   tabs: [], // every open view, of every project
@@ -208,6 +213,7 @@ function setContextTab(tab) {
   }
 
   const before = S.tabs.slice(0, Math.max(first, 0)).filter((candidate) => previousIDs.has(candidate.id)).length;
+  for (const candidate of previous) keepDraft(candidate);
   S.tabs = S.tabs.filter((candidate) => !previousIDs.has(candidate.id));
   const at = first < 0 ? S.tabs.length : first - before;
   S.tabs.splice(at, 0, tab);
@@ -216,6 +222,15 @@ function setContextTab(tab) {
   }
   selectTab(tab.id);
   resubscribe();
+}
+
+/* An unsent prompt belongs to the conversation. keepDraft hands it to
+   S.drafts as the tab goes, and openTask hands it back; closing or archiving
+   the conversation is the one thing that throws it away. */
+function keepDraft(tab) {
+  if (tab.kind !== "session") return;
+  if (tab.draft?.trim()) S.drafts[tab.sessionID] = tab.draft;
+  else delete S.drafts[tab.sessionID];
 }
 
 /* insertTab puts every new tab at the end of its project workspace. Projects
@@ -403,6 +418,7 @@ export async function closeTab(id, remember = true, force = false, cascade = tru
   const projectID = projectOfTab(tab);
   const dependents = cascade ? S.tabs.filter((t) => t.owner === id) : [];
   if (remember) rememberClosedTab(projectID, tab, dependents);
+  if (tab.kind === "session") delete S.drafts[tab.sessionID];
   // Its own project's list, not the strip: a project being deleted closes
   // tabs that are not on screen.
   const at = S.tabs.filter((t) => projectOfTab(t) === projectID).findIndex((t) => t.id === id);
@@ -942,7 +958,7 @@ async function blankSessionID(projectID) {
   const open = new Set(S.tabs.filter((t) => t.kind === "session").map((t) => t.sessionID));
   try {
     const free = (await projectSessions(projectID))
-      .filter((s) => !s.title && !s.queue_count && !open.has(s.id));
+      .filter((s) => !s.title && !s.queue_count && !open.has(s.id) && !S.drafts[s.id]);
     return free.reduce((best, s) => (!best || s.created_at > best.created_at ? s : best), null)?.id || "";
   } catch {
     return "";
@@ -1020,7 +1036,7 @@ export async function openTask(id, silent = false) {
     pendingQueued: [],
     // Unsent text belongs to the conversation, not to the prompt bar, so it
     // survives every tab switch and only closing throws it away.
-    draft: "",
+    draft: S.drafts[id] || "",
   });
   await Promise.all([refreshProjects(), refreshSessions()]).catch(fail);
 }
@@ -1067,7 +1083,8 @@ export async function renameTask(session, title) {
    session safe when archive is clicked from a compact project-list row. */
 async function shouldDeleteBlankSession(session, tab) {
   if (tab?.detail?.pendingQueued?.length) return false;
-  if (session.title || tab?.draft?.trim() || (tab && unsavedUnder(tab.id).length)) return false;
+  if (session.title || (tab?.draft || S.drafts[session.id] || "").trim()) return false;
+  if (tab && unsavedUnder(tab.id).length) return false;
   const detail = tab?.detail || await api("GET", "/api/sessions/" + session.id);
   return !detail.session.title &&
     !detail.messages.length &&
@@ -1086,6 +1103,7 @@ export async function setTaskArchived(session, archived) {
       ? await api("DELETE", "/api/sessions/" + session.id)
       : await api("PATCH", "/api/sessions/" + session.id, { done: archived });
     const dependents = tab ? S.tabs.filter((t) => t.owner === tab.id) : [];
+    if (archived) delete S.drafts[session.id];
     if (tab && !deleted) tab.detail.session = updated;
     await Promise.all([refreshProjects(), refreshSessions()]);
     reloadProjects();
@@ -1486,6 +1504,9 @@ const saveOpenTabs = debounce(() => {
       OPEN_TABS_KEY,
       JSON.stringify({
         tabs: S.tabs.map(savedTab).filter(Boolean),
+        // The drafts of conversations with no tab of their own; an open tab
+        // carries its own.
+        drafts: S.drafts,
         activeTab: S.activeTab,
         activeProjectID: S.activeProjectID,
       }),
@@ -1507,6 +1528,7 @@ async function restoreOpenTabs() {
     return;
   }
   if (!Array.isArray(saved?.tabs)) return;
+  if (saved.drafts && typeof saved.drafts === "object") Object.assign(S.drafts, saved.drafts);
 
   restoringTabs = true;
   try {

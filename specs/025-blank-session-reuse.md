@@ -16,10 +16,12 @@ title is a stronger claim on it than a letter in the box.
 
 `blankSessionID` continues the search into the conversations with no tab open,
 which is what the sidebar's `Untitled session` rows are. It reads the project's
-sessions, archived ones excluded, and takes the newest with no title and
-nothing queued. The server names a session from its first prompt, sent or
-queued, so an untitled one has an empty transcript and no draft to lose:
-reopening it is what starting a session would have produced anyway. A list
+sessions, archived ones excluded, and takes the newest with no title, nothing
+queued and no draft kept for it. The server names a session from its first
+prompt, sent or queued, so an untitled one with nothing kept has an empty
+transcript and no text to lose: reopening it is what starting a session would
+have produced anyway. One that is still holding an unsent prompt
+([004](004-ui.md)) is left alone, exactly as the open tab holding one is. A list
 request that fails is not reported — creating a session is still correct.
 
 Started from a project page, reuse hands that tab over exactly as creating did,

@@ -162,6 +162,22 @@ func (s *Store) SetScheduleNextRun(id, at int64) error {
 	return nil
 }
 
+// SetScheduleRecurrence changes the clock a schedule runs on. The anchor comes
+// in with it because the weekday and the day of the month are read off the
+// moment the form was chosen: switching to weekly re-anchors, moving a weekly
+// schedule's time does not.
+func (s *Store) SetScheduleRecurrence(id int64, every string, intervalMinutes, atMinute, anchorAt int64) error {
+	res, err := s.db.Exec(`UPDATE schedules SET every = ?, interval_minutes = ?, at_minute = ?,
+		anchor_at = ? WHERE id = ?`, every, intervalMinutes, atMinute, anchorAt, id)
+	if err != nil {
+		return fmt.Errorf("set schedule recurrence: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (s *Store) SetScheduleTitle(id int64, title string) error {
 	res, err := s.db.Exec(`UPDATE schedules SET title = ? WHERE id = ?`, title, id)
 	if err != nil {

@@ -9,10 +9,13 @@
 import { computed, ref, watch } from "vue";
 
 import {
+  EVERY,
   openTask,
   removeSchedule,
+  scheduleForm,
   scheduleLabel,
   setSchedulePaused,
+  setScheduleFrequency,
   setScheduleRemaining,
 } from "../store";
 import { isoLocal } from "../api";
@@ -22,17 +25,27 @@ const props = defineProps({ tab: { type: Object, required: true } });
 const schedule = computed(() => props.tab.data.schedule);
 const runs = computed(() => props.tab.data.runs);
 
-/* The field is only bound to the schedule while it is not being typed in:
-   a fire arriving mid-edit would otherwise take the caret with it. */
-const editing = ref(false);
+/* The fields are only bound to the schedule while they are not being typed
+   in: a fire arriving mid-edit would otherwise take the caret with it. */
+const editingCount = ref(false);
+const editingFreq = ref(false);
 const count = ref(String(schedule.value.remaining));
+const freq = ref(scheduleForm(schedule.value));
 watch(schedule, (s) => {
-  if (!editing.value) count.value = String(s.remaining);
+  if (!editingCount.value) count.value = String(s.remaining);
+  if (!editingFreq.value) freq.value = scheduleForm(s);
 });
 
 function commitCount() {
-  editing.value = false;
+  editingCount.value = false;
   setScheduleRemaining(schedule.value, count.value);
+}
+
+/* The clock is as changeable as the counter, and changing it restarts the
+   cadence from now — the server books the next run, as a resume does. */
+function commitFreq() {
+  editingFreq.value = false;
+  setScheduleFrequency(schedule.value, freq.value);
 }
 
 /* Skips have no session and no end; runs are told apart by their timestamps,
@@ -93,6 +106,56 @@ const status = (run) => STATUS[run.status] || { label: run.status, class: "text-
           {{ schedule.provider }} · {{ schedule.model
           }}{{ schedule.effort ? " · " + schedule.effort : "" }}
         </div>
+        <div class="pt-1.5 text-muted">Repeats</div>
+        <div class="flex flex-wrap items-center gap-2">
+          <USelectMenu
+            v-model="freq.every"
+            value-key="value"
+            :items="EVERY"
+            :search-input="false"
+            class="w-44"
+            aria-label="Repeat every"
+            @update:model-value="commitFreq"
+          />
+          <template v-if="freq.every === 'interval'">
+            <UInput
+              v-model="freq.hours"
+              type="number"
+              min="0"
+              class="w-20"
+              aria-label="Hours"
+              @focus="editingFreq = true"
+              @blur="commitFreq"
+              @keydown.enter="$event.target.blur()"
+            />
+            <span class="text-xs text-dimmed">h</span>
+            <UInput
+              v-model="freq.minutes"
+              type="number"
+              min="0"
+              class="w-20"
+              aria-label="Minutes"
+              @focus="editingFreq = true"
+              @blur="commitFreq"
+              @keydown.enter="$event.target.blur()"
+            />
+            <span class="text-xs text-dimmed">m</span>
+          </template>
+          <template v-else>
+            <UInput
+              v-model="freq.at"
+              type="time"
+              class="w-32"
+              aria-label="Time of day"
+              @focus="editingFreq = true"
+              @blur="commitFreq"
+              @keydown.enter="$event.target.blur()"
+            />
+            <span class="text-xs text-dimmed">
+              on the {{ freq.every === "week" ? "weekday" : "day" }} it was set
+            </span>
+          </template>
+        </div>
         <div class="pt-1.5 text-muted">Runs left</div>
         <div class="flex items-center gap-2">
           <UInput
@@ -101,7 +164,7 @@ const status = (run) => STATUS[run.status] || { label: run.status, class: "text-
             min="-1"
             class="w-28"
             aria-label="Runs left"
-            @focus="editing = true"
+            @focus="editingCount = true"
             @blur="commitCount"
             @keydown.enter="$event.target.blur()"
           />

@@ -47,6 +47,23 @@ func (s *Server) listSchedules(c *fiber.Ctx) error {
 	return c.JSON(schedules)
 }
 
+// checkRecurrence is the one place a clock is read, since creating a schedule
+// and changing one later take the same three fields and must not drift apart.
+func checkRecurrence(every string, intervalMinutes, atMinute int64) error {
+	switch every {
+	case store.EveryInterval, store.EveryDay, store.EveryWeek, store.EveryMonth:
+	default:
+		return badRequest("unknown recurrence %q", every)
+	}
+	if every == store.EveryInterval && intervalMinutes < 1 {
+		return badRequest("interval must be at least one minute")
+	}
+	if atMinute < 0 || atMinute > 24*60-1 {
+		return badRequest("time of day must be within the day")
+	}
+	return nil
+}
+
 // createSchedule turns the prompt in the box into a repeating one. Everything
 // it needs is already on screen — the prompt, the project, the model — so the
 // dialog only asks for the recurrence and the number of runs.
@@ -82,16 +99,8 @@ func (s *Server) createSchedule(c *fiber.Ctx) error {
 	if body.Model == "" {
 		body.Model = provider.Models()[0].ID
 	}
-	switch body.Every {
-	case store.EveryInterval, store.EveryDay, store.EveryWeek, store.EveryMonth:
-	default:
-		return badRequest("unknown recurrence %q", body.Every)
-	}
-	if body.Every == store.EveryInterval && body.IntervalMinutes < 1 {
-		return badRequest("interval must be at least one minute")
-	}
-	if body.AtMinute < 0 || body.AtMinute > 24*60-1 {
-		return badRequest("time of day must be within the day")
+	if err := checkRecurrence(body.Every, body.IntervalMinutes, body.AtMinute); err != nil {
+		return err
 	}
 	// Below -1 is -1: there is one way to say forever, and 0 is what the
 	// counter reaches on its own rather than something to be asked for.
@@ -151,15 +160,22 @@ func (s *Server) getSchedule(c *fiber.Ctx) error {
 	return c.JSON(scheduleDetail{Schedule: sched, Runs: runs})
 }
 
-// updateSchedule takes any subset. Remaining is a plain number the view can
-// change whenever — infinite to five, five to fifty, up or down — because how
-// many times something should still run is not a decision made once.
+// updateSchedule takes any subset. The clock and the counter are both plain
+// fields the view can change whenever — every 15 minutes to every morning,
+// infinite to five — because neither how often something runs nor how many
+// times it still should is a decision made once.
 func (s *Server) updateSchedule(c *fiber.Ctx) error {
 	var body struct {
 		Title     *string `json:"title"`
 		Remaining *int64  `json:"remaining"`
 		Paused    *bool   `json:"paused"`
 		Done      *bool   `json:"done"`
+
+		// The three recurrence fields move together, since they are one
+		// answer: every names the form, and the other two carry it.
+		Every           *string `json:"every"`
+		IntervalMinutes int64   `json:"interval_minutes"`
+		AtMinute        int64   `json:"at_minute"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return badRequest("invalid body: %v", err)
@@ -184,6 +200,28 @@ func (s *Server) updateSchedule(c *fiber.Ctx) error {
 			return err
 		}
 	}
+	// A new clock and a resume both restart the cadence from now, so the next
+	// run is booked once, after whichever came in has been applied.
+	rebook := false
+	if body.Every != nil {
+		if err := checkRecurrence(*body.Every, body.IntervalMinutes, body.AtMinute); err != nil {
+			return err
+		}
+		// The weekday and the day of the month come off the anchor, which is
+		// the moment the form was chosen — so choosing it again moves it, and
+		// a weekly schedule dragged from 09:00 to 10:00 keeps its Tuesday.
+		anchor := sched.AnchorAt
+		if *body.Every != sched.Every {
+			anchor = time.Now().UnixMilli()
+		}
+		if err := s.store.SetScheduleRecurrence(sched.ID, *body.Every,
+			body.IntervalMinutes, body.AtMinute, anchor); err != nil {
+			return err
+		}
+		sched.Every, sched.IntervalMinutes = *body.Every, body.IntervalMinutes
+		sched.AtMinute, sched.AnchorAt = body.AtMinute, anchor
+		rebook = true
+	}
 	if body.Paused != nil {
 		if err := s.store.SetSchedulePaused(sched.ID, *body.Paused); err != nil {
 			return err
@@ -191,10 +229,13 @@ func (s *Server) updateSchedule(c *fiber.Ctx) error {
 		// Resuming restarts the cadence from now. A pause holds runs back; it
 		// does not save them up to be fired all at once on release.
 		if !*body.Paused {
-			if err := s.store.SetScheduleNextRun(sched.ID,
-				runner.FirstRun(sched, time.Now()).UnixMilli()); err != nil {
-				return err
-			}
+			rebook = true
+		}
+	}
+	if rebook {
+		if err := s.store.SetScheduleNextRun(sched.ID,
+			runner.FirstRun(sched, time.Now()).UnixMilli()); err != nil {
+			return err
 		}
 	}
 	if body.Done != nil {

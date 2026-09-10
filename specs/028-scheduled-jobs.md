@@ -26,11 +26,25 @@ Two forms, which is what the dialog offers:
   off a clock on a wall.
 
 Day-of-week and day-of-month are **not** asked for. They are taken from the
-moment the schedule was created: a weekly schedule made on a Tuesday runs on
+moment the form was chosen: a weekly schedule made on a Tuesday runs on
 Tuesdays, a monthly one made on the 14th runs on the 14th. The dialog offers
 exactly the three words the user gave it, and an anchor answers the rest
 without another control. A monthly schedule anchored past the end of a short
 month clamps to that month's last day, so the 31st still fires in February.
+
+**The recurrence is as editable as the counter.** The schedule's view offers
+the same four forms the dialog does, and changing one restarts the cadence
+from now — the rule a resume already follows, since both mean "from here on,
+this". A prompt that turned out to be worth running hourly rather than every
+quarter of an hour should not have to be made again; remaking it would leave
+the runs it has already recorded behind in a schedule nobody wants.
+
+Changing the *form* re-anchors: switched to weekly on a Thursday, it runs on
+Thursdays. The anchor is when the form was chosen, and choosing it again is
+choosing it again. Moving only the time leaves the anchor alone, so a weekly
+schedule dragged from 09:00 to 10:00 keeps its Tuesday — otherwise the one
+control the dialog deliberately does not offer would move every time the clock
+beside it did.
 
 `next_run_at` is stored, not recomputed from the created time on every tick, so
 a due schedule is one indexed comparison. Advancing it after a fire adds whole
@@ -95,11 +109,26 @@ somewhere to be unarchived from.
 ## The view
 
 A schedule tab looks like a project page ([004](004-ui.md#tabs)) and is its own
-colour on the strip. It shows the prompt it will send, the recurrence in words,
-when the next run is due, the runs-left input, Pause/Resume and Delete — and
-under that every run it has spawned, newest first, each with its timestamp as
-`YYYY-MM-DD HH:mm:ss`. A spawned run is a session, so its row opens it. A
-skipped run is a row with no session and the reason it was skipped.
+colour on the strip. Its header carries the recurrence in words, when the next
+run is due, Pause/Resume and Delete. Under it sit the prompt, the model, the
+**Repeats** fields and the runs-left input; and under those every run it has
+spawned, newest first, each with its timestamp as `YYYY-MM-DD HH:mm:ss`. A
+spawned run is a session, so its row opens it. A skipped run is a row with no
+session and the reason it was skipped.
+
+Repeats is the dialog's own control less the number of runs: the four forms,
+then hours and minutes, or a time of day. A field commits when it is left, and
+the header's words and next run follow it — which is the confirmation that the
+new clock took, without a Save button to press. A calendar form says beside
+the time that the weekday or the day of the month is the one it was set on,
+since that is the control that is not there. Both Repeats and Runs left are
+only rebound to the schedule while nobody is typing in them: a fire arriving
+mid-edit would otherwise take the caret with it.
+
+A schedule stores only the half of the clock its form uses — the other is 0 —
+so switching form in the view offers what the dialog would have offered, a
+quarter of an hour or 09:00, rather than an interval of nothing or midnight
+nobody asked for.
 
 Those times are **local**, where the Stats panel's are UTC. The layout is the
 same; the zone is not, and deliberately: a schedule is read off the clock on
@@ -119,8 +148,9 @@ Migration 7 adds two tables and one column:
   next_run_at, created_at, done_at, position`. `every` is `interval`, `day`,
   `week` or `month`. `at_minute` is minutes past local midnight for the three
   calendar forms; `interval_minutes` is the whole X hours Y minutes for the
-  first. `anchor_at` is the creation time, which is what fixes the weekday and
-  the day of the month. `done_at` and `position` mean what they mean on a
+  first. `anchor_at` is when the form was chosen — the creation time until
+  the recurrence is edited into a different form — which is what fixes the
+  weekday and the day of the month. `done_at` and `position` mean what they mean on a
   session: archived-at, and the order the sidebar was dragged into.
 - **schedule_runs** — `id, schedule_id, session_id, status, started_at,
   ended_at`. `status` is `running`, `done`, `error`, `interrupted` or
@@ -156,8 +186,15 @@ idle cost of the feature is a query every quarter minute.
 | GET | `/api/schedules` | `?window=&q=&project_id=&include_done=` — the sidebar list |
 | POST | `/api/schedules` | `{project_id, prompt, provider, model, effort, permission, every, interval_minutes, at_minute, remaining}` |
 | GET | `/api/schedules/:id` | the schedule and its runs |
-| PATCH | `/api/schedules/:id` | `{title, remaining, paused, done}` — any subset |
+| PATCH | `/api/schedules/:id` | `{title, remaining, paused, done, every, interval_minutes, at_minute}` — any subset |
 | DELETE | `/api/schedules/:id` | drops the schedule and its run history; the sessions it spawned stay |
+
+The three recurrence fields move together on a PATCH, because they are one
+answer: `every` names the form and the other two carry it. They are read by
+the same check `POST` uses, so the two cannot drift apart, and a rejected
+clock changes nothing. Both a new clock and a resume book `next_run_at` once,
+after whichever came in has been applied — a request carrying both gets one
+booking, off the new recurrence.
 
 `GET /api/projects/:id` also carries the project's open schedules, the way it
 already carries its open sessions, so the Projects sidebar needs no second
@@ -185,5 +222,25 @@ Against the running app with a fake `claude` on PATH:
   09:00 → today 09:00, daily at 05:00 → tomorrow 05:00, weekly → the Thursday
   it was created on, monthly → the 10th, its anchor day.
 - A schedule tab draws one `<aside>`, not two: it has no right-hand panel.
+
+Editing the recurrence, checked on Thursday 2026-09-10 at 23:19 local against
+a schedule anchored to Tuesday 2026-08-18:
+
+- Every 15m → daily at 09:00 booked tomorrow 09:00, since 09:00 had passed;
+  → weekly at 10:00 booked the Thursday it was switched on, a week out;
+  → back to every 90m booked 90 minutes from then, not from the old slot.
+- Moving only the time of that weekly schedule, 10:00 → 11:00, kept the
+  Tuesday anchor and booked Tuesday 11:00. Switching its form to monthly
+  re-anchored to the 10th, the day it was switched.
+- `fortnight`, an interval of 0 and an `at_minute` of 1500 were each refused
+  with 400 and left the schedule as it was.
+- In the browser: Repeats sits between Model and Runs left; 0h15m → 2h30m,
+  then Day at 07:45, then Week, each redrew the header's words and next run.
+  Switching to Day proposed 09:00 rather than midnight. The note beside the
+  time read `on the weekday it was set` for Week and `on the day it was set`
+  for Day. Runs left still committed, to 5, and the sidebar followed.
+- Set to every minute in the view, the ticker fired on the new clock at
+  23:21:54 for a 23:21:51 slot — inside the 15-second tick — the run appeared
+  as `Running`, and the next was booked a minute on.
 
 No console or page errors throughout.

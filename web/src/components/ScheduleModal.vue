@@ -5,16 +5,9 @@
    was set to. See specs/028-scheduled-jobs.md. */
 import { ref, watch } from "vue";
 
-import { createSchedule, loadScheduleDefaults } from "../store";
+import { EVERY, createSchedule, loadScheduleDefaults } from "../store";
 
 const open = defineModel("open", { type: Boolean, default: false });
-
-const EVERY = [
-  { label: "Hours and minutes", value: "interval" },
-  { label: "Day", value: "day" },
-  { label: "Week", value: "week" },
-  { label: "Month", value: "month" },
-];
 
 /* Whatever was entered last is what the next one opens on, so a quarter of an
    hour is typed once rather than every time. */

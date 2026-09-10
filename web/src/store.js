@@ -792,6 +792,15 @@ export async function updateProjectPath(p, path) {
    click. */
 export const DEFAULT_SCHEDULE = { every: "interval", hours: 0, minutes: 15, at: "09:00", remaining: -1 };
 
+/* The forms a schedule can take. The dialog asks for one and the schedule
+   view offers the same four, since a clock can be changed after the fact. */
+export const EVERY = [
+  { label: "Hours and minutes", value: "interval" },
+  { label: "Day", value: "day" },
+  { label: "Week", value: "week" },
+  { label: "Month", value: "month" },
+];
+
 export function loadScheduleDefaults() {
   try {
     const saved = JSON.parse(localStorage.getItem(SCHEDULE_KEY));
@@ -856,15 +865,32 @@ export function atMinute(at) {
   return Math.min(24 * 60 - 1, Math.max(0, (Number(h) || 0) * 60 + (Number(m) || 0)));
 }
 
+/* "09:30" from minutes past local midnight, the way the field wants it. */
+function clock(atMinute) {
+  return String(Math.floor(atMinute / 60)).padStart(2, "0") +
+    ":" + String(atMinute % 60).padStart(2, "0");
+}
+
 export function scheduleLabel(schedule) {
   if (schedule.every === "interval") {
     const h = Math.floor(schedule.interval_minutes / 60);
     const m = schedule.interval_minutes % 60;
     return "Every " + [h ? h + "h" : "", m ? m + "m" : ""].filter(Boolean).join(" ");
   }
-  const at = String(Math.floor(schedule.at_minute / 60)).padStart(2, "0") +
-    ":" + String(schedule.at_minute % 60).padStart(2, "0");
-  return `Every ${schedule.every} at ${at}`;
+  return `Every ${schedule.every} at ${clock(schedule.at_minute)}`;
+}
+
+/* A schedule as the dialog's fields, for the view that edits them. Only the
+   half of the clock its form uses is stored — the other is 0 — so switching
+   form offers what the dialog would have, not midnight or no interval. */
+export function scheduleForm(schedule) {
+  const interval = schedule.every === "interval";
+  return {
+    every: schedule.every,
+    hours: interval ? Math.floor(schedule.interval_minutes / 60) : DEFAULT_SCHEDULE.hours,
+    minutes: interval ? schedule.interval_minutes % 60 : DEFAULT_SCHEDULE.minutes,
+    at: interval ? DEFAULT_SCHEDULE.at : clock(schedule.at_minute),
+  };
 }
 
 /* openSchedule puts a schedule in a tab: its prompt, its clock, and every run
@@ -942,6 +968,25 @@ export function setScheduleRemaining(schedule, remaining) {
   const n = Math.trunc(Number(remaining));
   if (!Number.isFinite(n) || n === schedule.remaining) return;
   return patchSchedule(schedule, { remaining: n < -1 ? -1 : n });
+}
+
+/* Neither is the clock: a schedule can be moved from every 15 minutes to
+   every morning without being made again. Changing the form re-anchors on the
+   server, so one switched to weekly today runs on today's weekday. */
+export function setScheduleFrequency(schedule, form) {
+  const body = {
+    every: form.every,
+    interval_minutes: form.every === "interval" ? intervalMinutes(form) : 0,
+    at_minute: form.every === "interval" ? 0 : atMinute(form.at),
+  };
+  if (
+    body.every === schedule.every &&
+    body.interval_minutes === schedule.interval_minutes &&
+    body.at_minute === schedule.at_minute
+  ) {
+    return;
+  }
+  return patchSchedule(schedule, body);
 }
 
 export function renameSchedule(schedule, title) {

@@ -76,10 +76,11 @@ const numbers = computed(() => {
   return found;
 });
 
-/* Rows of the selected project keep the number column even when nothing
-   reaches them, so the titles line up. Other projects have no strip. */
+/* Every row keeps the number column, whether or not a chord reaches it, so
+   selecting another project does not slide its titles left as the numbers
+   leave. */
 const taskNumber = (project, task) =>
-  S.activeProjectID === project.id ? numbers.value.get(task.id) || 0 : null;
+  S.activeProjectID === project.id ? numbers.value.get(task.id) || 0 : 0;
 
 /* A project is lit while any of its tasks is mid-turn, whether or not that
    conversation is the one on screen. */
@@ -185,7 +186,7 @@ function onTaskDrop(e) {
         <div
           v-for="(p, i) in S.projects"
           :key="p.id"
-          class="px-2.5 pt-1 pb-2.5"
+          class="px-2.5 py-1 not-first:border-t not-first:border-muted"
           @dragover="onProjectOver($event, p.id)"
           @drop.prevent="onProjectDrop"
         >

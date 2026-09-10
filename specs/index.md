@@ -27,8 +27,12 @@
 | [023-tool-call-groups.md](023-tool-call-groups.md) | Collapsing a run of tool calls to its latest |
 | [024-instant-prompt-echo.md](024-instant-prompt-echo.md) | Drawing a sent prompt on the keypress, not on the reply |
 | [025-blank-session-reuse.md](025-blank-session-reuse.md) | Starting a session lands on an untitled one wherever it is |
+| [026-image-preview.md](026-image-preview.md) | Previewing an SVG or an image, and diffing two pictures |
 
-Status: starting a session now lands on an untitled conversation of the
+Status: a file tab now renders pictures. An SVG previews and keeps its editor
+and its text diff; a PNG, JPEG, GIF, WEBP, AVIF, BMP, ICO or APNG previews,
+has no editor at all, and diffs as the two images side by side — see 026.
+Starting a session now lands on an untitled conversation of the
 project wherever it is, in a tab or not, instead of only when that one is in
 front — see 025. Pressing Enter now draws the prompt at once, ahead of the request
 that starts the turn — see 024. A run of consecutive tool calls now collapses to its latest, with

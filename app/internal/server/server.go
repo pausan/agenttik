@@ -98,6 +98,7 @@ func (s *Server) routes() {
 	api.Get("/projects/:id/file", s.projectFile)
 	api.Put("/projects/:id/file", s.saveProjectFile)
 	api.Get("/projects/:id/diff", s.projectDiff)
+	api.Get("/projects/:id/raw", s.projectRawImage)
 	api.Post("/projects/:id/sessions/order", s.reorderSessions)
 
 	api.Get("/sessions", s.listSessions)

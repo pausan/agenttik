@@ -1,5 +1,7 @@
 <script setup>
-/* An opened file: its text, its diff, or what it renders as.
+/* An opened file: its text, its diff, or what it renders as. An image has no
+   text, so it offers only the last two, and its diff is the two pictures
+   rather than two columns of lines.
 
    The view is remembered rather than reset per file — reading one diff
    usually means the next changed file wants one too — so the next file opens
@@ -11,25 +13,27 @@
    place. */
 import { computed } from "vue";
 
-import { canPreview, isDirty, saveFile, setFileMode } from "../store";
+import { canPreview, isDirty, isImage, saveFile, setFileMode } from "../store";
 import { langOf } from "../highlight";
 import { nf } from "../api";
 import { SEGMENTED } from "../ui";
 import FileDiff from "./FileDiff.vue";
 import FileEditor from "./FileEditor.vue";
 import FilePreview from "./FilePreview.vue";
+import ImageDiff from "./ImageDiff.vue";
 
 const props = defineProps({ tab: { type: Object, required: true } });
+
+const image = computed(() => isImage(props.tab.path));
 
 /* A file opened from a commit has one view. There is nothing to edit in a
    revision that has already been made, and its text is not what is on disk,
    so offering Edit or Preview would only show the wrong thing. */
 const modes = computed(() => {
   if (props.tab.commit) return [{ label: "Diff", value: "diff" }];
-  const items = [
-    { label: "Edit", value: "edit" },
-    { label: "Diff", value: "diff" },
-  ];
+  // An image has no text, so it has no Edit: what it renders as is the file.
+  const items = image.value ? [] : [{ label: "Edit", value: "edit" }];
+  items.push({ label: "Diff", value: "diff" });
   if (canPreview(props.tab.path)) items.push({ label: "Preview", value: "preview" });
   return items;
 });
@@ -42,19 +46,27 @@ const text = computed(() => props.tab.edited ?? props.tab.content ?? "");
 const body = computed(() => {
   const value = props.tab.mode === "diff" ? props.tab.diff : props.tab.content;
   if (value === null) return "loading";
-  if (props.tab.mode === "diff") return value ? "diff" : "empty";
+  // The diff of an image is still fetched, for its one useful word: git says
+  // nothing at all when a file has not changed, and the pictures are what is
+  // drawn from there on.
+  if (props.tab.mode === "diff") return value ? (image.value ? "images" : "diff") : "empty";
   return props.tab.mode === "preview" ? "preview" : "edit";
 });
 
-/* An iframe scrolls itself; everything else scrolls in the pane. */
-const fills = computed(() => body.value === "preview" && /\.html?$/i.test(props.tab.path));
+/* An iframe scrolls itself and a picture is fitted to its pane; everything
+   else scrolls in the pane. */
+const fills = computed(
+  () =>
+    body.value === "images" ||
+    (body.value === "preview" && (image.value || /\.html?$/i.test(props.tab.path))),
+);
 
 const lines = computed(() => text.value.split("\n").length);
 
 /* One extra pass over a diff that has already been fetched, and only when it
    changes — cheaper than threading the count back out of the parse. */
 const stat = computed(() => {
-  if (props.tab.mode !== "diff" || !props.tab.diff) return null;
+  if (props.tab.mode !== "diff" || !props.tab.diff || image.value) return null;
   let add = 0;
   let del = 0;
   for (const line of props.tab.diff.split("\n")) {
@@ -111,6 +123,7 @@ const stat = computed(() => {
         No changes to this file.
       </p>
       <FileDiff v-else-if="body === 'diff'" :diff="tab.diff" />
+      <ImageDiff v-else-if="body === 'images'" :tab="tab" />
       <FilePreview v-else-if="body === 'preview'" :tab="tab" />
       <FileEditor v-else :tab="tab" />
     </div>
@@ -118,8 +131,9 @@ const stat = computed(() => {
     <div
       class="flex shrink-0 items-center gap-3 border-t border-default px-5 py-1 text-xs text-dimmed"
     >
-      <span>{{ langOf(tab.path) || "text" }}</span>
+      <span>{{ image ? "image" : langOf(tab.path) || "text" }}</span>
       <span v-if="tab.commit" class="text-dimmed">committed</span>
+      <span v-else-if="image" class="text-dimmed">not editable</span>
       <span v-else-if="tab.readOnly" class="text-warning">read only</span>
       <span v-else-if="dirty" class="text-primary">unsaved</span>
       <span class="flex-1"></span>
@@ -127,7 +141,7 @@ const stat = computed(() => {
         <span class="text-success">+{{ nf.format(stat.add) }}</span>
         <span class="text-error">−{{ nf.format(stat.del) }}</span>
       </template>
-      <span v-else>{{ nf.format(lines) }} {{ lines === 1 ? "line" : "lines" }}</span>
+      <span v-else-if="!image">{{ nf.format(lines) }} {{ lines === 1 ? "line" : "lines" }}</span>
     </div>
   </div>
 </template>

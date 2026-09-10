@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -414,4 +415,123 @@ func trimTo(items []string, max int) []string {
 		return []string{}
 	}
 	return items
+}
+
+// maxRawBytes bounds a preview. Images are read whole into memory to be sent,
+// so this is the largest one the pane will show rather than a limit on what
+// the project may contain.
+const maxRawBytes = 16 << 20 // 16 MiB
+
+// rawTypes is every image the raw endpoint serves, and the content type each
+// is served as: an allowlist rather than a sniff, because these bytes come
+// back on the app's own origin. SVG is deliberately absent — it is markup and
+// can carry scripts, so its preview renders the text of the open tab instead
+// of a URL that could also be opened on its own.
+var rawTypes = map[string]string{
+	".png":  "image/png",
+	".jpg":  "image/jpeg",
+	".jpeg": "image/jpeg",
+	".gif":  "image/gif",
+	".webp": "image/webp",
+	".avif": "image/avif",
+	".bmp":  "image/bmp",
+	".ico":  "image/x-icon",
+	".apng": "image/apng",
+}
+
+// rawRev bounds what may reach git as a revision: a hex hash or HEAD, either
+// optionally with a ^ for its parent, which is the baseline side of a commit's
+// image diff.
+var rawRev = regexp.MustCompile(`^(HEAD|[0-9a-f]{4,40})\^?$`)
+
+// projectRawImage serves an image's bytes, for the views that render a file
+// rather than read it: the preview, and the two sides of an image diff. rev
+// names a revision to read it from instead of the working tree.
+func (s *Server) projectRawImage(c *fiber.Ctx) error {
+	root, err := s.projectRoot(c)
+	if err != nil {
+		return err
+	}
+	rel := c.Query("path")
+	abs, err := resolveInRoot(root, rel)
+	if err != nil {
+		return err
+	}
+	kind, ok := rawTypes[strings.ToLower(filepath.Ext(rel))]
+	if !ok {
+		return badRequest("%s is not an image agenttik renders", rel)
+	}
+	data, err := rawImage(root, abs, rel, c.Query("rev"))
+	if err != nil {
+		return err
+	}
+	c.Set(fiber.HeaderContentType, kind)
+	// The file is local and an agent can rewrite it at any moment, so a copy
+	// held in the browser would keep showing what is no longer there.
+	c.Set(fiber.HeaderCacheControl, "no-store")
+	c.Set("X-Content-Type-Options", "nosniff")
+	return c.Send(data)
+}
+
+// rawImage reads the working copy, or the revision asked for.
+func rawImage(root, abs, rel, rev string) ([]byte, error) {
+	if rev == "" {
+		info, err := os.Stat(abs)
+		if err != nil {
+			return nil, badRequest("cannot read %s: %v", rel, err)
+		}
+		if info.Size() > maxRawBytes {
+			return nil, badRequest("%s is larger than the %d MiB preview limit", rel, maxRawBytes>>20)
+		}
+		data, err := os.ReadFile(abs)
+		if err != nil {
+			return nil, badRequest("cannot read %s: %v", rel, err)
+		}
+		return data, nil
+	}
+	if !isGitRepo(root) {
+		return nil, badRequest("%s is not a git repository", root)
+	}
+	if !rawRev.MatchString(rev) {
+		return nil, badRequest("invalid revision")
+	}
+	// A file that is not in that revision is the ordinary answer for one side
+	// of a diff — an image just added, or one deleted — so it is a plain not
+	// found, which the pane showing it draws as an empty side.
+	data, err := gitBlob(root, rev+":"+filepath.ToSlash(filepath.Clean(rel)))
+	if err != nil {
+		return nil, fiber.NewError(fiber.StatusNotFound, fmt.Sprintf("%s is not in %s", rel, rev))
+	}
+	return data, nil
+}
+
+// gitBlob reads one path at one revision as bytes. runGit hands back a string,
+// and an image is not one.
+func gitBlob(root, spec string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "--no-optional-locks", "show", spec)
+	cmd.Dir = root
+	out := &capped{max: maxRawBytes}
+	var stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = out, &stderr
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("git show %s: %v: %s", spec, err, strings.TrimSpace(stderr.String()))
+	}
+	return out.buf.Bytes(), nil
+}
+
+// capped collects a command's output up to a limit, so a blob far larger than
+// anything the pane could show is refused while it streams rather than after
+// it is all in memory.
+type capped struct {
+	buf bytes.Buffer
+	max int
+}
+
+func (w *capped) Write(p []byte) (int, error) {
+	if w.buf.Len()+len(p) > w.max {
+		return 0, fmt.Errorf("output is larger than %d bytes", w.max)
+	}
+	return w.buf.Write(p)
 }

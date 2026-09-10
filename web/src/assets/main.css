@@ -269,3 +269,17 @@ button[draggable="true"]:active { cursor: grabbing; }
   text-align: left;
 }
 .markdown th { background: var(--ui-bg-muted); font-weight: 600; }
+
+/* A picture needs something behind it, or a transparent PNG reads as a solid
+   block of whatever the theme is. Two gradients offset by half a tile are the
+   whole checkerboard, in the theme's own greys so it does not fight the app in
+   either mode. */
+.checkerboard {
+  --checker: var(--ui-bg-accented);
+  background-color: var(--ui-bg-muted);
+  background-image:
+    linear-gradient(45deg, var(--checker) 25%, transparent 25%, transparent 75%, var(--checker) 75%),
+    linear-gradient(45deg, var(--checker) 25%, transparent 25%, transparent 75%, var(--checker) 75%);
+  background-position: 0 0, 8px 8px;
+  background-size: 16px 16px;
+}

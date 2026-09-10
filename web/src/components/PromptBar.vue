@@ -189,7 +189,6 @@ function onPromptInput(e) {
 }
 
 function enqueuePrompt() {
-  queueOpen.value = false;
   enqueue(text.value);
 }
 
@@ -216,11 +215,24 @@ const hints = computed(() => [
   { chord: S.keys["prompt.newline"][0], what: "for a newline" },
 ]);
 
-const submitLabel = computed(() => (enterDoes() === "enqueue" ? "Enqueue" : "Send"));
+/* The button does what Enter does, so the two never disagree, and the menu
+   beside it holds the other action — never a second copy of the same one. */
+const actions = computed(() => ({
+  send: { label: "Send", run: submit, disabled: !!S.detail?.running },
+  enqueue: { label: "🕒 Enqueue", run: enqueuePrompt, disabled: false },
+}));
+const primary = computed(() => actions.value[enterDoes() === "enqueue" ? "enqueue" : "send"]);
+const other = computed(() => actions.value[enterDoes() === "enqueue" ? "send" : "enqueue"]);
+
+/* The menu closes itself: it holds one action and it has just been used. */
+function runOther() {
+  queueOpen.value = false;
+  other.value.run();
+}
 </script>
 
 <template>
-  <form class="shrink-0 p-3" @submit.prevent="submit">
+  <form class="shrink-0 p-3" @submit.prevent="primary.run()">
     <div
       class="mx-auto max-w-[860px] rounded-[var(--ui-radius-lg,10px)] bg-default p-2 shadow-xs inset-ring inset-ring-accented focus-within:inset-ring-2 focus-within:inset-ring-primary"
     >
@@ -320,17 +332,25 @@ const submitLabel = computed(() => (enterDoes() === "enqueue" ? "Enqueue" : "Sen
           label="Stop"
           @click="stopTurn"
         />
-        <div class="flex">
-          <UButton type="submit" size="sm" :disabled="S.detail.running" :label="submitLabel" />
+        <UFieldGroup size="sm">
+          <UButton type="submit" :disabled="primary.disabled" :label="primary.label" />
           <UPopover v-model:open="queueOpen">
-            <UButton type="button" size="sm" color="primary" variant="solid" icon="i-lucide-chevron-down" aria-label="Send options" />
+            <UButton type="button" icon="i-lucide-chevron-down" aria-label="More prompt actions" />
             <template #content>
               <div class="p-1">
-                <UButton type="button" color="neutral" variant="ghost" block label="🕒 Enqueue" @click="enqueuePrompt" />
+                <UButton
+                  type="button"
+                  color="neutral"
+                  variant="ghost"
+                  block
+                  :disabled="other.disabled"
+                  :label="other.label"
+                  @click="runOther"
+                />
               </div>
             </template>
           </UPopover>
-        </div>
+        </UFieldGroup>
       </div>
     </div>
     <p class="mx-auto mt-1.5 flex max-w-[860px] flex-wrap items-center gap-x-1.5 px-1 text-xs text-dimmed">

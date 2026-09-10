@@ -15,6 +15,7 @@ import (
 
 // windows are the choices offered by the Sessions sidebar.
 var windows = map[string]time.Duration{
+	"1h":  time.Hour,
 	"1d":  24 * time.Hour,
 	"3d":  72 * time.Hour,
 	"7d":  7 * 24 * time.Hour,
@@ -22,7 +23,7 @@ var windows = map[string]time.Duration{
 	"all": 0,
 }
 
-const defaultWindow = "3d"
+const defaultWindow = "1h"
 
 func (s *Server) listSessions(c *fiber.Ctx) error {
 	name := c.Query("window", defaultWindow)

@@ -29,7 +29,8 @@
 | [025-blank-session-reuse.md](025-blank-session-reuse.md) | Starting a session lands on an untitled one wherever it is |
 | [026-image-preview.md](026-image-preview.md) | Previewing an SVG or an image, and diffing two pictures |
 
-Status: a file tab now renders pictures. An SVG previews and keeps its editor
+Status: the Sessions tab now reaches back one hour by default and keeps the
+window it was left on across launches — see 004. A file tab now renders pictures. An SVG previews and keeps its editor
 and its text diff; a PNG, JPEG, GIF, WEBP, AVIF, BMP, ICO or APNG previews,
 has no editor at all, and diffs as the two images side by side — see 026.
 Starting a session now lands on an untitled conversation of the

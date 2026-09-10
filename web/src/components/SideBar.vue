@@ -4,6 +4,7 @@ import { computed, nextTick, ref, watch } from "vue";
 import {
   PROJECT_KEYS,
   S,
+  SESSION_WINDOWS,
   TAB_CHORDS,
   isArchived,
   openProject,
@@ -13,6 +14,7 @@ import {
   reorderProjects,
   reorderSidebarSessions,
   setSessionArchived,
+  setWindow,
   switchProject,
   stopSession,
 } from "../store";
@@ -53,17 +55,8 @@ defineExpose({
   showTree: () => show("tree"),
 });
 
-const windows = [
-  { label: "Last day", value: "1d" },
-  { label: "Last 3 days", value: "3d" },
-  { label: "Last week", value: "7d" },
-  { label: "Last month", value: "1mo" },
-  { label: "All", value: "all" },
-];
-
 const reload = debounce(() => refreshSessions().catch(() => {}), 150);
 watch(() => S.query, reload);
-watch(() => S.window, () => refreshSessions().catch(() => {}));
 
 const draggingProject = ref(0);
 const draggingSession = ref(null);
@@ -295,7 +288,12 @@ function onSessionDrop(e) {
         />
       </div>
       <div class="shrink-0 px-2.5 pb-2">
-        <USelect v-model="S.window" :items="windows" class="w-full" />
+        <USelect
+          :model-value="S.window"
+          :items="SESSION_WINDOWS"
+          class="w-full"
+          @update:model-value="setWindow"
+        />
       </div>
       <div class="min-h-0 flex-1 overflow-auto px-2.5">
         <p v-if="!S.sessions.length" class="px-3 py-5 text-center text-dimmed">

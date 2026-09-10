@@ -25,6 +25,7 @@ const FILE_MODE_KEY = "agenttik.fileMode";
 const DIFF_VIEW_KEY = "agenttik.diffView";
 const COLORS_KEY = "agenttik.colors";
 const KEYS_KEY = "agenttik.keys";
+const WINDOW_KEY = "agenttik.window";
 const LAYOUT_LIMITS = { left: [180, 520], right: [200, 620] };
 
 /* The letters Alt reaches a project with. The first eight rows of the
@@ -34,6 +35,19 @@ export const PROJECT_KEYS = "ABCDEFGH";
 /* Alt+1 … Alt+9 reach the first nine tabs of the strip, so those are the only
    tabs — and the only sidebar rows — that carry a number. */
 export const TAB_CHORDS = 9;
+
+/* How far back the Sessions list reaches, and the order the picker offers.
+   The first is the default: the usual question is what is running now, not
+   what ran last week. The values are the ones /api/sessions takes, and the
+   list is also what a remembered choice is checked against. */
+export const SESSION_WINDOWS = [
+  { label: "Last hour", value: "1h" },
+  { label: "Last day", value: "1d" },
+  { label: "Last 3 days", value: "3d" },
+  { label: "Last week", value: "7d" },
+  { label: "Last month", value: "1mo" },
+  { label: "All", value: "all" },
+];
 
 export const S = reactive({
   providers: [],
@@ -59,7 +73,7 @@ export const S = reactive({
   tree: [],
   treeFilter: "",
   query: "", // sidebar session filter
-  window: "3d",
+  window: SESSION_WINDOWS[0].value,
   lastUsed: null,
   layout: { left: 272, right: 312 },
   colors: { ...DEFAULT_COLORS }, // the accent and the grey, from Settings
@@ -544,6 +558,26 @@ export async function refreshSessions() {
   if (S.query.trim()) params.set("q", S.query.trim());
   S.sessions = await api("GET", "/api/sessions?" + params);
   syncSessionTabs();
+}
+
+/* setWindow moves how far back the list reaches and remembers it, so the
+   next launch opens on the same reach rather than back on the default. */
+export function setWindow(value) {
+  if (value === S.window || !SESSION_WINDOWS.some((w) => w.value === value)) return;
+  S.window = value;
+  persist(WINDOW_KEY, value);
+  refreshSessions().catch(() => {});
+}
+
+/* A window the app no longer offers is dropped rather than sent on, since an
+   unknown one is a 400 and an empty Sessions tab. */
+function loadWindow() {
+  try {
+    const saved = localStorage.getItem(WINDOW_KEY);
+    if (SESSION_WINDOWS.some((w) => w.value === saved)) S.window = saved;
+  } catch {
+    /* keep the default */
+  }
 }
 
 /* The first prompt names a session on the server, so the tab strip takes its
@@ -1876,6 +1910,7 @@ export async function init() {
   loadLayout();
   loadKeys();
   loadFileMode();
+  loadWindow();
   // Open tabs are saved, but an edited file is not — it would put a whole
   // working copy in localStorage — so the browser's own warning is what
   // stands between unsaved edits and a reload.

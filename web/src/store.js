@@ -3,9 +3,9 @@
    none of them touch the DOM.
 
    Everything open is a tab in S.tabs: a session (transcript and prompt bar),
-   a project (its sessions) or a file. Several of each can be open at once,
-   including several sessions from the same project, and all of them stay
-   live. S.detail and S.project are derived from whichever tab is in front.
+   a project (its sessions) or a file. One leading project-or-session context
+   tab is reused per project; independent views stay open. S.detail and
+   S.project are derived from whichever tab is in front.
 
    The strip only shows one project at a time — S.strip is S.tabs narrowed to
    S.activeProjectID — so switching project switches the whole centre to that
@@ -33,8 +33,8 @@ const LAYOUT_LIMITS = { left: [180, 520], right: [200, 620] };
    sidebar get one, so dragging a project changes its letter. */
 export const PROJECT_KEYS = "ABCDEFGH";
 
-/* Alt+1 … Alt+9 reach the first nine tabs of the strip, so those are the only
-   tabs — and the only sidebar rows — that carry a number. */
+/* Alt+1 … Alt+9 reach the first nine sessions in the selected project's
+   sidebar order. */
 export const TAB_CHORDS = 9;
 
 /* How far back the Sessions list reaches, and the order the picker offers.
@@ -177,15 +177,48 @@ export async function toggleStar(provider, model, effort) {
 
 /* ------------------------------------------------------------------ tabs */
 
-/* addTab inserts unless the tab is already open, in which case it just comes
-   to the front — clicking a session twice must not open it twice. */
+/* addTab inserts an independent tab unless it is already open, in which case
+   it just comes to the front. Project and session views use setContextTab. */
 function addTab(tab) {
   if (!S.tabs.some((t) => t.id === tab.id)) insertTab(tab);
   selectTab(tab.id);
   resubscribe();
 }
 
-/* insertTab puts every new tab at the end of its project's strip. Projects
+
+function isContextTab(tab) {
+  return tab.kind === "project" || tab.kind === "session";
+}
+
+/* A project has one leading context slot. Selecting a project or a session
+   replaces that slot without disturbing files opened from the prior view.
+   Those files follow the new context so their inspector and Tree context stay
+   useful. This also folds old saved layouts with several session tabs into
+   the current shape as they are restored. */
+function setContextTab(tab) {
+  const projectID = projectOfTab(tab);
+  const previous = S.tabs.filter(
+    (candidate) => isContextTab(candidate) && projectOfTab(candidate) === projectID,
+  );
+  const previousIDs = new Set(previous.map((candidate) => candidate.id));
+  const first = S.tabs.findIndex((candidate) => projectOfTab(candidate) === projectID);
+
+  if (previous.length === 1 && previous[0] === tab && first >= 0 && S.tabs[first] === tab) {
+    return selectTab(tab.id);
+  }
+
+  const before = S.tabs.slice(0, Math.max(first, 0)).filter((candidate) => previousIDs.has(candidate.id)).length;
+  S.tabs = S.tabs.filter((candidate) => !previousIDs.has(candidate.id));
+  const at = first < 0 ? S.tabs.length : first - before;
+  S.tabs.splice(at, 0, tab);
+  for (const candidate of S.tabs) {
+    if (previousIDs.has(candidate.owner)) candidate.owner = tab.id;
+  }
+  selectTab(tab.id);
+  resubscribe();
+}
+
+/* insertTab puts every new tab at the end of its project workspace. Projects
    share one flat array, so the insertion point is immediately after that
    project's last tab rather than necessarily the end of the whole array. */
 function insertTab(tab) {
@@ -297,21 +330,29 @@ export function selectTab(id) {
   S.lastTab[projectID] = id;
 }
 
-/* selectTabAt is Alt+1 … Alt+9, so the number matches what the strip shows —
-   which is this project's tabs, not every tab open. */
-export function selectTabAt(n) {
-  const tab = S.strip[n - 1];
-  if (tab) selectTab(tab.id);
+/* Alt+1 … Alt+9 selects a session by its top-to-bottom sidebar position. */
+export function selectSessionAt(n) {
+  const session = S.projects.find((project) => project.id === S.activeProjectID)?.recent_sessions[n - 1];
+  if (session) openSession(session.id);
 }
 
-/* selectAdjacentTab is Ctrl+PageUp and Ctrl+PageDown: one step along the
-   strip, wrapping at both ends so every tab is reachable without turning
-   round. */
+/* Ctrl+PageUp and Ctrl+PageDown walk this project's sessions, including those
+   after the first nine. The tab in front only supplies the starting session. */
+export function selectAdjacentSession(step) {
+  const sessions = S.projects.find((project) => project.id === S.activeProjectID)?.recent_sessions || [];
+  if (!sessions.length) return;
+  const active = S.owner?.kind === "session" ? S.owner.sessionID : 0;
+  const at = sessions.findIndex((session) => session.id === active);
+  const next = at < 0 ? (step > 0 ? 0 : sessions.length - 1) : (at + step + sessions.length) % sessions.length;
+  openSession(sessions[next].id);
+}
+
+/* Ctrl+Tab and Ctrl+Shift+Tab walk every visible tab, wrapping at both ends. */
 export function selectAdjacentTab(step) {
   const strip = S.strip;
   const n = strip.length;
   if (!n) return;
-  const at = strip.findIndex((t) => t.id === S.activeTab);
+  const at = strip.findIndex((tab) => tab.id === S.activeTab);
   selectTab(strip[at < 0 ? (step > 0 ? 0 : n - 1) : (at + step + n) % n].id);
 }
 
@@ -469,7 +510,7 @@ export async function reorderProjects(ids) {
 export async function openProject(id, silent = false) {
   const tabID = "project:" + id;
   const open = S.tabs.find((t) => t.id === tabID);
-  if (open) return selectTab(tabID);
+  if (open) return setContextTab(open);
 
   let project, stats, sessions, archived;
   try {
@@ -483,7 +524,7 @@ export async function openProject(id, silent = false) {
     if (!silent) fail(e);
     return;
   }
-  addTab({
+  setContextTab({
     id: tabID,
     kind: "project",
     label: project.name,
@@ -905,8 +946,8 @@ async function blankSessionID(projectID) {
   }
 }
 
-/* A project page is where a session is started from, so it hands its tab over
-   to the new conversation rather than staying open behind it.
+/* A project page is the leading context slot, so starting a session replaces
+   it without disturbing independent file tabs.
 
    An untouched conversation is already what this would produce, so every way
    in — the chord, the strip's +, the page's button — stops at one of those
@@ -914,13 +955,11 @@ async function blankSessionID(projectID) {
    to the front with the cursor in the box, which is what was being asked
    for. */
 export async function startSession(project) {
-  const replaced = S.tab?.kind === "project" ? S.tab.id : "";
   /* The prompt bar's focus watcher only sees a request made after it mounts,
      and coming from a project page mounts it with this very switch, so the
      cursor is asked for once the switch has been drawn. */
   const reuse = async (tabID) => {
     selectTab(tabID);
-    if (replaced) closeTab(replaced, false);
     await nextTick();
     focusPrompt();
   };
@@ -937,7 +976,6 @@ export async function startSession(project) {
     const sess = await api("POST", "/api/sessions", { project_id: project.id, ...cfg });
     await Promise.all([refreshProjects(), refreshSessions()]);
     await openSession(sess.id);
-    if (replaced) closeTab(replaced, false);
     focusPrompt();
     reloadProjects();
   } catch (e) {
@@ -959,7 +997,8 @@ export function startCurrentSession() {
 
 export async function openSession(id, silent = false) {
   const tabID = "session:" + id;
-  if (S.tabs.some((t) => t.id === tabID)) return selectTab(tabID);
+  const open = S.tabs.find((t) => t.id === tabID);
+  if (open) return setContextTab(open);
 
   let detail;
   try {
@@ -969,7 +1008,7 @@ export async function openSession(id, silent = false) {
     return;
   }
   rememberUsed(detail.session);
-  addTab({
+  setContextTab({
     id: tabID,
     kind: "session",
     label: tabLabel(detail.session),

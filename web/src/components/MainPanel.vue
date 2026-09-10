@@ -2,13 +2,12 @@
 /* The centre: the tab strip over whatever the tab in front is.
 
    The strip is the active project's tabs only. Each kind has its own colour,
-   tabs can be dragged within their kind, and the numbers are simply where a
-   tab now sits, so rearranging changes what Alt+1 … Alt+9 reach. */
+   tabs can be dragged within their kind. Session shortcuts use the sidebar
+   order, so file tabs never consume an Alt number. */
 import { computed, ref } from "vue";
 
 import {
   S,
-  TAB_CHORDS,
   closeTab,
   moveTab,
   persistTabOrder,
@@ -35,7 +34,7 @@ const KINDS = {
 };
 
 const items = computed(() =>
-  S.strip.map((t, i) => ({
+  S.strip.map((t) => ({
     id: t.id,
     kind: t.kind,
     // The tab is named by its whole label even when the strip shows less of
@@ -47,10 +46,7 @@ const items = computed(() =>
         : t.label,
     title:
       t.label +
-      (i < TAB_CHORDS ? `  (Alt+${i + 1})` : "") +
       (t.temp ? "  (temporary — double click the file to keep it)" : ""),
-    // Only the first nine are one chord away, so only those show a number.
-    hint: i < TAB_CHORDS ? String(i + 1) : "",
     running: t.kind === "session" && t.detail.running,
     // Italic says "this one goes when the next file is clicked".
     temp: !!t.temp,
@@ -108,12 +104,6 @@ const running = computed(() => !!S.detail?.running);
           @dragend="onEnd"
           @drop.prevent="onEnd"
         >
-          <span
-            v-if="item.hint"
-            class="font-mono text-[10px] text-dimmed tabular-nums"
-            aria-hidden="true"
-            >{{ item.hint }}</span
-          >
           <StatusDot v-if="item.running" status="running" />
           <span
             class="truncate"

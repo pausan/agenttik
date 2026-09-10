@@ -85,17 +85,17 @@ function toggleProject(id) {
    row is, and dragging a project changes it. */
 const projectKey = (i) => PROJECT_KEYS[i] || "";
 
-/* A number in the sidebar means the same as the same number on the tab strip:
-   Alt and that digit go there. So it is the session's place in the strip, not
-   its place in this list — the strip also holds the project page and any open
-   files, and a session that is not open has no number at all.
+/* A number in the sidebar is the session shortcut number:
+   Alt and that digit go there. It is the session top-to-bottom position in
+   this project list, whether or not its context is currently visible. Rows
+   after the first nine keep the blank column and use Ctrl+PageUp/PageDown.
 
-   One pass over the strip rather than a lookup per row, since the sidebar is
-   redrawn whenever a tab changes. */
+   One pass over the selected project keeps every sidebar row aligned. */
 const numbers = computed(() => {
   const found = new Map();
-  S.strip.slice(0, TAB_CHORDS).forEach((t, i) => {
-    if (t.kind === "session") found.set(t.sessionID, i + 1);
+  const project = S.projects.find((candidate) => candidate.id === S.activeProjectID);
+  project?.recent_sessions.slice(0, TAB_CHORDS).forEach((session, i) => {
+    found.set(session.id, i + 1);
   });
   return found;
 });

@@ -9,10 +9,11 @@ import {
   hit,
   init,
   reopenClosedTab,
+  selectAdjacentSession,
   selectAdjacentTab,
   saveActiveFile,
   selectProjectAt,
-  selectTabAt,
+  selectSessionAt,
   startCurrentSession,
   useErrors,
 } from "./store";
@@ -47,6 +48,8 @@ useErrors(useToast());
    is read from the physical code: on some layouts Alt and a digit produce a
    different character. */
 function onKey(e) {
+  if (hit(e, "session.prev")) return run(e, () => selectAdjacentSession(-1));
+  if (hit(e, "session.next")) return run(e, () => selectAdjacentSession(1));
   if (hit(e, "tab.prev")) return run(e, () => selectAdjacentTab(-1));
   if (hit(e, "tab.next")) return run(e, () => selectAdjacentTab(1));
   if (hit(e, "session.new")) return run(e, startCurrentSession);
@@ -72,7 +75,7 @@ function onKey(e) {
 
   if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
   const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
-  if (digit) return run(e, () => selectTabAt(Number(digit[1])));
+  if (digit) return run(e, () => selectSessionAt(Number(digit[1])));
   // A … H are the first eight projects, in sidebar order.
   const letter = /^Key([A-H])$/.exec(e.code);
   if (letter) run(e, () => selectProjectAt(letter[1].charCodeAt(0) - 65));

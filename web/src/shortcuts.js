@@ -15,9 +15,11 @@ export const ACTIONS = [
   { id: "tab.close", group: "Conversations", what: "Close the current tab", keys: ["Ctrl+W"] },
   { id: "tab.reopen", group: "Conversations", what: "Restore the last closed tab in this project", keys: ["Ctrl+Shift+T"] },
 
-  { id: "tab.prev", group: "Tabs", what: "Previous tab", keys: ["Ctrl+PageUp"] },
-  { id: "tab.next", group: "Tabs", what: "Next tab", keys: ["Ctrl+PageDown"] },
-  { id: "tab.at", group: "Tabs", what: "Go straight to one of the first nine", keys: ["Alt+1…9"], fixed: true },
+  { id: "tab.prev", group: "Tabs", what: "Previous tab", keys: ["Ctrl+Shift+Tab"] },
+  { id: "tab.next", group: "Tabs", what: "Next tab", keys: ["Ctrl+Tab"] },
+  { id: "session.prev", group: "Conversations", what: "Previous session in this project", keys: ["Ctrl+PageUp"] },
+  { id: "session.next", group: "Conversations", what: "Next session in this project", keys: ["Ctrl+PageDown"] },
+  { id: "tab.at", group: "Conversations", what: "Go straight to one of the first nine sessions", keys: ["Alt+1…9"], fixed: true },
   { id: "project.at", group: "Tabs", what: "Switch to one of the first eight projects", keys: ["Alt+A…H"], fixed: true },
 
   { id: "goto", group: "Panels", what: "Go to anywhere", keys: ["Ctrl+P"] },

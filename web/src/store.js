@@ -336,28 +336,36 @@ export function selectProjectAt(i) {
 
 /* closeTab also closes the files opened from the tab, which have nothing to
    belong to once it is gone, and moves to the neighbour in the same project
-   rather than back to the first tab. Closing a tab only removes that view;
-   archiving is a separate action.
+   rather than back to the first tab. `closeTabOnly` is the keyboard variant:
+   it removes just the tab in front, leaving any files it opened in place.
+   Closing a tab only removes that view; archiving is a separate action.
 
    Unsaved edits stop it: closing a file that has been typed into — or a
    conversation holding one — asks first, and resolveClosing comes back here
    once the answer has been carried out. `force` is for a project being
    deleted, which has already been confirmed and takes everything with it. */
-export async function closeTab(id, remember = true, force = false) {
+/* Ctrl+W closes exactly the tab that is in front. The tab-strip × continues
+   to use closeTab, whose cascade is useful when intentionally dismissing a
+   whole conversation and its opened files. */
+export function closeTabOnly(id) {
+  return closeTab(id, true, false, false);
+}
+
+export async function closeTab(id, remember = true, force = false, cascade = true) {
   const tab = S.tabs.find((t) => t.id === id);
   if (!tab) return;
-  const unsaved = force ? [] : unsavedUnder(id);
+  const unsaved = force ? [] : unsavedUnder(id, cascade);
   if (unsaved.length) {
-    S.closing = { id, remember, tabs: unsaved };
+    S.closing = { id, remember, cascade, tabs: unsaved };
     return;
   }
   const projectID = projectOfTab(tab);
-  const dependents = S.tabs.filter((t) => t.owner === id);
+  const dependents = cascade ? S.tabs.filter((t) => t.owner === id) : [];
   if (remember) rememberClosedTab(projectID, tab, dependents);
   // Its own project's list, not the strip: a project being deleted closes
   // tabs that are not on screen.
   const at = S.tabs.filter((t) => projectOfTab(t) === projectID).findIndex((t) => t.id === id);
-  S.tabs = S.tabs.filter((t) => t.id !== id && t.owner !== id);
+  S.tabs = S.tabs.filter((t) => t.id !== id && (!cascade || t.owner !== id));
   if (S.lastTab[projectID] === id) delete S.lastTab[projectID];
   if (S.activeTab === id || !S.tabs.some((t) => t.id === S.activeTab)) {
     const left = S.tabs.filter((t) => projectOfTab(t) === projectID);
@@ -1346,8 +1354,8 @@ export function saveActiveFile() {
 
 /* unsavedUnder is a tab and everything that would close with it, narrowed to
    the files carrying edits — what the close dialog is about. */
-function unsavedUnder(id) {
-  return S.tabs.filter((t) => (t.id === id || t.owner === id) && isDirty(t));
+function unsavedUnder(id, cascade = true) {
+  return S.tabs.filter((t) => (t.id === id || (cascade && t.owner === id)) && isDirty(t));
 }
 
 /* resolveClosing answers the dialog. Saving that fails leaves it open, since
@@ -1365,7 +1373,7 @@ export async function resolveClosing(action) {
     for (const tab of pending.tabs) tab.edited = null;
   }
   S.closing = null;
-  await closeTab(pending.id, pending.remember);
+  await closeTab(pending.id, pending.remember, false, pending.cascade);
 }
 
 /* Not named `remember`: closeTab already takes a parameter by that name. */

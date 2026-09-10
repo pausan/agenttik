@@ -4,7 +4,7 @@ import { useToast } from "@nuxt/ui/composables";
 
 import {
   S,
-  closeTab,
+  closeTabOnly,
   hasInspector,
   hit,
   init,
@@ -62,11 +62,12 @@ function onKey(e) {
     return;
   }
   if (hit(e, "tab.close")) {
-    // A file opened from a session still belongs to that conversation.
-    // Always consume the chord so it never closes the browser tab.
-    return run(e, () => {
-      if (S.owner?.kind === "session") closeTab(S.owner.id);
-    });
+    // Ctrl+W closes the tab in front, not the session that owns a file.
+    // Always consume the chord so it never closes the browser tab, and do
+    // not let a held key walk through the rest of the strip.
+    e.preventDefault();
+    if (!e.repeat) closeTabOnly(S.tab?.id);
+    return;
   }
 
   if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;

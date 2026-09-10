@@ -33,6 +33,7 @@
 | [029-desktop-proxy-logging.md](029-desktop-proxy-logging.md) | Why the window logged broken pipes, and the abort it recovers instead |
 | [030-project-archived-sessions.md](030-project-archived-sessions.md) | The project page's archived list and its fuzzy filter |
 | [031-copilot-subscription.md](031-copilot-subscription.md) | GitHub Copilot CLI sessions and account quota |
+| [032-single-tab-close-shortcut.md](032-single-tab-close-shortcut.md) | Ctrl+W closes one active tab, including when held |
 
 Status: queued prompts now retain, show and let users change their individual
 provider, model and effort before starting — see 012. A project page now lists

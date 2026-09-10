@@ -12,7 +12,7 @@
 
 export const ACTIONS = [
   { id: "session.new", group: "Conversations", what: "New session in the current project", keys: ["Ctrl+N", "Ctrl+T"] },
-  { id: "tab.close", group: "Conversations", what: "Close the current conversation", keys: ["Ctrl+W"] },
+  { id: "tab.close", group: "Conversations", what: "Close the current tab", keys: ["Ctrl+W"] },
   { id: "tab.reopen", group: "Conversations", what: "Restore the last closed tab in this project", keys: ["Ctrl+Shift+T"] },
 
   { id: "tab.prev", group: "Tabs", what: "Previous tab", keys: ["Ctrl+PageUp"] },

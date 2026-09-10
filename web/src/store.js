@@ -463,12 +463,13 @@ export async function openProject(id, silent = false) {
   const open = S.tabs.find((t) => t.id === tabID);
   if (open) return selectTab(tabID);
 
-  let project, stats, sessions;
+  let project, stats, sessions, archived;
   try {
-    [project, stats, sessions] = await Promise.all([
+    [project, stats, sessions, archived] = await Promise.all([
       api("GET", "/api/projects/" + id),
       api("GET", `/api/projects/${id}/stats`),
       projectSessions(id),
+      projectArchived(id),
     ]);
   } catch (e) {
     if (!silent) fail(e);
@@ -479,25 +480,34 @@ export async function openProject(id, silent = false) {
     kind: "project",
     label: project.name,
     projectID: id,
-    data: { project, stats, sessions },
+    data: { project, stats, sessions, archived },
   });
   await Promise.all([refreshProjects(), refreshSessions()]).catch(fail);
 }
 
-/* Project views hide archived sessions; the Sessions list keeps them. */
+/* The project page's own list is what is still open in the project, in the
+   order it was dragged into. */
 function projectSessions(id) {
   return api("GET", `/api/sessions?window=all&project_id=${id}&include_done=false`);
+}
+
+/* Archived ones are the second list under it, newest first, which is the
+   order the server sends them in. */
+function projectArchived(id) {
+  return api("GET", `/api/sessions?window=all&project_id=${id}&only_done=true`);
 }
 
 async function reloadProjectTab(tab) {
   const id = tab.projectID;
   try {
-    const [stats, sessions] = await Promise.all([
+    const [stats, sessions, archived] = await Promise.all([
       api("GET", `/api/projects/${id}/stats`),
       projectSessions(id),
+      projectArchived(id),
     ]);
     tab.data.stats = stats;
     tab.data.sessions = sessions;
+    tab.data.archived = archived;
   } catch {
     /* a refresh that fails is not worth interrupting anyone over */
   }

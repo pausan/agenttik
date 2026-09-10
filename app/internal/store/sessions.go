@@ -81,10 +81,13 @@ type SessionFilter struct {
 	Query       string
 	Limit       int
 	ExcludeDone bool // the project views hide ticked-off sessions
+	OnlyDone    bool // ... and list them separately, under their own filter
 }
 
 // ListSessions orders one project's sessions by the order they were dragged
-// into, and every other listing by running first, then recency.
+// into, and every other listing by running first, then recency. An
+// archived-only listing is history rather than a list anyone arranged, so it
+// comes back newest first whether or not it is scoped to a project.
 func (s *Store) ListSessions(f SessionFilter) ([]Session, error) {
 	var where []string
 	var args []any
@@ -100,6 +103,9 @@ func (s *Store) ListSessions(f SessionFilter) ([]Session, error) {
 	if f.ExcludeDone {
 		where = append(where, "s.done_at = 0")
 	}
+	if f.OnlyDone {
+		where = append(where, "s.done_at > 0")
+	}
 	if q := strings.TrimSpace(f.Query); q != "" {
 		where = append(where, "(s.title LIKE ? OR p.name LIKE ? OR p.path LIKE ?)")
 		like := "%" + q + "%"
@@ -109,7 +115,9 @@ func (s *Store) ListSessions(f SessionFilter) ([]Session, error) {
 	if len(where) > 0 {
 		sqlStr += " WHERE " + strings.Join(where, " AND ")
 	}
-	if f.ProjectID > 0 {
+	if f.OnlyDone {
+		sqlStr += ` ORDER BY s.last_active_at DESC`
+	} else if f.ProjectID > 0 {
 		sqlStr += ` ORDER BY s.position, s.last_active_at DESC`
 	} else {
 		sqlStr += ` ORDER BY (s.status = '` + StatusRunning + `') DESC, s.last_active_at DESC`

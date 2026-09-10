@@ -1,11 +1,17 @@
 <script setup>
-/* A project in the centre: its open sessions, in the order you put them.
+/* A project in the centre: its open sessions, in the order you put them, and
+   under them everything it has archived.
 
    Rows are dragged with the browser's own drag and drop rather than pointer
    maths. The list reorders under the cursor as you go, so where the row is
    when you let go is where it lands, and the new order is sent once on drop.
-   Archived sessions are not here at all — they stay in the Sessions list. */
-import { ref } from "vue";
+
+   The archived list is not dragged and is not ordered by anyone: it is
+   history, newest at the top, behind a fuzzy filter. A project that has run
+   for a month has far more archived conversations than open ones, and the
+   only way back to one of them was the time-windowed Sessions pane, which
+   mixes in every other project. */
+import { computed, ref } from "vue";
 
 import {
   S,
@@ -17,12 +23,28 @@ import {
   stopSession,
 } from "../store";
 import { ago } from "../api";
+import { fuzzyAny } from "../fuzzy";
 import SessionRow from "./SessionRow.vue";
 
 const props = defineProps({ tab: { type: Object, required: true } });
 
 const dragging = ref("");
 const renaming = ref(""); // the session whose title is being edited
+const filter = ref("");
+
+/* The filter reads titles, not prompts: a prompt is up to 600 characters and
+   a subsequence match against one of those matches nearly anything typed.
+   The prompt is still a hover away on every row.
+
+   Matches keep the server's order rather than moving the best one to the
+   top — the point of the list is when a conversation happened. */
+const matches = computed(() =>
+  (props.tab.data.archived || []).filter(
+    (s) => fuzzyAny([s.title || "Untitled session"], filter.value) !== null,
+  ),
+);
+
+const subtitle = (s) => `${s.model}${s.effort ? " · " + s.effort : ""} · ${ago(s.last_active_at)}`;
 
 function onStart(e, id) {
   dragging.value = id;
@@ -85,7 +107,7 @@ function onDrop() {
           :title="s.title"
           :status="s.status"
           :queued="s.queue_count"
-          :sub="`${s.model}${s.effort ? ' · ' + s.effort : ''} · ${ago(s.last_active_at)}`"
+          :sub="subtitle(s)"
           :active="S.detail?.session.id === s.id"
           :stoppable="s.status === 'running' || s.queue_count > 0"
           :archive="s.status !== 'running' && s.queue_count === 0"
@@ -96,6 +118,45 @@ function onDrop() {
           @editing="renaming = $event ? s.id : ''"
         />
       </div>
+
+      <!-- Archived: newest at the top, oldest at the bottom. Only drawn once
+           the project has archived something, so a new project is still just
+           its open sessions. -->
+      <section v-if="tab.data.archived?.length" class="mt-6 border-t border-default pt-4">
+        <div class="mb-2 flex items-center gap-3">
+          <h3 class="m-0 shrink-0 text-xs font-semibold tracking-wide text-dimmed uppercase">
+            Archived
+          </h3>
+          <UInput
+            v-model="filter"
+            type="search"
+            icon="i-lucide-search"
+            placeholder="Filter archived sessions"
+            class="min-w-0 flex-1"
+          />
+          <span class="shrink-0 text-xs text-dimmed tabular-nums">
+            {{ matches.length }}/{{ tab.data.archived.length }}
+          </span>
+        </div>
+
+        <p v-if="!matches.length" class="px-3 py-4 text-center text-dimmed">
+          No archived session matches that.
+        </p>
+        <SessionRow
+          v-for="s in matches"
+          :key="s.id"
+          :title="s.title"
+          :prompt="s.prompt"
+          :status="s.status"
+          :sub="subtitle(s)"
+          :active="S.detail?.session.id === s.id"
+          archived
+          archive
+          @select="openSession(s.id)"
+          @toggle-archive="setSessionArchived(s, false)"
+          @rename="renameSession(s, $event)"
+        />
+      </section>
     </div>
   </div>
 </template>

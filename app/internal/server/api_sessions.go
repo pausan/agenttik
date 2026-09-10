@@ -36,8 +36,10 @@ func (s *Server) listSessions(c *fiber.Ctx) error {
 		Query:     c.Query("q"),
 		Limit:     c.QueryInt("limit", 200),
 		// The Sessions list keeps ticked-off sessions; the project views ask
-		// for them to be left out.
+		// for them to be left out, then ask for those alone for their
+		// archive filter.
 		ExcludeDone: !c.QueryBool("include_done", true),
+		OnlyDone:    c.QueryBool("only_done", false),
 	}
 	if d > 0 {
 		f.Since = time.Now().Add(-d).UnixMilli()

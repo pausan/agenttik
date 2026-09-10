@@ -31,9 +31,12 @@
 | [027-ignored-files-in-the-tree.md](027-ignored-files-in-the-tree.md) | Every file in the Tree, the ignored ones grey |
 | [028-scheduled-jobs.md](028-scheduled-jobs.md) | Repeating a prompt on a clock, and the sessions it spawns |
 | [029-desktop-proxy-logging.md](029-desktop-proxy-logging.md) | Why the window logged broken pipes, and the abort it recovers instead |
+| [030-project-archived-sessions.md](030-project-archived-sessions.md) | The project page's archived list and its fuzzy filter |
 
-Status: the desktop window no longer logs a broken pipe every time the UI
-reopens its event stream — see 029. A commit row in the Commits pane now shows only hash, author and time,
+Status: a project page now lists what it has archived under its open
+sessions, newest first, behind a fuzzy filter — see 030. The desktop window no
+longer logs a broken pipe every time the UI reopens its event stream — see
+029. A commit row in the Commits pane now shows only hash, author and time,
 and right-clicking one copies its hash — see 013. A prompt can be scheduled to repeat — every X hours Y minutes, or
 daily, weekly or monthly at a time — for a number of runs or forever; each run
 is a fresh session that leaves the project list when its turn ends, a run that

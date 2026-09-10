@@ -81,7 +81,26 @@ const sendNowHint = computed(() =>
 
 function waitLabel(since) {
   const secs = Math.max(0, Math.floor((now.value - Number(since || 0)) / 1000));
-  return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
+  return clockLabel(secs);
+}
+
+const clockLabel = (secs) => `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
+
+/* A prompt held back because the provider it needs was away says so where it
+   waits: what failed, and how long until the next attempt. That countdown is
+   the whole answer to "is this stuck?" — nothing was lost, the clock is what
+   will start it, and Send now is right there for anyone done waiting. A
+   prompt only waiting its turn has no retry_at and reads as before.
+   See specs/045-provider-outage-retry.md. */
+const heldLabel = (q) => (q.retry_at ? `Waiting for ${providerOf(q.provider)?.display_name || q.provider}` : "Queued");
+
+function retryNote(q) {
+  if (!q.retry_at) return "";
+  const left = Math.max(0, Math.round((Number(q.retry_at) - now.value) / 1000));
+  const when = left ? `retrying in ${clockLabel(left)}` : "retrying now";
+  const tried = q.retry_count > 1 ? ` · ${q.retry_count} attempts so far` : "";
+  const why = String(q.retry_error || "").trim().split("\n")[0];
+  return `${why.length > 200 ? why.slice(0, 200) + "…" : why} — ${when}${tried}`;
 }
 
 async function setQueuedChoice(q, provider, model, effort) {
@@ -167,16 +186,28 @@ watch(
            and the timer are what say it has not started. -->
       <div v-for="q in queued" :key="q.id" class="mb-4 flex flex-col items-end" aria-label="Queued prompt">
         <div class="mb-0.5 flex flex-row-reverse items-center gap-1.5">
-          <span class="text-[11px] font-medium tracking-wider text-dimmed uppercase">{{ q.pending ? "Sending…" : "Queued" }}</span>
+          <span
+            class="text-[11px] font-medium tracking-wider uppercase"
+            :class="q.retry_at ? 'text-warning' : 'text-dimmed'"
+            >{{ q.pending ? "Sending…" : heldLabel(q) }}</span
+          >
           <span class="flex items-center gap-1 font-mono text-[11px] text-dimmed tabular-nums">
             <span aria-hidden="true">{{ clockFace }}</span>{{ waitLabel(q.created_at) }}
           </span>
         </div>
         <div
-          class="max-w-[85%] rounded-[var(--ui-radius)] border border-dashed border-default bg-elevated/50 px-3 py-2 whitespace-pre-wrap text-muted wrap-anywhere"
+          class="max-w-[85%] rounded-[var(--ui-radius)] border border-dashed bg-elevated/50 px-3 py-2 whitespace-pre-wrap text-muted wrap-anywhere"
+          :class="q.retry_at ? 'border-warning/50' : 'border-default'"
         >
           {{ q.prompt }}
         </div>
+        <p
+          v-if="retryNote(q)"
+          class="mt-1 max-w-[85%] text-right text-[11px] text-dimmed wrap-anywhere"
+          aria-label="Why this prompt is waiting"
+        >
+          {{ retryNote(q) }}
+        </p>
         <div class="mt-1 flex items-center gap-1">
           <UPopover>
             <UButton

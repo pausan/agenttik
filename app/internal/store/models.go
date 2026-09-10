@@ -79,6 +79,15 @@ type QueuedMessage struct {
 	Model     string `json:"model"`
 	Effort    string `json:"effort"`
 	CreatedAt int64  `json:"created_at"`
+
+	// A prompt whose turn failed because the provider was away is held here
+	// until RetryAt, keeping the CreatedAt it was accepted with so it goes
+	// back to the place in the queue it left. RetryAt is 0 for a prompt that
+	// is only waiting its turn; RetryError is the failure that put it back.
+	// See 045-provider-outage-retry.md.
+	RetryAt    int64  `json:"retry_at,omitempty"`
+	RetryCount int64  `json:"retry_count,omitempty"`
+	RetryError string `json:"retry_error,omitempty"`
 }
 
 // Schedule is a prompt plus a clock. Each time it comes due it starts a new
@@ -228,11 +237,14 @@ type ServerConfig struct {
 	Port    int    `json:"port"`
 }
 
-// Session status values.
+// Session status values. Waiting is idle with a reason: the session has a
+// prompt it cannot run yet because the provider it needs is away, and the
+// clock is what will start it. See 045-provider-outage-retry.md.
 const (
 	StatusIdle    = "idle"
 	StatusRunning = "running"
 	StatusError   = "error"
+	StatusWaiting = "waiting"
 )
 
 // Recurrence kinds.

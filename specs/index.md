@@ -46,8 +46,14 @@
 | [042-sidebar-project-rows.md](042-sidebar-project-rows.md) | A project added lands last, the rule and spacing between projects, and the letter that folds one |
 | [043-exposed-server.md](043-exposed-server.md) | Serving the desktop window's UI to a browser too, on a chosen host and port |
 | [044-command-line.md](044-command-line.md) | Long options, `--help`, and the version a release tag builds in |
+| [045-provider-outage-retry.md](045-provider-outage-retry.md) | A prompt whose provider was away waits in the queue and starts itself when it answers |
 
-Status: The command line now documents its options with two dashes and
+Status: A turn that fails because its provider is away — no internet, a
+5xx, or a spent allowance — no longer costs the prompt: it goes back in the
+queue where it was, the task shows as waiting, and a clock starts it once the
+provider answers, honouring the reset the provider named when it named one; see
+045.
+The command line now documents its options with two dashes and
 answers `--help` and `--version`; a `vX.Y.Z` tag builds its `X.Y.Z` into the
 binary, and an untagged build reports its commit; see 044.
 The desktop window can now also serve a browser — this machine or

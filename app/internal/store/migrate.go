@@ -190,6 +190,16 @@ CREATE TABLE server_config (
     port    INTEGER NOT NULL DEFAULT 0
 );
 	`,
+	`
+-- A queued prompt whose turn failed because the provider was away goes back
+-- in the queue held until retry_at, with the failure that put it there and
+-- how many attempts it has cost. Held here rather than in the runner so a
+-- restart mid-outage waits its turn out instead of retrying at once, and so
+-- the waiting bubble can say what it is waiting for.
+ALTER TABLE queued_messages ADD COLUMN retry_at    INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE queued_messages ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE queued_messages ADD COLUMN retry_error TEXT    NOT NULL DEFAULT '';
+	`,
 }
 
 func migrate(db *sql.DB) error {

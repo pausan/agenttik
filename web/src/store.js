@@ -2092,6 +2092,10 @@ async function syncMessages(tab) {
     tab.detail.turns = detail.turns;
     tab.detail.queued = detail.queued;
     tab.detail.session.queue_count = detail.session.queue_count;
+    // A turn that ended on a provider being away leaves its prompt queued and
+    // the task waiting, so the status comes back with the queue that explains
+    // it. See specs/045-provider-outage-retry.md.
+    tab.detail.session.status = detail.session.status;
   } catch {
     /* the transcript on screen is still the one the stream produced */
   }

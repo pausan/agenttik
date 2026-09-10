@@ -37,6 +37,26 @@ func (s *Store) FinishTurn(t *Turn) error {
 	return nil
 }
 
+// DiscardTurn erases a turn and everything it recorded. It is for an attempt
+// that produced nothing: a provider that was away failed before a word of the
+// answer arrived, and the prompt is going back in the queue to be tried again.
+// Keeping those would grow a prompt bubble and an error bubble per attempt in
+// the transcript, and count each one in the turns the session is said to have
+// spent, for work that never happened.
+//
+// Only the caller can know an attempt was empty, so this asks nothing: an
+// attempt that got as far as producing text, a tool call, or tokens is kept
+// like any other failed turn.
+func (s *Store) DiscardTurn(turnID int64) error {
+	if _, err := s.db.Exec(`DELETE FROM messages WHERE turn_id = ?`, turnID); err != nil {
+		return fmt.Errorf("discard turn %d: %w", turnID, err)
+	}
+	if _, err := s.db.Exec(`DELETE FROM turns WHERE id = ?`, turnID); err != nil {
+		return fmt.Errorf("discard turn %d: %w", turnID, err)
+	}
+	return nil
+}
+
 // statsSelect aggregates a set of turns; the caller appends the WHERE clause.
 const statsSelect = `SELECT COUNT(*),
 	COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0),

@@ -22,6 +22,11 @@ var (
 	ErrNotRunning      = errors.New("session has no running turn")
 	ErrForcePending    = errors.New("session already has a forced prompt pending")
 	ErrUnknownProvider = errors.New("unknown provider")
+	// ErrProviderAway says the turn did not start because the provider was
+	// away, and the prompt is back in the queue waiting for it. The prompt is
+	// not lost and nothing failed, so a caller that keeps its own record of
+	// the attempt leaves that record open. See 045-provider-outage-retry.md.
+	ErrProviderAway = errors.New("provider away; prompt requeued")
 )
 
 // Event is what the UI receives over SSE: a provider event tagged with the
@@ -91,6 +96,18 @@ func (r *Runner) Running(sessionID string) bool {
 // Send starts a turn. It returns as soon as the provider process is up; the
 // turn continues in the background and is observed over the hub.
 func (r *Runner) Send(sessionID, prompt string) (*store.Turn, error) {
+	return r.send(store.QueuedMessage{SessionID: sessionID, Prompt: prompt,
+		CreatedAt: time.Now().UnixMilli()})
+}
+
+// send is Send's body, over the queue row shape rather than a bare prompt.
+// A turn carries what it would take to queue its prompt again because the
+// provider can turn out to be away — mid-turn or before the first word — and
+// then the prompt goes back where it was waiting instead of being lost. A
+// prompt sent straight to a session has no row of its own yet; it is described
+// by one here, with the time it was accepted, for the same reason.
+func (r *Runner) send(queued store.QueuedMessage) (*store.Turn, error) {
+	sessionID, prompt := queued.SessionID, queued.Prompt
 	sess, err := r.store.GetSession(sessionID)
 	if err != nil {
 		return nil, err
@@ -99,6 +116,10 @@ func (r *Runner) Send(sessionID, prompt string) (*store.Turn, error) {
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrUnknownProvider, sess.Provider)
 	}
+	// Whatever the turn actually runs with is what a requeue must ask for
+	// again: a queued row's own choice was applied to the session before it
+	// got here, and a direct send has none of its own.
+	queued.Provider, queued.Model, queued.Effort = sess.Provider, sess.Model, sess.Effort
 
 	r.mu.Lock()
 	if _, busy := r.active[sessionID]; busy {
@@ -154,6 +175,12 @@ func (r *Runner) Send(sessionID, prompt string) (*store.Turn, error) {
 		Permission:        agent.Permission(sess.Permission),
 	})
 	if err != nil {
+		// Nothing was produced, so an outage leaves no trace but the waiting
+		// prompt: the attempt is erased and the clock owns it from here.
+		if r.holdForOutage(sess, queued, turn, err.Error(), false) {
+			release()
+			return nil, ErrProviderAway
+		}
 		turn.Status, turn.Error = "error", err.Error()
 		r.store.FinishTurn(turn)
 		r.store.AddMessage(sessionID, turn.ID, store.RoleError, err.Error())
@@ -171,7 +198,7 @@ func (r *Runner) Send(sessionID, prompt string) (*store.Turn, error) {
 	r.hub.Publish(sess.ID, started)
 	r.hub.Publish(ProjectTopic(sess.ProjectID), started)
 
-	go r.consume(sess, turn, events, release)
+	go r.consume(sess, turn, queued, events, release)
 	return &snapshot, nil
 }
 
@@ -271,7 +298,7 @@ func (r *Runner) sendQueued(queued *store.QueuedMessage) (*store.Turn, error) {
 			return nil, err
 		}
 	}
-	return r.Send(queued.SessionID, queued.Prompt)
+	return r.send(*queued)
 }
 
 // dispatchLock serializes queue dispatch within one project. One lock per
@@ -306,18 +333,14 @@ func (r *Runner) dispatch(projectID int64, preferredSessionID string) {
 		return
 	}
 
-	sess, err := r.store.NextQueuedSession(projectID, preferredSessionID)
-	if err != nil || sess == nil {
-		return
-	}
-	queued, err := r.store.NextQueuedMessage(sess.ID)
+	_, queued, err := r.store.NextQueuedRun(projectID, preferredSessionID, time.Now().UnixMilli())
 	if err != nil || queued == nil {
 		return
 	}
+	// A prompt the provider was away for is already back in the queue under a
+	// new row, so this one is dropped either way: what is removed here is the
+	// row that was claimed, not the prompt.
 	if _, err := r.sendQueued(queued); err == ErrBusy {
-		return
-	} else if err != nil {
-		_ = r.store.RemoveQueuedMessage(queued.ID)
 		return
 	}
 	_ = r.store.RemoveQueuedMessage(queued.ID)
@@ -367,6 +390,10 @@ func (r *Runner) Stop(sessionID string) error {
 	}
 	if ok {
 		turn.cancel()
+	} else if sess.Status == store.StatusWaiting {
+		// Nothing to cancel: the session was waiting on a provider, and the
+		// prompt it was waiting for has just been dropped.
+		_ = r.store.SetSessionStatus(sessionID, store.StatusIdle)
 	}
 	return nil
 }
@@ -384,11 +411,18 @@ func (r *Runner) StopAll() {
 	}
 }
 
-func (r *Runner) consume(sess *store.Session, turn *store.Turn, events <-chan agent.Event, release func()) {
+func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.QueuedMessage, events <-chan agent.Event, release func()) {
 	defer release()
 
 	var text strings.Builder
 	var failure string
+	// produced is whether the turn got anywhere before it ended: a word of
+	// prose, a tool call, or tokens the provider charged for. It is what
+	// separates a turn worth keeping from an attempt that never happened,
+	// which is the difference between requeueing a prompt behind its own
+	// record and requeueing it as if nothing had been tried. See
+	// 045-provider-outage-retry.md.
+	var produced bool
 
 	// flushText writes the assistant prose accumulated so far. Called before
 	// each tool call so the transcript keeps its original ordering.
@@ -398,6 +432,7 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, events <-chan ag
 		}
 		r.store.AddMessage(sess.ID, turn.ID, store.RoleAssistant, text.String())
 		text.Reset()
+		produced = true
 	}
 
 	for ev := range events {
@@ -414,6 +449,7 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, events <-chan ag
 			if ev.Tool != nil {
 				r.store.AddMessage(sess.ID, turn.ID, store.RoleTool,
 					toolSummary(ev.Tool))
+				produced = true
 			}
 		case agent.EventUsage:
 			// Mid-turn usage reports the size of one prompt, not the turn's
@@ -437,6 +473,7 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, events <-chan ag
 				turn.CacheWriteTokens = ev.Usage.CacheWriteTokens
 				turn.CostUSD = ev.Usage.CostUSD
 				turn.ContextWindow = ev.Usage.ContextWindow
+				produced = produced || ev.Usage.OutputTokens > 0
 			}
 		case agent.EventError:
 			failure = ev.Text
@@ -453,10 +490,18 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, events <-chan ag
 		turn.Status, turn.Error = "error", failure
 		sessionStatus = store.StatusError
 	}
-	r.store.FinishTurn(turn)
-	r.store.SetSessionStatus(sess.ID, sessionStatus)
-	if sess.ScheduleID != 0 {
-		r.finishScheduledRun(sess, turn.Status)
+
+	// The provider being away is not this turn failing. The same prompt runs
+	// unchanged once it is back, so it goes back in the queue under a clock
+	// and the session waits instead of reporting an error nobody caused — and
+	// the schedule that spawned it, if any, keeps its run open, since what it
+	// asked for has not happened yet. holdForOutage owns the turn from here.
+	if failure == "" || !r.holdForOutage(sess, queued, turn, failure, produced) {
+		r.store.FinishTurn(turn)
+		r.store.SetSessionStatus(sess.ID, sessionStatus)
+		if sess.ScheduleID != 0 {
+			r.finishScheduledRun(sess, turn.Status)
+		}
 	}
 
 	stats, _ := r.store.SessionStats(sess.ID)

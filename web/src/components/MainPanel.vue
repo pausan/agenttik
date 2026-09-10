@@ -79,6 +79,16 @@ function onEnd() {
 
 const current = computed(() => S.tab);
 const running = computed(() => !!S.detail?.running);
+
+/* The badge says what the task is doing. "waiting" is its own state rather
+   than a quiet idle: the task has a prompt it cannot run because the provider
+   it needs is away, which is worth seeing without opening the transcript.
+   See specs/045-provider-outage-retry.md. */
+const badge = computed(() => {
+  if (running.value) return { status: "running", color: "primary", label: "running" };
+  if (S.detail?.session.status === "waiting") return { status: "waiting", color: "warning", label: "waiting" };
+  return { status: "idle", color: "neutral", label: "idle" };
+});
 </script>
 
 <template>
@@ -152,9 +162,9 @@ const running = computed(() => !!S.detail?.running);
           </UBadge>
         </template>
         <template v-else-if="S.detail">
-          <UBadge :color="running ? 'primary' : 'neutral'" variant="soft" size="sm">
-            <StatusDot :status="running ? 'running' : 'idle'" />
-            {{ running ? "running" : "idle" }}
+          <UBadge :color="badge.color" variant="soft" size="sm">
+            <StatusDot :status="badge.status" />
+            {{ badge.label }}
           </UBadge>
           <UBadge color="neutral" variant="soft" size="sm">{{ S.detail.session.model }}</UBadge>
           <UBadge color="neutral" variant="soft" size="sm">

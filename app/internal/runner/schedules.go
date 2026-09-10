@@ -3,6 +3,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -83,7 +84,12 @@ func (r *Runner) fireSchedule(s *store.Schedule, now time.Time) {
 	}
 	// Straight to Send: the project queue is for prompts waiting on a project,
 	// and a schedule that waited would stop being a schedule.
-	if _, err := r.Send(sess.ID, s.Prompt); err != nil {
+	//
+	// A provider that is away is the exception, and Send has already put the
+	// prompt in the queue for it. The run stays open, so the schedule reads as
+	// busy and passes over its next slot rather than piling up a run an hour
+	// for as long as the outage lasts; the retry closes it.
+	if _, err := r.Send(sess.ID, s.Prompt); err != nil && !errors.Is(err, ErrProviderAway) {
 		_, _ = r.store.FinishScheduleRun(sess.ID, store.RunError)
 	}
 }

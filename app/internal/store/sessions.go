@@ -250,6 +250,24 @@ func (s *Store) ReorderSessions(projectID int64, ids []string) error {
 	return nil
 }
 
+// queuedCols is one column list for every read of the queue, so a row scans
+// the same way wherever it is read from.
+const queuedCols = `id, session_id, prompt, provider, model, effort, created_at,
+	retry_at, retry_count, retry_error`
+
+// queuedOrder is the order a session's queue runs in: when each prompt was
+// accepted, id breaking a tie inside one millisecond. Acceptance time rather
+// than id, because a prompt put back after an outage keeps the time it was
+// accepted with and so returns to the place it left. See RequeueMessage.
+const queuedOrder = ` ORDER BY created_at, id`
+
+func scanQueued(row interface{ Scan(...any) error }) (*QueuedMessage, error) {
+	v := &QueuedMessage{}
+	err := row.Scan(&v.ID, &v.SessionID, &v.Prompt, &v.Provider, &v.Model, &v.Effort,
+		&v.CreatedAt, &v.RetryAt, &v.RetryCount, &v.RetryError)
+	return v, err
+}
+
 // EnqueueMessage persists a prompt and its chosen provider settings until the
 // project runner selects it. Queue order inside one session is first in, first
 // out.
@@ -264,12 +282,35 @@ func (s *Store) EnqueueMessage(sessionID, prompt, provider, model, effort string
 	return v, nil
 }
 
-// NextQueuedMessage returns the oldest prompt waiting in one session.
-func (s *Store) NextQueuedMessage(sessionID string) (*QueuedMessage, error) {
-	v := &QueuedMessage{}
-	err := s.db.QueryRow(`SELECT id, session_id, prompt, provider, model, effort, created_at FROM queued_messages
-		WHERE session_id = ? ORDER BY id LIMIT 1`, sessionID).
-		Scan(&v.ID, &v.SessionID, &v.Prompt, &v.Provider, &v.Model, &v.Effort, &v.CreatedAt)
+// RequeueMessage puts a prompt back after its turn failed on a provider that
+// was away, held until retryAt and carrying the failure that put it there.
+//
+// It keeps the acceptance time the prompt already had, which is what returns
+// it to the place in the queue it left rather than behind whatever was queued
+// while it ran. The waiting timer in the transcript keeps counting from the
+// same moment for the same reason: the wait the user is being told about
+// started when they sent it. See 045-provider-outage-retry.md.
+func (s *Store) RequeueMessage(v QueuedMessage, retryAt int64, failure string) (*QueuedMessage, error) {
+	v.RetryAt, v.RetryCount, v.RetryError = retryAt, v.RetryCount+1, failure
+	res, err := s.db.Exec(`INSERT INTO queued_messages
+		(session_id, prompt, provider, model, effort, created_at, retry_at, retry_count, retry_error)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		v.SessionID, v.Prompt, v.Provider, v.Model, v.Effort, v.CreatedAt,
+		v.RetryAt, v.RetryCount, v.RetryError)
+	if err != nil {
+		return nil, fmt.Errorf("requeue message: %w", err)
+	}
+	v.ID, _ = res.LastInsertId()
+	return &v, nil
+}
+
+// NextQueuedMessage returns the oldest prompt in one session that is ready to
+// run at now. A prompt held back for a retry is still queued — it is drawn,
+// counted and can be forced — but it is not offered to the scheduler until
+// its wait is over.
+func (s *Store) NextQueuedMessage(sessionID string, now int64) (*QueuedMessage, error) {
+	v, err := scanQueued(s.db.QueryRow(`SELECT `+queuedCols+` FROM queued_messages
+		WHERE session_id = ? AND retry_at <= ?`+queuedOrder+` LIMIT 1`, sessionID, now))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -282,9 +323,7 @@ func (s *Store) NextQueuedMessage(sessionID string) (*QueuedMessage, error) {
 // GetQueuedMessage returns one waiting prompt. Its session id lets callers
 // verify that a queue item belongs to the session they are acting on.
 func (s *Store) GetQueuedMessage(id int64) (*QueuedMessage, error) {
-	v := &QueuedMessage{}
-	err := s.db.QueryRow(`SELECT id, session_id, prompt, provider, model, effort, created_at FROM queued_messages WHERE id = ?`, id).
-		Scan(&v.ID, &v.SessionID, &v.Prompt, &v.Provider, &v.Model, &v.Effort, &v.CreatedAt)
+	v, err := scanQueued(s.db.QueryRow(`SELECT `+queuedCols+` FROM queued_messages WHERE id = ?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -298,8 +337,8 @@ func (s *Store) GetQueuedMessage(id int64) (*QueuedMessage, error) {
 // first, which is the order the scheduler will run them in. Always a slice, so
 // the transcript can iterate it without a guard.
 func (s *Store) ListQueuedMessages(sessionID string) ([]QueuedMessage, error) {
-	rows, err := s.db.Query(`SELECT id, session_id, prompt, provider, model, effort, created_at FROM queued_messages
-		WHERE session_id = ? ORDER BY id`, sessionID)
+	rows, err := s.db.Query(`SELECT `+queuedCols+` FROM queued_messages
+		WHERE session_id = ?`+queuedOrder, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("list queued messages: %w", err)
 	}
@@ -307,11 +346,35 @@ func (s *Store) ListQueuedMessages(sessionID string) ([]QueuedMessage, error) {
 
 	out := []QueuedMessage{}
 	for rows.Next() {
-		var v QueuedMessage
-		if err := rows.Scan(&v.ID, &v.SessionID, &v.Prompt, &v.Provider, &v.Model, &v.Effort, &v.CreatedAt); err != nil {
+		v, err := scanQueued(rows)
+		if err != nil {
 			return nil, fmt.Errorf("list queued messages: %w", err)
 		}
-		out = append(out, v)
+		out = append(out, *v)
+	}
+	return out, rows.Err()
+}
+
+// RetryProjects names the projects holding a prompt whose wait is over, so the
+// clock that retries them scans one indexed table instead of every session.
+// A prompt only waiting its turn has retry_at 0 and is not one of these: the
+// scheduler already reaches it when the project falls idle.
+func (s *Store) RetryProjects(now int64) ([]int64, error) {
+	rows, err := s.db.Query(`SELECT DISTINCT s.project_id
+		FROM queued_messages q JOIN sessions s ON s.id = q.session_id
+		WHERE q.retry_at > 0 AND q.retry_at <= ?`, now)
+	if err != nil {
+		return nil, fmt.Errorf("retry projects: %w", err)
+	}
+	defer rows.Close()
+
+	var out []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("retry projects: %w", err)
+		}
+		out = append(out, id)
 	}
 	return out, rows.Err()
 }
@@ -360,29 +423,51 @@ func (s *Store) QueueCount(sessionID string) (int64, error) {
 	return count, nil
 }
 
-// NextQueuedSession follows the projects visible session order. A preferred
-// session is returned first while it still has work, so a sessions own queue
-// drains before the scheduler returns to the projects top-to-bottom scan.
-func (s *Store) NextQueuedSession(projectID int64, preferredSessionID string) (*Session, error) {
+// NextQueuedRun picks the session whose queue runs next in a project, and the
+// prompt it will run. It follows the projects visible session order, and a
+// preferred session is returned first while it still has work, so a sessions
+// own queue drains before the scheduler returns to the projects top-to-bottom
+// scan.
+//
+// Session and prompt are chosen together because a session can hold prompts
+// and still have nothing to run: one waiting out a provider outage is passed
+// over so the ready work below it is not starved for the length of the wait.
+func (s *Store) NextQueuedRun(projectID int64, preferredSessionID string, now int64) (*Session, *QueuedMessage, error) {
+	ready := func(sess *Session) (*Session, *QueuedMessage, error) {
+		if sess.QueueCount == 0 {
+			return nil, nil, nil
+		}
+		queued, err := s.NextQueuedMessage(sess.ID, now)
+		if err != nil || queued == nil {
+			return nil, nil, err
+		}
+		return sess, queued, nil
+	}
+
 	if preferredSessionID != "" {
 		sess, err := s.GetSession(preferredSessionID)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		if sess.ProjectID == projectID && sess.QueueCount > 0 {
-			return sess, nil
+		if sess.ProjectID == projectID {
+			if sess, queued, err := ready(sess); err != nil || queued != nil {
+				return sess, queued, err
+			}
 		}
 	}
 	rows, err := s.ListSessions(SessionFilter{ProjectID: projectID, ExcludeDone: true})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for i := range rows {
-		if rows[i].QueueCount > 0 {
-			return &rows[i], nil
+		if rows[i].ID == preferredSessionID {
+			continue
+		}
+		if sess, queued, err := ready(&rows[i]); err != nil || queued != nil {
+			return sess, queued, err
 		}
 	}
-	return nil, nil
+	return nil, nil, nil
 }
 
 func (s *Store) DeleteSession(id string) error {

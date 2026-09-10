@@ -111,10 +111,12 @@ func run() error {
 
 	defer turns.StopAll()
 
-	// The clock runs for as long as the app does, in either shell.
-	schedules, stopSchedules := context.WithCancel(context.Background())
-	defer stopSchedules()
-	go turns.RunSchedules(schedules)
+	// The clocks run for as long as the app does, in either shell: one fires
+	// due schedules, the other retries prompts whose provider was away.
+	clocks, stopClocks := context.WithCancel(context.Background())
+	defer stopClocks()
+	go turns.RunSchedules(clocks)
+	go turns.RunQueueRetries(clocks)
 
 	if !*webOnly {
 		err := runDesktop(srv, lock, cfg.Addr)

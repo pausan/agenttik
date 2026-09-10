@@ -33,6 +33,11 @@ import (
 // errNoDesktop is returned by runDesktop in web-only builds.
 var errNoDesktop = errors.New("this build has no desktop window; rebuild with -tags desktop")
 
+// version is the release this binary was built from: the MAJOR.MINOR.PATCH of
+// the vMAJOR.MINOR.PATCH tag that ran the build, or the short commit when no
+// such tag did. The build sets it with -ldflags "-X main.version=...".
+var version = "dev"
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "agenttik:", err)
@@ -43,9 +48,24 @@ func main() {
 func run() error {
 	cfg := config.Default()
 	webOnly := flag.Bool("web", false, "serve the web UI only, no desktop window")
-	flag.StringVar(&cfg.Addr, "addr", cfg.Addr, "address to listen on")
-	flag.StringVar(&cfg.DataDir, "data-dir", cfg.DataDir, "directory for agenttik.db")
+	flag.StringVar(&cfg.Addr, "addr", cfg.Addr, "`host:port` to listen on")
+	flag.StringVar(&cfg.DataDir, "data-dir", cfg.DataDir, "`directory` holding agenttik.db")
+	showHelp := flag.Bool("help", false, "show this help and exit")
+	showVersion := flag.Bool("version", false, "show the version and exit")
+	flag.Usage = usage
 	flag.Parse()
+
+	// Asked for, so it goes to stdout and succeeds. A bad flag gets the same
+	// text on stderr from flag itself, which then exits 2.
+	if *showHelp {
+		flag.CommandLine.SetOutput(os.Stdout)
+		usage()
+		return nil
+	}
+	if *showVersion {
+		fmt.Println("agenttik", version)
+		return nil
+	}
 
 	if err := cfg.EnsureDataDir(); err != nil {
 		return err
@@ -104,6 +124,26 @@ func run() error {
 		log.Println("desktop window unavailable, serving the web UI instead")
 	}
 	return serveWeb(cfg, srv, turns, lock)
+}
+
+// usage prints the flags in their double-dash form. The flag package accepts
+// -addr and --addr alike, and the help shows the one the README uses.
+func usage() {
+	out := flag.CommandLine.Output()
+	fmt.Fprintf(out, "agenttik %s - run agent coding sessions from one local UI.\n\n", version)
+	fmt.Fprintf(out, "Usage:\n  agenttik [options]\n\nOptions:\n")
+	flag.VisitAll(func(f *flag.Flag) {
+		placeholder, help := flag.UnquoteUsage(f)
+		name := "--" + f.Name
+		if placeholder != "" {
+			name += " " + placeholder
+		}
+		fmt.Fprintf(out, "  %-22s %s", name, help)
+		if f.DefValue != "" && f.DefValue != "false" {
+			fmt.Fprintf(out, " (default %s)", f.DefValue)
+		}
+		fmt.Fprintln(out)
+	})
 }
 
 func serveWeb(cfg config.Config, srv *server.Server, turns *runner.Runner, lock *single.Lock) error {

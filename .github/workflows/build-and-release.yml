@@ -11,16 +11,22 @@ jobs:
   release-tag:
     runs-on: ubuntu-24.04
     outputs:
+      tag: ${{ steps.tag.outputs.tag }}
       version: ${{ steps.tag.outputs.version }}
       is_release: ${{ steps.tag.outputs.is_release }}
     steps:
+      # A release tag is vMAJOR.MINOR.PATCH, optionally carrying a suffix of
+      # letters, dashes and further dots. The full tag names the assets and the
+      # release; only the MAJOR.MINOR.PATCH part goes into the binary, so
+      # `agenttik --version` always reports a bare X.Y.Z.
       - id: tag
         env:
           REF_TYPE: ${{ github.ref_type }}
           TAG: ${{ github.ref_name }}
         run: |
-          if [[ "$REF_TYPE" == "tag" && "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            printf 'version=%s\n' "$TAG" >> "$GITHUB_OUTPUT"
+          if [[ "$REF_TYPE" == "tag" && "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)[-.A-Za-z0-9]*$ ]]; then
+            printf 'tag=%s\n' "$TAG" >> "$GITHUB_OUTPUT"
+            printf 'version=%s\n' "${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
             echo 'is_release=true' >> "$GITHUB_OUTPUT"
           else
             echo 'is_release=false' >> "$GITHUB_OUTPUT"
@@ -96,24 +102,25 @@ jobs:
           CGO_ENABLED: ${{ matrix.cgo_enabled }}
           GOOS: ${{ matrix.platform }}
           GOARCH: ${{ matrix.goarch }}
+          TAG: ${{ needs.release-tag.outputs.tag }}
           VERSION: ${{ needs.release-tag.outputs.version }}
         run: |
           mkdir -p dist
-          if [[ -z "$VERSION" ]]; then
-            VERSION="${GITHUB_SHA::12}"
-          fi
-          build_args=(
-            -trimpath
-            -tags "${{ matrix.build_tags }}"
-            -o "dist/agenttik_${VERSION}_${GOOS}_${GOARCH}${{ matrix.extension }}"
-          )
+          # An untagged push has no version to report, so it says which commit
+          # it is instead, in the file name and in the binary alike.
+          ldflags="-X main.version=${VERSION:-${GITHUB_SHA::12}}"
           if [[ -n "${{ matrix.ldflags }}" ]]; then
-            build_args+=(-ldflags "${{ matrix.ldflags }}")
+            ldflags="${{ matrix.ldflags }} $ldflags"
           fi
           if [[ -n "${{ matrix.cgo_ldflags }}" ]]; then
             export CGO_LDFLAGS="${{ matrix.cgo_ldflags }}"
           fi
-          go build "${build_args[@]}" ./app/cmd/agenttik
+          go build \
+            -trimpath \
+            -tags "${{ matrix.build_tags }}" \
+            -ldflags "$ldflags" \
+            -o "dist/agenttik_${TAG:-${GITHUB_SHA::12}}_${GOOS}_${GOARCH}${{ matrix.extension }}" \
+            ./app/cmd/agenttik
 
       - name: Upload release asset
         if: needs.release-tag.outputs.is_release == 'true'
@@ -141,5 +148,5 @@ jobs:
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.release-tag.outputs.version }}
+          TAG: ${{ needs.release-tag.outputs.tag }}
         run: gh release create "$TAG" release/* --title "$TAG" --generate-notes

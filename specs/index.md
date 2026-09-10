@@ -45,8 +45,12 @@
 | [041-project-archiving.md](041-project-archiving.md) | Putting a project away without deleting it, and the Settings list it waits in |
 | [042-sidebar-project-rows.md](042-sidebar-project-rows.md) | A project added lands last, the rule and spacing between projects, and the letter that folds one |
 | [043-exposed-server.md](043-exposed-server.md) | Serving the desktop window's UI to a browser too, on a chosen host and port |
+| [044-command-line.md](044-command-line.md) | Long options, `--help`, and the version a release tag builds in |
 
-Status: The desktop window can now also serve a browser — this machine or
+Status: The command line now documents its options with two dashes and
+answers `--help` and `--version`; a `vX.Y.Z` tag builds its `X.Y.Z` into the
+binary, and an untagged build reports its commit; see 044.
+The desktop window can now also serve a browser — this machine or
 another on the network — on a host and port chosen in Settings › Server:
 Everybody, localhost or a typed IP, starting on the app's own port. Off by
 default and remembered for the next launch; not offered on a web launch,

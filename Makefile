@@ -9,6 +9,16 @@ DIST     := dist
 WEBKIT_TAG := $(shell pkg-config --exists webkit2gtk-4.1 && echo webkit2_41)
 DESKTOP_TAGS := desktop production $(WEBKIT_TAG)
 
+# VERSION is what --version reports. A vX.Y.Z tag on HEAD gives its X.Y.Z,
+# dropping any suffix the tag carries; anything else gives the short commit.
+# Override it with `make build VERSION=1.2.3`.
+VERSION ?= $(shell git describe --tags --exact-match 2>/dev/null | \
+	sed -n 's/^v\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p')
+ifeq ($(strip $(VERSION)),)
+VERSION := $(shell git rev-parse --short=12 HEAD 2>/dev/null || echo dev)
+endif
+VERSION_LDFLAGS := -X main.version=$(VERSION)
+
 .PHONY: all build build-web build-windows-amd64 build-macos-arm64 run run-web test e2e vet fmt clean deps ui ui-dev
 
 all: build
@@ -23,23 +33,23 @@ ui-dev:
 
 ## build: desktop app (needs node, libwebkit2gtk-4.1-dev, libgtk-3-dev, gcc)
 build: ui
-	go build -tags "$(DESKTOP_TAGS)" -o $(BIN) $(PKG)
+	go build -ldflags "$(VERSION_LDFLAGS)" -tags "$(DESKTOP_TAGS)" -o $(BIN) $(PKG)
 
 ## build-web: web server only, no cgo and no system dependencies beyond node
 build-web: ui
-	CGO_ENABLED=0 go build -o $(BIN)-web $(PKG)
+	CGO_ENABLED=0 go build -ldflags "$(VERSION_LDFLAGS)" -o $(BIN)-web $(PKG)
 
 ## build-windows-amd64: Windows x64 desktop binary, with the embedded UI
 build-windows-amd64: ui
 	mkdir -p $(DIST)
-	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-H=windowsgui" -tags "desktop production" -o $(DIST)/agenttik_windows_amd64.exe $(PKG)
+	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-H=windowsgui $(VERSION_LDFLAGS)" -tags "desktop production" -o $(DIST)/agenttik_windows_amd64.exe $(PKG)
 
 ## build-macos-arm64: macOS ARM64 desktop binary (run this target on macOS)
 ## Wails calls UTType for the file dialog filters, so the linker needs
 ## UniformTypeIdentifiers. The wails CLI adds it; plain `go build` does not.
 build-macos-arm64: ui
 	mkdir -p $(DIST)
-	GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 CGO_LDFLAGS="-framework UniformTypeIdentifiers" go build -trimpath -tags "desktop production" -o $(DIST)/agenttik_darwin_arm64 $(PKG)
+	GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 CGO_LDFLAGS="-framework UniformTypeIdentifiers" go build -trimpath -ldflags "$(VERSION_LDFLAGS)" -tags "desktop production" -o $(DIST)/agenttik_darwin_arm64 $(PKG)
 
 run: build
 	./$(BIN)

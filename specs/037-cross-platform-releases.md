@@ -4,13 +4,18 @@
 embedded UI, on every push and manual dispatch. The build matrix uses native
 runners for Linux amd64 and arm64, macOS arm64, and Windows amd64.
 
-The matrix carries the per-platform build flags: the build tags, the Go
-`-ldflags`, and `CGO_LDFLAGS`. Both flag entries are only passed when they are
-set, so the Go defaults stand everywhere else. macOS needs
+The matrix carries the per-platform build flags: the build tags, extra Go
+`-ldflags`, and `CGO_LDFLAGS`. Those last two are only added when the platform
+sets them, so the Go defaults stand everywhere else. macOS needs
 `-framework UniformTypeIdentifiers`, because Wails calls `UTType` for the file
 dialog filters and only the `wails` CLI adds that framework; a plain
 `go build` fails to link without it.
 
-Only a pushed tag that exactly matches `vMAJOR.MINOR.PATCH` creates a GitHub
-Release. The release job waits for all matrix builds to succeed, then attaches
+Only a pushed tag matching `vMAJOR.MINOR.PATCH`, with an optional suffix of
+letters, dashes and further dots, creates a GitHub Release. The release job
+waits for all matrix builds to succeed, then attaches
 `agenttik_<tag>_<platform>_<architecture>` binaries, with `.exe` on Windows.
+An untagged push names its binaries after the short commit instead.
+
+Every build links in the version the binary reports, on top of whatever
+`-ldflags` the matrix already carries; see 044 for what that version is.

@@ -27,6 +27,9 @@ make run-web
 ```
 
 Open [localhost:7717](http://127.0.0.1:7717), add a project folder, and start a session.
+`--addr` and `--data-dir` change where it listens and where it keeps its
+database, `--web` skips the desktop window, and `--help` and `--version` say
+what this build is.
 For the desktop app, install the native build dependencies (`make deps` on
 Debian/Ubuntu), then run `make run`. `make build-windows-amd64` cross-compiles
 the Windows x64 binary; build the macOS ARM64 target on macOS with

@@ -98,10 +98,11 @@ func (s *Store) ListProjects() ([]Project, error) {
 // recentSessions feeds the Projects sidebar, so it hides ticked-off sessions
 // and follows the order its sessions were dragged into. A limit of 0 means all.
 func (s *Store) recentSessions(projectID int64, limit int) ([]SessionRef, error) {
-	query := `SELECT id, title, status,
-		(SELECT COUNT(*) FROM queued_messages q WHERE q.session_id = sessions.id) FROM sessions
-		 WHERE project_id = ? AND done_at = 0
-		 ORDER BY position, last_active_at DESC`
+	query := `SELECT s.id, s.title, s.status,
+		(SELECT COUNT(*) FROM queued_messages q WHERE q.session_id = s.id), ` +
+		firstPromptCol + ` FROM sessions s
+		 WHERE s.project_id = ? AND s.done_at = 0
+		 ORDER BY s.position, s.last_active_at DESC`
 	args := []any{projectID}
 	if limit > 0 {
 		query += ` LIMIT ?`
@@ -116,7 +117,7 @@ func (s *Store) recentSessions(projectID int64, limit int) ([]SessionRef, error)
 	refs := []SessionRef{}
 	for rows.Next() {
 		var r SessionRef
-		if err := rows.Scan(&r.ID, &r.Title, &r.Status, &r.QueueCount); err != nil {
+		if err := rows.Scan(&r.ID, &r.Title, &r.Status, &r.QueueCount, &r.Prompt); err != nil {
 			return nil, fmt.Errorf("recent sessions for project %d: %w", projectID, err)
 		}
 		refs = append(refs, r)

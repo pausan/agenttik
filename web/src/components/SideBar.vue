@@ -282,6 +282,7 @@ function onSessionDrop(e) {
           >
             <SessionRow
               :title="s.title"
+              :prompt="s.prompt"
               :status="s.status"
               :queued="s.queue_count"
               :active="S.detail?.session.id === s.id"
@@ -341,6 +342,7 @@ function onSessionDrop(e) {
           v-for="s in S.sessions"
           :key="s.id"
           :title="s.title"
+          :prompt="s.prompt"
           :status="s.status"
           :queued="s.queue_count"
           :sub="`${s.project_name} · ${s.project_path} · ${ago(s.last_active_at)}`"

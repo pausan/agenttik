@@ -25,6 +25,10 @@ type SessionRef struct {
 	Title      string `json:"title"`
 	Status     string `json:"status"`
 	QueueCount int64  `json:"queue_count"`
+
+	// Prompt is what the session was opened with, capped; the sidebar shows it
+	// when a row is hovered. See firstPromptCol.
+	Prompt string `json:"prompt,omitempty"`
 }
 
 type Session struct {
@@ -56,6 +60,10 @@ type Session struct {
 	// Denormalised for list views.
 	ProjectName string `json:"project_name,omitempty"`
 	ProjectPath string `json:"project_path,omitempty"`
+
+	// Prompt is what the session was opened with, capped; the sidebar shows it
+	// when a row is hovered. See firstPromptCol.
+	Prompt string `json:"prompt,omitempty"`
 }
 
 type QueuedMessage struct {

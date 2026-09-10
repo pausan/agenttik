@@ -7,18 +7,29 @@ import (
 	"strings"
 )
 
+// firstPromptCol is the prompt a session opened with, which the sidebar shows
+// on hover. It is capped in SQL: the tooltip clamps to five lines, and 600
+// characters is already more than five of them hold at its width, so the rest
+// would only weigh down every list. A session that has not run yet has no
+// message of its own, so the prompt still waiting in its queue stands in.
+const firstPromptCol = `COALESCE(
+	(SELECT substr(m.content, 1, 600) FROM messages m
+	  WHERE m.session_id = s.id AND m.role = '` + RoleUser + `' ORDER BY m.id LIMIT 1),
+	(SELECT substr(q.prompt, 1, 600) FROM queued_messages q
+	  WHERE q.session_id = s.id ORDER BY q.id LIMIT 1), '')`
+
 const sessionCols = `s.id, s.project_id, s.title, s.provider, s.provider_session_id,
 	s.model, s.effort, s.permission, s.source, s.status,
 	s.created_at, s.updated_at, s.last_active_at, s.done_at, s.position,
 	(SELECT COUNT(*) FROM queued_messages q WHERE q.session_id = s.id),
-	s.schedule_id, p.name, p.path`
+	s.schedule_id, p.name, p.path, ` + firstPromptCol
 
 func scanSession(sc interface{ Scan(...any) error }) (*Session, error) {
 	var v Session
 	err := sc.Scan(&v.ID, &v.ProjectID, &v.Title, &v.Provider, &v.ProviderSessionID,
 		&v.Model, &v.Effort, &v.Permission, &v.Source, &v.Status,
 		&v.CreatedAt, &v.UpdatedAt, &v.LastActiveAt, &v.DoneAt, &v.Position,
-		&v.QueueCount, &v.ScheduleID, &v.ProjectName, &v.ProjectPath)
+		&v.QueueCount, &v.ScheduleID, &v.ProjectName, &v.ProjectPath, &v.Prompt)
 	if err != nil {
 		return nil, err
 	}

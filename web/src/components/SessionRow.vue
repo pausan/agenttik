@@ -4,13 +4,19 @@
    one click away.
 
    Renaming happens in the row: the title becomes a field, Enter or leaving it
-   saves, Escape puts it back. */
+   saves, Escape puts it back.
+
+   A title is three to seven words the model chose, which is not always enough
+   to tell two conversations apart, so hovering the row shows the prompt it was
+   opened with. */
 import { nextTick, ref } from "vue";
 
 import StatusDot from "./StatusDot.vue";
 
 const props = defineProps({
   title: { type: String, default: "" },
+  // The prompt the session opened with, shown on hover. Empty draws no tooltip.
+  prompt: { type: String, default: "" },
   status: { type: String, default: "idle" },
   sub: { type: String, default: "" },
   // null keeps the row out of a numbered list. 0 is a row in one that no
@@ -70,27 +76,39 @@ function commit() {
       @keydown.esc.prevent="setEditing(false)"
     />
     <template v-else>
-      <button
-        type="button"
-        class="min-w-0 flex-1 px-2 py-1 text-left"
-        @click="$emit('select')"
+      <UTooltip
+        :disabled="!prompt"
+        :delay-duration="400"
+        :content="{ side: 'right', align: 'start' }"
+        :ui="{ content: 'block h-auto max-w-[600px] py-1.5 text-left' }"
       >
-        <span
-          class="flex items-center gap-2 overflow-hidden"
-          :class="active ? 'text-primary' : 'text-highlighted'"
+        <button
+          type="button"
+          class="min-w-0 flex-1 px-2 py-1 text-left"
+          @click="$emit('select')"
         >
           <span
-            v-if="number !== null"
-            class="w-3 shrink-0 font-mono text-[10px] text-dimmed tabular-nums"
-            aria-hidden="true"
-            >{{ number || "" }}</span
+            class="flex items-center gap-2 overflow-hidden"
+            :class="active ? 'text-primary' : 'text-highlighted'"
           >
-          <StatusDot :status="status" />
-          <span v-if="queued" class="shrink-0" title="Queued prompt">🕒</span>
-          <span class="truncate">{{ title || "Untitled session" }}</span>
-        </span>
-        <span v-if="sub" class="block truncate text-xs text-dimmed">{{ sub }}</span>
-      </button>
+            <span
+              v-if="number !== null"
+              class="w-3 shrink-0 font-mono text-[10px] text-dimmed tabular-nums"
+              aria-hidden="true"
+              >{{ number || "" }}</span
+            >
+            <StatusDot :status="status" />
+            <span v-if="queued" class="shrink-0" title="Queued prompt">🕒</span>
+            <span class="truncate">{{ title || "Untitled session" }}</span>
+          </span>
+          <span v-if="sub" class="block truncate text-xs text-dimmed">{{ sub }}</span>
+        </button>
+        <!-- Five lines is as much as is worth reading in a hover; the clamp
+             puts the ellipsis on the last one it kept. -->
+        <template #content>
+          <span class="line-clamp-5 break-words whitespace-pre-wrap">{{ prompt }}</span>
+        </template>
+      </UTooltip>
       <button
         type="button"
         class="mr-1 shrink-0 rounded p-1 text-dimmed hover:text-primary"

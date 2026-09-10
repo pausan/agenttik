@@ -33,10 +33,11 @@ its place in the list, so the digit there is the digit that reaches it. Rows
 whose conversation is not open, or that sit past the ninth tab, keep the blank
 column; rows of every other project have no column at all.
 
-`startSession` refuses to open a second blank conversation: while the one in
-front has no messages, no queued prompts and an empty draft, the chord, the
-strip's `+` and both New session buttons select it and focus the prompt
-instead.
+`startSession` refuses to open a second blank conversation: while any of the
+project's conversations has no messages, no queued prompts and an empty draft,
+the chord, the strip's `+` and both New session buttons go to that one and
+focus the prompt instead — the tab in front for preference, then any other tab,
+then an untitled session with no tab open, which is reopened. See 025.
 
 A project row shows its letter dimmed in front of the name, is highlighted when
 selected, and pulses a dot on the right while any of its sessions is mid-turn —

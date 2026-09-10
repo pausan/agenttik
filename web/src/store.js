@@ -11,7 +11,7 @@
    S.activeProjectID — so switching project switches the whole centre to that
    project's work. */
 
-import { reactive, watch } from "vue";
+import { nextTick, reactive, watch } from "vue";
 import { api } from "./api";
 import { debounce } from "./debounce";
 import { ACCENTS, DEFAULT_COLORS, NEUTRALS, applyColors } from "./theme";
@@ -611,32 +611,67 @@ function sessionDefaults() {
   return { provider: p.name, model: p.models[0].id, effort: "", permission: "workspace" };
 }
 
-/* blankSession is the conversation in front when it is still untouched:
-   nothing said, nothing queued, nothing typed. A single letter in the box
-   makes it worth keeping, and starting another is then a real request. */
+/* blankSession is an untouched conversation of the project: nothing said,
+   nothing queued, nothing typed. A single letter in the box makes one worth
+   keeping. The one in front is preferred, then any other tab of the project,
+   so which conversation happens to be selected does not decide this. */
 function blankSession(projectID) {
-  const tab = S.owner;
-  if (tab?.kind !== "session" || projectOfTab(tab) !== projectID) return null;
-  const { messages, queued } = tab.detail;
-  return messages.length || queued.length || tab.draft.trim() ? null : tab;
+  const blank = (t) =>
+    t.kind === "session" &&
+    projectOfTab(t) === projectID &&
+    !t.detail.session.title &&
+    !t.detail.messages.length &&
+    !t.detail.queued.length &&
+    !t.draft.trim();
+  const owner = S.owner;
+  if (owner && blank(owner)) return owner;
+  return S.tabs.find(blank) || null;
+}
+
+/* blankSessionID is the same search over the project's conversations with no
+   tab open. The first prompt names a session, sent or queued, so an untitled
+   one is still empty and has no draft to lose: reopening it is what starting
+   a session would produce anyway. The newest comes first, and a list that
+   fails to load is not worth reporting — a new session is still correct. */
+async function blankSessionID(projectID) {
+  const open = new Set(S.tabs.filter((t) => t.kind === "session").map((t) => t.sessionID));
+  try {
+    const free = (await projectSessions(projectID))
+      .filter((s) => !s.title && !s.queue_count && !open.has(s.id));
+    return free.reduce((best, s) => (!best || s.created_at > best.created_at ? s : best), null)?.id || "";
+  } catch {
+    return "";
+  }
 }
 
 /* A project page is where a session is started from, so it hands its tab over
    to the new conversation rather than staying open behind it.
 
    An untouched conversation is already what this would produce, so every way
-   in — the chord, the strip's +, the page's button — stops at that one rather
-   than leaving a trail of empty tabs. It comes to the front with the cursor in
-   the box, which is what was being asked for. */
+   in — the chord, the strip's +, the page's button — stops at one of those
+   rather than leaving a trail of empty tabs, open in a tab or not. It comes
+   to the front with the cursor in the box, which is what was being asked
+   for. */
 export async function startSession(project) {
+  const replaced = S.tab?.kind === "project" ? S.tab.id : "";
+  /* The prompt bar's focus watcher only sees a request made after it mounts,
+     and coming from a project page mounts it with this very switch, so the
+     cursor is asked for once the switch has been drawn. */
+  const reuse = async (tabID) => {
+    selectTab(tabID);
+    if (replaced) closeTab(replaced, false);
+    await nextTick();
+    focusPrompt();
+  };
   const blank = blankSession(project.id);
-  if (blank) {
-    selectTab(blank.id);
-    return focusPrompt();
+  if (blank) return reuse(blank.id);
+  const reusable = await blankSessionID(project.id);
+  if (reusable) {
+    await openSession(reusable);
+    return reuse("session:" + reusable);
   }
   const cfg = sessionDefaults();
   if (!cfg) return fail(new Error("No agent CLI is available. Open Settings to see why."));
-  const replaced = S.tab?.kind === "project" ? S.tab.id : "";
   try {
     const sess = await api("POST", "/api/sessions", { project_id: project.id, ...cfg });
     await Promise.all([refreshProjects(), refreshSessions()]);

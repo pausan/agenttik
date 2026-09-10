@@ -24,8 +24,11 @@
 | [020-queued-session-titles.md](020-queued-session-titles.md) | Isolated small-model titles for queued sessions |
 | [021-stop-active-sessions.md](021-stop-active-sessions.md) | Stopping active or scheduled sessions from the sidebar |
 | [022-transcript-file-links.md](022-transcript-file-links.md) | Clicking a path in a reply to open the file at its line |
+| [023-tool-call-groups.md](023-tool-call-groups.md) | Collapsing a run of tool calls to its latest |
 
-Status: a path an agent names in its reply now opens the file in a tab, at
+Status: a run of consecutive tool calls now collapses to its latest, with
+a button that opens the run and closes it again — see 023. A path an agent
+names in its reply now opens the file in a tab, at
 the line it named — see 022. The tree and the changed list follow the project
 folder as it moves on disk — see 019 for the watcher and what it deliberately
 ignores.

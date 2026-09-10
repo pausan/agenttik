@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
 import { forceQueued, S } from "../store";
 import Message from "./Message.vue";
+import ToolGroup from "./ToolGroup.vue";
 
 const box = ref(null);
 const now = ref(Date.now());
@@ -17,6 +18,27 @@ const elapsed = computed(() =>
 );
 const elapsedLabel = computed(() => `${elapsed.value} ${elapsed.value === 1 ? "second" : "seconds"}`);
 const clockFace = computed(() => CLOCK_FACES[Math.floor(now.value / 250) % CLOCK_FACES.length]);
+
+/* A run of consecutive tool calls is handed to one ToolGroup, which shows
+   only its latest until asked for the rest. Grouping reads role and nothing
+   else, so a streaming delta — which only grows a message's content — does
+   not rebuild the list. */
+const rows = computed(() => {
+  const messages = S.detail?.messages || [];
+  const out = [];
+  for (let i = 0; i < messages.length; i++) {
+    if (messages[i].role !== "tool") {
+      out.push({ at: i, message: messages[i] });
+      continue;
+    }
+    const at = i;
+    const tools = [];
+    while (i < messages.length && messages[i].role === "tool") tools.push(messages[i++]);
+    i--;
+    out.push({ at, tools });
+  }
+  return out;
+});
 
 /* Queued prompts are drawn under the transcript, each with how long it has
    been waiting, so opening a session shows the text that is going to run. */
@@ -72,7 +94,10 @@ watch(
       Pick a session, or a project to start one.
     </p>
     <div v-else class="mx-auto max-w-[860px] px-6 pt-5 pb-2">
-      <Message v-for="(m, i) in S.detail.messages" :key="i" :message="m" />
+      <template v-for="row in rows" :key="row.at">
+        <ToolGroup v-if="row.tools" :tools="row.tools" />
+        <Message v-else :message="row.message" />
+      </template>
       <div v-if="S.detail.running" class="mb-3 flex items-center gap-2 text-xs text-dimmed" aria-label="Agent working">
         <span aria-hidden="true">{{ clockFace }}</span>
         <span>Working ({{ elapsedLabel }})</span>

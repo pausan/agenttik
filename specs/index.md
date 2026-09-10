@@ -31,7 +31,7 @@
 | [027-ignored-files-in-the-tree.md](027-ignored-files-in-the-tree.md) | Every file in the Tree, the ignored ones grey |
 | [028-scheduled-jobs.md](028-scheduled-jobs.md) | Repeating a prompt on a clock, and the sessions it spawns |
 | [029-desktop-proxy-logging.md](029-desktop-proxy-logging.md) | Why the window logged broken pipes, and the abort it recovers instead |
-| [030-project-archived-sessions.md](030-project-archived-sessions.md) | The project page's archived list and its fuzzy filter |
+| [030-project-tasks.md](030-project-tasks.md) | Every task of a project in one list, behind a focused filter |
 | [031-copilot-subscription.md](031-copilot-subscription.md) | GitHub Copilot CLI sessions and account quota |
 | [032-single-tab-close-shortcut.md](032-single-tab-close-shortcut.md) | Ctrl+W closes one active tab, including when held |
 | [033-prompt-model-picker.md](033-prompt-model-picker.md) | Bounded, collapsible provider groups in the prompt model picker |
@@ -39,13 +39,17 @@
 | [035-missing-work-dir.md](035-missing-work-dir.md) | Reporting a renamed or deleted project folder as itself |
 | [036-copilot-model-list.md](036-copilot-model-list.md) | Asking the Copilot CLI which models the account has |
 
-Status: GitHub Copilot's model list now comes from the CLI instead of a
+Status: A project page now holds every task it has in one list under Tasks —
+open ones black, archived ones grey — with the cursor in the filter that
+narrows both; see 030. An unsent prompt now outlives the tab it was typed in,
+so changing focus or starting another task leaves the text where it was; see
+004. The prompt bar reads the subscription allowance again whenever the task
+or the model changes, and no longer repeats "running…" next to the header
+badge that already says so; see 011. GitHub Copilot's model list now comes from the CLI instead of a
 hand-written list that had gone stale in both directions — see 036. The prompt
 model picker now has a bounded scrolling viewport, collapsible
 provider groups and provider context in filtered results — see 033. Claude Code startup retries once if its updater briefly removes the executable — see 034. A turn whose project folder is gone now says so instead of blaming the CLI — see 035. Queued prompts now retain, show and let users change their individual
-provider, model and effort before starting — see 012. A project page now lists
-what it has archived under its open
-sessions, newest first, behind a fuzzy filter — see 030. The desktop window no
+provider, model and effort before starting — see 012. The desktop window no
 longer logs a broken pipe every time the UI reopens its event stream — see
 029. A commit row in the Commits pane now shows only hash, author and time,
 and right-clicking one copies its hash — see 013. A prompt can be scheduled to repeat — every X hours Y minutes, or
@@ -85,8 +89,11 @@ implemented.
 
 `go build ./...`, `go vet ./...`, `make ui` and the web unit tests (33) pass.
 Two Go tests fail: `TestDoneReachesProjectTopic` in runner and
-`TestReorderSessionsDrivesProjectOrder` in store. Two e2e cases fail as well,
-both driving the model picker as a `USelect`, which it is not — see 015.
+`TestReorderSessionsDrivesProjectOrder` in store. The e2e suite has not been
+carried through the sessions-to-tasks rename — it still asks for a
+`New session` button, an `Untitled session` row and a `Sessions` stats label —
+so most of it fails at `HEAD` and needs rewriting against the current
+labels.
 
 Claude Code sessions stream into the transcript, record per-turn token metrics,
 report their context window and subscription allowance, and resume across

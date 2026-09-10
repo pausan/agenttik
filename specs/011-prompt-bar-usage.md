@@ -55,6 +55,26 @@ The event carries no window duration, so the bucket type names the bar
 (`five_hour` → 5-hour, `seven_day` → Weekly, `overage` → Overage); an
 unrecognised type is shown as it arrived rather than guessed at.
 
+## When the reading is taken
+
+The bars answer for the model in the box, so the allowance is read again when
+the conversation changes, when the provider changes, and when the *model*
+changes. The last of those matters because a provider can meter a single model
+on a window of its own — Claude Code's `Current week (Fable)` — which makes a
+different model a different allowance rather than the same one relabelled.
+Selecting the same model again reads nothing: the session comes back
+unchanged, so the watcher does not fire.
+
+Asking costs a CLI process, about two seconds of one for Claude Code, so
+`refreshSubscriptionLimits` shares the read already in flight for a provider
+instead of spawning one per click. Every window comes back on any of them, so
+the shared answer is the same answer. A cached reading stays on screen while
+the next one is fetched, and a provider that answers nothing keeps no bars.
+
+The prompt bar carries no "running" label of its own. The header above the
+transcript already states the turn with a status dot beside it, and the bar's
+Stop button says the same thing where it is useful.
+
 ## Asking Claude Code for every window
 
 The event alone is not enough to draw the 5-hour and weekly bars, and that is
@@ -116,6 +136,14 @@ app-server path still answers in 0.9s. The migration was applied against a
 copy of the real database. `go test ./app/internal/agent/...` passes;
 `TestDoneReachesProjectTopic` and `TestReorderSessionsDrivesProjectOrder`
 already failed before this change and still do.
+
+Headless against the running app, with two providers answering: opening a
+task read its own provider and drew that provider's bars (Codex 12%/73%);
+selecting a Claude model read `claude` once and redrew them as 56%/47%/22%;
+selecting the model already in the box read nothing; opening another task read
+its provider again. While a turn ran, the prompt bar showed the ring, the
+bars, Stop and Send, and no "running…" — the header carried `running` with its
+dot. No console or page errors.
 
 Against CLI 2.1.227, `/api/providers/claude/subscription-limits` answers
 `five_hour` 57%, `seven_day` 47% and `seven_day_fable` 22%; the two parsed

@@ -155,12 +155,23 @@ export function contextWindow(session, stats) {
 // latter through its own /usage — and the server falls back to the newest
 // reading a turn volunteered if the query fails. A provider that does neither
 // returns no buckets.
-export async function refreshSubscriptionLimits(provider) {
-  if (!provider) return;
-  S.subscriptionLimits[provider] = await api(
-    "GET",
-    `/api/providers/${encodeURIComponent(provider)}/subscription-limits`,
-  );
+//
+// Asking costs a CLI process — Claude Code spends about two seconds on its
+// own /usage — so a burst of model changes shares the one read in flight
+// rather than spawning one each. Every window comes back on any of them.
+const limitReads = {};
+export function refreshSubscriptionLimits(provider) {
+  if (!provider) return Promise.resolve();
+  if (limitReads[provider]) return limitReads[provider];
+  const read = api("GET", `/api/providers/${encodeURIComponent(provider)}/subscription-limits`)
+    .then((limits) => {
+      S.subscriptionLimits[provider] = limits;
+    })
+    .finally(() => {
+      delete limitReads[provider];
+    });
+  limitReads[provider] = read;
+  return read;
 }
 export function isStarred(provider, model, effort) {
   return S.stars.some(

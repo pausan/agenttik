@@ -202,9 +202,19 @@ const reportedAgo = computed(() => {
   return stamps.length ? ago(Math.max(...stamps)) : "";
 });
 
+/* The bars answer for the model in the box, so the reading is taken again
+   when the conversation changes, when the provider does, and when the model
+   does — a provider can meter a single model on a window of its own
+   (Claude Code's per-model weekly), so a different model is a different
+   allowance, not just a different label. A provider that answers nothing
+   keeps no bars. */
 watch(
-  () => S.detail?.session?.provider,
-  (provider) => {
+  [
+    () => S.detail?.session?.id,
+    () => S.detail?.session?.provider,
+    () => S.detail?.session?.model,
+  ],
+  ([, provider]) => {
     if (provider) refreshSubscriptionLimits(provider).catch(() => {});
   },
   { immediate: true },
@@ -392,7 +402,8 @@ function runOther(action) {
             </div>
           </template>
         </UPopover>
-        <span v-if="S.detail.running" class="text-xs text-dimmed">running…</span>
+        <!-- No "running" label here: the header badge above the transcript
+             already carries the state, with its own dot. -->
         <UButton
           v-if="S.detail.running"
           color="neutral"

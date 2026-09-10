@@ -8,7 +8,10 @@ export async function api(method, path, body) {
   });
   if (res.status === 204) return null;
   const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
+  // Endpoints that only accept work answer with a bare status, whose body is
+  // the reason phrase rather than JSON. Failures are always JSON.
+  const isJSON = res.headers.get("content-type")?.includes("json");
+  const data = text && isJSON ? JSON.parse(text) : null;
   if (!res.ok) throw new Error((data && data.error) || res.statusText);
   return data;
 }

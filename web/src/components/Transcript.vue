@@ -44,6 +44,18 @@ const rows = computed(() => {
    been waiting, so opening a session shows the text that is going to run. */
 const queued = computed(() => S.detail?.queued || []);
 const forcing = ref(0);
+
+/* Sending a queued prompt now always interrupts something: this session's own
+   turn, or the turn elsewhere in the project it is waiting behind. Only the
+   wording differs, so the session that is running says "Force send" and one
+   that is merely waiting in the project queue says "Send now". */
+const sendNowLabel = computed(() => (S.detail?.running ? "Force send" : "Send now"));
+const sendNowHint = computed(() =>
+  S.detail?.running
+    ? "Stop the current turn and send this queued prompt next"
+    : "Stop the turn this project is running and send this prompt next",
+);
+
 function waitLabel(since) {
   const secs = Math.max(0, Math.floor((now.value - Number(since || 0)) / 1000));
   return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
@@ -119,15 +131,14 @@ watch(
           {{ q.prompt }}
         </div>
         <UButton
-          v-if="S.detail.running"
           class="mt-1"
           color="warning"
           variant="ghost"
           size="xs"
-          label="Force send"
+          :label="sendNowLabel"
           :loading="forcing === q.id"
           :disabled="forcing !== 0"
-          title="Stop the current turn and send this queued prompt next"
+          :title="sendNowHint"
           @click="force(q)"
         />
       </div>

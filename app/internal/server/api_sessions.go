@@ -322,8 +322,9 @@ func (s *Server) enqueueMessage(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"queued": queued, "queue_count": len(queued)})
 }
 
-// forceQueuedMessage interrupts this session's active turn and runs the
-// selected queued prompt next in the same provider conversation.
+// forceQueuedMessage interrupts whatever turn the project is running and runs
+// the selected queued prompt next. That turn is usually this session's own,
+// but a prompt can also be waiting behind another session in the project.
 func (s *Server) forceQueuedMessage(c *fiber.Ctx) error {
 	var body struct {
 		QueuedID int64 `json:"queued_id"`

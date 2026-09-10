@@ -38,21 +38,28 @@ type Event struct {
 	Prompt string       `json:"prompt,omitempty"`
 }
 
+// activeTurn is a turn in flight. It carries the project so scanning for
+// "is this project busy" stays a map walk rather than a query per turn.
+type activeTurn struct {
+	projectID int64
+	cancel    context.CancelFunc
+}
+
 type Runner struct {
 	store    *store.Store
 	registry *agent.Registry
 	hub      *Hub
 
 	mu     sync.Mutex
-	active map[string]context.CancelFunc // session id -> cancel
-	sched  map[int64]*sync.Mutex         // project id -> serializes queue dispatch
-	forced map[string]int64              // session id -> queued message to run next
+	active map[string]activeTurn // session id -> turn in flight
+	sched  map[int64]*sync.Mutex // project id -> serializes queue dispatch
+	forced map[int64]int64       // project id -> queued message to run next
 }
 
 func New(s *store.Store, reg *agent.Registry, hub *Hub) *Runner {
 	return &Runner{store: s, registry: reg, hub: hub,
-		active: make(map[string]context.CancelFunc), sched: make(map[int64]*sync.Mutex),
-		forced: make(map[string]int64)}
+		active: make(map[string]activeTurn), sched: make(map[int64]*sync.Mutex),
+		forced: make(map[int64]int64)}
 }
 
 func (r *Runner) Hub() *Hub { return r.hub }
@@ -98,18 +105,24 @@ func (r *Runner) Send(sessionID, prompt string) (*store.Turn, error) {
 		return nil, ErrBusy
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	r.active[sessionID] = cancel
+	r.active[sessionID] = activeTurn{projectID: sess.ProjectID, cancel: cancel}
 	r.mu.Unlock()
 
 	release := func() {
 		r.mu.Lock()
 		delete(r.active, sessionID)
-		forcedID, forced := r.forced[sessionID]
-		delete(r.forced, sessionID)
+		// Whichever turn in the project exits last takes the forced prompt:
+		// the others are still shutting down and cannot start one.
+		var forcedID int64
+		var forced bool
+		if len(r.activeInProject(sess.ProjectID)) == 0 {
+			forcedID, forced = r.forced[sess.ProjectID]
+			delete(r.forced, sess.ProjectID)
+		}
 		r.mu.Unlock()
 		cancel()
 		if forced {
-			go r.runForced(sess.ProjectID, sessionID, forcedID)
+			go r.runForced(sess.ProjectID, forcedID)
 		} else {
 			go r.schedule(sess.ProjectID, sessionID)
 		}
@@ -188,9 +201,11 @@ func (r *Runner) Enqueue(sessionID, prompt string) ([]store.QueuedMessage, error
 	return r.store.ListQueuedMessages(sessionID)
 }
 
-// ForceQueued stops this session's current turn and makes one of its waiting
-// prompts the next turn. The message stays in the queue until Send has
-// accepted it, so a failed launch cannot lose it.
+// ForceQueued makes one of a session's waiting prompts the next turn in its
+// project. The prompt can be waiting behind that session's own turn or behind
+// another session's, so every turn in flight in the project is cancelled and
+// the prompt starts once the last of them exits. The message stays in the
+// queue until Send has accepted it, so a failed launch cannot lose it.
 func (r *Runner) ForceQueued(sessionID string, queuedID int64) error {
 	queued, err := r.store.GetQueuedMessage(queuedID)
 	if err != nil {
@@ -199,33 +214,51 @@ func (r *Runner) ForceQueued(sessionID string, queuedID int64) error {
 	if queued.SessionID != sessionID {
 		return store.ErrNotFound
 	}
+	sess, err := r.store.GetSession(sessionID)
+	if err != nil {
+		return err
+	}
 
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	if _, pending := r.forced[sessionID]; pending {
+	if _, pending := r.forced[sess.ProjectID]; pending {
+		r.mu.Unlock()
 		return ErrForcePending
 	}
-	cancel, running := r.active[sessionID]
-	if !running {
-		return ErrNotRunning
+	cancels := r.activeInProject(sess.ProjectID)
+	if len(cancels) > 0 {
+		r.forced[sess.ProjectID] = queuedID
 	}
-	r.forced[sessionID] = queuedID
-	cancel()
+	r.mu.Unlock()
+
+	for _, cancel := range cancels {
+		cancel()
+	}
+	// Nothing to interrupt: the prompt is only waiting for the scheduler, so
+	// take it here instead of waiting for a turn that is not coming.
+	if len(cancels) == 0 {
+		go r.runForced(sess.ProjectID, queuedID)
+	}
 	return nil
 }
 
-// runForced starts the chosen queued prompt after the cancelled turn has
-// fully released its provider process. It bypasses normal project ordering
-// exactly once; the rest of the queue resumes its ordinary scheduler order.
-func (r *Runner) runForced(projectID int64, sessionID string, queuedID int64) {
+// runForced starts the chosen queued prompt after the cancelled turns have
+// fully released their provider processes. It bypasses normal project
+// ordering exactly once; the rest of the queue resumes its ordinary scheduler
+// order. The dispatch lock is what keeps it from racing a scheduler that is
+// already draining the same project.
+func (r *Runner) runForced(projectID int64, queuedID int64) {
+	lock := r.dispatchLock(projectID)
+	lock.Lock()
+	defer lock.Unlock()
+
 	queued, err := r.store.GetQueuedMessage(queuedID)
-	if err == nil && queued.SessionID == sessionID {
-		if _, err := r.Send(sessionID, queued.Prompt); err == nil {
+	if err == nil && !r.projectBusy(projectID) {
+		if _, err := r.Send(queued.SessionID, queued.Prompt); err == nil {
 			_ = r.store.RemoveQueuedMessage(queued.ID)
 			return
 		}
 	}
-	r.schedule(projectID, sessionID)
+	r.dispatch(projectID, "")
 }
 
 // dispatchLock serializes queue dispatch within one project. One lock per
@@ -251,16 +284,14 @@ func (r *Runner) schedule(projectID int64, preferredSessionID string) {
 	lock := r.dispatchLock(projectID)
 	lock.Lock()
 	defer lock.Unlock()
+	r.dispatch(projectID, preferredSessionID)
+}
 
-	r.mu.Lock()
-	for sessionID := range r.active {
-		sess, err := r.store.GetSession(sessionID)
-		if err == nil && sess.ProjectID == projectID {
-			r.mu.Unlock()
-			return
-		}
+// dispatch is schedule's body, with the project's dispatch lock already held.
+func (r *Runner) dispatch(projectID int64, preferredSessionID string) {
+	if r.projectBusy(projectID) {
+		return
 	}
-	r.mu.Unlock()
 
 	sess, err := r.store.NextQueuedSession(projectID, preferredSessionID)
 	if err != nil || sess == nil {
@@ -279,6 +310,27 @@ func (r *Runner) schedule(projectID int64, preferredSessionID string) {
 	_ = r.store.RemoveQueuedMessage(queued.ID)
 }
 
+// projectBusy reports whether any turn in the project is still in flight.
+func (r *Runner) projectBusy(projectID int64) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.activeInProject(projectID)) > 0
+}
+
+// activeInProject collects the cancels of every turn in flight in a project.
+// Callers hold r.mu. Queue scheduling runs one turn per project, but a prompt
+// sent straight to a session does not pass through it, so there can be more
+// than one.
+func (r *Runner) activeInProject(projectID int64) []context.CancelFunc {
+	var cancels []context.CancelFunc
+	for _, turn := range r.active {
+		if turn.projectID == projectID {
+			cancels = append(cancels, turn.cancel)
+		}
+	}
+	return cancels
+}
+
 // Stop cancels the running turn and drops queued prompts, so the session is
 // not scheduled again after the current CLI process exits.
 
@@ -291,11 +343,7 @@ func (r *Runner) Stop(sessionID string) error {
 	lock.Lock()
 	defer lock.Unlock()
 	r.mu.Lock()
-	cancel, ok := r.active[sessionID]
-	if ok {
-		// A forced prompt would otherwise start after cancellation.
-		delete(r.forced, sessionID)
-	}
+	turn, ok := r.active[sessionID]
 	r.mu.Unlock()
 	removed, err := r.store.RemoveQueuedMessages(sessionID)
 	if err != nil {
@@ -305,7 +353,7 @@ func (r *Runner) Stop(sessionID string) error {
 		return ErrNotRunning
 	}
 	if ok {
-		cancel()
+		turn.cancel()
 	}
 	return nil
 }
@@ -314,8 +362,8 @@ func (r *Runner) Stop(sessionID string) error {
 func (r *Runner) StopAll() {
 	r.mu.Lock()
 	cancels := make([]context.CancelFunc, 0, len(r.active))
-	for _, c := range r.active {
-		cancels = append(cancels, c)
+	for _, turn := range r.active {
+		cancels = append(cancels, turn.cancel)
 	}
 	r.mu.Unlock()
 	for _, c := range cancels {

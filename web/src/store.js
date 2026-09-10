@@ -1551,9 +1551,10 @@ export async function enqueue(prompt) {
   }
 }
 
-// forceQueued interrupts the active turn, then the runner starts this waiting
-// prompt next. The queue stays untouched here until the started event claims
-// it, so the UI cannot hide a prompt if cancellation or startup fails.
+// forceQueued interrupts the turn the project is running — this session's own
+// or the one it is queued behind — then the runner starts this waiting prompt
+// next. The queue stays untouched here until the started event claims it, so
+// the UI cannot hide a prompt if cancellation or startup fails.
 export async function forceQueued(queuedID) {
   const tab = S.owner;
   if (tab?.kind !== "session" || !queuedID) return;

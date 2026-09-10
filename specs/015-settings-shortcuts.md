@@ -70,9 +70,8 @@ it, survives a reload, and the row's arrow restores `Ctrl+Enter`; recording
 rows; Escape cancels a recording with the dialog still open; Restore all
 defaults resets the lot. No console or page errors.
 
-Two e2e cases still fail, and did before this work: `a starred model and effort
-heads the picker` and `changing the model updates the badge`, both of which
-drive the prompt bar's model picker as the `USelect` it stopped being when it
-became a popover and command palette (see 009 and 011). Two others failed on an
-ambiguous `Send` locator — the send button and the Send options caret both
-match it — and are fixed here with `exact`.
+Two e2e cases fail: `a starred model and effort heads the picker` and
+`changing the model updates the badge`, both driving the prompt bar's model
+picker as a `USelect`, which it is not — it is a popover and command palette
+(see 009 and 011). The other cases locate `Send` with `exact`, since the send
+button and the Send options caret both match the bare name.

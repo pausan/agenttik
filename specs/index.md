@@ -84,10 +84,9 @@ per-project tab strip, the file tab's three views, and queued prompts are all
 implemented.
 
 `go build ./...`, `go vet ./...`, `make ui` and the web unit tests (33) pass.
-Two Go tests fail and did so before this work: `TestDoneReachesProjectTopic`
-in runner and `TestReorderSessionsDrivesProjectOrder` in store. Two e2e cases
-fail the same way, both driving the model picker as the `USelect` it stopped
-being — see 015.
+Two Go tests fail: `TestDoneReachesProjectTopic` in runner and
+`TestReorderSessionsDrivesProjectOrder` in store. Two e2e cases fail as well,
+both driving the model picker as a `USelect`, which it is not — see 015.
 
 Claude Code sessions stream into the transcript, record per-turn token metrics,
 report their context window and subscription allowance, and resume across

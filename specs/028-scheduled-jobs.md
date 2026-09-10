@@ -166,8 +166,8 @@ request.
 ## Validation
 
 `go build ./...`, `go vet ./...`, `make ui` and the web unit tests (33) pass.
-`go test ./...` fails only `TestDoneReachesProjectTopic` and
-`TestReorderSessionsDrivesProjectOrder`, both of which failed before this work.
+`go test ./...` fails only the two cases listed in [index.md](index.md), which
+are unrelated to schedules.
 
 Against the running app with a fake `claude` on PATH:
 

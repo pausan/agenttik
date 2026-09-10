@@ -128,15 +128,6 @@ func (r *Runner) Send(sessionID, prompt string) (*store.Turn, error) {
 			go r.schedule(sess.ProjectID, sessionID)
 		}
 	}
-
-	// The first prompt names the session.
-	if strings.TrimSpace(sess.Title) == "" {
-		title := titleFrom(prompt)
-		if err := r.store.SetSessionTitle(sessionID, title); err == nil {
-			sess.Title = title
-		}
-	}
-
 	turn, err := r.store.StartTurn(sessionID, sess.Model, sess.Effort)
 	if err != nil {
 		release()
@@ -146,6 +137,17 @@ func (r *Runner) Send(sessionID, prompt string) (*store.Turn, error) {
 		release()
 		return nil, err
 	}
+
+	// The prompt is persisted before any follow-up work, including naming the
+	// session. The client already knows the prompt and can show it on the
+	// keypress; this order keeps the durable transcript just as immediate.
+	if strings.TrimSpace(sess.Title) == "" {
+		title := titleFrom(prompt)
+		if err := r.store.SetSessionTitle(sessionID, title); err == nil {
+			sess.Title = title
+		}
+	}
+
 	if err := r.store.SetSessionStatus(sessionID, store.StatusRunning); err != nil {
 		release()
 		return nil, err
@@ -191,13 +193,13 @@ func (r *Runner) Enqueue(sessionID, prompt string) ([]store.QueuedMessage, error
 	if err != nil {
 		return nil, err
 	}
-	// A queued prompt may wait behind another session for a while. Name its
-	// session before it enters that queue so the sidebar never shows a blank
-	// placeholder while it waits.
-	r.titleQueuedSession(sess, prompt)
 	if _, err := r.store.EnqueueMessage(sessionID, prompt, sess.Provider, sess.Model, sess.Effort); err != nil {
 		return nil, err
 	}
+	// A queued prompt may wait behind another session for a while. Name its
+	// session after the queue row exists, so the title is never ahead of the
+	// user's accepted prompt.
+	r.titleQueuedSession(sess, prompt)
 	r.schedule(sess.ProjectID, "")
 	return r.store.ListQueuedMessages(sessionID)
 }

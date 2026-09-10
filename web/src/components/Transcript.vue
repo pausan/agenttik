@@ -42,7 +42,10 @@ const rows = computed(() => {
 
 /* Queued prompts are drawn under the transcript, each with how long it has
    been waiting, so opening a session shows the text that is going to run. */
-const queued = computed(() => S.detail?.queued || []);
+const queued = computed(() => [
+  ...(S.detail?.queued || []),
+  ...(S.detail?.pendingQueued || []),
+]);
 const forcing = ref(0);
 const changing = ref(0);
 const NONE = "__default";
@@ -82,6 +85,7 @@ function waitLabel(since) {
 }
 
 async function setQueuedChoice(q, provider, model, effort) {
+  if (q.pending) return;
   changing.value = q.id;
   try {
     await updateQueuedModel(q.id, provider, model, effort);
@@ -104,6 +108,7 @@ function pickQueuedEffort(q, effort) {
 }
 
 async function force(q) {
+  if (q.pending) return;
   forcing.value = q.id;
   try {
     await forceQueued(q.id);
@@ -162,7 +167,7 @@ watch(
            and the timer are what say it has not started. -->
       <div v-for="q in queued" :key="q.id" class="mb-4 flex flex-col items-end" aria-label="Queued prompt">
         <div class="mb-0.5 flex flex-row-reverse items-center gap-1.5">
-          <span class="text-[11px] font-medium tracking-wider text-dimmed uppercase">Queued</span>
+          <span class="text-[11px] font-medium tracking-wider text-dimmed uppercase">{{ q.pending ? "Sending…" : "Queued" }}</span>
           <span class="flex items-center gap-1 font-mono text-[11px] text-dimmed tabular-nums">
             <span aria-hidden="true">{{ clockFace }}</span>{{ waitLabel(q.created_at) }}
           </span>
@@ -181,7 +186,7 @@ watch(
               trailing-icon="i-lucide-chevron-down"
               :label="labelOf(q.provider, q.model)"
               :loading="changing === q.id"
-              :disabled="forcing !== 0 || changing !== 0"
+              :disabled="q.pending || forcing !== 0 || changing !== 0"
               title="Change queued model"
             />
             <template #content>
@@ -199,7 +204,7 @@ watch(
             :model-value="q.effort || NONE"
             :items="effortItems(q)"
             size="xs"
-            :disabled="forcing !== 0 || changing !== 0"
+            :disabled="q.pending || forcing !== 0 || changing !== 0"
             title="Change queued effort"
             @update:model-value="pickQueuedEffort(q, $event)"
           />
@@ -209,7 +214,7 @@ watch(
             size="xs"
             :label="sendNowLabel"
             :loading="forcing === q.id"
-            :disabled="forcing !== 0 || changing !== 0"
+            :disabled="q.pending || forcing !== 0 || changing !== 0"
             :title="sendNowHint"
             @click="force(q)"
           />

@@ -882,6 +882,7 @@ function blankSession(projectID) {
     !t.detail.session.title &&
     !t.detail.messages.length &&
     !t.detail.queued.length &&
+    !(t.detail.pendingQueued || []).length &&
     !t.draft.trim();
   const owner = S.owner;
   if (owner && blank(owner)) return owner;
@@ -974,6 +975,7 @@ export async function openSession(id, silent = false) {
     label: tabLabel(detail.session),
     sessionID: id,
     detail,
+    pendingQueued: [],
     // Unsent text belongs to the conversation, not to the prompt bar, so it
     // survives every tab switch and only closing throws it away.
     draft: "",
@@ -1022,6 +1024,7 @@ export async function renameSession(session, title) {
    user has to find later. Checking the detail also keeps a titled or used
    session safe when archive is clicked from a compact project-list row. */
 async function shouldDeleteBlankSession(session, tab) {
+  if (tab?.detail?.pendingQueued?.length) return false;
   if (session.title || tab?.draft?.trim() || (tab && unsavedUnder(tab.id).length)) return false;
   const detail = tab?.detail || await api("GET", "/api/sessions/" + session.id);
   return !detail.session.title &&
@@ -1801,12 +1804,17 @@ function endLive(tab) {
    is the one that started. A prompt typed twice can pick the wrong row; the
    end of the turn re-reads the queue anyway. */
 function takeQueued(tab, prompt) {
-  const queued = tab.detail.queued;
-  if (!queued?.length) return;
-  const at = queued.findIndex((q) => q.prompt === prompt);
+  const queued = tab.detail.queued || [];
+  const pending = tab.detail.pendingQueued || [];
+  let list = queued;
+  let at = queued.findIndex((q) => q.prompt === prompt);
+  if (at < 0) {
+    list = pending;
+    at = pending.findIndex((q) => q.prompt === prompt);
+  }
   if (at < 0) return;
-  queued.splice(at, 1);
-  tab.detail.session.queue_count = queued.length;
+  list.splice(at, 1);
+  tab.detail.session.queue_count = queued.length + pending.length;
 }
 
 /* ---------------------------------------------------------------- prompt */
@@ -1922,18 +1930,39 @@ export async function enqueue(prompt) {
   if (tab?.kind !== "session") return;
   prompt = prompt.trim();
   if (!prompt) return;
+  const typed = tab.draft;
   // Cleared before the request, as sending does: whatever is typed while it
   // is in flight is the next prompt, not this one.
   tab.draft = "";
+  // Keep optimistic queue rows separate from messages, so an assistant stream
+  // can finish in order while the server is still accepting this prompt.
+  const pendingQueued = tab.detail.pendingQueued || (tab.detail.pendingQueued = []);
+  const createdAt = Date.now();
+  const pending = {
+    id: `pending:${tab.sessionID}:${createdAt}:${pendingQueued.length}`,
+    session_id: tab.sessionID,
+    prompt,
+    provider: tab.detail.session.provider,
+    model: tab.detail.session.model,
+    effort: tab.detail.session.effort || "",
+    created_at: createdAt,
+    pending: true,
+  };
+  pendingQueued.push(pending);
   try {
     const result = await api("POST", `/api/sessions/${tab.sessionID}/queue`, { prompt });
-    // What came back is the queue after scheduling, so a prompt that started
-    // immediately is not in it and the transcript draws none.
+    const at = pendingQueued.indexOf(pending);
+    if (at >= 0) pendingQueued.splice(at, 1);
     tab.detail.queued = result.queued;
-    tab.detail.session.queue_count = result.queue_count;
+    tab.detail.session.queue_count = result.queue_count + pendingQueued.length;
     refreshSessions();
     refreshProjects();
   } catch (e) {
+    const at = pendingQueued.indexOf(pending);
+    if (at >= 0) pendingQueued.splice(at, 1);
+    // Text entered while this request was in flight belongs to the next
+    // prompt, so only restore the submitted text when the box is still empty.
+    if (!tab.draft) tab.draft = typed;
     fail(e);
   }
 }

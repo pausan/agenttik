@@ -2,9 +2,15 @@
 
 ## Outcome
 
-Pressing Enter draws the prompt immediately. The bubble, the empty box and the
-working indicator all happen on the keypress; the request to start the turn
-goes out behind them.
+Pressing Enter or Ctrl+Enter draws the prompt immediately. The bubble and the
+empty box happen on the keypress; a Send also starts the working indicator on
+that same turn. Ctrl+Enter keeps its configured Enqueue meaning: its prompt
+appears as a pending dashed row immediately, then becomes the server-backed
+queued row or a normal transcript bubble if the queue starts at once.
+
+## Priority
+
+> instant user feedback along with performance is of upmost importance
 
 Sending used to clear the box first and draw the prompt only once the server
 had answered. The answer is not slow, but everything between the keypress and
@@ -30,8 +36,11 @@ Three details keep the optimistic bubble honest:
 Marking the session running on the keypress also disables Send, so a second
 Enter during the round trip cannot start a second turn.
 
-Enqueue is unchanged: its bubble needs the queue row's id, which only the
-server can give it.
+The pending queue row has no server id, so its controls stay disabled until the
+response replaces it. A started event claims the pending row directly, while a
+refusal removes it and restores the draft. The prompt is persisted before
+queued session title generation, and a sent prompt is persisted before its
+first session title, so naming and other follow-up work never comes first.
 
 ## Validation
 

@@ -9,7 +9,7 @@ DIST     := dist
 WEBKIT_TAG := $(shell pkg-config --exists webkit2gtk-4.1 && echo webkit2_41)
 DESKTOP_TAGS := desktop production $(WEBKIT_TAG)
 
-.PHONY: all build build-web build-windows-amd64 build-macos-amd64 run run-web test e2e vet fmt clean deps ui ui-dev
+.PHONY: all build build-web build-windows-amd64 build-macos-arm64 run run-web test e2e vet fmt clean deps ui ui-dev
 
 all: build
 
@@ -34,10 +34,10 @@ build-windows-amd64: ui
 	mkdir -p $(DIST)
 	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-H=windowsgui" -tags "desktop production" -o $(DIST)/agenttik_windows_amd64.exe $(PKG)
 
-## build-macos-amd64: macOS x64 desktop binary (run this target on macOS)
-build-macos-amd64: ui
+## build-macos-arm64: macOS ARM64 desktop binary (run this target on macOS)
+build-macos-arm64: ui
 	mkdir -p $(DIST)
-	GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 go build -trimpath -tags "desktop production" -o $(DIST)/agenttik_darwin_amd64 $(PKG)
+	GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 go build -trimpath -tags "desktop production" -o $(DIST)/agenttik_darwin_arm64 $(PKG)
 
 run: build
 	./$(BIN)

@@ -32,6 +32,7 @@
 | [028-scheduled-jobs.md](028-scheduled-jobs.md) | Repeating a prompt on a clock, and the sessions it spawns |
 | [029-desktop-proxy-logging.md](029-desktop-proxy-logging.md) | Why the window logged broken pipes, and the abort it recovers instead |
 | [030-project-archived-sessions.md](030-project-archived-sessions.md) | The project page's archived list and its fuzzy filter |
+| [031-copilot-subscription.md](031-copilot-subscription.md) | GitHub Copilot CLI sessions and account quota |
 
 Status: queued prompts now retain, show and let users change their individual
 provider, model and effort before starting — see 012. A project page now lists
@@ -84,4 +85,5 @@ Claude Code sessions stream into the transcript, record per-turn token metrics,
 report their context window and subscription allowance, and resume across
 turns. The Codex provider is implemented against the current CLI JSONL
 contract and its app-server allowance query answers live; its billable
-live-turn check remains pending.
+live-turn check remains pending. GitHub Copilot sessions use the official CLI
+JSONL contract and its read-only headless quota query; see 031.

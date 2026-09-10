@@ -19,6 +19,7 @@ import (
 	"github.com/pausan/agenttik/app/internal/agent"
 	"github.com/pausan/agenttik/app/internal/agent/claudecode"
 	"github.com/pausan/agenttik/app/internal/agent/codex"
+	"github.com/pausan/agenttik/app/internal/agent/copilot"
 	"github.com/pausan/agenttik/app/internal/config"
 	"github.com/pausan/agenttik/app/internal/runner"
 	"github.com/pausan/agenttik/app/internal/server"
@@ -61,7 +62,7 @@ func run() error {
 		return err
 	}
 
-	registry := agent.NewRegistry(claudecode.New(), codex.New())
+	registry := agent.NewRegistry(claudecode.New(), codex.New(), copilot.New())
 	turns := runner.New(db, registry, runner.NewHub())
 	srv := server.New(db, registry, turns)
 

@@ -3,7 +3,7 @@
 # agenttik
 
 A local workspace for running AI coding sessions across multiple projects.
-Use Claude Code and Codex through their official CLIs, with your existing login,
+Use Claude Code, Codex and GitHub Copilot through their official CLIs, with your existing login,
 in one desktop window or browser tab. Linux only for now.
 
 ## Main features
@@ -15,11 +15,11 @@ in one desktop window or browser tab. Linux only for now.
 - **Usage tracking:** view tokens, context usage, subscription allowance, and costs where reported.
 - **Local state:** SQLite history, remembered tabs, customizable shortcuts, and color themes.
 
-Claude Code is working; Codex is implemented, with live-turn validation still pending.
+Claude Code is working; Codex and GitHub Copilot are implemented, with live-turn validation still pending.
 
 ## Quick start
 
-Use Go 1.25+, Node.js 22.12+ with npm, and a logged-in `claude` or `codex` CLI on `PATH`.
+Use Go 1.25+, Node.js 22.12+ with npm, and a logged-in `claude`, `codex` or `copilot` CLI on `PATH`.
 
 ```sh
 make run-web

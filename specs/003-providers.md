@@ -4,7 +4,7 @@
 
 ```go
 type Provider interface {
-    Name() string                  // "claude" | "codex"
+    Name() string                  // "claude" | "codex" | "copilot"
     DisplayName() string
     Models() []Model               // each may define its own efforts
     Efforts() []string             // fallback for models without their own list

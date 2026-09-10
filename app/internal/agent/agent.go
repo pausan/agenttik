@@ -1,5 +1,5 @@
 // Package agent defines the provider-neutral contract for running one agent
-// turn. Implementations drive locally installed CLIs (Claude Code, Codex) or,
+// turn. Implementations drive locally installed CLIs (Claude Code, Codex, GitHub Copilot) or,
 // later, key-based HTTP APIs. Nothing here knows about HTTP or SQL.
 package agent
 

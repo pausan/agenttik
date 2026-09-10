@@ -162,17 +162,12 @@ function onSessionDrop(e) {
 
 <template>
   <aside class="flex min-h-0 flex-col bg-muted">
-    <header class="flex items-center gap-2 px-3.5 pt-3 pb-2.5">
-      <span class="size-4.5 rounded-[5px] bg-linear-[140deg] from-primary to-sky-500" aria-hidden="true" />
-      <span class="font-semibold tracking-tight text-highlighted">agenttik</span>
-    </header>
-
     <UTabs
       :model-value="tab"
       :items="tabs"
       :content="false"
       size="sm"
-      class="mx-2.5 mb-2 shrink-0"
+      class="mx-2.5 mt-3 mb-2 shrink-0"
       :ui="SEGMENTED"
       @update:model-value="show(String($event))"
     >

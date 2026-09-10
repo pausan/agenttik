@@ -7,7 +7,7 @@ test("opens with nothing selected", async ({ page }) => {
 
 test("a project appears in the sidebar with its folder underneath", async ({ page }) => {
   await addProject(page);
-  await expect(sidebar(page).getByText("agenttik", { exact: true })).toHaveCount(2); // brand + project
+  await expect(sidebar(page).getByText("agenttik", { exact: true })).toHaveCount(1);
   await expect(sidebar(page).getByText(REPO)).toBeVisible();
 });
 

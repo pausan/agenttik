@@ -521,11 +521,24 @@ export function currentProjectID() {
 
 /* -------------------------------------------------------------- projects */
 
+/* Several things ask for the project list at once — a turn starting, a tab
+   opening, a drag landing — and those answers can come back in any order.
+   Only the newest is worth keeping: an older one would take a running task's
+   dot off the sidebar, or put a finished one back, until the next event.
+
+   The stream is reopened from here too, since the sidebar follows the turns
+   of every project it draws. */
+let projectsRead = 0;
+
 export async function refreshProjects() {
-  S.projects = await api("GET", "/api/projects");
+  const read = ++projectsRead;
+  const projects = await api("GET", "/api/projects");
+  if (read !== projectsRead) return;
+  S.projects = projects;
   for (const project of S.projects) {
     syncProjectSessionOrder(project.id, project.recent_sessions.map((session) => session.id));
   }
+  resubscribe();
 }
 
 /* reorderProjects persists the sidebar order after it has already moved under
@@ -605,6 +618,14 @@ async function reloadProjectTab(tab) {
    no argument so two projects cannot collapse into one reload. */
 const reloadProjects = debounce(() => {
   for (const t of S.tabs) if (t.kind === "project") reloadProjectTab(t);
+}, 150);
+
+/* reloadLists re-reads the two listings a turn moves: the sidebar's projects
+   and the Sessions list. Debounced for the same reason reloadProjects is —
+   the end of a turn arrives twice, and a busy project ends several at once. */
+const reloadLists = debounce(() => {
+  refreshProjects().catch(() => {});
+  refreshSessions().catch(() => {});
 }, 150);
 
 export async function addProject(path, name) {
@@ -1739,9 +1760,10 @@ let streamURL = "";
 
 function subscriptionURL() {
   const sessions = S.tabs.filter((t) => t.kind === "session").map((t) => t.sessionID);
-  const projects = S.tabs
-    .filter((t) => t.kind === "project" || t.kind === "schedule")
-    .map((t) => t.projectID);
+  // Every project, not just the ones with a page open: the sidebar draws a
+  // dot per task, and a task loses its tab as soon as another replaces it, so
+  // the turn events that move its dot can only come from its project.
+  const projects = S.projects.map((p) => p.id);
   // The project in front is also the one whose folder the server watches for
   // us: only its files are on screen, so only its files are worth following.
   const shown = currentProjectID();
@@ -1787,6 +1809,12 @@ function resubscribe() {
   };
 }
 
+/* The start and end of a turn are published to the session's topic and to its
+   project's, and this window is subscribed to both, so each arrives twice.
+   The pair travels back to back; remembering the last one is enough to handle
+   a turn once, and a repeat that slips past only costs a second refresh. */
+let lastTurnEvent = "";
+
 function onEvent(msg) {
   // The working tree moved on disk: from a turn, an editor, or a git command
   // in a terminal. Either way what is on screen is now out of date.
@@ -1800,11 +1828,23 @@ function onEvent(msg) {
   // A schedule fired, skipped a run, or spent one. It names no schedule: the
   // views re-read what they are showing, as the file watcher's event does.
   if (msg.event?.type === "schedule_changed") return reloadSchedules();
+  const turnMoved = ["started", "done"].includes(msg.event?.type);
+  if (turnMoved) {
+    const seen = `${msg.event.type}:${msg.session_id}:${msg.turn_id}`;
+    if (seen === lastTurnEvent) return;
+    lastTurnEvent = seen;
+  }
   const tab = S.tabs.find((t) => t.kind === "session" && t.sessionID === msg.session_id);
   if (tab) onSessionEvent(tab, msg);
-  // A turn ending anywhere in a project moves its totals, whether or not that
-  // session is open here.
-  if (["started", "done"].includes(msg.event?.type)) reloadProjects();
+  // A turn starting or ending anywhere in a project moves its totals, its
+  // sidebar dot and the Sessions list, whether or not that session has a tab
+  // open here. Most do not — one conversation per project is on screen at a
+  // time — and theirs would otherwise sit at whatever the last full read said
+  // for as long as the turn lasts.
+  if (turnMoved) {
+    reloadLists();
+    reloadProjects();
+  }
 }
 
 function onSessionEvent(tab, msg) {
@@ -1814,8 +1854,6 @@ function onSessionEvent(tab, msg) {
       startLocal(tab, msg.prompt, msg.turn);
       if (msg.session) tab.detail.session = msg.session;
       takeQueued(tab, msg.prompt);
-      refreshSessions();
-      refreshProjects();
       break;
     case "text":
       appendLive(tab, "assistant", ev.text);
@@ -1865,8 +1903,6 @@ function onSessionEvent(tab, msg) {
           // A turn that commits has changed the history as well as the tree.
           refreshLog();
         }
-        refreshSessions();
-        refreshProjects();
         refreshSubscriptionLimits(tab.detail.session.provider).catch(() => {});
       }
       break;

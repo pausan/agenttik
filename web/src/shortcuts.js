@@ -31,8 +31,8 @@ export const ACTIONS = [
   { id: "file.indent", group: "Files", what: "Indent, with the caret in a file", keys: ["Tab"], fixed: true },
   { id: "edit.undo", group: "Files", what: "Undo / redo file and draft edits", keys: ["Ctrl+Z", "Ctrl+Y"], fixed: true },
 
-  { id: "prompt.send", group: "Prompt", what: "Send", keys: ["Enter"] },
-  { id: "prompt.enqueue", group: "Prompt", what: "Enqueue", keys: ["Ctrl+Enter"] },
+  { id: "prompt.send", group: "Prompt", what: "Send", keys: ["Ctrl+Enter"] },
+  { id: "prompt.enqueue", group: "Prompt", what: "Enqueue", keys: ["Enter"] },
   { id: "prompt.newline", group: "Prompt", what: "New line", keys: ["Shift+Enter"], fixed: true },
 ];
 

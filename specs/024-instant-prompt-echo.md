@@ -4,7 +4,7 @@
 
 Pressing Enter or Ctrl+Enter draws the prompt immediately. The bubble and the
 empty box happen on the keypress; a Send also starts the working indicator on
-that same turn. Ctrl+Enter keeps its configured Enqueue meaning: its prompt
+that same turn. Enter keeps its configured Enqueue meaning: its prompt
 appears as a pending dashed row immediately, then becomes the server-backed
 queued row or a normal transcript bubble if the queue starts at once.
 

@@ -105,8 +105,8 @@ rail with its fuzzy filter and editable shortcuts, the Commits pane and its comm
 diffs, transcript message copying and prompt editing, queued prompts drawn in
 the transcript with their waiting timer, and the Claude Code subscription
 allowance are implemented and browser-checked — see 017, 016, 015, 013, 014,
-012 and 011 for what each was verified against. Enqueue is Ctrl+Enter by
-default, and General swaps it with Enter.
+012 and 011 for what each was verified against. Enqueue is Enter by default,
+and General swaps it with Ctrl+Enter.
 Sidebar ordering, session archiving, collapsible project session lists, the
 project-scoped Tree, fuzzy go-to navigation, global conversation closing,
 remembered open tabs, project-scoped closed-tab reopening, prompt and file

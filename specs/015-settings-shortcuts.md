@@ -2,8 +2,8 @@
 
 ## Outcome
 
-Enqueue is `Ctrl+Enter`. `Alt+Enter` no longer queues anything: it was chosen
-because `Ctrl+Enter` looked taken, and it is not.
+Enqueue is `Enter`; `Ctrl+Enter` sends. `Alt+Enter` no longer queues anything:
+it was chosen because `Ctrl+Enter` looked taken, and it is not.
 
 Every chord the app answers to now comes from one registry, `shortcuts.js`, and
 the handlers ask it a question instead of spelling a key out —
@@ -60,12 +60,12 @@ cannot disagree with them either.
 `make ui`, `go vet ./...` and the web unit tests (32) passed.
 
 Browser-checked headlessly against a fake `claude` on PATH that sleeps, so a
-turn stays running and the scheduler leaves the queue alone: `Ctrl+Enter`
+turn stays running and the scheduler leaves the queue alone: `Enter`
 queues a prompt and `Alt+Enter` leaves the text in the box; the keyboard button opens on Shortcuts and the
 Settings button on General; filtering `enqueue` from Appearance moves to
 Shortcuts and `opus` moves to Models, `zzzz` empties the rail; rebinding
 Enqueue to `Ctrl+Shift+E` takes effect in the prompt box and in the hint under
-it, survives a reload, and the row's arrow restores `Ctrl+Enter`; recording
+it, survives a reload, and the row's arrow restores `Enter`; recording
 `Ctrl+P` over Send does not open the launcher and flags the conflict on both
 rows; Escape cancels a recording with the dialog still open; Restore all
 defaults resets the lot. No console or page errors.

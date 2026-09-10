@@ -2,7 +2,7 @@
 
 ## Outcome
 
-A prompt can be queued with the Send menu or Ctrl+Enter (rebindable — see
+A prompt can be queued with the Send menu or Enter (rebindable — see
 [015-settings-shortcuts.md](015-settings-shortcuts.md)). Queued prompts are
 persisted and marked with a clock in session lists.
 

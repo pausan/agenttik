@@ -35,9 +35,11 @@ build-windows-amd64: ui
 	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-H=windowsgui" -tags "desktop production" -o $(DIST)/agenttik_windows_amd64.exe $(PKG)
 
 ## build-macos-arm64: macOS ARM64 desktop binary (run this target on macOS)
+## Wails calls UTType for the file dialog filters, so the linker needs
+## UniformTypeIdentifiers. The wails CLI adds it; plain `go build` does not.
 build-macos-arm64: ui
 	mkdir -p $(DIST)
-	GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 go build -trimpath -tags "desktop production" -o $(DIST)/agenttik_darwin_arm64 $(PKG)
+	GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 CGO_LDFLAGS="-framework UniformTypeIdentifiers" go build -trimpath -tags "desktop production" -o $(DIST)/agenttik_darwin_arm64 $(PKG)
 
 run: build
 	./$(BIN)

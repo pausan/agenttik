@@ -97,7 +97,7 @@ func run() error {
 	go turns.RunSchedules(schedules)
 
 	if !*webOnly {
-		err := runDesktop(srv, lock)
+		err := runDesktop(srv, lock, cfg.Addr)
 		if !errors.Is(err, errNoDesktop) {
 			return err
 		}

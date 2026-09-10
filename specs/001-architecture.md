@@ -21,7 +21,10 @@ One binary, two ways to show the same UI:
 - **Desktop (default)** — a Wails window. It starts the HTTP server on a random
   loopback port and points a WebKit view at it through a reverse proxy with
   `FlushInterval = -1`, so SSE still streams. Needs cgo, gtk3 and
-  webkit2gtk; built with `-tags "desktop production webkit2_41"`.
+  webkit2gtk; built with `-tags "desktop production webkit2_41"`. Settings ›
+  Server can additionally expose that same server on a chosen host and port,
+  through a second, independent proxy the window itself never touches — see
+  [043-exposed-server.md](043-exposed-server.md).
 - **Web (`--web`)** — the HTTP server only, prints its URL. Builds with
   `CGO_ENABLED=0` and no system dependencies beyond node for the UI.
 

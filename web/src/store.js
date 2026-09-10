@@ -65,6 +65,11 @@ export const S = reactive({
   // they are shown. See specs/041-project-archiving.md.
   archivedProjects: [],
   subscriptionLimits: {}, // provider -> its latest subscription allowance buckets
+  // Whether this desktop window's server is also exposed for a browser to
+  // reach, read when Settings opens like the archived projects beside it.
+  // available is false on a web launch, which already is the server. See
+  // specs/043-exposed-server.md.
+  serverConfig: { available: false, enabled: false, host: "", port: 0, listening: false },
   /* sessionID -> unsent prompt, for a conversation with no tab of its own.
      A project has one context slot, so opening anything else in it drops the
      session tab the text was typed into; the text is the user's and outlives
@@ -149,6 +154,29 @@ export async function loadProviders() {
 
 export function providerOf(name) {
   return S.providers.find((p) => p.name === name);
+}
+
+/* --------------------------------------------------------- server exposure */
+
+/* Read when Settings opens, like loadArchivedProjects: it does not change
+   while the dialog is shut, and nothing else needs it. */
+export async function loadServerConfig() {
+  S.serverConfig = await api("GET", "/api/server");
+}
+
+/* setServerConfig sends the whole setting every time — enabled, host and
+   port together — because turning the server on with a fresh address and
+   pointing a running one at a new address are the same request. patch is
+   applied over the current value, so a caller changing one field does not
+   have to know the other two. A rejected change (a bad address, a port
+   already taken) leaves S.serverConfig, and so the form, exactly as it was. */
+export async function setServerConfig(patch) {
+  const body = { enabled: S.serverConfig.enabled, host: S.serverConfig.host, port: S.serverConfig.port, ...patch };
+  try {
+    S.serverConfig = await api("PUT", "/api/server", body);
+  } catch (e) {
+    fail(e);
+  }
 }
 
 /* contextWindow is how many tokens the session's model holds, which the

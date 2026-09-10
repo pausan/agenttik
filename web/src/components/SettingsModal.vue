@@ -8,11 +8,12 @@
    the filter changes. They are small enough that this costs nothing. */
 import { computed, reactive, ref, watch } from "vue";
 
-import { fail, loadArchivedProjects, loadProviders } from "../store";
+import { fail, loadArchivedProjects, loadProviders, loadServerConfig } from "../store";
 import AppearanceSettings from "./settings/AppearanceSettings.vue";
 import GeneralSettings from "./settings/GeneralSettings.vue";
 import ModelSettings from "./settings/ModelSettings.vue";
 import ProjectSettings from "./settings/ProjectSettings.vue";
+import ServerSettings from "./settings/ServerSettings.vue";
 import ShortcutSettings from "./settings/ShortcutSettings.vue";
 
 const open = defineModel("open", { type: Boolean, default: false });
@@ -23,11 +24,12 @@ const SECTIONS = [
   { id: "projects", label: "Projects", icon: "i-lucide-archive" },
   { id: "appearance", label: "Appearance", icon: "i-lucide-palette" },
   { id: "models", label: "Models", icon: "i-lucide-sparkles" },
+  { id: "server", label: "Server", icon: "i-lucide-server" },
   { id: "shortcuts", label: "Shortcuts", icon: "i-lucide-keyboard" },
 ];
 
 const filter = ref("");
-const counts = reactive({ general: 0, projects: 0, appearance: 0, models: 0, shortcuts: 0 });
+const counts = reactive({ general: 0, projects: 0, appearance: 0, models: 0, server: 0, shortcuts: 0 });
 
 const shown = computed(() => (filter.value ? SECTIONS.filter((s) => counts[s.id]) : SECTIONS));
 
@@ -46,7 +48,7 @@ watch(open, async (on) => {
   if (!on) return;
   filter.value = "";
   try {
-    await Promise.all([loadProviders(), loadArchivedProjects()]);
+    await Promise.all([loadProviders(), loadArchivedProjects(), loadServerConfig()]);
   } catch (e) {
     fail(e);
     open.value = false;
@@ -105,6 +107,11 @@ watch(open, async (on) => {
             v-show="section === 'models'"
             :filter="filter"
             @count="counts.models = $event"
+          />
+          <ServerSettings
+            v-show="section === 'server'"
+            :filter="filter"
+            @count="counts.server = $event"
           />
           <ShortcutSettings
             v-show="section === 'shortcuts'"

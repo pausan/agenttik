@@ -178,6 +178,18 @@ SET provider = (SELECT provider FROM sessions WHERE sessions.id = queued_message
 -- is scanned faster than a second B-tree is read.
 ALTER TABLE projects ADD COLUMN archived_at INTEGER NOT NULL DEFAULT 0;
 	`,
+	`
+-- Whether the desktop window's server is also exposed for a browser to
+-- reach, and where. One row, id fixed at 1: this is a setting, not a list.
+-- Host blank and port 0 mean "never saved"; the app fills those with its own
+-- default rather than keeping a second copy of it here.
+CREATE TABLE server_config (
+    id      INTEGER PRIMARY KEY CHECK (id = 1),
+    enabled INTEGER NOT NULL DEFAULT 0,
+    host    TEXT    NOT NULL DEFAULT '',
+    port    INTEGER NOT NULL DEFAULT 0
+);
+	`,
 }
 
 func migrate(db *sql.DB) error {

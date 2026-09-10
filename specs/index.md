@@ -44,8 +44,14 @@
 | [040-editable-project-path.md](040-editable-project-path.md) | Repointing a project at a moved folder, by typing or by browsing |
 | [041-project-archiving.md](041-project-archiving.md) | Putting a project away without deleting it, and the Settings list it waits in |
 | [042-sidebar-project-rows.md](042-sidebar-project-rows.md) | A project added lands last, no rule between projects, and the letter that folds one |
+| [043-exposed-server.md](043-exposed-server.md) | Serving the desktop window's UI to a browser too, on a chosen host and port |
 
-Status: A project added now lands at the end of the sidebar instead of on top
+Status: The desktop window can now also serve a browser — this machine or
+another on the network — on a host and port chosen in Settings › Server:
+Everybody, localhost or a typed IP, starting on the app's own port. Off by
+default and remembered for the next launch; not offered on a web launch,
+which already is the exposed server; see 043.
+A project added now lands at the end of the sidebar instead of on top
 of the order the user arranged, nothing but space separates one project from
 the next, and Alt with a project's letter folds its tasks away once that
 project is the one showing; see 042.

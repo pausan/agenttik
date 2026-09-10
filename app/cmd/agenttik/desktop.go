@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strconv"
 	"sync"
 
 	"github.com/wailsapp/wails/v2"
@@ -18,6 +19,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/linux"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
+	"github.com/pausan/agenttik/app/internal/netserver"
 	"github.com/pausan/agenttik/app/internal/server"
 	"github.com/pausan/agenttik/app/internal/single"
 	"github.com/pausan/agenttik/web"
@@ -26,8 +28,10 @@ import (
 // runDesktop opens a native window over the same HTTP server the web mode
 // uses. The window talks to a loopback listener through a reverse proxy rather
 // than to an in-process handler, because the SSE stream needs a real
-// connection it can flush.
-func runDesktop(srv *server.Server, lock *single.Lock) error {
+// connection it can flush. defaultAddr seeds Settings › Server: the app's own
+// default, or --addr if one was given, for whenever nothing has been saved
+// yet.
+func runDesktop(srv *server.Server, lock *single.Lock, defaultAddr string) error {
 	// A second launch reaches this instance over the same port the window
 	// does, so the hook goes in before anything is serving on it.
 	win := &window{}
@@ -41,6 +45,21 @@ func runDesktop(srv *server.Server, lock *single.Lock) error {
 		return err
 	}
 	go srv.Listener(ln)
+
+	// Settings › Server can additionally expose this same server on a chosen
+	// host and port, for a browser rather than only the window — see
+	// specs/043-exposed-server.md. It proxies to the same loopback listener
+	// the window itself talks to, so the two are never out of step.
+	defaultHost, defaultPort, err := net.SplitHostPort(defaultAddr)
+	if err != nil {
+		defaultHost, defaultPort = "127.0.0.1", "7717"
+	}
+	port, err := strconv.Atoi(defaultPort)
+	if err != nil {
+		port = 7717
+	}
+	srv.SetNetworkManager(netserver.New(ln.Addr().String()), defaultHost, port)
+	srv.ApplyStoredNetworkConfig()
 
 	target, err := url.Parse("http://" + ln.Addr().String())
 	if err != nil {

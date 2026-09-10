@@ -7,4 +7,4 @@ import (
 	"github.com/pausan/agenttik/app/internal/single"
 )
 
-func runDesktop(*server.Server, *single.Lock) error { return errNoDesktop }
+func runDesktop(*server.Server, *single.Lock, string) error { return errNoDesktop }

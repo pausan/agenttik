@@ -29,7 +29,9 @@ Open [localhost:7717](http://127.0.0.1:7717), add a project folder, and start a 
 For the desktop app, install the native build dependencies (`make deps` on
 Debian/Ubuntu), then run `make run`.
 
-**Local use only:** the server has no authentication. Do not expose it to the network.
+**No authentication:** anyone who can reach agenttik's address has full control of it. It binds to
+loopback only by default; the desktop app's Settings › Server can expose it to the network instead,
+which is a trust decision — only do that on a network you trust.
 
 Built with Go, SQLite, Vue 3, Nuxt UI, and Wails. See [specs](specs/index.md)
 for architecture and implementation details.

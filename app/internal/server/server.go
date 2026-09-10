@@ -1,5 +1,7 @@
-// Package server exposes the HTTP API and the embedded UI. It binds to
-// loopback and has no authentication: agenttik is a local tool.
+// Package server exposes the HTTP API and the embedded UI. It has no
+// authentication — agenttik is a local tool — and binds to loopback by
+// default; the desktop shell can optionally expose it further, on a host and
+// port of the user's choosing, through app/internal/netserver.
 package server
 
 import (
@@ -7,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -16,6 +19,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/recover"
 
 	"github.com/pausan/agenttik/app/internal/agent"
+	"github.com/pausan/agenttik/app/internal/netserver"
 	"github.com/pausan/agenttik/app/internal/runner"
 	"github.com/pausan/agenttik/app/internal/store"
 	"github.com/pausan/agenttik/web"
@@ -37,6 +41,14 @@ type Server struct {
 	// foreground raises the app's window, and says whether there was one to
 	// raise. Set by the desktop shell before serving starts; nil in web mode.
 	foreground func() bool
+
+	// network is the desktop shell's optional exposed-server manager, and the
+	// host and port it falls back to when nothing has been saved yet. Set by
+	// the desktop shell before serving starts; nil in web mode, where the
+	// process is already the server on whatever address it was started with.
+	network            *netserver.Manager
+	networkDefaultHost string
+	networkDefaultPort int
 }
 
 func New(s *store.Store, reg *agent.Registry, r *runner.Runner) *Server {
@@ -87,6 +99,8 @@ func (s *Server) routes() {
 	api.Get("/providers/:provider/subscription-limits", s.subscriptionLimits)
 	api.Get("/fs", s.browseDir)
 	api.Post("/foreground", s.raiseWindow)
+	api.Get("/server", s.getServerConfig)
+	api.Put("/server", s.putServerConfig)
 
 	api.Get("/projects", s.listProjects)
 	api.Post("/projects", s.createProject)
@@ -158,6 +172,48 @@ func (s *Server) Handler() http.Handler { return adaptor.FiberApp(s.app) }
 // OnForeground registers how to raise the app's window. Call it during wiring,
 // before serving starts: nothing guards the field afterwards.
 func (s *Server) OnForeground(raise func() bool) { s.foreground = raise }
+
+// SetNetworkManager wires in the desktop shell's optional exposed-server
+// manager, and the host and port to report and to bind when no explicit
+// choice has ever been saved. Call during wiring, before serving starts, like
+// OnForeground; leave unset in web mode, where GET /api/server answers that
+// there is nothing to configure.
+func (s *Server) SetNetworkManager(m *netserver.Manager, defaultHost string, defaultPort int) {
+	s.network = m
+	s.networkDefaultHost = defaultHost
+	s.networkDefaultPort = defaultPort
+}
+
+// ApplyStoredNetworkConfig starts the exposed listener if the saved setting
+// says to. Call once, after SetNetworkManager and before the window opens. A
+// failure — the saved port taken by something else since the last run — is
+// not fatal: ApplyStoredNetworkConfig only leaves it unbound, and Status
+// carries the reason to GET /api/server rather than stopping the app from
+// opening at all.
+func (s *Server) ApplyStoredNetworkConfig() {
+	if s.network == nil {
+		return
+	}
+	cfg, err := s.store.GetServerConfig()
+	if err != nil || !cfg.Enabled {
+		return
+	}
+	s.network.Start(net.JoinHostPort(s.withDefaults(cfg)))
+}
+
+// withDefaults fills in the app's compiled-in host and port wherever cfg
+// holds the zero value, i.e. nothing has ever been saved for it.
+func (s *Server) withDefaults(cfg store.ServerConfig) (host, port string) {
+	host = cfg.Host
+	if host == "" {
+		host = s.networkDefaultHost
+	}
+	port = strconv.Itoa(cfg.Port)
+	if cfg.Port == 0 {
+		port = strconv.Itoa(s.networkDefaultPort)
+	}
+	return host, port
+}
 
 // raiseWindow answers the request a second launch makes instead of starting
 // its own copy of the app. See app/cmd/agenttik and app/internal/single.

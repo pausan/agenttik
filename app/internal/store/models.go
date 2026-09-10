@@ -217,6 +217,17 @@ type Star struct {
 	CreatedAt int64  `json:"created_at"`
 }
 
+// ServerConfig is whether and where the desktop window's server is also
+// exposed for a browser to reach, beyond the loopback connection the window
+// itself uses. Host is blank and Port is 0 until ever saved; the caller
+// fills those in with the app's own default rather than a second copy of it
+// living here. See 043-exposed-server.md.
+type ServerConfig struct {
+	Enabled bool   `json:"enabled"`
+	Host    string `json:"host"`
+	Port    int    `json:"port"`
+}
+
 // Session status values.
 const (
 	StatusIdle    = "idle"

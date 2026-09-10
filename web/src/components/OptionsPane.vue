@@ -1,14 +1,21 @@
 <script setup>
 import { ref, watch } from "vue";
 
-import { S, removeProject, renameProject, startTask } from "../store";
+import { S, removeProject, renameProject, startTask, updateProjectPath } from "../store";
 
 const name = ref("");
+const path = ref("");
 const confirming = ref(false);
 
 watch(
   () => S.project?.project.name,
   (v) => (name.value = v || ""),
+  { immediate: true },
+);
+
+watch(
+  () => S.project?.project.path,
+  (v) => (path.value = v || ""),
   { immediate: true },
 );
 
@@ -30,12 +37,15 @@ async function remove() {
       />
     </label>
 
-    <div class="mb-3 text-xs font-medium text-muted">
+    <label class="mb-3 block text-xs font-medium text-muted">
       Folder
-      <div class="mt-1 rounded-[var(--ui-radius)] bg-elevated px-2 py-1.5 font-mono text-xs font-normal wrap-anywhere text-highlighted">
-        {{ S.project.project.path }}
-      </div>
-    </div>
+      <UInput
+        v-model="path"
+        class="mt-1 w-full font-mono text-xs font-normal"
+        @change="updateProjectPath(S.project.project, path)"
+        @keydown.enter="$event.target.blur()"
+      />
+    </label>
 
     <UButton block label="New task" @click="startTask(S.project.project)" />
 

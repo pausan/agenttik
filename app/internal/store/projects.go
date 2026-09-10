@@ -47,6 +47,20 @@ func (s *Store) SetProjectName(id int64, name string) error {
 	return nil
 }
 
+// SetProjectPath repoints a project at a new folder, for when the one on disk
+// has moved. Nothing under the project is touched; only where future turns,
+// the Tree and the Changed pane look for it changes.
+func (s *Store) SetProjectPath(id int64, path string) error {
+	res, err := s.db.Exec(`UPDATE projects SET path = ? WHERE id = ?`, path, id)
+	if err != nil {
+		return fmt.Errorf("update project %d path: %w", id, err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (s *Store) DeleteProject(id int64) error {
 	res, err := s.db.Exec(`DELETE FROM projects WHERE id = ?`, id)
 	if err != nil {

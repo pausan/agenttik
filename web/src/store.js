@@ -676,6 +676,23 @@ export async function renameProject(p, name) {
   }
 }
 
+/* updateProjectPath repoints a project at a new folder, for when the one on
+   disk has moved. The Tree and Changed panes read the old folder until told
+   otherwise, so a successful move refreshes them like switching projects
+   does. */
+export async function updateProjectPath(p, path) {
+  path = path.trim();
+  if (!path || path === p.path) return;
+  try {
+    const updated = await api("PATCH", "/api/projects/" + p.id, { path });
+    const tab = S.tabs.find((t) => t.kind === "project" && t.projectID === p.id);
+    if (tab) tab.data.project = updated;
+    await Promise.all([refreshProjects(), refreshInspector()]);
+  } catch (e) {
+    fail(e);
+  }
+}
+
 /* ------------------------------------------------------------- schedules */
 
 /* A schedule is a prompt plus a clock: every time it comes due it starts a

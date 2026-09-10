@@ -28,13 +28,9 @@ func (s *Server) createProject(c *fiber.Ctx) error {
 	if body.Path == "" {
 		return badRequest("path is required")
 	}
-	abs, err := filepath.Abs(expandHome(body.Path))
+	abs, err := resolveProjectPath(body.Path)
 	if err != nil {
-		return badRequest("invalid path: %v", err)
-	}
-	info, err := os.Stat(abs)
-	if err != nil || !info.IsDir() {
-		return badRequest("%s is not a directory", abs)
+		return err
 	}
 	if body.Name == "" {
 		body.Name = filepath.Base(abs)
@@ -83,7 +79,9 @@ func (s *Server) reorderProjects(c *fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-// updateProject renames a project; the folder is fixed for its lifetime.
+// updateProject renames a project, repoints it at a new folder, or both. Each
+// field is applied only when sent, so a rename does not require the path and
+// a move does not require the name.
 func (s *Server) updateProject(c *fiber.Ctx) error {
 	id, err := projectID(c)
 	if err != nil {
@@ -91,16 +89,29 @@ func (s *Server) updateProject(c *fiber.Ctx) error {
 	}
 	var body struct {
 		Name string `json:"name"`
+		Path string `json:"path"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return badRequest("invalid body: %v", err)
 	}
 	name := strings.TrimSpace(body.Name)
-	if name == "" {
-		return badRequest("name is required")
+	path := strings.TrimSpace(body.Path)
+	if name == "" && path == "" {
+		return badRequest("name or path is required")
 	}
-	if err := s.store.SetProjectName(id, name); err != nil {
-		return err
+	if name != "" {
+		if err := s.store.SetProjectName(id, name); err != nil {
+			return err
+		}
+	}
+	if path != "" {
+		abs, err := resolveProjectPath(path)
+		if err != nil {
+			return err
+		}
+		if err := s.store.SetProjectPath(id, abs); err != nil {
+			return err
+		}
 	}
 	p, err := s.store.GetProject(id)
 	if err != nil {
@@ -150,6 +161,22 @@ func (s *Server) projectMetrics(c *fiber.Ctx) error {
 	}
 	return c.JSON(metrics)
 }
+
+// resolveProjectPath turns a user-supplied path into the absolute, existing
+// directory a project points at, shared by create and update so a moved
+// folder is validated the same way a new one is.
+func resolveProjectPath(path string) (string, error) {
+	abs, err := filepath.Abs(expandHome(path))
+	if err != nil {
+		return "", badRequest("invalid path: %v", err)
+	}
+	info, err := os.Stat(abs)
+	if err != nil || !info.IsDir() {
+		return "", badRequest("%s is not a directory", abs)
+	}
+	return abs, nil
+}
+
 func expandHome(path string) string {
 	if path == "~" || len(path) > 1 && path[:2] == "~/" {
 		if home, err := os.UserHomeDir(); err == nil {

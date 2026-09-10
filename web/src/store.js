@@ -1911,8 +1911,8 @@ function resubscribe() {
 
 /* The start and end of a turn are published to the session's topic and to its
    project's, and this window is subscribed to both, so each arrives twice.
-   The pair travels back to back; remembering the last one is enough to handle
-   a turn once, and a repeat that slips past only costs a second refresh. */
+   A provider's done event precedes the persisted final done event, which
+   carries stats, so each stage needs its own deduplication key. */
 let lastTurnEvent = "";
 
 function onEvent(msg) {
@@ -1930,7 +1930,8 @@ function onEvent(msg) {
   if (msg.event?.type === "schedule_changed") return reloadSchedules();
   const turnMoved = ["started", "done"].includes(msg.event?.type);
   if (turnMoved) {
-    const seen = `${msg.event.type}:${msg.session_id}:${msg.turn_id}`;
+    const stage = msg.event.type === "done" && msg.stats ? "final" : "event";
+    const seen = `${stage}:${msg.event.type}:${msg.session_id}:${msg.turn_id}`;
     if (seen === lastTurnEvent) return;
     lastTurnEvent = seen;
   }

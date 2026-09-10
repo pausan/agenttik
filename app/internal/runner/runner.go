@@ -442,6 +442,9 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, events <-chan ag
 	}
 	r.store.FinishTurn(turn)
 	r.store.SetSessionStatus(sess.ID, sessionStatus)
+	if sess.ScheduleID != 0 {
+		r.finishScheduledRun(sess, turn.Status)
+	}
 
 	stats, _ := r.store.SessionStats(sess.ID)
 	done := Event{SessionID: sess.ID, ProjectID: sess.ProjectID, TurnID: turn.ID,

@@ -10,14 +10,15 @@ import (
 const sessionCols = `s.id, s.project_id, s.title, s.provider, s.provider_session_id,
 	s.model, s.effort, s.permission, s.source, s.status,
 	s.created_at, s.updated_at, s.last_active_at, s.done_at, s.position,
-	(SELECT COUNT(*) FROM queued_messages q WHERE q.session_id = s.id), p.name, p.path`
+	(SELECT COUNT(*) FROM queued_messages q WHERE q.session_id = s.id),
+	s.schedule_id, p.name, p.path`
 
 func scanSession(sc interface{ Scan(...any) error }) (*Session, error) {
 	var v Session
 	err := sc.Scan(&v.ID, &v.ProjectID, &v.Title, &v.Provider, &v.ProviderSessionID,
 		&v.Model, &v.Effort, &v.Permission, &v.Source, &v.Status,
 		&v.CreatedAt, &v.UpdatedAt, &v.LastActiveAt, &v.DoneAt, &v.Position,
-		&v.QueueCount, &v.ProjectName, &v.ProjectPath)
+		&v.QueueCount, &v.ScheduleID, &v.ProjectName, &v.ProjectPath)
 	if err != nil {
 		return nil, err
 	}
@@ -35,12 +36,13 @@ func (s *Store) CreateSession(v *Session) error {
 	}
 	_, err := s.db.Exec(
 		`INSERT INTO sessions (id, project_id, title, provider, provider_session_id,
-		    model, effort, permission, source, status, created_at, updated_at, last_active_at, position)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,
+		    model, effort, permission, source, status, created_at, updated_at, last_active_at,
+		    schedule_id, position)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,
 		    (SELECT COALESCE(MAX(position), 0) + 1 FROM sessions WHERE project_id = ?))`,
 		v.ID, v.ProjectID, v.Title, v.Provider, v.ProviderSessionID,
 		v.Model, v.Effort, v.Permission, v.Source, v.Status,
-		v.CreatedAt, v.UpdatedAt, v.LastActiveAt, v.ProjectID)
+		v.CreatedAt, v.UpdatedAt, v.LastActiveAt, v.ScheduleID, v.ProjectID)
 	if err != nil {
 		return fmt.Errorf("create session: %w", err)
 	}

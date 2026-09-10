@@ -114,6 +114,50 @@ ALTER TABLE turns ADD COLUMN context_window INTEGER NOT NULL DEFAULT 0;
 -- reported a reading is the reading.
 ALTER TABLE turns ADD COLUMN rate_limits TEXT NOT NULL DEFAULT '';
 	`,
+	`
+-- A schedule is a prompt plus a clock. It is not a session: no transcript, no
+-- provider thread, no turns of its own — what it produces are ordinary
+-- sessions. Its own table is what stops every list that reads a session from
+-- having to say "unless it is a schedule".
+CREATE TABLE schedules (
+    id               INTEGER PRIMARY KEY,
+    project_id       INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    title            TEXT    NOT NULL DEFAULT '',
+    prompt           TEXT    NOT NULL,
+    provider         TEXT    NOT NULL,
+    model            TEXT    NOT NULL,
+    effort           TEXT    NOT NULL DEFAULT '',
+    permission       TEXT    NOT NULL DEFAULT 'workspace',
+    every            TEXT    NOT NULL,            -- interval | day | week | month
+    interval_minutes INTEGER NOT NULL DEFAULT 0,  -- the whole X hours Y minutes
+    at_minute        INTEGER NOT NULL DEFAULT 0,  -- minutes past local midnight
+    anchor_at        INTEGER NOT NULL,            -- fixes the weekday and the day of month
+    remaining        INTEGER NOT NULL DEFAULT -1, -- -1 runs forever
+    paused           INTEGER NOT NULL DEFAULT 0,
+    next_run_at      INTEGER NOT NULL DEFAULT 0,
+    created_at       INTEGER NOT NULL,
+    done_at          INTEGER NOT NULL DEFAULT 0,
+    position         INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX idx_schedules_project ON schedules(project_id, position, created_at);
+CREATE INDEX idx_schedules_due     ON schedules(next_run_at);
+
+-- One row per fire, spawned or skipped. A skip never becomes a session, so
+-- without this table the gap one leaves could not be explained.
+CREATE TABLE schedule_runs (
+    id          INTEGER PRIMARY KEY,
+    schedule_id INTEGER NOT NULL REFERENCES schedules(id) ON DELETE CASCADE,
+    session_id  TEXT    NOT NULL DEFAULT '',
+    status      TEXT    NOT NULL,   -- running | done | error | interrupted | skipped
+    started_at  INTEGER NOT NULL,
+    ended_at    INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX idx_schedule_runs ON schedule_runs(schedule_id, id DESC);
+
+-- 0 for an ordinary session. A finishing turn reads it to find the schedule
+-- that started it, rather than a lookup per turn.
+ALTER TABLE sessions ADD COLUMN schedule_id INTEGER NOT NULL DEFAULT 0;
+	`,
 }
 
 func migrate(db *sql.DB) error {

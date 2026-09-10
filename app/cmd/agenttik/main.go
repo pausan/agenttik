@@ -6,6 +6,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -50,8 +51,13 @@ func run() error {
 	}
 	defer db.Close()
 
-	// No turn survives a restart, so clear anything left marked running.
+	// No turn survives a restart, so clear anything left marked running. The
+	// same goes for a schedule's open run: left as it was, its schedule would
+	// read as busy forever and skip every fire after it.
 	if err := db.ResetRunningSessions(); err != nil {
+		return err
+	}
+	if err := db.ResetRunningScheduleRuns(); err != nil {
 		return err
 	}
 
@@ -60,6 +66,11 @@ func run() error {
 	srv := server.New(db, registry, turns)
 
 	defer turns.StopAll()
+
+	// The clock runs for as long as the app does, in either shell.
+	schedules, stopSchedules := context.WithCancel(context.Background())
+	defer stopSchedules()
+	go turns.RunSchedules(schedules)
 
 	if !*webOnly {
 		err := runDesktop(srv)

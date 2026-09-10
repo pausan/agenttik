@@ -38,9 +38,9 @@ Enter during the round trip cannot start a second turn.
 
 The pending queue row has no server id, so its controls stay disabled until the
 response replaces it. A started event claims the pending row directly, while a
-refusal removes it and restores the draft. The prompt is persisted before
-queued session title generation, and a sent prompt is persisted before its
-first session title, so naming and other follow-up work never comes first.
+refusal removes it and restores the draft. Both prompts are persisted before
+the task is named, and naming itself only writes the prompt's first line and
+sends the real request to the background, so no follow-up work comes first.
 
 ## Validation
 

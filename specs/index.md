@@ -21,7 +21,7 @@
 | [017-general-settings.md](017-general-settings.md) | The General section, and which key sends |
 | [018-readme-icon.md](018-readme-icon.md) | Concise project overview, and the one SVG the README, favicon and window share |
 | [019-file-watching.md](019-file-watching.md) | Tree and Changed following the disk as it moves |
-| [020-queued-session-titles.md](020-queued-session-titles.md) | Isolated small-model titles for queued sessions |
+| [020-task-titles.md](020-task-titles.md) | Instant first-line title, refined by an isolated small model |
 | [021-stop-active-sessions.md](021-stop-active-sessions.md) | Stopping active or scheduled sessions from the sidebar |
 | [022-transcript-file-links.md](022-transcript-file-links.md) | Clicking a path in a reply to open the file at its line |
 | [023-tool-call-groups.md](023-tool-call-groups.md) | Collapsing a run of tool calls to its latest |

@@ -174,6 +174,24 @@ func (s *Store) SetSessionTitle(id, title string) error {
 	return nil
 }
 
+// RetitleSession replaces a title only if the row still holds the one the
+// caller last wrote, and reports whether it did. A generated title arrives
+// seconds after the placeholder it replaces, and by then the user may have
+// named the task themselves; their name wins.
+func (s *Store) RetitleSession(id, title, expect string) (bool, error) {
+	res, err := s.db.Exec(
+		`UPDATE sessions SET title = ?, updated_at = ? WHERE id = ? AND title = ?`,
+		title, nowMillis(), id, expect)
+	if err != nil {
+		return false, fmt.Errorf("retitle session: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("retitle session: %w", err)
+	}
+	return n > 0, nil
+}
+
 // SetSessionModel records a mid-session model choice. Changing provider also
 // clears its opaque thread id: a Codex thread cannot be resumed by Claude,
 // and vice versa.

@@ -1932,6 +1932,19 @@ function onEvent(msg) {
   // A schedule fired, skipped a run, or spent one. It names no schedule: the
   // views re-read what they are showing, as the file watcher's event does.
   if (msg.event?.type === "schedule_changed") return reloadSchedules();
+  // A background request has named a task. The sidebar, the project lists and
+  // the tab strip all draw that name; the tab is set from the event because a
+  // task outside the sidebar's window is in neither list that would carry it.
+  if (msg.event?.type === "session_titled") {
+    const named = S.tabs.find((t) => t.kind === "session" && t.sessionID === msg.session_id);
+    if (named && msg.session) {
+      named.detail.session = { ...named.detail.session, ...msg.session };
+      named.label = tabLabel(msg.session);
+    }
+    reloadLists();
+    reloadProjects();
+    return;
+  }
   const turnMoved = ["started", "done"].includes(msg.event?.type);
   if (turnMoved) {
     const stage = msg.event.type === "done" && msg.stats ? "final" : "event";

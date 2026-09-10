@@ -75,7 +75,7 @@ const modelGroups = computed(() => S.providers.map((provider) => ({
 const sendNowLabel = computed(() => (S.detail?.running ? "Force send" : "Send now"));
 const sendNowHint = computed(() =>
   S.detail?.running
-    ? "Stop this session's turn and send this queued prompt next"
+    ? "Stop this task's turn and send this queued prompt next"
     : "Send this prompt now, beside whatever else the project is running",
 );
 
@@ -150,7 +150,7 @@ watch(
 <template>
   <div ref="box" class="min-h-0 flex-1 overflow-auto">
     <p v-if="!S.detail" class="pt-[18vh] text-center text-dimmed">
-      Pick a session, or a project to start one.
+      Pick a task, or a project to start one.
     </p>
     <div v-else class="mx-auto max-w-[860px] px-6 pt-5 pb-2">
       <template v-for="row in rows" :key="row.at">

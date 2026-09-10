@@ -11,14 +11,14 @@ function context(session, stats) {
   return tokens(stats.context_tokens) + (total ? " / " + tokens(total) : "");
 }
 
-/* Sessions in a project run concurrently, so agent time is summed across
+/* Tasks in a project run concurrently, so agent time is summed across
    them and can exceed the wall clock. */
 const rows = computed(() => {
   if (S.project) {
     const { project, stats } = S.project;
     return [
       ["Folder", project.path],
-      ["Sessions", nf.format(stats.sessions)],
+      ["Tasks", nf.format(stats.sessions)],
       ["Running now", nf.format(stats.running)],
       ["Turns", nf.format(stats.turns)],
       ["Input tokens", tokens(stats.input_tokens)],

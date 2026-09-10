@@ -95,3 +95,4 @@ contract and its app-server allowance query answers live; its billable
 live-turn check remains pending. GitHub Copilot sessions use the official CLI
 JSONL contract and its read-only headless quota query; see 031.
 | [037-linux-releases.md](037-linux-releases.md) | Tagged Linux amd64 and arm64 desktop builds and releases |
+| [038-task-naming.md](038-task-naming.md) | Task naming and hover-popup content |

@@ -7,22 +7,22 @@ import {
   TAB_CHORDS,
   openProject,
   openSchedule,
-  openSession,
+  openTask,
   renameSchedule,
-  renameSession,
+  renameTask,
   reorderProjects,
-  reorderSidebarSessions,
+  reorderSidebarTasks,
   scheduleLabel,
   setScheduleArchived,
   setSchedulePaused,
-  setSessionArchived,
+  setTaskArchived,
   switchProject,
-  stopSession,
+  stopTask,
 } from "../store";
 import { SEGMENTED } from "../ui";
 import FileTree from "./FileTree.vue";
 import ScheduleRow from "./ScheduleRow.vue";
-import SessionRow from "./SessionRow.vue";
+import TaskRow from "./TaskRow.vue";
 import StatusDot from "./StatusDot.vue";
 
 defineEmits(["add-project", "setup", "shortcuts"]);
@@ -49,8 +49,8 @@ defineExpose({
 
 
 const draggingProject = ref(0);
-const draggingSession = ref(null);
-const renaming = ref(""); // the session whose title is being edited
+const draggingTask = ref(null);
+const renaming = ref(""); // the task whose title is being edited
 const collapsedProjects = ref(new Set());
 function toggleProject(id) {
   const collapsed = collapsedProjects.value;
@@ -62,8 +62,8 @@ function toggleProject(id) {
    row is, and dragging a project changes it. */
 const projectKey = (i) => PROJECT_KEYS[i] || "";
 
-/* A number in the sidebar is the session shortcut number:
-   Alt and that digit go there. It is the session top-to-bottom position in
+/* A number in the sidebar is the task shortcut number:
+   Alt and that digit go there. It is the task top-to-bottom position in
    this project list, whether or not its context is currently visible. Rows
    after the first nine keep the blank column and use Ctrl+PageUp/PageDown.
 
@@ -71,18 +71,18 @@ const projectKey = (i) => PROJECT_KEYS[i] || "";
 const numbers = computed(() => {
   const found = new Map();
   const project = S.projects.find((candidate) => candidate.id === S.activeProjectID);
-  project?.recent_sessions.slice(0, TAB_CHORDS).forEach((session, i) => {
-    found.set(session.id, i + 1);
+  project?.recent_sessions.slice(0, TAB_CHORDS).forEach((task, i) => {
+    found.set(task.id, i + 1);
   });
   return found;
 });
 
 /* Rows of the selected project keep the number column even when nothing
    reaches them, so the titles line up. Other projects have no strip. */
-const sessionNumber = (project, session) =>
-  S.activeProjectID === project.id ? numbers.value.get(session.id) || 0 : null;
+const taskNumber = (project, task) =>
+  S.activeProjectID === project.id ? numbers.value.get(task.id) || 0 : null;
 
-/* A project is lit while any of its sessions is mid-turn, whether or not that
+/* A project is lit while any of its tasks is mid-turn, whether or not that
    conversation is the one on screen. */
 const busy = (p) =>
   p.recent_sessions.some((s) => s.status === "running") || p.schedules.some((s) => s.running);
@@ -127,32 +127,32 @@ function onProjectDrop() {
   reorderProjects(S.projects.map((p) => p.id));
 }
 
-function onSessionStart(e, projectID, sessionID) {
-  draggingSession.value = { projectID, sessionID };
-  beginDrag(e, sessionID);
+function onTaskStart(e, projectID, taskID) {
+  draggingTask.value = { projectID, taskID };
+  beginDrag(e, taskID);
 }
 
-function onSessionOver(e, projectID, overID) {
-  const dragged = draggingSession.value;
-  if (!dragged || dragged.projectID !== projectID || dragged.sessionID === overID) return;
+function onTaskOver(e, projectID, overID) {
+  const dragged = draggingTask.value;
+  if (!dragged || dragged.projectID !== projectID || dragged.taskID === overID) return;
   e.stopPropagation();
   e.preventDefault();
   const project = S.projects.find((p) => p.id === projectID);
   if (!project) return;
-  const from = project.recent_sessions.findIndex((s) => s.id === dragged.sessionID);
+  const from = project.recent_sessions.findIndex((s) => s.id === dragged.taskID);
   const to = project.recent_sessions.findIndex((s) => s.id === overID);
   if (from < 0 || to < 0) return;
   project.recent_sessions.splice(to, 0, ...project.recent_sessions.splice(from, 1));
 }
 
-function onSessionDrop(e) {
-  const dragged = draggingSession.value;
+function onTaskDrop(e) {
+  const dragged = draggingTask.value;
   if (!dragged) return;
   e.stopPropagation();
   e.preventDefault();
-  draggingSession.value = null;
+  draggingTask.value = null;
   const project = S.projects.find((p) => p.id === dragged.projectID);
-  if (project) reorderSidebarSessions(project, project.recent_sessions.map((s) => s.id));
+  if (project) reorderSidebarTasks(project, project.recent_sessions.map((s) => s.id));
 }
 </script>
 
@@ -169,7 +169,7 @@ function onSessionDrop(e) {
     >
       <template #default="{ item }">
         <template v-if="item.value === 'projects'"><span class="underline">P</span>rojects</template>
-        <template v-else-if="item.value === 'sessions'"><span class="underline">S</span>essions</template>
+        <template v-else-if="item.value === 'sessions'"><span class="underline">S</span>asks</template>
         <template v-else><span class="underline">T</span>ree</template>
       </template>
     </UTabs>
@@ -203,7 +203,7 @@ function onSessionDrop(e) {
             <button
               type="button"
               class="mt-0.5 shrink-0"
-              :title="`${collapsedProjects.has(p.id) ? 'Expand' : 'Collapse'} sessions`"
+              :title="`${collapsedProjects.has(p.id) ? 'Expand' : 'Collapse'} tasks`"
               :aria-expanded="!collapsedProjects.has(p.id)"
               @click.stop="toggleProject(p.id)"
             >
@@ -248,28 +248,28 @@ function onSessionDrop(e) {
             v-for="s in p.recent_sessions"
             :key="s.id"
             :class="[
-              draggingSession?.sessionID === s.id ? 'opacity-40' : '',
+              draggingTask?.taskID === s.id ? 'opacity-40' : '',
               renaming === s.id ? '' : 'cursor-grab active:cursor-grabbing',
             ]"
             :draggable="renaming !== s.id"
-            @dragstart.stop="onSessionStart($event, p.id, s.id)"
-            @dragover="onSessionOver($event, p.id, s.id)"
-            @drop="onSessionDrop"
-            @dragend="onSessionDrop"
+            @dragstart.stop="onTaskStart($event, p.id, s.id)"
+            @dragover="onTaskOver($event, p.id, s.id)"
+            @drop="onTaskDrop"
+            @dragend="onTaskDrop"
           >
-            <SessionRow
+            <TaskRow
               :title="s.title"
               :prompt="s.prompt"
               :status="s.status"
               :queued="s.queue_count"
               :active="S.detail?.session.id === s.id"
-              :number="sessionNumber(p, s)"
+              :number="taskNumber(p, s)"
               :stoppable="s.status === 'running' || s.queue_count > 0"
               :archive="s.status !== 'running' && s.queue_count === 0"
-              @stop="stopSession(s.id)"
-              @select="openSession(s.id)"
-              @toggle-archive="setSessionArchived(s, true)"
-              @rename="renameSession(s, $event)"
+              @stop="stopTask(s.id)"
+              @select="openTask(s.id)"
+              @toggle-archive="setTaskArchived(s, true)"
+              @rename="renameTask(s, $event)"
               @editing="renaming = $event ? s.id : ''"
             />
           </div>

@@ -33,7 +33,7 @@ const LAYOUT_LIMITS = { left: [180, 520], right: [200, 620] };
    sidebar get one, so dragging a project changes its letter. */
 export const PROJECT_KEYS = "ABCDEFGH";
 
-/* Alt+1 … Alt+9 reach the first nine sessions in the selected project's
+/* Alt+1 … Alt+9 reach the first nine tasks in the selected project's
    sidebar order. */
 export const TAB_CHORDS = 9;
 
@@ -41,7 +41,7 @@ export const TAB_CHORDS = 9;
    The first is the default: the usual question is what is running now, not
    what ran last week. The values are the ones /api/sessions takes, and the
    list is also what a remembered choice is checked against. */
-export const SESSION_WINDOWS = [
+export const TASK_WINDOWS = [
   { label: "Last hour", value: "1h" },
   { label: "Last day", value: "1d" },
   { label: "Last 3 days", value: "3d" },
@@ -78,7 +78,7 @@ export const S = reactive({
   treeIgnored: [],
   treeFilter: "",
   query: "", // sidebar session filter
-  window: SESSION_WINDOWS[0].value,
+  window: TASK_WINDOWS[0].value,
   lastUsed: null,
   layout: { left: 272, right: 312 },
   colors: { ...DEFAULT_COLORS }, // the accent and the grey, from Settings
@@ -308,7 +308,7 @@ export function persistTabOrder(id) {
   const tab = S.tabs.find((candidate) => candidate.id === id);
   if (tab?.kind !== "session") return;
   const project = S.projects.find((p) => p.id === projectOfTab(tab));
-  if (project) reorderSidebarSessions(project, project.recent_sessions.map((session) => session.id));
+  if (project) reorderSidebarTasks(project, project.recent_sessions.map((session) => session.id));
 }
 
 /* The prompt bar watches this counter. A counter, rather than a Boolean,
@@ -331,20 +331,20 @@ export function selectTab(id) {
 }
 
 /* Alt+1 … Alt+9 selects a session by its top-to-bottom sidebar position. */
-export function selectSessionAt(n) {
+export function selectTaskAt(n) {
   const session = S.projects.find((project) => project.id === S.activeProjectID)?.recent_sessions[n - 1];
-  if (session) openSession(session.id);
+  if (session) openTask(session.id);
 }
 
 /* Ctrl+PageUp and Ctrl+PageDown walk this project's sessions, including those
    after the first nine. The tab in front only supplies the starting session. */
-export function selectAdjacentSession(step) {
+export function selectAdjacentTask(step) {
   const sessions = S.projects.find((project) => project.id === S.activeProjectID)?.recent_sessions || [];
   if (!sessions.length) return;
   const active = S.owner?.kind === "session" ? S.owner.sessionID : 0;
   const at = sessions.findIndex((session) => session.id === active);
   const next = at < 0 ? (step > 0 ? 0 : sessions.length - 1) : (at + step + sessions.length) % sessions.length;
-  openSession(sessions[next].id);
+  openTask(sessions[next].id);
 }
 
 /* Ctrl+Tab and Ctrl+Shift+Tab walk every visible tab, wrapping at both ends. */
@@ -440,7 +440,7 @@ async function openSavedTab(tab) {
   if (tab.kind === "project") await openProject(tab.projectID, true);
   else if (tab.kind === "schedule") await openSchedule(tab.scheduleID, true);
   else if (tab.kind === "session") {
-    await openSession(tab.sessionID, true);
+    await openTask(tab.sessionID, true);
     const open = S.tabs.find((candidate) => candidate.id === tab.id);
     if (open) open.draft = typeof tab.draft === "string" ? tab.draft : "";
   } else if (tab.kind === "file") {
@@ -459,7 +459,7 @@ export async function reopenClosedTab() {
   if (!entry?.tab) return;
   let restored;
   if (entry.archived) {
-    restored = await setSessionArchived({ id: entry.tab.sessionID }, false);
+    restored = await setTaskArchived({ id: entry.tab.sessionID }, false);
     if (restored) {
       restored = await openSavedTab(entry.tab);
       for (const tab of entry.dependents) await openSavedTab(tab);
@@ -832,7 +832,7 @@ export async function refreshSessions() {
 /* setWindow moves how far back the list reaches and remembers it, so the
    next launch opens on the same reach rather than back on the default. */
 export function setWindow(value) {
-  if (value === S.window || !SESSION_WINDOWS.some((w) => w.value === value)) return;
+  if (value === S.window || !TASK_WINDOWS.some((w) => w.value === value)) return;
   S.window = value;
   persist(WINDOW_KEY, value);
   refreshSessions().catch(() => {});
@@ -844,7 +844,7 @@ export function setWindow(value) {
 function loadWindow() {
   try {
     const saved = localStorage.getItem(WINDOW_KEY);
-    if (SESSION_WINDOWS.some((w) => w.value === saved)) S.window = saved;
+    if (TASK_WINDOWS.some((w) => w.value === saved)) S.window = saved;
   } catch {
     /* keep the default */
   }
@@ -863,7 +863,7 @@ function syncSessionTabs() {
 }
 
 function tabLabel(session) {
-  return session.title?.trim() || "New session";
+  return session.title?.trim() || "New task";
 }
 
 /* A new session asks nothing: it opens empty on the model, effort and
@@ -957,7 +957,7 @@ async function blankSessionID(projectID) {
    rather than leaving a trail of empty tabs, open in a tab or not. It comes
    to the front with the cursor in the box, which is what was being asked
    for. */
-export async function startSession(project) {
+export async function startTask(project) {
   /* The prompt bar's focus watcher only sees a request made after it mounts,
      and coming from a project page mounts it with this very switch, so the
      cursor is asked for once the switch has been drawn. */
@@ -970,7 +970,7 @@ export async function startSession(project) {
   if (blank) return reuse(blank.id);
   const reusable = await blankSessionID(project.id);
   if (reusable) {
-    await openSession(reusable);
+    await openTask(reusable);
     return reuse("session:" + reusable);
   }
   const cfg = sessionDefaults();
@@ -978,7 +978,7 @@ export async function startSession(project) {
   try {
     const sess = await api("POST", "/api/sessions", { project_id: project.id, ...cfg });
     await Promise.all([refreshProjects(), refreshSessions()]);
-    await openSession(sess.id);
+    await openTask(sess.id);
     focusPrompt();
     reloadProjects();
   } catch (e) {
@@ -986,19 +986,19 @@ export async function startSession(project) {
   }
 }
 
-/* startCurrentSession is the keyboard and command-palette version of the
-   project page's New session button. A session, project, or file tab all
+/* startCurrentTask is the keyboard and command-palette version of the
+   project page's New task button. A session, project, or file tab all
    identify their owning project. */
-export function startCurrentSession() {
+export function startCurrentTask() {
   const id = currentProjectID();
   const project = S.project?.project?.id === id
     ? S.project.project
     : S.projects.find((p) => p.id === id);
   if (!project) return fail(new Error("Open a project or session first."));
-  return startSession(project);
+  return startTask(project);
 }
 
-export async function openSession(id, silent = false) {
+export async function openTask(id, silent = false) {
   const tabID = "session:" + id;
   const open = S.tabs.find((t) => t.id === tabID);
   if (open) return setContextTab(open);
@@ -1040,11 +1040,11 @@ export async function setModel(provider, model, effort) {
   }
 }
 
-/* renameSession retitles a session. The same session shows in the sidebar, in
+/* renameTask retitles a session. The same session shows in the sidebar, in
    its project's view and on the tab strip, so every list is re-read; the tab
    label is set here too, because a session outside the sidebar's window is
    not in the list that would otherwise carry the new name back. */
-export async function renameSession(session, title) {
+export async function renameTask(session, title) {
   title = title.trim();
   if (!title || title === session.title) return;
   try {
@@ -1075,10 +1075,10 @@ async function shouldDeleteBlankSession(session, tab) {
     !detail.queued.length &&
     !detail.running;
 }
-/* setSessionArchived removes a session from project views and closes its tab.
+/* setTaskArchived removes a session from project views and closes its tab.
    Archived sessions remain restorable; an untouched untitled placeholder is
    deleted instead. */
-export async function setSessionArchived(session, archived) {
+export async function setTaskArchived(session, archived) {
   try {
     const tab = S.tabs.find((t) => t.kind === "session" && t.sessionID === session.id);
     const deleted = archived && await shouldDeleteBlankSession(session, tab);
@@ -1105,12 +1105,12 @@ export function isArchived(session) {
   return !!session?.done_at;
 }
 
-/* reorderSessions records the order a project view was dragged into. The list
+/* reorderTasks records the order a project view was dragged into. The list
    is put in that order first, so the drop lands where it was let go rather
    than a request later; if the server refuses, the project is re-read, which
    is the only reliable way back — the row has been moved under the cursor
    since the drag began and the order it started in is gone. */
-export async function reorderSessions(tab, ids) {
+export async function reorderTasks(tab, ids) {
   syncProjectSessionOrder(tab.projectID, ids);
   try {
     await api("POST", `/api/projects/${tab.projectID}/sessions/order`, { ids });
@@ -1124,7 +1124,7 @@ export async function reorderSessions(tab, ids) {
 /* The sidebar has the same project session order as the centre project view,
    but owns a different array. It can therefore use the same endpoint without
    coupling a sidebar drag to an open project tab. */
-export async function reorderSidebarSessions(project, ids) {
+export async function reorderSidebarTasks(project, ids) {
   syncProjectSessionOrder(project.id, ids);
   try {
     await api("POST", `/api/projects/${project.id}/sessions/order`, { ids });
@@ -1516,7 +1516,7 @@ async function restoreOpenTabs() {
       } else if (tab?.kind === "schedule" && tab.scheduleID) {
         await openSchedule(tab.scheduleID, true);
       } else if (tab?.kind === "session" && tab.sessionID) {
-        await openSession(tab.sessionID, true);
+        await openTask(tab.sessionID, true);
         const open = S.tabs.find((t) => t.id === tab.id);
         if (open) open.draft = typeof tab.draft === "string" ? tab.draft : "";
       } else if (tab?.kind === "file" && typeof tab.path === "string") {
@@ -2048,12 +2048,12 @@ export async function forceQueued(queuedID) {
 export async function stopTurn() {
   const tab = S.owner;
   if (tab?.kind !== "session") return;
-  return stopSession(tab.sessionID);
+  return stopTask(tab.sessionID);
 }
 
 // Stopping from a sidebar row works for an active turn and for work waiting in
 // the project queue. The server clears queued prompts in either case.
-export async function stopSession(sessionID) {
+export async function stopTask(sessionID) {
   if (!sessionID) return;
   try {
     await api("POST", `/api/sessions/${sessionID}/stop`);
@@ -2136,6 +2136,12 @@ export function setColor(key, name) {
    send chord?" — instead of spelling a key out. Only what differs from the
    default is stored, so a default that changes later reaches everyone who
    never touched it. */
+const LEGACY_TASK_ACTIONS = {
+  "task.new": "session.new",
+  "task.prev": "session.prev",
+  "task.next": "session.next",
+};
+
 function defaultKeys() {
   const bound = {};
   for (const a of ACTIONS) bound[a.id] = a.keys;
@@ -2151,7 +2157,7 @@ export function loadKeys() {
   }
   if (!saved) return;
   for (const a of ACTIONS) {
-    const chords = saved[a.id];
+    const chords = saved[a.id] || saved[LEGACY_TASK_ACTIONS[a.id]];
     if (a.fixed || !Array.isArray(chords) || !chords.length) continue;
     if (chords.every((c) => typeof c === "string" && c)) S.keys[a.id] = chords;
   }

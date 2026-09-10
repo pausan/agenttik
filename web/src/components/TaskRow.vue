@@ -1,5 +1,5 @@
 <script setup>
-/* One session in a list: the sidebar's, or a project's. Its rename and archive
+/* One task in a list: the sidebar's, or a project's. Its rename and archive
    controls are separate from the row button, so opening a conversation stays
    one click away.
 
@@ -7,15 +7,14 @@
    saves, Escape puts it back.
 
    A title is three to seven words the model chose, which is not always enough
-   to tell two conversations apart, so hovering the row shows the prompt it was
-   opened with. */
+   to tell two tasks apart, so hovering the row shows its opening prompt. */
 import { nextTick, ref } from "vue";
 
 import StatusDot from "./StatusDot.vue";
 
 const props = defineProps({
   title: { type: String, default: "" },
-  // The prompt the session opened with, shown on hover. Empty draws no tooltip.
+  // The prompt the task opened with, shown on hover. Empty draws no tooltip.
   prompt: { type: String, default: "" },
   status: { type: String, default: "idle" },
   sub: { type: String, default: "" },
@@ -69,7 +68,7 @@ function commit() {
       ref="field"
       v-model="draft"
       size="sm"
-      placeholder="Untitled session"
+      placeholder="Untitled task"
       class="min-w-0 flex-1 cursor-text"
       @blur="commit"
       @keydown.enter.prevent="commit"
@@ -99,20 +98,23 @@ function commit() {
             >
             <StatusDot :status="status" />
             <span v-if="queued" class="shrink-0" title="Queued prompt">🕒</span>
-            <span class="truncate">{{ title || "Untitled session" }}</span>
+            <span class="truncate">{{ title || "Untitled task" }}</span>
           </span>
           <span v-if="sub" class="block truncate text-xs text-dimmed">{{ sub }}</span>
         </button>
         <!-- Five lines is as much as is worth reading in a hover; the clamp
              puts the ellipsis on the last one it kept. -->
         <template #content>
-          <span class="line-clamp-5 break-words whitespace-pre-wrap">{{ prompt }}</span>
+          <div class="space-y-1">
+            <div class="font-medium text-highlighted">{{ title || "Untitled task" }}</div>
+            <div class="line-clamp-5 break-words whitespace-pre-wrap">{{ prompt }}</div>
+          </div>
         </template>
       </UTooltip>
       <button
         type="button"
         class="mr-1 shrink-0 rounded p-1 text-dimmed hover:text-primary"
-        title="Rename session"
+        title="Rename task"
         @click.stop="edit"
       >
         <UIcon name="i-lucide-pencil" class="size-3.5 block" />
@@ -121,8 +123,8 @@ function commit() {
         v-if="stoppable"
         type="button"
         class="mr-1 shrink-0 rounded p-1 text-dimmed hover:text-primary"
-        title="Stop session"
-        aria-label="Stop session"
+        title="Stop task"
+        aria-label="Stop task"
         @click.stop="$emit('stop')"
       >
         <UIcon name="i-lucide-square" class="size-3.5 block" />
@@ -133,7 +135,7 @@ function commit() {
         class="mr-1 shrink-0 rounded p-1 text-dimmed hover:text-primary"
         :class="archived ? 'text-primary' : ''"
         :aria-pressed="archived"
-        :title="archived ? 'Unarchive session' : 'Archive session'"
+        :title="archived ? 'Unarchive task' : 'Archive task'"
         @click.stop="$emit('toggle-archive')"
       >
         <UIcon :name="archived ? 'i-lucide-archive-restore' : 'i-lucide-archive'" class="size-3.5 block" />

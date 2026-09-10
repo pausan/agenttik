@@ -1,17 +1,17 @@
 <script setup>
 /* Ctrl+P's fuzzy launcher keeps navigation and common actions in one place.
-   Active sessions deliberately come from each project's open-session list:
-   the Sessions pane is time-windowed and also includes archived sessions. */
+   Active tasks deliberately come from each project's open-task list:
+   the Tasks pane is time-windowed and also includes archived sessions. */
 import { computed } from "vue";
 
 import {
   S,
   currentProjectID,
   openProject,
-  openSession,
+  openTask,
   providerOf,
   setModel,
-  startCurrentSession,
+  startCurrentTask,
 } from "../store";
 
 const open = defineModel("open", { type: Boolean, default: false });
@@ -35,14 +35,14 @@ const navigation = computed(() => [
   },
   {
     label: "Changed",
-    description: "Current session's changed files",
+    description: "Current task's changed files",
     icon: "i-lucide-file-diff",
     disabled: !S.detail,
     onSelect: () => choose(() => (S.inspector.active = "changed")),
   },
   {
-    label: "Session stats",
-    description: "Current session",
+    label: "Task stats",
+    description: "Current task",
     icon: "i-lucide-chart-no-axes-combined",
     disabled: !S.detail,
     onSelect: () => choose(() => (S.inspector.active = "stats")),
@@ -58,13 +58,13 @@ const projectItems = computed(() =>
   })),
 );
 
-const activeSessions = computed(() =>
+const activeTasks = computed(() =>
   S.projects.flatMap((project) =>
     project.recent_sessions.map((session) => ({
-      label: session.title || "Untitled session",
+      label: session.title || "Untitled task",
       description: project.name,
       icon: "i-lucide-message-square",
-      onSelect: () => choose(() => openSession(session.id)),
+      onSelect: () => choose(() => openTask(session.id)),
     })),
   ),
 );
@@ -77,7 +77,7 @@ const favourites = computed(() =>
     return [
       {
         label: `${provider.display_name} ${model.label} · ${star.effort || "default"}`,
-        description: "Apply to the current session",
+        description: "Apply to the current task",
         icon: "i-lucide-star",
         disabled: !S.detail,
         onSelect: () => choose(() => setModel(star.provider, star.model, star.effort || "")),
@@ -88,11 +88,11 @@ const favourites = computed(() =>
 
 const actions = computed(() => [
   {
-    label: "New session",
+    label: "New task",
     description: "In the current project",
     icon: "i-lucide-square-pen",
     disabled: !currentProjectID(),
-    onSelect: () => choose(startCurrentSession),
+    onSelect: () => choose(startCurrentTask),
   },
   {
     label: "Add project",
@@ -115,7 +115,7 @@ const actions = computed(() => [
 const groups = computed(() => [
   { id: "navigation", label: "Go to", items: navigation.value },
   { id: "projects", label: "Projects", items: projectItems.value },
-  { id: "sessions", label: "Active sessions", items: activeSessions.value },
+  { id: "tasks", label: "Active tasks", items: activeTasks.value },
   { id: "favourites", label: "Favourite models", items: favourites.value },
   { id: "actions", label: "Actions", items: actions.value },
 ]);

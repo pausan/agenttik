@@ -1,5 +1,5 @@
 <script setup>
-/* A project in the centre: its open sessions, in the order you put them, with
+/* A project in the centre: its open tasks, in the order you put them, with
    project history and activity below.
 
    Rows are dragged with the browser's own drag and drop rather than pointer
@@ -12,33 +12,33 @@ import { computed, ref } from "vue";
 
 import {
   S,
-  openSession,
-  renameSession,
-  reorderSessions,
-  setSessionArchived,
-  startSession,
-  stopSession,
+  openTask,
+  renameTask,
+  reorderTasks,
+  setTaskArchived,
+  startTask,
+  stopTask,
 } from "../store";
 import { ago, cost, duration, isoDate, nf, tokens } from "../api";
 import { fuzzyAny } from "../fuzzy";
-import SessionRow from "./SessionRow.vue";
+import TaskRow from "./TaskRow.vue";
 
 const props = defineProps({ tab: { type: Object, required: true } });
 
 const dragging = ref("");
-const renaming = ref(""); // the session whose title is being edited
+const renaming = ref(""); // the task whose title is being edited
 const filter = ref("");
 
-const lower = ref("sessions");
+const lower = ref("tasks");
 const lowerTabs = [
-  { label: "Sessions", value: "sessions" },
+  { label: "Tasks", value: "tasks" },
   { label: "Stats", value: "stats" },
 ];
 
 const statsRows = computed(() => {
   const stats = props.tab.data.stats;
   return [
-    ["Sessions", nf.format(stats.sessions)],
+    ["Tasks", nf.format(stats.sessions)],
     ["Running now", nf.format(stats.running)],
     ["Turns", nf.format(stats.turns)],
     ["Input tokens", tokens(stats.input_tokens)],
@@ -50,10 +50,10 @@ const statsRows = computed(() => {
 });
 
 const chart = computed(() => (props.tab.data.metrics || []).slice(-30));
-const maxSessions = computed(() => Math.max(1, ...chart.value.map((point) => point.sessions)));
+const maxTasks = computed(() => Math.max(1, ...chart.value.map((point) => point.sessions)));
 const maxDuration = computed(() => Math.max(1, ...chart.value.map((point) => point.duration_ms)));
 const charts = computed(() => [
-  { label: "Sessions created", key: "sessions", max: maxSessions.value, color: "bg-primary/70" },
+  { label: "Tasks created", key: "sessions", max: maxTasks.value, color: "bg-primary/70" },
   { label: "Agent time", key: "duration_ms", max: maxDuration.value, color: "bg-sky-500/70" },
 ]);
 /* The filter reads titles, not prompts: a prompt is up to 600 characters and
@@ -64,7 +64,7 @@ const charts = computed(() => [
    top — the point of the list is when a conversation happened. */
 const matches = computed(() =>
   (props.tab.data.archived || []).filter(
-    (s) => fuzzyAny([s.title || "Untitled session"], filter.value) !== null,
+    (s) => fuzzyAny([s.title || "Untitled task"], filter.value) !== null,
   ),
 );
 
@@ -82,17 +82,17 @@ function onStart(e, id) {
 function onOver(e, overID) {
   if (!dragging.value || overID === dragging.value) return;
   e.preventDefault();
-  const sessions = props.tab.data.sessions;
-  const from = sessions.findIndex((s) => s.id === dragging.value);
-  const to = sessions.findIndex((s) => s.id === overID);
+  const tasks = props.tab.data.sessions;
+  const from = tasks.findIndex((s) => s.id === dragging.value);
+  const to = tasks.findIndex((s) => s.id === overID);
   if (from < 0 || to < 0) return;
-  sessions.splice(to, 0, ...sessions.splice(from, 1));
+  tasks.splice(to, 0, ...tasks.splice(from, 1));
 }
 
 function onDrop() {
   if (!dragging.value) return;
   dragging.value = "";
-  reorderSessions(props.tab, props.tab.data.sessions.map((s) => s.id));
+  reorderTasks(props.tab, props.tab.data.sessions.map((s) => s.id));
 }
 </script>
 
@@ -104,7 +104,7 @@ function onDrop() {
           <h2 class="m-0 text-[17px] tracking-tight text-highlighted">{{ tab.data.project.name }}</h2>
           <div class="truncate text-xs text-dimmed">{{ tab.data.project.path }}</div>
         </div>
-        <UButton class="ml-auto shrink-0" label="New session" @click="startSession(tab.data.project)" />
+        <UButton class="ml-auto shrink-0" label="New task" @click="startTask(tab.data.project)" />
       </div>
 
       <p v-if="!tab.data.sessions.length" class="px-3 py-5 text-center text-dimmed">
@@ -126,7 +126,7 @@ function onDrop() {
           class="size-3.5 shrink-0 cursor-grab text-dimmed"
           title="Drag to reorder"
         />
-        <SessionRow
+        <TaskRow
           class="min-w-0 flex-1"
           :title="s.title"
           :status="s.status"
@@ -135,20 +135,20 @@ function onDrop() {
           :active="S.detail?.session.id === s.id"
           :stoppable="s.status === 'running' || s.queue_count > 0"
           :archive="s.status !== 'running' && s.queue_count === 0"
-          @stop="stopSession(s.id)"
-          @select="openSession(s.id)"
-          @toggle-archive="setSessionArchived(s, true)"
-          @rename="renameSession(s, $event)"
+          @stop="stopTask(s.id)"
+          @select="openTask(s.id)"
+          @toggle-archive="setTaskArchived(s, true)"
+          @rename="renameTask(s, $event)"
           @editing="renaming = $event ? s.id : ''"
         />
       </div>
 
       <!-- Archived: newest at the top, oldest at the bottom. Only drawn once
            the project has archived something, so a new project is still just
-           its open sessions. -->
+           its open tasks. -->
       <section class="mt-6 border-t border-default pt-4">
         <UTabs v-model="lower" :items="lowerTabs" :content="false" size="sm" class="mb-4" />
-        <template v-if="lower === 'sessions'">
+        <template v-if="lower === 'tasks'">
           <div class="mb-2 flex items-center gap-3">
           <h3 class="m-0 shrink-0 text-xs font-semibold tracking-wide text-dimmed uppercase">
             Archived
@@ -157,7 +157,7 @@ function onDrop() {
             v-model="filter"
             type="search"
             icon="i-lucide-search"
-            placeholder="Filter archived sessions"
+            placeholder="Filter archived tasks"
             class="min-w-0 flex-1"
           />
           <span class="shrink-0 text-xs text-dimmed tabular-nums">
@@ -165,11 +165,11 @@ function onDrop() {
           </span>
         </div>
 
-        <p v-if="!tab.data.archived.length" class="px-3 py-5 text-center text-dimmed">No archived sessions.</p>
+        <p v-if="!tab.data.archived.length" class="px-3 py-5 text-center text-dimmed">No archived tasks.</p>
         <p v-else-if="!matches.length" class="px-3 py-4 text-center text-dimmed">
-          No archived session matches that.
+          No archived task matches that.
         </p>
-        <SessionRow
+        <TaskRow
           v-for="s in matches"
           :key="s.id"
           :title="s.title"
@@ -179,9 +179,9 @@ function onDrop() {
           :active="S.detail?.session.id === s.id"
           archived
           archive
-          @select="openSession(s.id)"
-          @toggle-archive="setSessionArchived(s, false)"
-          @rename="renameSession(s, $event)"
+          @select="openTask(s.id)"
+          @toggle-archive="setTaskArchived(s, false)"
+          @rename="renameTask(s, $event)"
         />
         </template>
         <template v-else>

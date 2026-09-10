@@ -9,12 +9,12 @@ import {
   hit,
   init,
   reopenClosedTab,
-  selectAdjacentSession,
+  selectAdjacentTask,
   selectAdjacentTab,
   saveActiveFile,
   selectProjectAt,
-  selectSessionAt,
-  startCurrentSession,
+  selectTaskAt,
+  startCurrentTask,
   useErrors,
 } from "./store";
 import SideBar from "./components/SideBar.vue";
@@ -48,11 +48,11 @@ useErrors(useToast());
    is read from the physical code: on some layouts Alt and a digit produce a
    different character. */
 function onKey(e) {
-  if (hit(e, "session.prev")) return run(e, () => selectAdjacentSession(-1));
-  if (hit(e, "session.next")) return run(e, () => selectAdjacentSession(1));
+  if (hit(e, "task.prev")) return run(e, () => selectAdjacentTask(-1));
+  if (hit(e, "task.next")) return run(e, () => selectAdjacentTask(1));
   if (hit(e, "tab.prev")) return run(e, () => selectAdjacentTab(-1));
   if (hit(e, "tab.next")) return run(e, () => selectAdjacentTab(1));
-  if (hit(e, "session.new")) return run(e, startCurrentSession);
+  if (hit(e, "task.new")) return run(e, startCurrentTask);
   if (hit(e, "tab.reopen")) return run(e, reopenClosedTab);
   if (hit(e, "goto")) return run(e, () => (goTo.value = true));
   if (hit(e, "panel.tree")) return run(e, () => sideBar.value?.showTree());
@@ -64,7 +64,7 @@ function onKey(e) {
     return;
   }
   if (hit(e, "tab.close")) {
-    // Ctrl+W closes the tab in front, not the session that owns a file.
+    // Ctrl+W closes the tab in front, not the task that owns a file.
     // Always consume the chord so it never closes the browser tab, and do
     // not let a held key walk through the rest of the strip.
     e.preventDefault();
@@ -74,7 +74,7 @@ function onKey(e) {
 
   if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
   const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
-  if (digit) return run(e, () => selectSessionAt(Number(digit[1])));
+  if (digit) return run(e, () => selectTaskAt(Number(digit[1])));
   // A … H are the first eight projects, in sidebar order.
   const letter = /^Key([A-H])$/.exec(e.code);
   if (letter) run(e, () => selectProjectAt(letter[1].charCodeAt(0) - 65));

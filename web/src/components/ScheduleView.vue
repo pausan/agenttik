@@ -9,7 +9,7 @@
 import { computed, ref, watch } from "vue";
 
 import {
-  openSession,
+  openTask,
   removeSchedule,
   scheduleLabel,
   setSchedulePaused,
@@ -118,7 +118,7 @@ const status = (run) => STATUS[run.status] || { label: run.status, class: "text-
         :key="run.id"
         class="flex items-center gap-3 rounded-[var(--ui-radius)] px-2 py-1"
         :class="run.session_id ? 'cursor-pointer hover:bg-elevated' : ''"
-        @click="run.session_id && openSession(run.session_id)"
+        @click="run.session_id && openTask(run.session_id)"
       >
         <span class="shrink-0 font-mono text-xs text-dimmed tabular-nums">
           {{ isoLocal(run.started_at) }}

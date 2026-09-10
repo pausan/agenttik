@@ -12,7 +12,7 @@ import {
   moveTab,
   persistTabOrder,
   selectTab,
-  startCurrentSession,
+  startCurrentTask,
 } from "../store";
 import Transcript from "./Transcript.vue";
 import ProjectView from "./ProjectView.vue";
@@ -23,7 +23,7 @@ import StatusDot from "./StatusDot.vue";
 
 /* A session title can be a whole sentence, and the strip has to stay
    readable with a dozen of them open. */
-const MAX_SESSION_LABEL = 20;
+const MAX_TASK_LABEL = 20;
 
 /* One colour per kind, so what a tab is reads before its label does. */
 const KINDS = {
@@ -41,8 +41,8 @@ const items = computed(() =>
     // it, so a truncated tab is still addressable.
     name: t.label,
     label:
-      t.kind === "session" && t.label.length > MAX_SESSION_LABEL
-        ? t.label.slice(0, MAX_SESSION_LABEL - 3) + "..."
+      t.kind === "session" && t.label.length > MAX_TASK_LABEL
+        ? t.label.slice(0, MAX_TASK_LABEL - 3) + "..."
         : t.label,
     title:
       t.label +
@@ -132,9 +132,9 @@ const running = computed(() => !!S.detail?.running);
         variant="ghost"
         size="xs"
         class="shrink-0"
-        title="New session  (Ctrl+N)"
-        aria-label="New session"
-        @click="startCurrentSession()"
+        title="New task  (Ctrl+N)"
+        aria-label="New task"
+        @click="startCurrentTask()"
       />
 
       <div class="flex shrink-0 items-center gap-1.5">
@@ -148,7 +148,7 @@ const running = computed(() => !!S.detail?.running);
             {{ S.project.stats.running ? `${S.project.stats.running} running` : "idle" }}
           </UBadge>
           <UBadge color="neutral" variant="soft" size="sm">
-            {{ S.project.stats.sessions }} {{ S.project.stats.sessions === 1 ? "session" : "sessions" }}
+            {{ S.project.stats.sessions }} {{ S.project.stats.sessions === 1 ? "task" : "tasks" }}
           </UBadge>
         </template>
         <template v-else-if="S.detail">

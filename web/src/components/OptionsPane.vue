@@ -1,7 +1,7 @@
 <script setup>
 import { ref, watch } from "vue";
 
-import { S, removeProject, renameProject, startSession } from "../store";
+import { S, removeProject, renameProject, startTask } from "../store";
 
 const name = ref("");
 const confirming = ref(false);
@@ -37,10 +37,10 @@ async function remove() {
       </div>
     </div>
 
-    <UButton block label="New session" @click="startSession(S.project.project)" />
+    <UButton block label="New task" @click="startTask(S.project.project)" />
 
     <p class="mt-3.5 mb-1.5 text-xs text-dimmed">
-      Deleting removes its sessions and history from agenttik. The folder on disk is untouched.
+      Deleting removes its tasks and history from agenttik. The folder on disk is untouched.
     </p>
     <UButton block color="error" variant="soft" label="Delete project" @click="confirming = true" />
 
@@ -48,7 +48,7 @@ async function remove() {
       <template #body>
         <p class="text-muted">
           Delete <span class="font-medium text-highlighted">{{ S.project.project.name }}</span>?
-          Its sessions and their history are deleted from agenttik. The folder on disk is untouched.
+          Its tasks and their history are deleted from agenttik. The folder on disk is untouched.
         </p>
       </template>
       <template #footer>

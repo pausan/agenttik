@@ -1405,8 +1405,12 @@ function onSessionEvent(tab, msg) {
   }
 }
 
+/* push hands back the bubble it added, so a caller that put one up before the
+   server agreed can take that exact one out again. */
 function push(tab, role, content) {
-  tab.detail.messages.push({ role, content });
+  const message = { role, content };
+  tab.detail.messages.push(message);
+  return message;
 }
 
 /* appendLive grows one message as deltas arrive instead of adding a bubble
@@ -1510,22 +1514,41 @@ export async function copyText(text) {
   }
 }
 
+/* The prompt is on screen before the request leaves. Its text is already known
+   here, so waiting on the round trip — the turn and message rows, then the CLI
+   launch — to draw your own words is latency that buys nothing. Marking the
+   session running in the same breath starts the working indicator from the
+   keypress and takes the Send button out of reach of a second Enter.
+
+   Nothing draws it twice: the reply contributes only the turn, and the started
+   event's startLocal skips a prompt that is already the last message. A
+   failure takes the bubble back out and returns the text to the box. */
 export async function send(prompt) {
   const tab = S.owner;
   if (tab?.kind !== "session") return;
   prompt = prompt.trim();
   if (!prompt) return;
 
+  const typed = tab.draft;
+  const wasRunning = tab.detail.running;
   tab.draft = "";
   endLive(tab);
+  const echo = push(tab, "user", prompt);
+  tab.detail.running = true;
 
   try {
     const turn = await api("POST", `/api/sessions/${tab.sessionID}/messages`, { prompt });
-    startLocal(tab, prompt, turn);
+    startLocal(tab, "", turn);
     refreshSessions();
     refreshProjects();
   } catch (e) {
-    tab.detail.running = false;
+    const at = tab.detail.messages.indexOf(echo);
+    if (at >= 0) tab.detail.messages.splice(at, 1);
+    // Whatever was typed while the request was in flight is the next prompt,
+    // not this one.
+    if (!tab.draft) tab.draft = typed;
+    // A refusal because the session is busy leaves that turn running.
+    tab.detail.running = wasRunning;
     fail(e);
   }
 }

@@ -1,7 +1,5 @@
 # Ignored files in the Tree
 
-## Outcome
-
 The Tree lists every file in the project, not only the ones git would track.
 What `.gitignore` covers is drawn grey, sorted below what it does not, and its
 folders start shut. Everything else about the pane is unchanged: the filter is
@@ -61,27 +59,3 @@ exactly like a small project.
 **Nothing is grey outside a repository.** The hand-walked fallback has no
 patterns to test against, so it skips the dependency folders it always skipped
 and returns an empty `ignored`.
-
-## Validation
-
-`go build ./...`, `go vet ./...`, `make ui`, the server Go tests and the 33 web
-unit tests pass. `TestTreeListsFiles` now decodes the object and additionally
-asserts that a plain folder reports nothing as ignored.
-
-Browser-checked against agenttik's own repository — 140 files, 13,789 ignored —
-on a fresh database. The page logged no errors.
-
-| Check | Result |
-|---|---|
-| Endpoint | `files` 140, `ignored` 13,789 |
-| Pane on open | 218 rows, 55 of them grey — the ignored world costs 55 rows, not 13,789 |
-| Root order | project files first, then grey `bin/` and the grey `tmp-*.svg` batch |
-| `web/dist` | not grey; its `assets/` and `alternative-logos/` children are |
-| Filter `wesst` | 48 rows drawn, count reads 12,100, greys carry `node_modules 11861`, `node_modules 121`, `node_modules 76`, `playwright-report 6` |
-| Expanding `e2e/node_modules` mid-filter | 48 → 50 rows: its two ignored children, each shut with its own count |
-| Filter `distassets` | 6 rows: the path down to two shut grey folders, count 348 |
-| Clearing the filter | back to 218 rows, 55 grey |
-| Clicking a grey file | `tmp-icon-proposal19.svg` opened in a tab with `Edit | Diff | Preview` |
-
-The title on a grey row reads `<path> — ignored by git`, so the colour is
-explained on hover rather than only inferred.

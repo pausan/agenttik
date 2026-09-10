@@ -1,7 +1,5 @@
 # Previewing SVG and images
 
-## Outcome
-
 A file tab can now render pictures, not only text.
 
 **An SVG previews and stays editable.** `.svg` joined `PREVIEWABLE`, so the tab
@@ -67,32 +65,3 @@ baseline side of a commit's diff is its parent.
 **`git show` output is read as bytes, through a cap.** `runGit` returns a
 string, and an image is not one. `capped` refuses output past the 16 MiB
 preview limit while it streams rather than after it is all in memory.
-
-## Validation
-
-`go build ./...`, `go vet ./...`, `make ui` and the 33 web unit tests pass.
-
-Browser-checked on a fresh database against a fixture repository holding a
-committed PNG changed again in a second commit and once more in the working
-tree, an untracked PNG, a committed SVG modified in the working tree, an
-untracked SVG, and a README. The page logged **no errors at all**:
-
-- `logo.svg` opened `Edit | Diff | Preview`; Preview drew it from a
-  `data:image/svg+xml` URL at 96×96 — the edited width, not the committed one —
-  filling the pane; Diff was the text diff, `Unified | Split`, zero images, and
-  showed `width="96"`; Edit still had its textarea and its Save button.
-- `shot.png` opened `Diff | Preview` with no Edit, on Preview, footer
-  `image · not editable`, no Save button, drawn at its own 1800×2200 rather
-  than stretched.
-- Its Diff drew `HEAD` at 560 × 1300 beside `working tree` at 1800 × 2200, with
-  no unified/split toggle.
-- The untracked `fresh.png` drew "Added — nothing before it." on the baseline
-  side and made no request for it.
-- `shot.png` opened from the `resize the sheet` commit drew `rev=<hash>^` as
-  *before* and `rev=<hash>` as *after*, footer `image · committed`.
-- Opening `README.md` after all of that landed on a view markdown can show.
-
-The endpoint's refusals were checked directly: `../../etc/passwd` and
-`/etc/passwd` are 400s naming the reason, `README.md` and `logo.svg` are
-"not an image agenttik renders", `rev=; rm -rf` is "invalid revision", and a
-path absent from a revision is a 404.

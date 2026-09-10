@@ -1,7 +1,5 @@
 # Project archiving
 
-## Outcome
-
 A project can be put away without being deleted. **Archive project** sits
 above **Delete project** in the Options pane and takes one click: the project
 leaves the sidebar and the Go To list, its tabs close, and its schedules stop
@@ -71,26 +69,3 @@ schedules resume, unpaused, the moment it is restored.
 closes its tabs; `removeProject` and `setProjectArchived` both call it, since
 nothing in the strip can belong to a project that has left the sidebar either
 way.
-
-## Validation
-
-`go build ./...` and `go vet ./...` are clean, and `npx vite build` succeeds.
-
-Browser-checked headlessly against a built web server on a fresh data
-directory, with scratch folders `proj-alpha` and `proj-beta`, and no console
-or page errors in any run:
-
-| Done in the UI | Result |
-|---|---|
-| Archive `proj-beta` from its Options pane | leaves the sidebar; `GET /api/projects` no longer lists it, `?archived=true` does, with `archived_at` set |
-| open Settings › Projects | one row: name, folder, "just now", Restore |
-| filter the rail with `beta` | only *Projects* survives, count 1 |
-| Restore | row goes, empty state appears, project is back in the sidebar; selection stays where it was |
-| archive the selected project with its page open | tab closes, selection moves to the project left at the top |
-| archive the last project | sidebar shows its empty state, centre reads "Pick a task, or a project to start one" |
-| restore with nothing selected | the restored project becomes the selected one |
-
-The scheduler rule was checked against the ticker itself: a schedule row due
-at `next_run_at = 1` on an archived project stayed unfired over six ticks —
-`next_run_at` unmoved, no session, no run row. Restoring the project fired it
-inside one tick, advancing `next_run_at` and writing one session and one run.

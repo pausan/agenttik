@@ -1,7 +1,5 @@
 # Editable project path
 
-## Outcome
-
 A project's folder can be changed after it is added, from the same Options
 pane its name is renamed in. This is for when the folder on disk moves — the
 existing project row is repointed rather than deleting the project and
@@ -55,28 +53,3 @@ that watcher is keyed by project id and starts once per open window, so a
 window already watching the old folder keeps watching it until its event
 stream reopens — switching projects, or a reload. Explicit actions — opening
 the Tree, saving a file, starting a turn — read the path fresh regardless.
-
-## Validation
-
-`go build ./...`, `go vet ./...` and `gofmt -l` are clean. `make ui` builds
-and the 33 web unit tests pass. `go test ./...` reproduces only the two
-failures already on record in the index (`TestDoneReachesProjectTopic`,
-`TestReorderSessionsDrivesProjectOrder`), unrelated to this change.
-
-Browser-checked headlessly against a built web server, on scratch folders
-`projA` and `projB` under one root, with no unexpected console or page
-errors:
-
-| Done in the UI | Result |
-|---|---|
-| Add project through its own picker | unchanged — lands on `projA` |
-| open the Options pane | Folder field reads `projA`, Browse button present |
-| click Browse | picker opens listing `projA`, breadcrumbs live |
-| `..`, into `projB`, `Select` | stored path, field and Tree all move to `projB` |
-| Browse, navigate, `Cancel` | stored path unchanged |
-| type a path into the field | still applies on blur |
-| Browse to a folder another project holds | toasts "another project already uses that folder"; stored path unchanged |
-
-`curl` covers the same rejection on `POST /api/projects` and on
-`PATCH /api/projects/:id`: both answer `409` with that message and write
-nothing.

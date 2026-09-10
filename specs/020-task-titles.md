@@ -1,14 +1,8 @@
 # Task titles
 
-## Status
-
-Implemented.
-
-## Behaviour
-
 The first prompt of an untitled task names it, whether it is sent or queued.
 
-Naming never holds up the conversation. The prompt's first line, trimmed to 80
+Naming never holds up the task. The prompt's first line, trimmed to 80
 characters, is written as the title before the turn starts, so no row is ever
 drawn as `Untitled task` and the keypress is not waiting on a provider. A
 better title is fetched behind it and replaces the first line when it arrives,
@@ -19,7 +13,7 @@ GPT-5.6 Luna with no reasoning and Claude Code uses Haiku with low effort.
 The one-shot request runs read-only from the system temporary directory and
 receives only the prompt to title. It has no project files, transcript, real
 session ID, or provider session ID, so it cannot become part of the actual
-conversation. An 8-second limit or any provider failure leaves the first line
+task. An 8-second limit or any provider failure leaves the first line
 standing.
 
 The request asks for the intent behind the prompt rather than a trim of its
@@ -37,6 +31,6 @@ user chose. A provider that returns the placeholder unchanged writes nothing.
 
 The replacement is published as a `session_titled` event on both the session's
 topic and its project's, carrying the session row. The sidebar, the project
-lists and the tab strip all draw the title, and a task outside the sidebar's
-window is in neither list that would otherwise carry the new name back, so the
-open tab is relabelled from the event itself.
+lists and the tab strip all draw the title, and a task with no row on screen is
+in neither list that would otherwise carry the new name back, so the open tab is
+relabelled from the event itself.

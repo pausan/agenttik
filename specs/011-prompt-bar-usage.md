@@ -1,7 +1,5 @@
 # Prompt-bar usage indicators
 
-## Outcome
-
 The model control is a fuzzy-search palette. It preserves provider groups and
 favourite model-and-effort combinations, and searching matches both the display
 name and model id.
@@ -82,7 +80,7 @@ only when there is something to say.
 ## When the reading is taken
 
 The bars answer for the model in the box, so the allowance is read again when
-the conversation changes, when the provider changes, and when the *model*
+the task changes, when the provider changes, and when the *model*
 changes. The last of those matters because a provider can meter a single model
 on a window of its own — Claude Code's `Current week (Fable)` — which makes a
 different model a different allowance rather than the same one relabelled.
@@ -147,43 +145,3 @@ Having both paths also means neither is a single point of failure. The ask
 comes first, and the remembered reading stands in whenever it fails or comes
 back empty — an unreachable CLI, or a report worded in a way the parser no
 longer recognises, then shows the last known bars instead of none.
-
-## Validation
-
-`go build ./...`, `go vet ./...` and `npm run build` pass. A live Claude Code
-haiku turn through the running app stored `context_window` 200000 and
-`rate_limits` `[{"limit_id":"overage","primary":{"used_percent":88,…}}]`, and
-`GET /api/providers/claude/subscription-limits` served it back with
-`reported_at`. The same turn before the per-model change stored 1000000,
-because its breakdown also carried a Sonnet entry from auto mode. Codex's
-app-server path still answers in 0.9s. The migration was applied against a
-copy of the real database. `go test ./app/internal/agent/...` passes;
-`TestDoneReachesProjectTopic` and `TestReorderSessionsDrivesProjectOrder`
-already failed before this change and still do.
-
-Headless against a CLI reporting four windows — 56%, 92%, 22% and a 74% one
-named `Weekly (Some Very Long Model Name Indeed)` with no reset — every row
-drew its name, figure, bar and reset on three lines with nothing wrapped and
-nothing past the panel's edge; the long name ellipsised and its figure stayed
-in place; 92% and its bar came out red-500, 74% amber-500, the other two the
-theme's strongest text over a green bar, and the dark theme's 400 variants of
-each. A turn that volunteered a `seven_day` reading at 93% drew one red bar
-with `Status allowed_warning` and `Reported just now` beneath it. A reset in
-2027 read `resets Dec 28, 2027, 2:20 PM`, one in this year `resets Sep 15,
-3:59 PM`.
-
-Headless against the running app, with two providers answering: opening a
-task read its own provider and drew that provider's bars (Codex 12%/73%);
-selecting a Claude model read `claude` once and redrew them as 56%/47%/22%;
-selecting the model already in the box read nothing; opening another task read
-its provider again. While a turn ran, the prompt bar showed the ring, the
-bars, Stop and Send, and no "running…" — the header carried `running` with its
-dot. No console or page errors.
-
-Against CLI 2.1.227, `/api/providers/claude/subscription-limits` answers
-`five_hour` 57%, `seven_day` 47% and `seven_day_fable` 22%; the two parsed
-resets match what the CLI printed, to the minute, once converted back to
-Europe/Madrid. Codex still answers one `codex` bucket with both windows, so
-its two bars are unchanged. Headless in the running app: three tracks with
-widths 56%/47%/22%, a panel reading "5-hour · Weekly · Weekly (Fable)" with
-each reset, and no console errors.

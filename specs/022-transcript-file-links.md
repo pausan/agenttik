@@ -1,7 +1,5 @@
 # Paths in a transcript open the file
 
-## Outcome
-
 A file the agent names in its reply is clickable, and clicking it opens that
 file in a tab — the project's temporary tab, the same one a click in the Tree
 uses, so reading through what an agent changed leaves one tab behind rather
@@ -64,19 +62,3 @@ choice and not one a link should make for them.
   would mean guessing at prose.
 - A file that does not exist, or a path outside the project, opens no tab and
   says why.
-
-## Validation
-
-`go build ./...`, `go vet ./...`, `npm run build` and the web unit tests (33)
-pass. Browser-checked on a fresh database against this repo, with no page
-errors:
-
-`web/src/store.js:801` opened `store.js` in one italic tab, scrolled to line
-801 with it selected. `specs/016-file-tab-reuse.md` took that same tab over,
-leaving two tabs in all. A markdown link to `app/internal/server/api_files.go`
-and an absolute link to `/home/amnio/github/agenttik/go.mod` both opened their
-file. Scrolling the pane back to the top and clicking the same reference
-scrolled to line 801 again. `S.detail`, `tab.temp`, `npm run build`,
-`account/rateLimits/read` and `v1.2.3` stayed plain code spans. `/etc/hosts.json`
-was refused with "path must be relative to the project" and
-`web/src/nope.js:12` with "no such file or directory", neither opening a tab.

@@ -1,18 +1,16 @@
 # Scheduled jobs
 
-## Outcome
-
 A prompt can be scheduled to run again and again. The Send menu holds a third
 action, **Schedule**, beside Send and Enqueue. It asks for a recurrence and a
 number of runs, and leaves a schedule behind in the project. When each run
-comes due the schedule starts a *new* session with the same prompt, on the
+comes due the schedule starts a *new* task with the same prompt, on the
 provider, model, effort and permission the prompt bar was set to.
 
-A schedule is not a session. It has no transcript, no provider session id and
-no turns of its own — it is a prompt plus a clock, and what it produces are
-ordinary sessions. That is why it is its own table and its own kind of tab
-rather than a flag on `sessions`: nearly every list, count and view that reads
-a session would otherwise need to say "unless it is a schedule".
+A schedule is not a task. It has no transcript, no provider session id and no
+turns of its own — it is a prompt plus a clock, and what it produces are
+ordinary tasks. That is why it is its own table and its own kind of tab rather
+than a flag on `sessions`: nearly every list, count and view that reads a
+session would otherwise need to say "unless it is a schedule".
 
 ## The recurrence
 
@@ -76,9 +74,9 @@ every 15 minutes" is not improved by running it four times back to back at
 the view says why there is a gap rather than leaving one.
 
 The check is per schedule, not per project. Two schedules in one project are as
-independent as two sessions in one project, and the project queue
-([012](012-session-queue.md)) is deliberately not involved: a schedule sends
-straight to its new session.
+independent as two tasks in one project, and the project queue
+([012](012-task-queue.md)) is deliberately not involved: a schedule sends
+straight to its new task.
 
 ## Pause, archive and the sidebar
 
@@ -87,24 +85,20 @@ scheduled at all until it is resumed, and resuming restarts the cadence from
 now rather than firing everything the pause held back.
 
 The archive icon appears **only on a paused schedule**. Archiving something that
-is still firing would hide it while it kept starting sessions, which is the one
+is still firing would hide it while it kept starting tasks, which is the one
 state nothing in the UI would explain. Archived therefore implies paused, and
 unarchiving leaves it paused — a schedule comes back where it was put down, not
 mid-burst.
 
-Archived or not, a schedule stays a schedule. It is a row in `schedules`, so
-there is no state in which the Sessions list has to guess whether something was
-a schedule or an ordinary prompt.
+Archived or not, a schedule stays a schedule. It is a row in `schedules`, so no
+list has to guess whether something was a schedule or an ordinary prompt.
 
 **The project's sidebar list holds the schedule, not its runs.** A schedule
 that has fired forty times would otherwise bury the project it belongs to. A
-run appears there while it is going, the way any session does, and is archived
-the moment its turn ends — it leaves the project views and stays in the
-Sessions list, which is what archiving already means
-([007](007-session-closing.md)). The schedule's own view is where the forty are.
-
-The Sessions tab lists schedules above sessions, so an archived one has
-somewhere to be unarchived from.
+run appears there while it is going, the way any task does, and is archived the
+moment its turn ends — it leaves the sidebar for the grey half of the project
+page's Tasks tab, which is what archiving already means
+([007](007-task-closing.md)). The schedule's own view is where the forty are.
 
 ## The view
 
@@ -113,8 +107,8 @@ colour on the strip. Its header carries the recurrence in words, when the next
 run is due, Pause/Resume and Delete. Under it sit the prompt, the model, the
 **Repeats** fields and the runs-left input; and under those every run it has
 spawned, newest first, each with its timestamp as `YYYY-MM-DD HH:mm:ss`. A
-spawned run is a session, so its row opens it. A skipped run is a row with no
-session and the reason it was skipped.
+spawned run is a task, so its row opens it. A skipped run is a row with no task
+and the reason it was skipped.
 
 Repeats is the dialog's own control less the number of runs: the four forms,
 then hours and minutes, or a time of day. A field commits when it is left, and
@@ -136,7 +130,7 @@ the wall, so "every day at 09:00" listing its runs at 07:00 would read as
 simply wrong. `isoLocal` sits beside `isoDate` in `api.js` for that.
 
 A schedule tab has no right-hand panel. Changed and Stats describe a
-conversation; a schedule has neither, and its page already carries everything
+task; a schedule has neither, and its page already carries everything
 it knows.
 
 ## Data
@@ -151,7 +145,7 @@ Migration 7 adds two tables and one column:
   first. `anchor_at` is when the form was chosen — the creation time until
   the recurrence is edited into a different form — which is what fixes the
   weekday and the day of the month. `done_at` and `position` mean what they mean on a
-  session: archived-at, and the order the sidebar was dragged into.
+  session row: archived-at, and the order the sidebar was dragged into.
 - **schedule_runs** — `id, schedule_id, session_id, status, started_at,
   ended_at`. `status` is `running`, `done`, `error`, `interrupted` or
   `skipped`. A skipped run has no `session_id`. This is the list the view
@@ -164,8 +158,8 @@ Migration 7 adds two tables and one column:
 - **sessions.schedule_id** — 0 for an ordinary session. It is what lets a
   finishing turn find the schedule that started it without a lookup per turn.
   It is the open **run row** that decides whether a run is spent, though, not
-  this column: a scheduled session the user later prompts by hand has no open
-  run, so it neither spends a run nor is archived a second time.
+  this column: a scheduled task the user later prompts by hand has no open run,
+  so it neither spends a run nor is archived a second time.
 
 ## Firing
 
@@ -197,50 +191,5 @@ after whichever came in has been applied — a request carrying both gets one
 booking, off the new recurrence.
 
 `GET /api/projects/:id` also carries the project's open schedules, the way it
-already carries its open sessions, so the Projects sidebar needs no second
+already carries its open tasks, so the Projects sidebar needs no second
 request.
-
-## Validation
-
-`go build ./...`, `go vet ./...`, `make ui` and the web unit tests (33) pass.
-`go test ./...` fails only the two cases listed in [index.md](index.md), which
-are unrelated to schedules.
-
-Against the running app with a fake `claude` on PATH:
-
-- A one-minute schedule for three runs fired, its run appeared in the list as
-  `Done` with its local timestamp, and the counter went 3 → 2 when the turn
-  ended — not when it started.
-- With a `claude` that outlasts the interval, the fire that came due behind it
-  was recorded as `skipped` with no session, and the counter did not move.
-- The spawned session appeared in the project's sidebar list while it ran and
-  was gone from it once the turn ended, leaving the schedule as the only row.
-  It is in the Sessions list, archived, where the schedule sits above it.
-- Pausing showed the archive icon and hid it again on resume; the header read
-  `paused` in place of the next run.
-- The recurrence arithmetic, checked on a Thursday at 06:49 local: daily at
-  09:00 → today 09:00, daily at 05:00 → tomorrow 05:00, weekly → the Thursday
-  it was created on, monthly → the 10th, its anchor day.
-- A schedule tab draws one `<aside>`, not two: it has no right-hand panel.
-
-Editing the recurrence, checked on Thursday 2026-09-10 at 23:19 local against
-a schedule anchored to Tuesday 2026-08-18:
-
-- Every 15m → daily at 09:00 booked tomorrow 09:00, since 09:00 had passed;
-  → weekly at 10:00 booked the Thursday it was switched on, a week out;
-  → back to every 90m booked 90 minutes from then, not from the old slot.
-- Moving only the time of that weekly schedule, 10:00 → 11:00, kept the
-  Tuesday anchor and booked Tuesday 11:00. Switching its form to monthly
-  re-anchored to the 10th, the day it was switched.
-- `fortnight`, an interval of 0 and an `at_minute` of 1500 were each refused
-  with 400 and left the schedule as it was.
-- In the browser: Repeats sits between Model and Runs left; 0h15m → 2h30m,
-  then Day at 07:45, then Week, each redrew the header's words and next run.
-  Switching to Day proposed 09:00 rather than midnight. The note beside the
-  time read `on the weekday it was set` for Week and `on the day it was set`
-  for Day. Runs left still committed, to 5, and the sidebar followed.
-- Set to every minute in the view, the ticker fired on the new clock at
-  23:21:54 for a 23:21:51 slot — inside the 15-second tick — the run appeared
-  as `Running`, and the next was booked a minute on.
-
-No console or page errors throughout.

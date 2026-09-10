@@ -1,7 +1,5 @@
 # README and icon
 
-## Outcome
-
 The README introduces the local, multi-project coding workspace, lists its main
 features, and keeps a short quick start. The existing MIT license is linked once,
 at the end. Codex's pending live-turn validation and the local-only server warning
@@ -22,19 +20,11 @@ explicitly — Wails only defaults it to `Never` while those options are nil, an
 the webview goes blank on some drivers with acceleration on.
 
 The sidebar carries no logo. It used to open with a gradient square and an
-`agenttik` wordmark; both are gone, and the Projects/Sessions/Tree strip starts
+`agenttik` wordmark; both are gone, and the Projects/Tree strip starts
 at the top of the panel, aligned with the inspector's strip on the other side.
 The app is named by its window title and its favicon, which is where a
 single-window local tool is already identified.
 
-## Status
-
-Implemented. SVG parsed and visually checked at 256, 80, and 16 pixels; local
-documentation links and whitespace checks pass.
-
-The sidebar was checked in a headless browser: no gradient square left in
-either `aside`, the tab strip's top edge matches the inspector's to the pixel,
-and Projects/Sessions/Tree still switch and still hand focus to the filter on
-the keyboard chord. The window icon is compiled but not visually confirmed —
-`make build` links it, and this machine has the librsvg loader, but no one has
-looked at the running window's titlebar.
+The window icon is compiled in but has never been looked at: `make build` links
+it and this machine has the librsvg loader, but nobody has checked the running
+window's titlebar.

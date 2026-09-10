@@ -1,7 +1,5 @@
 # Retrying a prompt whose provider was away
 
-## Outcome
-
 A turn that fails because the provider is unreachable no longer costs the
 prompt. Three failures are read as one case — no internet under the CLI, a 5xx
 or an overload behind it, a spent subscription allowance in front of it —
@@ -84,31 +82,4 @@ retry then reads as the second try it is.
 - A schedule whose run hit an outage keeps its run open, so it reads as busy
   and passes over its next slot instead of piling up a run an hour for the
   length of the outage. The retry closes it. See
-  [028-scheduled-jobs.md](028-scheduled-jobs.md).
-
-## Validation
-
-`go build ./...`, `go vet ./...` and `make ui` pass. `go test ./...` fails only
-the two cases listed in [index.md](index.md), which are unrelated.
-
-Checked against the running app with a fake `claude` on `PATH` answering as a
-provider that is away, then as one that is back:
-
-- A prompt sent into `Connection error.` leaves the task `waiting` with the
-  prompt requeued, `retry_count` 1, a reason, and a 53-second countdown — and
-  no turn, no messages, no turns counted.
-- Left away, the retry fires on its own and doubles the wait to 120 seconds.
-  Three CLI starts over three minutes: no spinning.
-- Marking the provider back with nothing forced, the scheduled retry runs it:
-  task `idle`, one turn, the prompt and the reply in the transcript, queue
-  empty.
-- `Invalid model name` is not an outage — task `error`, turn kept, error in the
-  transcript, nothing queued.
-- With one session held on a 503, a prompt queued in another session of the
-  same project ran immediately; the held one was still waiting afterwards.
-- Killed and restarted mid-wait: same `retry_at`, same `retry_count`, still
-  `waiting`, and no CLI start on the way up. The new process then fired the
-  retry when the wait expired.
-- **Stop** on a waiting task returns it to `idle` with an empty queue.
-- `Claude AI usage limit reached|<unix>` waited the 90 minutes the provider
-  named rather than the one-minute backoff.
+  [028](028-scheduled-jobs.md).

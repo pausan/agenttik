@@ -1,7 +1,5 @@
 # Instant prompt echo
 
-## Outcome
-
 Pressing Enter or Ctrl+Enter draws the prompt immediately. The bubble and the
 empty box happen on the keypress; a Send also starts the working indicator on
 that same turn. Enter keeps its configured Enqueue meaning: its prompt
@@ -41,13 +39,3 @@ response replaces it. A started event claims the pending row directly, while a
 refusal removes it and restores the draft. Both prompts are persisted before
 the task is named, and naming itself only writes the prompt's first line and
 sends the real request to the background, so no follow-up work comes first.
-
-## Validation
-
-Browser-checked against a real server with the POST held for 1500ms by a route
-handler, so client and server latency are told apart. The bubble appeared 19ms
-after Enter and the working indicator 27ms after it, both while the request was
-still in flight; the reply released at 1514ms left one bubble, not two, and the
-turn was really running. With the POST failing 500 instead, the bubble appeared,
-then went away, the text was back in the box, and the session was not left
-looking busy. `npx vite build` passes.

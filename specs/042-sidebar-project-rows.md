@@ -1,7 +1,5 @@
 # A project added lands last, and its letter folds it
 
-## Outcome
-
 How the Projects sidebar draws its list of projects, rather than what is in
 them.
 
@@ -40,26 +38,8 @@ leaves every project's fold state where it was.
 
 The fold state moved from the sidebar component to `S.collapsedProjects`,
 since the keyboard handler in `App.vue` reaches it now as well as the chevron.
-It is per session and not written to `localStorage`: which projects are folded
+It lasts as long as the page does and is not written to `localStorage`: which
+projects are folded
 is where the user is in the list, not a preference. A held letter is consumed
 but acts once, like `Ctrl+W`, since repeats would only flap the tasks open and
 shut.
-
-## Validation
-
-`go vet ./...`, `npx vite build`.
-
-Browser-checked headlessly, twice, against a fresh database and a fake
-`claude` that sleeps so the two tasks stay put. Adding *zeta*, *alpha* and
-*mid* in that order through the Add project dialog draws them in that order
-with positions 1, 2, 3 — before the change SQLite returned them
-alphabetically. Every block after the first computes `border-top-width: 1px`,
-at `neutral-200` on the light sidebar and `neutral-700` on the dark one, and
-the first computes `0px`. Across two projects of three tasks each, selecting
-either one leaves all six titles at the same left offset and every number
-column twelve pixels wide, whether it holds a digit or nothing. With
-project *one* showing and two tasks under it: `Alt+B` selects *two* and folds
-nothing, `Alt+A` comes back without folding, `Alt+A` again hides both task
-rows, a third press restores them, `Alt+B` leaves *one* folded as it was, the
-chevron still toggles, `Alt+T`/`Alt+P` and `Alt+2` are unaffected, and holding
-`Alt+A` for over a second toggles once. No console or page errors.

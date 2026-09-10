@@ -1,10 +1,8 @@
 # Project logs
 
-## Outcome
-
 The right-hand panel carries a **Commits** pane beside Changed and Stats — the
 history of the branch the project is on, for the project page and for every
-session in it. The branch name and the short head hash sit above a filter box;
+task in it. The branch name and the short head hash sit above a filter box;
 under it, one row per commit.
 
 A row is the commit subject, and under it, in grey, what identifies it:
@@ -77,24 +75,3 @@ possibly empty — `web/{ui => }/index.html` is a move up one level. The
 destination is cleaned rather than concatenated; without that it reads
 `web//index.html`, matching neither the file on disk nor the path
 `--name-status` reports its status letter under.
-
-## Validation
-
-`go build ./...`, `go vet ./...` and `npm run build` pass. Browser-checked
-against this repository: 36 commits listed on `fix-context-window`, the first
-row reading `1323b7ae · Pau Sanchez · 2026-09-09 16:46`; `subscr` narrows to 2
-rows and `1323b7` to 1; expanding gives 13 files with
-`M app/internal/agent/agent.go +38 −0`; opening one renders 65 diff lines in a
-Diff-only tab headed `@ 1323b7ae`. The endpoints were also checked against a
-rename commit (63 files, 30 renames, every status letter matched) and the
-repository's root commit, and `hash=--all` is refused. No page or console
-errors.
-
-Copy hash was browser-checked on `feat/scheduled-jobs`, 71 rows: right-clicking
-the second row copies `92a4a26d`, not the first row's hash; right-clicking a
-file inside an expanded commit copies that commit's `aaa1f592`; right-clicking
-a fourth row after that copies `3bff73ba`, so the aim follows the pointer.
-Left-clicking still expands, and a file still opens as `@ aaa1f592`. The greyed
-item was not reachable in the layout as it stands — the scroller hugs its rows,
-so a right click beside them lands outside the menu's trigger and opens
-nothing, which is the same outcome.

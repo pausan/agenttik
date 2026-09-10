@@ -1,11 +1,9 @@
 # One file tab a click reuses
 
-## Outcome
-
 Reading through files no longer fills the strip. A click on a file — in the
 Tree, in Changed, or on a commit's file list in Commits — opens it in the
 project's *temporary* tab, and the next file clicked takes that tab over: same
-place in the strip, same `Alt` number, one tab. A double click opens the file
+place in the strip, one tab. A double click opens the file
 to keep, and so does typing in it. Kept tabs are only closed by hand.
 
 `temp` on the file tab is the whole state. `tempFileIn` finds the one a click
@@ -44,17 +42,3 @@ leave the file previewed alongside.
 
 **`temp`, not `preview`.** A file tab already has a Preview view for markdown
 and HTML in `mode`. Two meanings of the word in one object read as a bug.
-
-## Validation
-
-Browser-checked on a fresh database against this repo, with no console or page
-errors. Clicking `go.mod`, then `go.sum`, then `Makefile` in the Tree left one
-italic tab that changed its name each time. A double click on `LICENSE` took
-the italic off; the next click opened a second, italic tab beside it. Typing
-one character into that tab took its italic off too, and the next click opened
-a third. Clicking a kept file's row selected its tab and left it kept.
-
-Clicking a file in Changed, then one in the Tree, then one under a commit in
-Commits reused the same single tab across all three, and a double click on the
-commit's file kept it. After a reload the kept tab came back kept and the
-italic one came back italic.

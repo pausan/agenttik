@@ -1,7 +1,5 @@
 # Copying and editing transcript messages
 
-## Outcome
-
 Every message in a transcript can be copied. Hovering a bubble reveals the
 actions beside its role label; they occupy the layout at all times, so nothing
 shifts when the pointer arrives. The copy icon becomes a tick for a moment so
@@ -46,14 +44,3 @@ message; an id alone says nothing about either. A session with a turn in
 flight is refused *before* anything is deleted, so a busy session cannot lose
 the tail of its transcript and get no turn for it. Deletion is `id >= from`:
 ids are handed out in order, so that is "from here down".
-
-## Validation
-
-`go build ./...`, `go vet ./...` and `npm run build` pass. Against a live
-haiku session: editing an assistant message is refused ("only your own prompts
-can be edited"), an id from another session is a 404, an empty prompt is a
-400, and a real edit left the transcript as the rewritten prompt and its new
-reply with both turns still recorded. Browser-checked: the You bubble offers
-Copy and Edit, the Agent bubble only Copy, the clipboard read back the agent's
-text, the editor opened prefilled with the existing prompt and its caveat
-line, and Escape closed it without sending. No page or console errors.

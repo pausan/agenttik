@@ -1,7 +1,5 @@
 # Settings sections and editable shortcuts
 
-## Outcome
-
 Enqueue is `Enter`; `Ctrl+Enter` sends. `Alt+Enter` no longer queues anything:
 it was chosen because `Ctrl+Enter` looked taken, and it is not.
 
@@ -21,7 +19,7 @@ reaches the recorder rather than closing the dialog. Only what differs from a
 default is written to `localStorage`, so a default that changes later still
 reaches everyone who never touched it.
 
-Recording replaces a whole binding. `New session` answers to both `Ctrl+N` and
+Recording replaces a whole binding. `New task` answers to both `Ctrl+N` and
 `Ctrl+T` by default; rebinding it leaves one chord, and the row's reset brings
 both back.
 
@@ -36,9 +34,10 @@ with the other action's name. Which one runs is whichever handler asks first,
 and that is not something to find out by accident.
 
 The dialog grew a rail to hold all this: **General**, **Projects**,
-**Appearance**, **Models**, **Shortcuts** — General arrived with 017 and
-Projects, which lists what has been archived, with 041 — and a filter above
-them. The filter fuzzy-matches every row in every section — a palette name, a
+**Appearance**, **Models**, **Server**, **Shortcuts** — General is
+[017](017-general-settings.md), Projects lists what has been archived
+([041](041-project-archiving.md)), and Server is
+[043](043-exposed-server.md) — with a filter above them. The filter fuzzy-matches every row in every section — a palette name, a
 model, a shortcut and its keys — and each section reports how many it kept, so
 the count beside a section says where the answer is before you click.
 Filtering into a section that has no matches moves to one that does. Every
@@ -54,24 +53,3 @@ and the launcher's new *Keyboard shortcuts* entry both open Settings on the
 Shortcuts section, so there is one list rather than two that can disagree —
 and it is now generated from the registry the handlers read, which is why it
 cannot disagree with them either.
-
-## Validation
-
-`make ui`, `go vet ./...` and the web unit tests (32) passed.
-
-Browser-checked headlessly against a fake `claude` on PATH that sleeps, so a
-turn stays running and the scheduler leaves the queue alone: `Enter`
-queues a prompt and `Alt+Enter` leaves the text in the box; the keyboard button opens on Shortcuts and the
-Settings button on General; filtering `enqueue` from Appearance moves to
-Shortcuts and `opus` moves to Models, `zzzz` empties the rail; rebinding
-Enqueue to `Ctrl+Shift+E` takes effect in the prompt box and in the hint under
-it, survives a reload, and the row's arrow restores `Enter`; recording
-`Ctrl+P` over Send does not open the launcher and flags the conflict on both
-rows; Escape cancels a recording with the dialog still open; Restore all
-defaults resets the lot. No console or page errors.
-
-Two e2e cases fail: `a starred model and effort heads the picker` and
-`changing the model updates the badge`, both driving the prompt bar's model
-picker as a `USelect`, which it is not — it is a popover and command palette
-(see 009 and 011). The other cases locate `Send` with `exact`, since the send
-button and the Send options caret both match the bare name.

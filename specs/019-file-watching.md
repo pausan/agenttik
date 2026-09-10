@@ -1,7 +1,5 @@
 # The tree and the changed list follow the disk
 
-## Outcome
-
 Tree and Changed used to be read when the project changed and when a turn
 ended, so an editor, a `git commit` in a terminal, or a build left both panes
 showing what was true minutes ago. They now follow the project folder: a file
@@ -32,7 +30,7 @@ already has the path.
 
 **A topic of its own, not `ProjectTopic`.** The project topic carries the start
 and end of every turn. Sending file events there would have made a window with
-a session tab open receive each turn event twice — the transcript grows from
+a task tab open receive each turn event twice — the transcript grows from
 that stream.
 
 **Announce that something moved, not what.** The panes re-read their whole
@@ -58,21 +56,3 @@ the `index` that follows it is the event that matters.
 **`git --no-optional-locks`.** Plain `git status` rewrites the index to cache
 what it stat'd, which the watcher sees as a change, refreshes for, and sees
 again. Every git call here is a read, so the flag is set for all of them.
-
-## Validation
-
-Browser-checked on a fresh database against two scratch projects, with no
-console or page errors, driving nothing in the UI after the first click:
-
-| Done outside the UI | Tree | Changed |
-|---|---|---|
-| edit a tracked file | — | `M src/a.txt` |
-| create a file | gains it | `?? src/new.txt` |
-| delete a tracked file | loses it | `D src/b.txt` |
-| `git add -A && git commit` | — | empties |
-| write in an ignored `build/` | no request at all | no request at all |
-| create a file in a non-git project | gains it | — |
-
-Switching to another project and back kept the new project's folder followed.
-Four seconds of idle, before and after all of it, made no request: the watcher
-is the only thing that wakes the panes.

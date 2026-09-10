@@ -16,7 +16,7 @@ up by hand.
 The data directory is the key, not the port. That is what two instances would
 actually corrupt: one SQLite file, opened twice. `--data-dir` therefore still
 starts a genuine second copy, which is how the e2e suite runs its servers in
-parallel ([005-testing.md](005-testing.md)).
+parallel ([005](005-testing.md)).
 
 Taking the lock before the database matters. `ResetRunningSessions` clears
 whatever the table says is running, because no turn survives a restart — and a
@@ -64,23 +64,3 @@ may still refuse a raise it did not see the user ask for.
 Wails ships its own `SingleInstanceLock`, over dbus, and it is not used: it
 runs inside `wails.Run`, which is long after the database is open and reset, it
 does nothing in a web-only build, and it exits 1 on the path that worked.
-
-## Status
-
-Implemented and checked end to end.
-
-Web mode: a second launch on the same data directory printed the running URL
-and exited 0, whether or not it was given the same `--addr`, and the first
-instance kept serving. With a fake `claude` holding a turn open, the session
-stayed `running` and its turn stayed `running` across the second launch. The
-same probe against a `HEAD` binary built in a throwaway worktree flipped the
-session to `idle` and the turn to `interrupted` while the child still ran,
-which is the regression the ordering fixes. `SIGTERM` emptied the lock file;
-`SIGKILL` left the address behind but the flock free, and the next start took
-it.
-
-Desktop mode, headless on Xvfb under xfwm4: the window opened and was the
-active window, `xdotool windowminimize` left it `IsUnMapped` with no active
-window, and a second launch printed the raise line, exited 0 and left the
-window `IsViewable` and active again. Process and toplevel-window counts were
-unchanged across the second launch, so nothing was left behind.

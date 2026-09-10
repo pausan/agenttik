@@ -1,25 +1,33 @@
-# Sidebar ordering and project tree
+# Sidebar ordering and the project tree
 
-## Outcome
+The left strip is `Projects | Tree`. Tree always uses the project that owns the
+active tab — a task, a project page, or a file opened from either — and falls
+back to the selected project when nothing is open in it. With no project at all
+it asks the user to pick one.
 
-The left strip is `Projects | Sessions | Tree`. Tree always uses the project
-that owns the active tab: a session, project, or file opened from either. With
-no active project it asks the user to select one. The right strip now contains
-only Changed/Stats for a session and Options/Stats for a project.
+The right strip is `Changed | Stats` for a task and `Options | Commits` for a
+project; see [004](004-ui.md#tabs).
 
-Projects and every open session under each project can be reordered with native
-browser drag and drop. The list moves below the pointer immediately, then sends
-one request on drop. Project order is stored in `projects.position`; a new
-forward-only migration adds it. A project is created with the next position
-rather than the default 0, so it lands at the end of the list. The existing
-`sessions.position` is used for the sidebar as well as the project page. The
-project endpoint now includes all open session rows, rather than a five-row
-subset, so a sidebar drop always sends the complete order.
+## Dragging
 
-Project-session archive icons archive a session and remove it from that project.
-The Sessions tab retains archived rows, with a right-side unarchive icon to
-restore them. Its filter input uses the same search/lens icon as Tree.
+Projects, and every open task under each project, are reordered with native
+browser drag and drop. The list moves below the pointer immediately and one
+request is sent on drop; if the server refuses it, the row goes back where it
+was.
 
-## Validation
+Project order lives in `projects.position` and task order in
+`sessions.position`, which serves the sidebar and the project page alike.
+Positions are written `1..n`, and a row created afterwards takes the next
+number, so new work lands at the end of an order someone arranged rather than
+on top of it — see [042](042-sidebar-project-rows.md) for projects.
 
-No tests were run for this change, as requested.
+`GET /api/projects/:id` carries every open task row, not a subset, so a sidebar
+drop always sends the complete order.
+
+## Archiving
+
+A task row's archive icon takes it out of the project's sidebar list. Nothing
+is deleted: it moves to the grey half of the project page's Tasks tab, where
+the restore icon brings it back — see [030](030-project-tasks.md). A task that
+is running or holding queued prompts shows **Stop** in place of the archive
+icon; see [021](021-stop-active-tasks.md).

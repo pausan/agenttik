@@ -13,6 +13,12 @@ type Provider interface {
 }
 ```
 
+Two halves are optional. `TitleGenerator` names a task from its first prompt
+([020](020-task-titles.md)); `Metered` answers the signed-in account's own
+subscription allowance without ever holding its credentials
+([011](011-prompt-bar-usage.md)). A provider that only volunteers an allowance
+mid-turn implements neither and is read off its limits event instead.
+
 `Run` starts the CLI and returns a channel that closes when the turn is over. The
 channel carries provider-neutral events:
 
@@ -23,7 +29,7 @@ Cancelling the context kills the process group, which is how "stop" works.
 
 ## Permission modes
 
-Chosen per session; default `workspace`. A web UI cannot answer an interactive
+Chosen per task; default `workspace`. A web UI cannot answer an interactive
 approval prompt, so the posture is set before the turn starts.
 
 | agenttik | claude | codex |
@@ -35,14 +41,14 @@ approval prompt, so the posture is set before the turn starts.
 `workspace` maps to claude's `auto`, the mode the IDE extensions use for their
 Auto setting, and deliberately not to `acceptEdits`. Both auto-approve file
 edits, but `acceptEdits` still asks before running a command; under `-p` there
-is nobody to ask, so the call is refused. That made workspace sessions able to
+is nobody to ask, so the call is refused. That made workspace tasks able to
 edit files but never build, test, or commit — an agent told to commit its work
 silently did not. `auto` approves ordinary work and still asks for the
 destructive cases, so only those are refused.
 
-If `auto` turns out to withhold something a session needs, the lever is
+If `auto` turns out to withhold something a task needs, the lever is
 `--allowedTools` (a space- or comma-separated list such as `"Bash(git commit:*)
-Edit"`) rather than widening the whole session to `full`.
+Edit"`) rather than widening the whole task to `full`.
 
 ## Claude Code
 
@@ -104,9 +110,18 @@ stream maps as follows:
 `input_tokens` includes the cached portion reported separately as
 `cached_input_tokens`; the former is used as the current context size.
 
-Status: implementation compiles against Codex CLI 0.147.0's command syntax and
-the official JSONL event contract. A live subscription turn was not run because
-it would consume account usage.
+Implemented against Codex CLI 0.147.0's command syntax and the official JSONL
+event contract. A live subscription turn has never been run, because it would
+spend real account usage; everything below a turn — the argument building, the
+event mapping and the app-server allowance query — has been.
+
+## GitHub Copilot
+
+The third provider, through the locally authenticated `copilot` CLI. Its
+session contract, permission mapping and quota query are
+[031](031-copilot-subscription.md); its model list is asked of the CLI rather
+than written down here, because both the catalogue and the account's
+entitlement change without a release — see [036](036-copilot-model-list.md).
 
 ## Later: key-based providers
 

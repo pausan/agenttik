@@ -1,7 +1,5 @@
 # Exposed server
 
-## Outcome
-
 Settings gained a sixth section, **Server**: whether this desktop window's
 server also answers a browser — this machine or another on the network — in
 addition to the window itself, and where.
@@ -71,36 +69,3 @@ saved before are otherwise indistinguishable — it applies on blur, once a
 host has actually been typed, the same as the project path field. The port
 field validates its range client-side before ever calling `PUT`, so a typo
 never reaches the network layer at all.
-
-## Validation
-
-`go build ./...`, `go vet ./...`, `gofmt -l` and the desktop-tagged build are
-clean. `make ui` and the web unit tests (33) pass. `go test ./...` reproduces
-only the two failures already on record in the index
-(`TestDoneReachesProjectTopic`, `TestReorderSessionsDrivesProjectOrder`),
-unrelated to this change.
-
-The listener swap needs no window, so it was driven directly against the real
-`store`, `netserver` and `server` packages — the same wiring
-`runDesktop` does, minus Wails: a fresh launch reports the compiled-in
-default (`available: true`, `enabled: false`, `127.0.0.1:7717`,
-`listening: false`); enabling on a free port binds it and a request through
-that port reaches the real API; pointing it at a port something else already
-holds answers `400` and leaves the previous good listener answering exactly
-as before; stopping the manager and rebuilding the server against the same
-database — a stand-in for relaunching the app — re-binds the saved address
-on its own, with no request needed; disabling stops the exposed port while
-the loopback address the window itself would be using keeps answering
-throughout.
-
-Browser-checked headlessly with `/api/server` mocked so the controls render
-regardless of launch mode: starts unchecked, localhost selected, port 7717,
-no status line while disabled; enabling sends `{enabled: true, host:
-"127.0.0.1", port: 7717}` and draws "Listening on 127.0.0.1:7717" with no
-warning; picking Everybody sends `host: "0.0.0.0"` and draws the network-wide
-warning; picking Other alone sends nothing until a typed address is blurred,
-which then sends that host and names it in the warning; a port outside
-1–65535 is rejected before any request and the field snaps back to the saved
-value; disabling sends `enabled: false` and clears the status line. No page
-errors; the one console error is `fail`'s own logging of the port rejection,
-same as every other rejected edit in the app.

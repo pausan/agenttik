@@ -1,7 +1,5 @@
 # Copilot model list
 
-## Outcome
-
 The GitHub Copilot provider no longer carries a hand-written model list. It
 asks the CLI, which is the only authority worth asking: which models exist,
 and which the signed-in account is entitled to, both change without a release
@@ -67,22 +65,3 @@ an empty list is indistinguishable from an absent one on the wire, and the UI
 reads absent as "use the provider's list". This is what every Copilot model
 did before, so it is not a regression, but it does offer four models levels
 the CLI would reject.
-
-## Validation
-
-Checked against the installed CLI (1.0.28) and a live account. No model turn
-was used: `models.list` is read-only.
-
-- 12 models returned, cold 2.76s, second call 311ns from cache
-- `/api/providers` served the live 12 in 0.7ms, the startup ask having already
-  finished
-- `account.getQuota` still answers through the extracted transport
-- a missing CLI falls back in 151µs without starting a process
-- the picker groups all 12 under GitHub Copilot and filters them by id
-- `claude-opus-5` offers only `medium`, `gpt-5.3-codex` all four levels
-- a new Copilot session starts on `gpt-5.3-codex`, the CLI's first offer
-- `go build ./...` and `go vet ./...` pass; no console or page errors
-
-## Status
-
-Implemented and browser-checked.

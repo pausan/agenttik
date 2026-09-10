@@ -1,10 +1,10 @@
 # GitHub Copilot subscription
 
-## Outcome
-
 GitHub Copilot is the third provider in the registry. It runs through the
 locally installed `copilot` CLI, streams its JSONL events into the existing
-transcript, resumes the CLI session id, and reports token/context usage.
+transcript, resumes the CLI session id, and reports token and context usage.
+Its model list is asked of the CLI rather than written down; see
+[036](036-copilot-model-list.md).
 
 The provider also implements `agent.Metered`. The server starts a short-lived
 headless Copilot CLI process and sends the read-only `account.getQuota` RPC
@@ -45,9 +45,3 @@ agenttik does not read VS Code extension storage, GitHub tokens, or Copilot
 credentials. The installed `copilot` CLI must already be authenticated with
 the GitHub account that owns the Copilot subscription. A machine with only the
 VS Code extension and no `copilot` CLI reports the provider as unavailable.
-
-## Status
-
-Implemented. The installed CLI's headless server answered `ping` and the
-read-only `account.getQuota` RPC, and its response shape was converted to
-agenttik's shared allowance model. No model turn was used for that check.

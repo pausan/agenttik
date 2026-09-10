@@ -1,7 +1,5 @@
 # Collapsing a run of tool calls
 
-## Outcome
-
 Consecutive tool calls in a transcript are drawn as one block that shows only
 its latest call. Above it sits a button reading how many the run holds — "6
 tool calls" — which opens all of them and closes them again. A run of a single
@@ -27,11 +25,3 @@ streaming path — a delta only grows a message's `content`, so the computed
 that builds the rows is not invalidated and the bubble that changed is still
 the only one that re-renders. Rows are keyed by the position the run starts
 at, so a group keeps its component, and its open flag, as calls arrive.
-
-## Validation
-
-`npm run build` passes. Browser-checked against a live session whose CLI
-streamed a run of six tool calls, a reply, then a lone call: collapsed showed
-the sixth call only and one toggle, expanding showed all six, collapsing
-returned to one, the lone call had no button, and `aria-expanded` tracked the
-state. No page or console errors.

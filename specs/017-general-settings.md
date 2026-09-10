@@ -1,7 +1,5 @@
 # General settings, and which key submits
 
-## Outcome
-
 Settings grew a fourth section, **General**, and it is where the dialog now
 opens: the sidebar's Settings button and the launcher's Settings entry both
 land there, the keyboard button still lands on Shortcuts.
@@ -33,26 +31,3 @@ The caret beside it holds the other action, so the pair never offers two
 enqueues, and it is one field group — one pill, one seam at the caret — because
 the two are one control. Only sending is refused while a turn runs, wherever it
 sits, since enqueueing during a turn is the point of it.
-
-## Validation
-
-`make ui`, `go build ./...`, `go vet ./...` and the web unit tests (32) passed.
-
-Browser-checked headlessly against a fake `claude` on PATH that sleeps, so the
-first turn stays running and the scheduler leaves the queue alone: the Settings
-button opens on General and the keyboard button on Shortcuts; the rail reads
-General | Appearance | Models | Shortcuts; the hint under the prompt box reads
-`Enter` to enqueue before the swap and `Ctrl+Enter` to enqueue after it; after
-the swap the Shortcuts rows read Send `Enter` and Enqueue `Ctrl+Enter`; in the
-box, `Ctrl+Enter` queues and plain Enter sends the next prompt, which the transcript
-draws as waiting; the choice survives a reload; filtering `enqueue` leaves
-General 2 and Shortcuts 1 and `zzzz` empties the rail; rebinding Send to
-`Ctrl+Shift+E` in Shortcuts leaves neither option ticked and the pane says
-which chords are in use; picking one restores `Enter` and `Ctrl+Enter`. No
-console or page errors.
-
-Re-checked the same way after the button was made to follow the default: with
-Enter enqueueing, the pill reads 🕒 Enqueue and its menu Send; after the swap it
-reads Send and its menu 🕒 Enqueue. During a running turn the Send half is
-disabled in both arrangements — as the button when it leads, as the menu entry
-when it does not — while Enqueue stays live. No console or page errors.

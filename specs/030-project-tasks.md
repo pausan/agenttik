@@ -1,7 +1,5 @@
 # Tasks on the project page
 
-## Outcome
-
 A project page is two tabs under its name: **Tasks**, which is every task the
 project has, and **Stats**, which is its totals and daily activity.
 
@@ -30,8 +28,8 @@ The same fuzzy matcher the folder picker and the Settings panes use
 with no title matches "Untitled task". Prompts are deliberately left out: one
 is up to 600 characters, and a subsequence match against a string that long
 matches nearly anything typed. The prompt each row opened with is still one
-hover away ([014](014-transcript-messages.md) draws the same tooltip in the
-sidebar).
+hover away — [038](038-task-naming.md) describes the same tooltip in the
+sidebar.
 
 It narrows both states at once, and the counter beside it reads
 `matches/total` over all of them. Matching does not reorder: open rows keep
@@ -79,7 +77,7 @@ needs.
 Archived rows are never draggable. `sessions.position` is the order someone
 chose for the work in front of them; a history is ordered by the clock. They
 carry the restore icon rather than the archive one, so this is also where a
-conversation comes back: unarchiving turns the row black in place.
+task comes back: unarchiving turns the row black in place.
 
 ## Data
 
@@ -96,36 +94,3 @@ scoped to a project, where every other project-scoped listing is ordered by
 A project tab loads and reloads totals, daily metrics, open tasks, and
 archived tasks in one `Promise.all`. The reload is the existing debounced one
 that already runs at the end of a turn.
-
-## Validation
-
-`go build ./...`, `go vet ./...`, `make ui` and the web unit tests (33) pass.
-
-Headless against the running app, one project with two open and three
-archived tasks:
-
-- The Tasks tab listed all five, counter `5/5`, with the two open titles at
-  `oklch(0.21 …)` — the theme's `text-highlighted` — and the three archived at
-  `oklch(0.552 …)`, its `text-muted`.
-- The page opened with focus on `input[type=search]`, placeholder
-  `Filter tasks`, so typing filtered without clicking first.
-- `arch` narrowed to the three archived rows and the counter to `3/5`; `one`
-  to the single open row and `1/5`; `zzzz` drew "No task matches that."
-- No console or page errors throughout.
-
-Paging, against a project seeded with 8 open and 55 archived tasks:
-
-- Page 1 drew 25 rows, `Open task 00` first and `Archived task 46` last, over
-  `1–25 of 63`; page 2 drew `26–50 of 63`; page 3 drew its 13 remaining rows
-  as `51–63 of 63`.
-- `10 / page` went back to page 1 and drew 10; `100 / page` drew all 63 and
-  removed the pager.
-- Filtering to `Archived task 1` from page 1 of 7 gave `1–10 of 15` with the
-  counter at `15/63`.
-- The size stayed at 10 across leaving the project page and a full reload.
-- On page 3 of 3 of a project of 21 untitled tasks, archiving the only row
-  there deleted it and the view fell back to `11–20 of 20` rather than an
-  empty page.
-- A project of 3 tasks drew no size select and no pager. Switching to it from
-  a filtered project reset the filter to `3/3` and re-focused it.
-- No console or page errors throughout.

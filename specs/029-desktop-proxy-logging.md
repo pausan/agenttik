@@ -1,7 +1,5 @@
 # Desktop proxy logging
 
-## Outcome
-
 The desktop window no longer prints a line like
 
 ```
@@ -35,14 +33,3 @@ same handler under a real server and never logged this at all.
 Filtering the proxy's `ErrorLog` was the other option and was not taken: it
 matches on stdlib log wording, and it would keep the misleading "in test" text
 for any copy error it did not recognise.
-
-## Status
-
-Fixed and checked end to end, headless, on a virtual display.
-
-The pre-fix binary was built through `go build -overlay` so the comparison
-needed no second checkout. Adding a project and selecting it reopens the
-stream; the old binary printed the line one heartbeat later, and the new one
-printed nothing across four reopen cycles. Backend connections and open file
-descriptors returned to their pre-cycle counts each time, so the abort still
-closes the proxied response and releases the watcher.

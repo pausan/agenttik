@@ -44,7 +44,7 @@ func runDesktop(srv *server.Server) error {
 		Height:           900,
 		MinWidth:         900,
 		MinHeight:        600,
-		AssetServer:      &assetserver.Options{Handler: http.Handler(proxy)},
+		AssetServer:      &assetserver.Options{Handler: quietAborts(proxy)},
 		BackgroundColour: &options.RGBA{R: 17, G: 18, B: 21, A: 255},
 		OnShutdown:       func(ctx context.Context) { srv.Shutdown() },
 		Linux: &linux.Options{
@@ -53,6 +53,30 @@ func runDesktop(srv *server.Server) error {
 			// the webview goes blank on some drivers with acceleration on.
 			WebviewGpuPolicy: linux.WebviewGpuPolicyNever,
 		},
+	})
+}
+
+// quietAborts drops the abort a reverse proxy raises when the client goes away
+// mid-body. The webview does that on every reload and on every reopen of the
+// event stream, which the UI does whenever a tab opens or closes.
+//
+// The context value is what makes the proxy raise that abort in the first
+// place. Wails runs the handler itself rather than through an http.Server, and
+// with no server in the context the proxy assumes it is under test and logs
+// every dropped connection instead. Recovering the abort is what an
+// http.Server does, so the window stays as quiet as --web.
+func quietAborts(h http.Handler) http.Handler {
+	// Only has to be non-nil; nothing on this path reads it back.
+	srv := &http.Server{}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			// Anything else is a real bug, so let it keep unwinding.
+			if p := recover(); p != nil && p != http.ErrAbortHandler {
+				panic(p)
+			}
+		}()
+		ctx := context.WithValue(r.Context(), http.ServerContextKey, srv)
+		h.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 

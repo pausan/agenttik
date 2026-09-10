@@ -2,13 +2,14 @@ BIN      := bin/agenttik
 PKG      := ./app/cmd/agenttik
 UI       := web
 E2E      := e2e
+DIST     := dist
 
 # Wails needs to know which webkit2gtk is installed. 4.1 is the current one;
 # older distros still ship 4.0.
 WEBKIT_TAG := $(shell pkg-config --exists webkit2gtk-4.1 && echo webkit2_41)
 DESKTOP_TAGS := desktop production $(WEBKIT_TAG)
 
-.PHONY: all build build-web run run-web test e2e vet fmt clean deps ui ui-dev
+.PHONY: all build build-web build-windows-amd64 build-macos-amd64 run run-web test e2e vet fmt clean deps ui ui-dev
 
 all: build
 
@@ -27,6 +28,16 @@ build: ui
 ## build-web: web server only, no cgo and no system dependencies beyond node
 build-web: ui
 	CGO_ENABLED=0 go build -o $(BIN)-web $(PKG)
+
+## build-windows-amd64: Windows x64 desktop binary, with the embedded UI
+build-windows-amd64: ui
+	mkdir -p $(DIST)
+	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-H=windowsgui" -tags "desktop production" -o $(DIST)/agenttik_windows_amd64.exe $(PKG)
+
+## build-macos-amd64: macOS x64 desktop binary (run this target on macOS)
+build-macos-amd64: ui
+	mkdir -p $(DIST)
+	GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 go build -trimpath -tags "desktop production" -o $(DIST)/agenttik_darwin_amd64 $(PKG)
 
 run: build
 	./$(BIN)
@@ -50,7 +61,7 @@ fmt:
 	gofmt -l -w .
 
 clean:
-	rm -rf bin $(E2E)/test-results $(E2E)/playwright-report
+	rm -rf bin $(DIST) $(E2E)/test-results $(E2E)/playwright-report
 	find web/dist -mindepth 1 ! -name .gitkeep -delete
 
 ## deps: system packages the desktop build needs on Debian/Ubuntu. The UI

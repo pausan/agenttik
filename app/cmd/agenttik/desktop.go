@@ -5,7 +5,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/fs"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -16,13 +15,11 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
-	"github.com/wailsapp/wails/v2/pkg/options/linux"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"github.com/pausan/agenttik/app/internal/netserver"
 	"github.com/pausan/agenttik/app/internal/server"
 	"github.com/pausan/agenttik/app/internal/single"
-	"github.com/pausan/agenttik/web"
 )
 
 // runDesktop opens a native window over the same HTTP server the web mode
@@ -68,7 +65,7 @@ func runDesktop(srv *server.Server, lock *single.Lock, defaultAddr string) error
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.FlushInterval = -1 // flush immediately, so SSE streams
 
-	return wails.Run(&options.App{
+	app := &options.App{
 		Title:            "agenttik",
 		Width:            1440,
 		Height:           900,
@@ -78,13 +75,9 @@ func runDesktop(srv *server.Server, lock *single.Lock, defaultAddr string) error
 		BackgroundColour: &options.RGBA{R: 17, G: 18, B: 21, A: 255},
 		OnStartup:        win.opened,
 		OnShutdown:       func(ctx context.Context) { srv.Shutdown() },
-		Linux: &linux.Options{
-			Icon: appIcon(),
-			// Wails only picks this default while Linux options are nil, and
-			// the webview goes blank on some drivers with acceleration on.
-			WebviewGpuPolicy: linux.WebviewGpuPolicyNever,
-		},
-	})
+	}
+	configureDesktop(app)
+	return wails.Run(app)
 }
 
 // window is the open Wails window, or the wait for one. The server is already
@@ -101,10 +94,8 @@ func (w *window) opened(ctx context.Context) {
 	w.ctx = ctx
 }
 
-// present raises the window and says whether there was one. Both calls hand
-// the work to the GTK main loop, so any goroutine may make them: on Linux
-// Wails maps WindowShow to gtk_widget_show, which covers a hidden window, and
-// WindowUnminimise to gtk_window_present, which is the raise and the focus.
+// present raises the window and says whether there was one. Wails queues both
+// calls onto the native UI loop, so any goroutine may make them.
 func (w *window) present() bool {
 	w.mu.Lock()
 	ctx := w.ctx
@@ -139,16 +130,4 @@ func quietAborts(h http.Handler) http.Handler {
 		ctx := context.WithValue(r.Context(), http.ServerContextKey, srv)
 		h.ServeHTTP(w, r.WithContext(ctx))
 	})
-}
-
-// appIcon is the logo the browser tab already shows, taken from the embedded
-// UI so there is one copy of it. GTK draws it through gdk-pixbuf, which reads
-// SVG only with the loader librsvg installs; without it, or without a built
-// UI, the window keeps the toolkit default.
-func appIcon() []byte {
-	svg, err := fs.ReadFile(web.Assets(), "agenttik.svg")
-	if err != nil {
-		return nil
-	}
-	return svg
 }

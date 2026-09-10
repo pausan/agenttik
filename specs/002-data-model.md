@@ -2,7 +2,9 @@
 
 ## Location
 
-`$XDG_DATA_HOME/agenttik/agenttik.db`, falling back to `~/.local/share/agenttik/`.
+On Linux, `$XDG_DATA_HOME/agenttik/agenttik.db`, falling back to
+`~/.local/share/agenttik/agenttik.db`. macOS and Windows use their respective
+user configuration directories via `os.UserConfigDir`.
 Overridable with `--data-dir`. The directory is created on first run.
 
 SQLite in WAL mode, `busy_timeout=5000`, foreign keys on. Driver is

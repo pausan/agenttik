@@ -38,7 +38,7 @@
 | [034-claude-update-retry.md](034-claude-update-retry.md) | Retrying Claude Code startup during a self-update |
 | [035-missing-work-dir.md](035-missing-work-dir.md) | Reporting a renamed or deleted project folder as itself |
 | [036-copilot-model-list.md](036-copilot-model-list.md) | Asking the Copilot CLI which models the account has |
-| [037-linux-releases.md](037-linux-releases.md) | Tagged Linux amd64 and arm64 desktop builds and releases |
+| [037-cross-platform-releases.md](037-cross-platform-releases.md) | Push builds and tagged Linux, macOS, and Windows releases |
 | [038-task-naming.md](038-task-naming.md) | Task naming and hover-popup content |
 | [039-single-instance.md](039-single-instance.md) | One app per data directory, and the window a second launch raises |
 | [040-editable-project-path.md](040-editable-project-path.md) | Repointing a project at a moved folder, by typing or by browsing |

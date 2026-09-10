@@ -4,7 +4,8 @@
 
 A local workspace for running AI coding sessions across multiple projects.
 Use Claude Code, Codex and GitHub Copilot through their official CLIs, with your existing login,
-in one desktop window or browser tab. Linux only for now.
+in one desktop window or browser tab. Desktop builds support Linux, macOS x64,
+and Windows x64.
 
 ## Main features
 
@@ -27,7 +28,9 @@ make run-web
 
 Open [localhost:7717](http://127.0.0.1:7717), add a project folder, and start a session.
 For the desktop app, install the native build dependencies (`make deps` on
-Debian/Ubuntu), then run `make run`.
+Debian/Ubuntu), then run `make run`. `make build-windows-amd64` cross-compiles
+the Windows x64 binary; build the macOS x64 target on macOS with
+`make build-macos-amd64`.
 
 **No authentication:** anyone who can reach agenttik's address has full control of it. It binds to
 loopback only by default; the desktop app's Settings › Server can expose it to the network instead,

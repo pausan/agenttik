@@ -12,7 +12,7 @@ authenticate with the accounts already configured on the machine
 subscription session against the raw API. Key-based providers (OpenRouter,
 direct APIs) come later as a separate provider kind that does hold keys.
 
-Linux only for now.
+The desktop shell supports Linux, macOS amd64, and Windows amd64.
 
 ## Shells
 
@@ -20,8 +20,10 @@ One binary, two ways to show the same UI:
 
 - **Desktop (default)** — a Wails window. It starts the HTTP server on a random
   loopback port and points a WebKit view at it through a reverse proxy with
-  `FlushInterval = -1`, so SSE still streams. Needs cgo, gtk3 and
-  webkit2gtk; built with `-tags "desktop production webkit2_41"`. Settings ›
+  `FlushInterval = -1`, so SSE still streams. Linux needs cgo, gtk3 and
+  webkit2gtk and builds with `-tags "desktop production webkit2_41"`; macOS
+  and Windows use Wails' native platform backends with
+  `-tags "desktop production"`. Settings ›
   Server can additionally expose that same server on a chosen host and port,
   through a second, independent proxy the window itself never touches — see
   [043-exposed-server.md](043-exposed-server.md).

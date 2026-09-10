@@ -6,10 +6,12 @@ database.
 
 ## The lock
 
-`<data-dir>/agenttik.lock` carries an advisory `flock(LOCK_EX|LOCK_NB)`, taken
-in `run()` before `store.Open` and held for the life of the process
-(`app/internal/single`). The kernel releases it when the file closes, so a
-crash or a `SIGKILL` leaves nothing to clean up by hand.
+`<data-dir>/agenttik.lock` carries an exclusive operating-system file lock,
+taken in `run()` before `store.Open` and held for the life of the process
+(`app/internal/single`). Unix uses advisory `flock(LOCK_EX|LOCK_NB)` and
+Windows uses a non-blocking exclusive `LockFileEx` lock. The operating system
+releases either lock when the file closes, so a crash leaves nothing to clean
+up by hand.
 
 The data directory is the key, not the port. That is what two instances would
 actually corrupt: one SQLite file, opened twice. `--data-dir` therefore still

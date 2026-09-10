@@ -1,0 +1,138 @@
+name: Build and release
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-tag:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+      is_release: ${{ steps.tag.outputs.is_release }}
+    steps:
+      - id: tag
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [[ "$REF_TYPE" == "tag" && "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            printf 'version=%s\n' "$TAG" >> "$GITHUB_OUTPUT"
+            echo 'is_release=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'is_release=false' >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: release-tag
+    name: ${{ matrix.platform }} ${{ matrix.goarch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            goarch: amd64
+            runner: ubuntu-24.04
+            cgo_enabled: 1
+            build_tags: desktop production webkit2_41
+            ldflags: ""
+            extension: ""
+          - platform: linux
+            goarch: arm64
+            runner: ubuntu-24.04-arm
+            cgo_enabled: 1
+            build_tags: desktop production webkit2_41
+            ldflags: ""
+            extension: ""
+          - platform: darwin
+            goarch: amd64
+            runner: macos-15-intel
+            cgo_enabled: 1
+            build_tags: desktop production
+            ldflags: ""
+            extension: ""
+          - platform: windows
+            goarch: amd64
+            runner: windows-2025
+            cgo_enabled: 0
+            build_tags: desktop production
+            ldflags: -H=windowsgui
+            extension: .exe
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install Linux desktop dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - name: Build embedded UI
+        run: |
+          npm ci --prefix web
+          npm run build --prefix web
+
+      - name: Build desktop binary
+        shell: bash
+        env:
+          CGO_ENABLED: ${{ matrix.cgo_enabled }}
+          GOOS: ${{ matrix.platform }}
+          GOARCH: ${{ matrix.goarch }}
+          VERSION: ${{ needs.release-tag.outputs.version }}
+        run: |
+          mkdir -p dist
+          if [[ -z "$VERSION" ]]; then
+            VERSION="${GITHUB_SHA::12}"
+          fi
+          build_args=(
+            -trimpath
+            -tags "${{ matrix.build_tags }}"
+            -o "dist/agenttik_${VERSION}_${GOOS}_${GOARCH}${{ matrix.extension }}"
+          )
+          if [[ -n "${{ matrix.ldflags }}" ]]; then
+            build_args+=(-ldflags "${{ matrix.ldflags }}")
+          fi
+          go build "${build_args[@]}" ./app/cmd/agenttik
+
+      - name: Upload release asset
+        if: needs.release-tag.outputs.is_release == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: agenttik-release-${{ matrix.platform }}-${{ matrix.goarch }}
+          path: dist/agenttik_*
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    needs: [release-tag, build]
+    if: needs.release-tag.outputs.is_release == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download release assets
+        uses: actions/download-artifact@v7
+        with:
+          pattern: agenttik-release-*
+          path: release
+          merge-multiple: true
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release-tag.outputs.version }}
+        run: gh release create "$TAG" release/* --title "$TAG" --generate-notes

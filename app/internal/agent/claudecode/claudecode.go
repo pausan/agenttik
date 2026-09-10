@@ -15,10 +15,10 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/pausan/agenttik/app/internal/agent"
+	"github.com/pausan/agenttik/app/internal/process"
 )
 
 // Binary is the CLI we shell out to. A variable so tests can point at a fake.
@@ -134,11 +134,11 @@ func (p *Provider) Run(ctx context.Context, req agent.TurnRequest) (<-chan agent
 		go func() {
 			select {
 			case <-ctx.Done():
-				syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+				process.Terminate(cmd.Process)
 				select {
 				case <-done:
 				case <-time.After(3 * time.Second):
-					syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+					process.Kill(cmd.Process)
 				}
 			case <-done:
 			}
@@ -168,7 +168,7 @@ func start(req agent.TurnRequest) (*exec.Cmd, io.ReadCloser, *strings.Builder, e
 		// The prompt goes in on stdin, never as an argv element.
 		cmd.Stdin = strings.NewReader(req.Prompt)
 		// Own process group so cancelling kills the CLI's children too.
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		process.Configure(cmd)
 
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {

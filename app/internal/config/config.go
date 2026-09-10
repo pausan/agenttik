@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
 type Config struct {
@@ -33,12 +34,19 @@ func (c Config) EnsureDataDir() error {
 }
 
 func defaultDataDir() string {
-	if dir := os.Getenv("XDG_DATA_HOME"); dir != "" {
-		return filepath.Join(dir, "agenttik")
+	if runtime.GOOS == "linux" {
+		if dir := os.Getenv("XDG_DATA_HOME"); dir != "" {
+			return filepath.Join(dir, "agenttik")
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return ".agenttik"
+		}
+		return filepath.Join(home, ".local", "share", "agenttik")
 	}
-	home, err := os.UserHomeDir()
+	dir, err := os.UserConfigDir()
 	if err != nil {
 		return ".agenttik"
 	}
-	return filepath.Join(home, ".local", "share", "agenttik")
+	return filepath.Join(dir, "agenttik")
 }

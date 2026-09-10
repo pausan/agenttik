@@ -11,10 +11,10 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/pausan/agenttik/app/internal/agent"
+	"github.com/pausan/agenttik/app/internal/process"
 )
 
 var Binary = "copilot"
@@ -85,7 +85,7 @@ func (p *Provider) Run(ctx context.Context, req agent.TurnRequest) (<-chan agent
 	}
 	cmd := exec.Command(Binary, buildArgs(req)...)
 	cmd.Dir = req.WorkDir
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	process.Configure(cmd)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -107,11 +107,11 @@ func (p *Provider) Run(ctx context.Context, req agent.TurnRequest) (<-chan agent
 		go func() {
 			select {
 			case <-ctx.Done():
-				_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+				_ = process.Terminate(cmd.Process)
 				select {
 				case <-done:
 				case <-time.After(3 * time.Second):
-					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+					_ = process.Kill(cmd.Process)
 				}
 			case <-done:
 			}

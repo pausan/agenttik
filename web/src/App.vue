@@ -5,6 +5,7 @@ import { useToast } from "@nuxt/ui/composables";
 import {
   S,
   closeTab,
+  hasInspector,
   hit,
   init,
   reopenClosedTab,
@@ -93,7 +94,9 @@ onUnmounted(() => window.removeEventListener("keydown", onKey));
     <div
       class="grid h-full bg-default text-default text-sm"
       :style="{
-        gridTemplateColumns: `${S.layout.left}px 1px minmax(0,1fr) 1px ${S.layout.right}px`,
+        gridTemplateColumns: hasInspector()
+          ? `${S.layout.left}px 1px minmax(0,1fr) 1px ${S.layout.right}px`
+          : `${S.layout.left}px 1px minmax(0,1fr)`,
       }"
     >
       <SideBar
@@ -104,8 +107,10 @@ onUnmounted(() => window.removeEventListener("keydown", onKey));
       />
       <Splitter side="left" />
       <MainPanel />
-      <Splitter side="right" />
-      <InspectorPanel />
+      <template v-if="hasInspector()">
+        <Splitter side="right" />
+        <InspectorPanel />
+      </template>
     </div>
 
     <UnsavedModal />

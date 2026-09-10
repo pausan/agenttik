@@ -22,7 +22,8 @@ func (s *Store) CreateProject(name, path string) (*Project, error) {
 
 func (s *Store) GetProject(id int64) (*Project, error) {
 	var p Project
-	p.RecentSessions = []SessionRef{} // the field is always an array, never null
+	// Both lists are always arrays, never null, so the UI iterates without a guard.
+	p.RecentSessions, p.Schedules = []SessionRef{}, []Schedule{}
 	err := s.db.QueryRow(
 		`SELECT id, name, path, created_at, position FROM projects WHERE id = ?`, id).
 		Scan(&p.ID, &p.Name, &p.Path, &p.CreatedAt, &p.Position)
@@ -83,6 +84,13 @@ func (s *Store) ListProjects() ([]Project, error) {
 			return nil, err
 		}
 		projects[i].RecentSessions = refs
+		// The sidebar draws schedules above sessions, so they travel with the
+		// project rather than costing a request per project.
+		schedules, err := s.ListSchedules(ScheduleFilter{ProjectID: projects[i].ID, ExcludeDone: true})
+		if err != nil {
+			return nil, err
+		}
+		projects[i].Schedules = schedules
 	}
 	return projects, nil
 }

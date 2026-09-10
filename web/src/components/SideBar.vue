@@ -8,11 +8,17 @@ import {
   TAB_CHORDS,
   isArchived,
   openProject,
+  openSchedule,
   openSession,
+  refreshSchedules,
   refreshSessions,
+  renameSchedule,
   renameSession,
   reorderProjects,
   reorderSidebarSessions,
+  scheduleLabel,
+  setScheduleArchived,
+  setSchedulePaused,
   setSessionArchived,
   setWindow,
   switchProject,
@@ -22,6 +28,7 @@ import { ago } from "../api";
 import { debounce } from "../debounce";
 import { SEGMENTED } from "../ui";
 import FileTree from "./FileTree.vue";
+import ScheduleRow from "./ScheduleRow.vue";
 import SessionRow from "./SessionRow.vue";
 import StatusDot from "./StatusDot.vue";
 
@@ -55,7 +62,12 @@ defineExpose({
   showTree: () => show("tree"),
 });
 
-const reload = debounce(() => refreshSessions().catch(() => {}), 150);
+/* Both lists answer the same filter and the same window, so both are
+   re-read. */
+const reload = debounce(() => {
+  refreshSessions().catch(() => {});
+  refreshSchedules().catch(() => {});
+}, 150);
 watch(() => S.query, reload);
 
 const draggingProject = ref(0);
@@ -95,7 +107,14 @@ const sessionNumber = (project, session) =>
 
 /* A project is lit while any of its sessions is mid-turn, whether or not that
    conversation is the one on screen. */
-const busy = (p) => p.recent_sessions.some((s) => s.status === "running");
+const busy = (p) =>
+  p.recent_sessions.some((s) => s.status === "running") || p.schedules.some((s) => s.running);
+
+/* The schedule tab in front, so its sidebar row is highlighted the way an
+   open conversation's is. */
+const activeSchedule = computed(() =>
+  S.owner?.kind === "schedule" ? S.owner.scheduleID : 0,
+);
 
 /* Clicking a project selects it, which is what makes its tabs the ones on
    screen. Clicking the one already selected opens its page, since that is
@@ -237,6 +256,16 @@ function onSessionDrop(e) {
               <span class="block truncate pl-4 text-xs text-dimmed">{{ p.path }}</span>
             </button>
           </div>
+          <ScheduleRow
+            v-for="sched in collapsedProjects.has(p.id) ? [] : p.schedules"
+            :key="'sched' + sched.id"
+            :schedule="sched"
+            :active="activeSchedule === sched.id"
+            @select="openSchedule(sched.id)"
+            @toggle-paused="setSchedulePaused(sched, !sched.paused)"
+            @toggle-archive="setScheduleArchived(sched, true)"
+            @rename="renameSchedule(sched, $event)"
+          />
           <div
             v-if="!collapsedProjects.has(p.id)"
             v-for="s in p.recent_sessions"
@@ -278,7 +307,7 @@ function onSessionDrop(e) {
           v-model="S.query"
           type="search"
           icon="i-lucide-search"
-          placeholder="Filter sessions"
+          placeholder="Filter sessions and schedules"
           class="w-full"
         />
       </div>
@@ -291,8 +320,22 @@ function onSessionDrop(e) {
         />
       </div>
       <div class="min-h-0 flex-1 overflow-auto px-2.5">
-        <p v-if="!S.sessions.length" class="px-3 py-5 text-center text-dimmed">
-          No sessions in this window.
+        <!-- Schedules first, archived ones included: a schedule stays a
+             schedule, so this is where an archived one is restored from. -->
+        <ScheduleRow
+          v-for="sched in S.schedules"
+          :key="'sched' + sched.id"
+          :schedule="sched"
+          :sub="`${scheduleLabel(sched)} · ${sched.project_name}`"
+          :active="activeSchedule === sched.id"
+          :archived="isArchived(sched)"
+          @select="openSchedule(sched.id)"
+          @toggle-paused="setSchedulePaused(sched, !sched.paused)"
+          @toggle-archive="setScheduleArchived(sched, !isArchived(sched))"
+          @rename="renameSchedule(sched, $event)"
+        />
+        <p v-if="!S.sessions.length && !S.schedules.length" class="px-3 py-5 text-center text-dimmed">
+          Nothing in this window.
         </p>
         <SessionRow
           v-for="s in S.sessions"

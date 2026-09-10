@@ -98,9 +98,13 @@ A schedule tab looks like a project page ([004](004-ui.md#tabs)) and is its own
 colour on the strip. It shows the prompt it will send, the recurrence in words,
 when the next run is due, the runs-left input, Pause/Resume and Delete — and
 under that every run it has spawned, newest first, each with its timestamp as
-`YYYY-MM-DD HH:mm:ss` UTC, the same format the Stats panel already uses. A
-spawned run is a session, so its row opens it. A skipped run is a row with no
-session and the reason it was skipped.
+`YYYY-MM-DD HH:mm:ss`. A spawned run is a session, so its row opens it. A
+skipped run is a row with no session and the reason it was skipped.
+
+Those times are **local**, where the Stats panel's are UTC. The layout is the
+same; the zone is not, and deliberately: a schedule is read off the clock on
+the wall, so "every day at 09:00" listing its runs at 07:00 would read as
+simply wrong. `isoLocal` sits beside `isoDate` in `api.js` for that.
 
 A schedule tab has no right-hand panel. Changed and Stats describe a
 conversation; a schedule has neither, and its page already carries everything
@@ -119,11 +123,19 @@ Migration 7 adds two tables and one column:
   the day of the month. `done_at` and `position` mean what they mean on a
   session: archived-at, and the order the sidebar was dragged into.
 - **schedule_runs** — `id, schedule_id, session_id, status, started_at,
-  ended_at`. `status` is `running`, `done`, `error` or `skipped`. A skipped run
-  has no `session_id`. This is the list the view draws, and it is why skips can
-  be shown at all: they never become sessions.
+  ended_at`. `status` is `running`, `done`, `error`, `interrupted` or
+  `skipped`. A skipped run has no `session_id`. This is the list the view
+  draws, and it is why skips can be shown at all: they never become sessions.
+
+  `interrupted` is what a restart leaves behind, and clearing those at startup
+  is not optional: an open run row is what makes a schedule read as busy, so
+  one left by a killed process would skip every fire after it, forever. An
+  interrupted run spends nothing — it did not finish.
 - **sessions.schedule_id** — 0 for an ordinary session. It is what lets a
   finishing turn find the schedule that started it without a lookup per turn.
+  It is the open **run row** that decides whether a run is spent, though, not
+  this column: a scheduled session the user later prompts by hand has no open
+  run, so it neither spends a run nor is archived a second time.
 
 ## Firing
 
@@ -153,4 +165,25 @@ request.
 
 ## Validation
 
-Pending — see the status line in [index.md](index.md).
+`go build ./...`, `go vet ./...`, `make ui` and the web unit tests (33) pass.
+`go test ./...` fails only `TestDoneReachesProjectTopic` and
+`TestReorderSessionsDrivesProjectOrder`, both of which failed before this work.
+
+Against the running app with a fake `claude` on PATH:
+
+- A one-minute schedule for three runs fired, its run appeared in the list as
+  `Done` with its local timestamp, and the counter went 3 → 2 when the turn
+  ended — not when it started.
+- With a `claude` that outlasts the interval, the fire that came due behind it
+  was recorded as `skipped` with no session, and the counter did not move.
+- The spawned session appeared in the project's sidebar list while it ran and
+  was gone from it once the turn ended, leaving the schedule as the only row.
+  It is in the Sessions list, archived, where the schedule sits above it.
+- Pausing showed the archive icon and hid it again on resume; the header read
+  `paused` in place of the next run.
+- The recurrence arithmetic, checked on a Thursday at 06:49 local: daily at
+  09:00 → today 09:00, daily at 05:00 → tomorrow 05:00, weekly → the Thursday
+  it was created on, monthly → the 10th, its anchor day.
+- A schedule tab draws one `<aside>`, not two: it has no right-hand panel.
+
+No console or page errors throughout.

@@ -100,6 +100,7 @@ func (s *Server) routes() {
 	api.Get("/projects/:id/diff", s.projectDiff)
 	api.Get("/projects/:id/raw", s.projectRawImage)
 	api.Post("/projects/:id/sessions/order", s.reorderSessions)
+	api.Post("/projects/:id/schedules/order", s.reorderSchedules)
 
 	api.Get("/sessions", s.listSessions)
 	api.Post("/sessions", s.createSession)
@@ -111,6 +112,12 @@ func (s *Server) routes() {
 	api.Post("/sessions/:id/queue", s.enqueueMessage)
 	api.Post("/sessions/:id/queue/force", s.forceQueuedMessage)
 	api.Post("/sessions/:id/stop", s.stopSession)
+
+	api.Get("/schedules", s.listSchedules)
+	api.Post("/schedules", s.createSchedule)
+	api.Get("/schedules/:id", s.getSchedule)
+	api.Patch("/schedules/:id", s.updateSchedule)
+	api.Delete("/schedules/:id", s.deleteSchedule)
 
 	// One stream for every open tab. See streamAll.
 	api.Get("/stream", s.streamAll)

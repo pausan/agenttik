@@ -26,6 +26,7 @@ const DIFF_VIEW_KEY = "agenttik.diffView";
 const COLORS_KEY = "agenttik.colors";
 const KEYS_KEY = "agenttik.keys";
 const WINDOW_KEY = "agenttik.window";
+const SCHEDULE_KEY = "agenttik.schedule";
 const LAYOUT_LIMITS = { left: [180, 520], right: [200, 620] };
 
 /* The letters Alt reaches a project with. The first eight rows of the
@@ -55,6 +56,7 @@ export const S = reactive({
   projects: [],
   subscriptionLimits: {}, // provider -> its latest subscription allowance buckets
   sessions: [],
+  schedules: [], // repeating prompts, drawn above the sessions in both lists
   tabs: [], // every open view, of every project
   closedTabs: {}, // project id -> most recently closed tabs and archived sessions
   activeTab: "",
@@ -387,6 +389,7 @@ function rememberClosedTab(projectID, tab, dependents = [], archived = false) {
 async function openSavedTab(tab) {
   if (!tab) return false;
   if (tab.kind === "project") await openProject(tab.projectID, true);
+  else if (tab.kind === "schedule") await openSchedule(tab.scheduleID, true);
   else if (tab.kind === "session") {
     await openSession(tab.sessionID, true);
     const open = S.tabs.find((candidate) => candidate.id === tab.id);
@@ -555,6 +558,206 @@ export async function renameProject(p, name) {
   }
 }
 
+/* ------------------------------------------------------------- schedules */
+
+/* A schedule is a prompt plus a clock: every time it comes due it starts a
+   new session with the same prompt. It is not a session itself — no
+   transcript, no turns — which is why it is its own list and its own kind of
+   tab. See specs/028-scheduled-jobs.md. */
+
+/* What the dialog opens on. A quarter of an hour is the common case, and
+   whatever was entered last replaces it, so the second schedule is one
+   click. */
+export const DEFAULT_SCHEDULE = { every: "interval", hours: 0, minutes: 15, at: "09:00", remaining: -1 };
+
+export function loadScheduleDefaults() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SCHEDULE_KEY));
+    return saved ? { ...DEFAULT_SCHEDULE, ...saved } : { ...DEFAULT_SCHEDULE };
+  } catch {
+    return { ...DEFAULT_SCHEDULE };
+  }
+}
+
+function rememberScheduleDefaults(form) {
+  persist(SCHEDULE_KEY, JSON.stringify(form));
+}
+
+export async function refreshSchedules() {
+  const params = new URLSearchParams({ window: S.window });
+  if (S.query.trim()) params.set("q", S.query.trim());
+  S.schedules = await api("GET", "/api/schedules?" + params);
+}
+
+/* createSchedule turns the prompt in the box into a repeating one. Everything
+   else is already on screen — the project, the model, the effort — so the
+   dialog only asked for the recurrence and the number of runs. The schedule
+   opens in front, since a clock nobody can see is worth nothing. */
+export async function createSchedule(form) {
+  const tab = S.owner;
+  const prompt = (tab?.kind === "session" ? tab.draft : "").trim();
+  if (!tab || tab.kind !== "session" || !prompt) return;
+  const s = tab.detail.session;
+  // Cleared before the request, as sending and queueing both do.
+  tab.draft = "";
+  try {
+    const created = await api("POST", "/api/schedules", {
+      project_id: s.project_id,
+      prompt,
+      provider: s.provider,
+      model: s.model,
+      effort: s.effort || "",
+      permission: s.permission,
+      every: form.every,
+      interval_minutes: form.every === "interval" ? intervalMinutes(form) : 0,
+      at_minute: form.every === "interval" ? 0 : atMinute(form.at),
+      remaining: form.remaining,
+    });
+    rememberScheduleDefaults(form);
+    await Promise.all([refreshProjects(), refreshSchedules()]).catch(() => {});
+    openSchedule(created.schedule.id);
+  } catch (e) {
+    if (!tab.draft) tab.draft = prompt;
+    fail(e);
+  }
+}
+
+/* The dialog asks for hours and minutes; the server stores the one number. */
+export function intervalMinutes(form) {
+  return Math.max(1, Number(form.hours || 0) * 60 + Number(form.minutes || 0));
+}
+
+/* "09:30" as minutes past midnight, local — the clock on the wall is what
+   "every day at 9" is read off. */
+export function atMinute(at) {
+  const [h, m] = String(at || "").split(":");
+  return Math.min(24 * 60 - 1, Math.max(0, (Number(h) || 0) * 60 + (Number(m) || 0)));
+}
+
+export function scheduleLabel(schedule) {
+  if (schedule.every === "interval") {
+    const h = Math.floor(schedule.interval_minutes / 60);
+    const m = schedule.interval_minutes % 60;
+    return "Every " + [h ? h + "h" : "", m ? m + "m" : ""].filter(Boolean).join(" ");
+  }
+  const at = String(Math.floor(schedule.at_minute / 60)).padStart(2, "0") +
+    ":" + String(schedule.at_minute % 60).padStart(2, "0");
+  return `Every ${schedule.every} at ${at}`;
+}
+
+/* openSchedule puts a schedule in a tab: its prompt, its clock, and every run
+   it has spawned or skipped. */
+export async function openSchedule(id, silent = false) {
+  const tabID = "schedule:" + id;
+  const open = S.tabs.find((t) => t.id === tabID);
+  if (open) {
+    await reloadScheduleTab(open);
+    return selectTab(tabID);
+  }
+  let detail;
+  try {
+    detail = await api("GET", "/api/schedules/" + id);
+  } catch (e) {
+    if (!silent) fail(e);
+    return;
+  }
+  addTab({
+    id: tabID,
+    kind: "schedule",
+    label: detail.schedule.title,
+    scheduleID: id,
+    projectID: detail.schedule.project_id,
+    data: detail,
+  });
+}
+
+async function reloadScheduleTab(tab) {
+  try {
+    tab.data = await api("GET", "/api/schedules/" + tab.scheduleID);
+    tab.label = tab.data.schedule.title;
+  } catch {
+    /* a refresh that fails is not worth interrupting anyone over */
+  }
+}
+
+/* Debounced for the same reason project tabs are: a fire publishes on spawn
+   and again when the run ends. */
+const reloadSchedules = debounce(() => {
+  for (const t of S.tabs) if (t.kind === "schedule") reloadScheduleTab(t);
+  refreshProjects().catch(() => {});
+  refreshSchedules().catch(() => {});
+  // A finished run is archived rather than deleted, so the Sessions list is
+  // where it goes. Nothing else re-reads it: the run had no tab of its own,
+  // so its done event reached no session watcher here.
+  refreshSessions().catch(() => {});
+}, 150);
+
+async function patchSchedule(schedule, body) {
+  try {
+    const updated = await api("PATCH", "/api/schedules/" + schedule.id, body);
+    const tab = S.tabs.find((t) => t.kind === "schedule" && t.scheduleID === schedule.id);
+    if (tab) {
+      tab.data.schedule = updated;
+      tab.label = updated.title;
+    }
+    await Promise.all([refreshProjects(), refreshSchedules()]).catch(() => {});
+    return updated;
+  } catch (e) {
+    fail(e);
+  }
+}
+
+/* Paused, nothing is scheduled at all until it is resumed, and resuming
+   restarts the cadence from now rather than firing what the pause held back —
+   the server books the next run. */
+export function setSchedulePaused(schedule, paused) {
+  return patchSchedule(schedule, { paused });
+}
+
+/* How many runs are left is not a decision made once: -1 is forever, and the
+   view can move it up or down whenever. */
+export function setScheduleRemaining(schedule, remaining) {
+  const n = Math.trunc(Number(remaining));
+  if (!Number.isFinite(n) || n === schedule.remaining) return;
+  return patchSchedule(schedule, { remaining: n < -1 ? -1 : n });
+}
+
+export function renameSchedule(schedule, title) {
+  title = title.trim();
+  if (!title || title === schedule.title) return;
+  return patchSchedule(schedule, { title });
+}
+
+/* Only a paused schedule can be archived: one that was hidden while it kept
+   starting sessions is the one state nothing here would explain. Archiving
+   pauses on the server too, so a restored schedule comes back paused. */
+export async function setScheduleArchived(schedule, archived) {
+  const updated = await patchSchedule(schedule, { done: archived });
+  if (archived && updated) closeTab("schedule:" + schedule.id, false);
+  return updated;
+}
+
+export async function removeSchedule(schedule) {
+  try {
+    await api("DELETE", "/api/schedules/" + schedule.id);
+    closeTab("schedule:" + schedule.id, false);
+    await Promise.all([refreshProjects(), refreshSchedules()]).catch(() => {});
+  } catch (e) {
+    fail(e);
+  }
+}
+
+/* reorderSchedules records the sidebar order, as the session lists do. */
+export async function reorderSchedules(projectID, ids) {
+  try {
+    await api("POST", `/api/projects/${projectID}/schedules/order`, { ids });
+    await refreshProjects();
+  } catch (e) {
+    fail(e);
+    refreshProjects().catch(() => {});
+  }
+}
+
 /* -------------------------------------------------------------- sessions */
 
 export async function refreshSessions() {
@@ -571,6 +774,7 @@ export function setWindow(value) {
   S.window = value;
   persist(WINDOW_KEY, value);
   refreshSessions().catch(() => {});
+  refreshSchedules().catch(() => {});
 }
 
 /* A window the app no longer offers is dropped rather than sent on, since an
@@ -1181,6 +1385,9 @@ function loadFileMode() {
    current version after the app is relaunched. */
 function savedTab(tab) {
   if (tab.kind === "project") return { id: tab.id, kind: tab.kind, projectID: tab.projectID };
+  if (tab.kind === "schedule") {
+    return { id: tab.id, kind: tab.kind, scheduleID: tab.scheduleID, projectID: tab.projectID };
+  }
   if (tab.kind === "session") {
     return { id: tab.id, kind: tab.kind, sessionID: tab.sessionID, draft: tab.draft || "" };
   }
@@ -1243,6 +1450,8 @@ async function restoreOpenTabs() {
     for (const tab of saved.tabs) {
       if (tab?.kind === "project" && tab.projectID) {
         await openProject(tab.projectID, true);
+      } else if (tab?.kind === "schedule" && tab.scheduleID) {
+        await openSchedule(tab.scheduleID, true);
       } else if (tab?.kind === "session" && tab.sessionID) {
         await openSession(tab.sessionID, true);
         const open = S.tabs.find((t) => t.id === tab.id);
@@ -1380,6 +1589,12 @@ watch(
   { immediate: true },
 );
 
+/* A schedule tab has no right-hand panel at all: Changed describes a working
+   tree and Stats a conversation, and a schedule is neither. */
+export function hasInspector() {
+  return S.owner?.kind !== "schedule";
+}
+
 watch(
   currentProjectID,
   () => {
@@ -1402,7 +1617,9 @@ let streamURL = "";
 
 function subscriptionURL() {
   const sessions = S.tabs.filter((t) => t.kind === "session").map((t) => t.sessionID);
-  const projects = S.tabs.filter((t) => t.kind === "project").map((t) => t.projectID);
+  const projects = S.tabs
+    .filter((t) => t.kind === "project" || t.kind === "schedule")
+    .map((t) => t.projectID);
   // The project in front is also the one whose folder the server watches for
   // us: only its files are on screen, so only its files are worth following.
   const shown = currentProjectID();
@@ -1458,6 +1675,9 @@ function onEvent(msg) {
     }
     return;
   }
+  // A schedule fired, skipped a run, or spent one. It names no schedule: the
+  // views re-read what they are showing, as the file watcher's event does.
+  if (msg.event?.type === "schedule_changed") return reloadSchedules();
   const tab = S.tabs.find((t) => t.kind === "session" && t.sessionID === msg.session_id);
   if (tab) onSessionEvent(tab, msg);
   // A turn ending anywhere in a project moves its totals, whether or not that
@@ -1939,6 +2159,7 @@ export async function init() {
     await loadProviders();
     await refreshProjects();
     await refreshSessions();
+    await refreshSchedules();
     await restoreOpenTabs();
     // A first launch has no tabs to say which project is selected, and the
     // sidebar, the Tree and Ctrl+N all want one.

@@ -17,6 +17,7 @@ import {
 } from "../store";
 import Transcript from "./Transcript.vue";
 import ProjectView from "./ProjectView.vue";
+import ScheduleView from "./ScheduleView.vue";
 import FileView from "./FileView.vue";
 import PromptBar from "./PromptBar.vue";
 import StatusDot from "./StatusDot.vue";
@@ -30,6 +31,7 @@ const KINDS = {
   project: { text: "text-sky-500", edge: "border-sky-500" },
   session: { text: "text-primary", edge: "border-primary" },
   file: { text: "text-amber-500", edge: "border-amber-500" },
+  schedule: { text: "text-violet-500", edge: "border-violet-500" },
 };
 
 const items = computed(() =>
@@ -173,6 +175,7 @@ const running = computed(() => !!S.detail?.running);
     </div>
 
     <ProjectView v-if="current?.kind === 'project'" :tab="current" />
+    <ScheduleView v-else-if="current?.kind === 'schedule'" :tab="current" />
     <FileView v-else-if="current?.kind === 'file'" :tab="current" />
     <Transcript v-else />
 

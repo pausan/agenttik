@@ -50,6 +50,17 @@ export function isoDate(ts) {
   return new Date(ts).toISOString().slice(0, 19).replace("T", " ");
 }
 
+// A schedule is read off the clock on the wall — "every day at 9" means local
+// 9 — so its times are local, in the same YYYY-MM-DD HH:mm:ss layout. Showing
+// the next run in UTC beside a local recurrence reads as simply wrong.
+export function isoLocal(ts) {
+  if (!ts) return "never";
+  const d = new Date(ts);
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ` +
+    `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
 export function cost(usd) {
   return "$" + (usd || 0).toFixed(4);
 }

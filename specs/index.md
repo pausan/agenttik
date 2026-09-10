@@ -33,9 +33,10 @@
 
 Status: a prompt can now be scheduled to repeat — every X hours Y minutes, or
 daily, weekly or monthly at a time — for a number of runs or forever; each run
-is a fresh session, a run that comes due behind its own predecessor is skipped
-rather than queued, and the schedule pauses before it can be archived — see
-028. The Tree now lists every file in the project, with what .gitignore
+is a fresh session that leaves the project list when its turn ends, a run that
+comes due behind its own predecessor is skipped rather than queued, and the
+schedule pauses before it can be archived. Implemented and browser-checked —
+see 028. The Tree now lists every file in the project, with what .gitignore
 covers drawn grey, sorted last and its folders shut — see 027. The Sessions tab
 now reaches back one hour by default and keeps the
 window it was left on across launches — see 004. A file tab now renders pictures. An SVG previews and keeps its editor

@@ -14,6 +14,10 @@ type Project struct {
 	// Filled by ListProjects: titles of the project's open sessions. Always
 	// encoded, empty included, so the UI can iterate it without a guard.
 	RecentSessions []SessionRef `json:"recent_sessions"`
+
+	// Schedules are the project's open schedules, drawn above its sessions in
+	// the sidebar. Same rule: always encoded, empty included.
+	Schedules []Schedule `json:"schedules"`
 }
 
 type SessionRef struct {

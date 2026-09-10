@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, watch } from "vue";
 
 import { S, contextWindow, enqueue, enterDoes, fail, hit, isStarred, providerOf, refreshSubscriptionLimits, send, setModel, stopTurn, toggleStar } from "../store";
+import ScheduleModal from "./ScheduleModal.vue";
 import { ago } from "../api";
 import Chord from "./Chord.vue";
 import ContextPane from "./ContextPane.vue";
@@ -19,6 +20,7 @@ const history = useTextHistory(text, (value) => (text.value = value));
 const prompt = ref(null);
 const modelOpen = ref(false);
 const queueOpen = ref(false);
+const scheduling = ref(false);
 
 /* New sessions can be made while another prompt bar is still mounted, so an
    explicit focus request is more reliable than the component's autofocus. */
@@ -229,18 +231,25 @@ const hints = computed(() => [
 ]);
 
 /* The button does what Enter does, so the two never disagree, and the menu
-   beside it holds the other action — never a second copy of the same one. */
+   beside it holds the rest — never a second copy of the same one. */
 const actions = computed(() => ({
   send: { label: "Send", run: submit, disabled: !!S.detail?.running },
   enqueue: { label: "🕒 Enqueue", run: enqueuePrompt, disabled: false },
 }));
 const primary = computed(() => actions.value[enterDoes() === "enqueue" ? "enqueue" : "send"]);
-const other = computed(() => actions.value[enterDoes() === "enqueue" ? "send" : "enqueue"]);
 
-/* The menu closes itself: it holds one action and it has just been used. */
-function runOther() {
+/* Schedule is only in the menu. It is not a way of sending this prompt but of
+   keeping it: the dialog asks how often and how many times, and every run
+   after that is a session of its own. See specs/028-scheduled-jobs.md. */
+const others = computed(() => [
+  actions.value[enterDoes() === "enqueue" ? "send" : "enqueue"],
+  { label: "🔁 Schedule…", run: () => (scheduling.value = true), disabled: !text.value.trim() },
+]);
+
+/* The menu closes itself: whichever action was chosen has just been used. */
+function runOther(action) {
   queueOpen.value = false;
-  other.value.run();
+  action.run();
 }
 </script>
 
@@ -352,13 +361,16 @@ function runOther() {
             <template #content>
               <div class="p-1">
                 <UButton
+                  v-for="action in others"
+                  :key="action.label"
                   type="button"
                   color="neutral"
                   variant="ghost"
                   block
-                  :disabled="other.disabled"
-                  :label="other.label"
-                  @click="runOther"
+                  class="justify-start"
+                  :disabled="action.disabled"
+                  :label="action.label"
+                  @click="runOther(action)"
                 />
               </div>
             </template>
@@ -366,6 +378,7 @@ function runOther() {
         </UFieldGroup>
       </div>
     </div>
+    <ScheduleModal v-model:open="scheduling" />
     <p class="mx-auto mt-1.5 flex max-w-[860px] flex-wrap items-center gap-x-1.5 px-1 text-xs text-dimmed">
       <template v-for="(hint, i) in hints" :key="hint.what">
         <span v-if="i">·</span>

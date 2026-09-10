@@ -38,8 +38,13 @@
 | [034-claude-update-retry.md](034-claude-update-retry.md) | Retrying Claude Code startup during a self-update |
 | [035-missing-work-dir.md](035-missing-work-dir.md) | Reporting a renamed or deleted project folder as itself |
 | [036-copilot-model-list.md](036-copilot-model-list.md) | Asking the Copilot CLI which models the account has |
+| [037-linux-releases.md](037-linux-releases.md) | Tagged Linux amd64 and arm64 desktop builds and releases |
+| [038-task-naming.md](038-task-naming.md) | Task naming and hover-popup content |
+| [039-single-instance.md](039-single-instance.md) | One app per data directory, and the window a second launch raises |
 
-Status: A project page now holds every task it has in one list under Tasks —
+Status: Launching agenttik while it is already open now raises the window
+that is running and exits, instead of starting a second copy that shared the
+database and cleared the first one's live turns; see 039. A project page now holds every task it has in one list under Tasks —
 open ones black, archived ones grey — with the cursor in the filter that
 narrows both, drawn 25 rows to a page with 10, 50 and 100 on offer; see 030. An unsent prompt now outlives the tab it was typed in,
 so changing focus or starting another task leaves the text where it was; see
@@ -102,5 +107,3 @@ turns. The Codex provider is implemented against the current CLI JSONL
 contract and its app-server allowance query answers live; its billable
 live-turn check remains pending. GitHub Copilot sessions use the official CLI
 JSONL contract and its read-only headless quota query; see 031.
-| [037-linux-releases.md](037-linux-releases.md) | Tagged Linux amd64 and arm64 desktop builds and releases |
-| [038-task-naming.md](038-task-naming.md) | Task naming and hover-popup content |

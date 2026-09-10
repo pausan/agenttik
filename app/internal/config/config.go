@@ -20,6 +20,10 @@ func Default() Config {
 // DBPath is the SQLite file inside the data directory.
 func (c Config) DBPath() string { return filepath.Join(c.DataDir, "agenttik.db") }
 
+// LockPath is the file one instance holds to keep a second off the same
+// database. See app/internal/single.
+func (c Config) LockPath() string { return filepath.Join(c.DataDir, "agenttik.lock") }
+
 // EnsureDataDir creates the data directory if it does not exist.
 func (c Config) EnsureDataDir() error {
 	if err := os.MkdirAll(c.DataDir, 0o755); err != nil {

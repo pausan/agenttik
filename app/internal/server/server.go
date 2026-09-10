@@ -33,6 +33,10 @@ type Server struct {
 	// without this the process could not quit.
 	closing   chan struct{}
 	closeOnce sync.Once
+
+	// foreground raises the app's window, and says whether there was one to
+	// raise. Set by the desktop shell before serving starts; nil in web mode.
+	foreground func() bool
 }
 
 func New(s *store.Store, reg *agent.Registry, r *runner.Runner) *Server {
@@ -82,6 +86,7 @@ func (s *Server) routes() {
 	api.Get("/providers", s.listProviders)
 	api.Get("/providers/:provider/subscription-limits", s.subscriptionLimits)
 	api.Get("/fs", s.browseDir)
+	api.Post("/foreground", s.raiseWindow)
 
 	api.Get("/projects", s.listProjects)
 	api.Post("/projects", s.createProject)
@@ -149,6 +154,16 @@ func (s *Server) Shutdown() error {
 
 // Handler adapts the app to net/http, for the desktop shell's asset server.
 func (s *Server) Handler() http.Handler { return adaptor.FiberApp(s.app) }
+
+// OnForeground registers how to raise the app's window. Call it during wiring,
+// before serving starts: nothing guards the field afterwards.
+func (s *Server) OnForeground(raise func() bool) { s.foreground = raise }
+
+// raiseWindow answers the request a second launch makes instead of starting
+// its own copy of the app. See app/cmd/agenttik and app/internal/single.
+func (s *Server) raiseWindow(c *fiber.Ctx) error {
+	return c.JSON(fiber.Map{"raised": s.foreground != nil && s.foreground()})
+}
 
 // apiError is the body returned for any failed API call.
 type apiError struct {

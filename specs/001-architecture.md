@@ -25,6 +25,10 @@ One binary, two ways to show the same UI:
 - **Web (`--web`)** — the HTTP server only, prints its URL. Builds with
   `CGO_ENABLED=0` and no system dependencies beyond node for the UI.
 
+Either shell holds an exclusive lock on its data directory, so a second launch
+raises the window already open and exits instead of running a rival copy over
+the same database — see [039-single-instance.md](039-single-instance.md).
+
 A binary built without the `desktop` tag falls back to web mode with a notice
 rather than failing, so `go build ./...` works anywhere. The UI is a Vite build
 (`make ui`), and a binary made without it says so rather than serving a blank
@@ -64,6 +68,7 @@ Vue UI and its embed glue, `e2e/` the browser tests ([005-testing.md](005-testin
 |---------|----------------|
 | `app/cmd/agenttik` | flags, wiring, graceful shutdown |
 | `app/internal/config` | data dir resolution (XDG), listen address |
+| `app/internal/single` | the one-instance-per-data-dir lock and the address behind it |
 | `app/internal/store` | SQLite access and migrations. No business logic |
 | `app/internal/agent` | provider-neutral `Event`/`TurnRequest` types, `Provider` interface, registry |
 | `app/internal/agent/claudecode` | Claude Code CLI adapter |

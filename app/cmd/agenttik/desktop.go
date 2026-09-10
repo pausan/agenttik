@@ -10,13 +10,16 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"sync"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/linux"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"github.com/pausan/agenttik/app/internal/server"
+	"github.com/pausan/agenttik/app/internal/single"
 	"github.com/pausan/agenttik/web"
 )
 
@@ -24,10 +27,18 @@ import (
 // uses. The window talks to a loopback listener through a reverse proxy rather
 // than to an in-process handler, because the SSE stream needs a real
 // connection it can flush.
-func runDesktop(srv *server.Server) error {
+func runDesktop(srv *server.Server, lock *single.Lock) error {
+	// A second launch reaches this instance over the same port the window
+	// does, so the hook goes in before anything is serving on it.
+	win := &window{}
+	srv.OnForeground(win.present)
+
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return fmt.Errorf("listen on loopback: %w", err)
+	}
+	if err := lock.Publish(ln.Addr().String()); err != nil {
+		return err
 	}
 	go srv.Listener(ln)
 
@@ -46,6 +57,7 @@ func runDesktop(srv *server.Server) error {
 		MinHeight:        600,
 		AssetServer:      &assetserver.Options{Handler: quietAborts(proxy)},
 		BackgroundColour: &options.RGBA{R: 17, G: 18, B: 21, A: 255},
+		OnStartup:        win.opened,
 		OnShutdown:       func(ctx context.Context) { srv.Shutdown() },
 		Linux: &linux.Options{
 			Icon: appIcon(),
@@ -54,6 +66,36 @@ func runDesktop(srv *server.Server) error {
 			WebviewGpuPolicy: linux.WebviewGpuPolicyNever,
 		},
 	})
+}
+
+// window is the open Wails window, or the wait for one. The server is already
+// answering by the time Wails calls opened, and a second launch can ask to be
+// raised in that gap, so the context crosses goroutines and needs the guard.
+type window struct {
+	mu  sync.Mutex
+	ctx context.Context
+}
+
+func (w *window) opened(ctx context.Context) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.ctx = ctx
+}
+
+// present raises the window and says whether there was one. Both calls hand
+// the work to the GTK main loop, so any goroutine may make them: on Linux
+// Wails maps WindowShow to gtk_widget_show, which covers a hidden window, and
+// WindowUnminimise to gtk_window_present, which is the raise and the focus.
+func (w *window) present() bool {
+	w.mu.Lock()
+	ctx := w.ctx
+	w.mu.Unlock()
+	if ctx == nil {
+		return false
+	}
+	runtime.WindowShow(ctx)
+	runtime.WindowUnminimise(ctx)
+	return true
 }
 
 // quietAborts drops the abort a reverse proxy raises when the client goes away

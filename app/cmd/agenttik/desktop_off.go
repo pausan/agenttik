@@ -2,6 +2,9 @@
 
 package main
 
-import "github.com/pausan/agenttik/app/internal/server"
+import (
+	"github.com/pausan/agenttik/app/internal/server"
+	"github.com/pausan/agenttik/app/internal/single"
+)
 
-func runDesktop(*server.Server) error { return errNoDesktop }
+func runDesktop(*server.Server, *single.Lock) error { return errNoDesktop }

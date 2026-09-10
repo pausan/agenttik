@@ -169,9 +169,13 @@ func TestTreeListsFiles(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "node_modules", "x", "y.js"), []byte("y"), 0o644)
 	p, _ := st.CreateProject("alpha", dir)
 
-	paths := decode[[]string](t, do(t, s, "GET", "/api/projects/"+itoa(p.ID)+"/tree", nil))
-	if len(paths) != 1 || paths[0] != "a.txt" {
-		t.Errorf("tree = %v, want [a.txt] with node_modules skipped", paths)
+	got := decode[projectFiles](t, do(t, s, "GET", "/api/projects/"+itoa(p.ID)+"/tree", nil))
+	if len(got.Files) != 1 || got.Files[0] != "a.txt" {
+		t.Errorf("tree = %v, want [a.txt] with node_modules skipped", got.Files)
+	}
+	// Nothing is ignored outside a repository: there is no .gitignore to read.
+	if len(got.Ignored) != 0 {
+		t.Errorf("ignored = %v, want none in a plain folder", got.Ignored)
 	}
 }
 

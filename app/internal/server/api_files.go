@@ -77,25 +77,42 @@ type fileEntry struct {
 	Size int64  `json:"size,omitempty"`
 }
 
+// projectFiles is the tree listing: what git tracks or would track, and what
+// it ignores, kept apart rather than mixed. The pane needs to know which is
+// which — ignored files are drawn grey and their folders start shut — and the
+// order matters here too. See listFiles.
+type projectFiles struct {
+	Files   []string `json:"files"`
+	Ignored []string `json:"ignored"`
+}
+
 func (s *Server) projectTree(c *fiber.Ctx) error {
 	root, err := s.projectRoot(c)
 	if err != nil {
 		return err
 	}
-	paths, err := listFiles(root)
+	files, ignored, err := listFiles(root)
 	if err != nil {
 		return err
 	}
-	return c.JSON(paths)
+	return c.JSON(projectFiles{Files: files, Ignored: ignored})
 }
 
 // listFiles prefers git, which gives us .gitignore handling for free and is
 // far faster than walking a large working tree.
-func listFiles(root string) ([]string, error) {
+//
+// The cap is spent on the project's own files first and the ignored ones get
+// what is left: a dependency folder is thousands of entries — 13,789 against
+// 140 in agenttik's own repository — and must never push a real file out of
+// the listing. Walking by hand has no notion of ignoring, so there the
+// dependency folders are skipped as they always were and nothing comes back
+// grey.
+func listFiles(root string) ([]string, []string, error) {
 	if isGitRepo(root) {
 		out, err := runGit(root, "ls-files", "--cached", "--others", "--exclude-standard")
 		if err == nil {
-			return trimTo(withoutDeleted(root, splitLines(out)), maxTreeEntries), nil
+			files := trimTo(withoutDeleted(root, splitLines(out)), maxTreeEntries)
+			return files, listIgnored(root, maxTreeEntries-len(files)), nil
 		}
 	}
 	var paths []string
@@ -120,10 +137,26 @@ func listFiles(root string) ([]string, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("walk project: %w", err)
+		return nil, nil, fmt.Errorf("walk project: %w", err)
 	}
 	sort.Strings(paths)
-	return paths, nil
+	return trimTo(paths, maxTreeEntries), []string{}, nil
+}
+
+// listIgnored is what .gitignore covers. It lists the files inside an ignored
+// folder rather than the folder itself, which is what makes it the long half
+// of the answer and why it carries a bound of its own.
+func listIgnored(root string, max int) []string {
+	if max <= 0 {
+		return []string{}
+	}
+	// --ignored only means anything alongside --exclude-standard: without it
+	// git has no set of patterns to call something ignored against.
+	out, err := runGit(root, "ls-files", "--others", "--ignored", "--exclude-standard")
+	if err != nil {
+		return []string{}
+	}
+	return trimTo(splitLines(out), max)
 }
 
 // withoutDeleted drops the tracked files that are no longer on disk. Git keeps

@@ -70,7 +70,10 @@ export const S = reactive({
   logFilter: "",
   logOpen: "", // the commit whose file list is expanded
   logFiles: {}, // commit hash -> what it touched, fetched the first time it opens
+  // Every path in the project, and the subset git ignores. The Tree draws
+  // both, the ignored ones grey.
   tree: [],
+  treeIgnored: [],
   treeFilter: "",
   query: "", // sidebar session filter
   window: SESSION_WINDOWS[0].value,
@@ -1342,15 +1345,25 @@ export function openCommitFile(hash, path, pin = false) {
 
 async function refreshTree() {
   const id = currentProjectID();
-  if (!id) return (S.tree = []);
+  if (!id) return clearTree();
   try {
-    const tree = await api("GET", `/api/projects/${id}/tree`);
+    const { files = [], ignored = [] } = (await api("GET", `/api/projects/${id}/tree`)) || {};
     // A slow request for the tab we just left must not replace the active
     // project's sidebar Tree.
-    if (currentProjectID() === id) S.tree = tree;
+    if (currentProjectID() !== id) return;
+    // The two lists arrive apart so the ignored half can be capped on its own;
+    // the pane wants one listing, and `tree` being empty is what "No files."
+    // is read from.
+    S.tree = ignored.length ? files.concat(ignored) : files;
+    S.treeIgnored = ignored;
   } catch {
-    if (currentProjectID() === id) S.tree = [];
+    if (currentProjectID() === id) clearTree();
   }
+}
+
+function clearTree() {
+  S.tree = [];
+  S.treeIgnored = [];
 }
 
 /* The panel follows the tab in front: which panes it offers depends on the

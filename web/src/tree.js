@@ -8,9 +8,16 @@
 
 import { fuzzy } from "./fuzzy.js";
 
-/* buildTree groups paths into nodes. Folders come before files and both are
-   sorted by name, which is the order a file manager shows. */
-export function buildTree(paths) {
+/* buildTree groups paths into nodes. What git ignores goes in the tree too and
+   is marked `ig`: the pane greys those and keeps their folders shut, so
+   generated files are visible without being in the way.
+
+   Folders come before files and both are sorted by name, which is the order a
+   file manager shows — except that anything ignored sinks below everything
+   that is not, so a folder reads as its own contents first and what was
+   generated into it after. */
+export function buildTree(paths, ignored = []) {
+  const skip = ignored.length ? new Set(ignored) : null;
   const root = node("", "", true);
   for (const path of paths) {
     const parts = path.split("/").filter(Boolean);
@@ -26,21 +33,35 @@ export function buildTree(paths) {
       }
       at = next;
     }
+    if (skip?.has(path)) at.ig = true;
   }
   return sortTree(root);
 }
 
 function node(name, path, dir) {
-  return { name, path, dir, children: dir ? [] : null, index: dir ? new Map() : null, hits: null };
+  return {
+    name,
+    path,
+    dir,
+    children: dir ? [] : null,
+    index: dir ? new Map() : null,
+    hits: null,
+    ig: false,
+  };
 }
 
 /* sortTree also drops the lookup maps, which were only needed while building
-   and would otherwise be walked by Vue's reactivity for nothing. */
+   and would otherwise be walked by Vue's reactivity for nothing.
+
+   Children are sorted after they have been walked, because a folder counts as
+   ignored only once its own are known: git ignores files, so a folder is
+   generated exactly when everything inside it is. */
 function sortTree(n) {
   n.index = null;
   if (!n.children) return n;
-  n.children.sort((a, b) => b.dir - a.dir || a.name.localeCompare(b.name));
   for (const c of n.children) sortTree(c);
+  n.ig = n.children.length > 0 && n.children.every((c) => c.ig);
+  n.children.sort((a, b) => a.ig - b.ig || b.dir - a.dir || a.name.localeCompare(b.name));
   return n;
 }
 

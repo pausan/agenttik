@@ -111,6 +111,9 @@ func (p *Provider) Run(ctx context.Context, req agent.TurnRequest) (<-chan agent
 	if err := p.Available(); err != nil {
 		return nil, err
 	}
+	if err := req.CheckWorkDir(); err != nil {
+		return nil, err
+	}
 	cmd := exec.Command(Binary, buildArgs(req)...)
 	cmd.Dir = req.WorkDir
 	// The prompt goes in on stdin, never as an argv element.

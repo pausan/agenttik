@@ -115,6 +115,9 @@ func (p *Provider) Run(ctx context.Context, req agent.TurnRequest) (<-chan agent
 	if err := p.Available(); err != nil {
 		return nil, err
 	}
+	if err := req.CheckWorkDir(); err != nil {
+		return nil, err
+	}
 	cmd, stdout, stderr, err := start(req)
 	if err != nil {
 		return nil, err

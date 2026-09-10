@@ -6,6 +6,9 @@ package agent
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io/fs"
+	"os"
 )
 
 var ErrNotImplemented = errors.New("provider not implemented")
@@ -61,6 +64,28 @@ type TurnRequest struct {
 	ProviderSessionID string
 
 	Permission Permission
+}
+
+// CheckWorkDir reports whether the turn can still be run where it was asked to
+// run. Providers must call it before starting a CLI: they all set the child's
+// working directory, and a failed chdir is reported by the OS against the
+// binary that could not be run, so a project folder that was renamed or
+// deleted otherwise surfaces as the CLI itself being missing.
+func (r TurnRequest) CheckWorkDir() error {
+	if r.WorkDir == "" {
+		return nil
+	}
+	info, err := os.Stat(r.WorkDir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("work dir no longer exists: %s", r.WorkDir)
+	}
+	if err != nil {
+		return fmt.Errorf("work dir %s: %w", r.WorkDir, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("work dir is not a directory: %s", r.WorkDir)
+	}
+	return nil
 }
 
 type EventType string

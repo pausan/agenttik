@@ -70,6 +70,9 @@ type QueuedMessage struct {
 	ID        int64  `json:"id"`
 	SessionID string `json:"session_id"`
 	Prompt    string `json:"prompt"`
+	Provider  string `json:"provider"`
+	Model     string `json:"model"`
+	Effort    string `json:"effort"`
 	CreatedAt int64  `json:"created_at"`
 }
 

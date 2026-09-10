@@ -43,6 +43,18 @@ The prompt box is also cleared before the request rather than after it, as
 sending already did. Queueing two prompts in a row lost the second one: the
 answer to the first arrived while it was being typed and blanked the box.
 
+## Per-item model choices
+
+Each queued prompt records the provider, model and effort selected when it was
+enqueued. Its dashed transcript bubble shows the model and offers the same
+cross-provider model search plus an effort picker. Editing one item does not
+change the session default or other queued items.
+
+When the runner claims an item, it applies that saved choice immediately before
+starting the turn. A provider change clears the provider-owned thread id; a
+model or effort change within the current provider keeps it. Existing queued
+rows are populated from their session during migration.
+
 ## Validation
 
 `make ui`, `go vet ./...` and the web unit tests (32) passed. `go test ./...`
@@ -74,3 +86,8 @@ send**, since B is the running session now. No console or page errors.
 Fixed on the way: `api()` parsed the body of a bare `202 Accepted` as JSON, so
 a *successful* force raised a "Something went wrong" toast. It now decodes only
 a JSON content type; failures are always JSON.
+
+## Per-item model validation
+
+`go build ./...` and `npm run build` passed. Tests were not run, per the
+prototype workflow.

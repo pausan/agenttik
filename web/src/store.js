@@ -1700,6 +1700,7 @@ function onSessionEvent(tab, msg) {
   switch (ev.type) {
     case "started":
       startLocal(tab, msg.prompt, msg.turn);
+      if (msg.session) tab.detail.session = msg.session;
       takeQueued(tab, msg.prompt);
       refreshSessions();
       refreshProjects();
@@ -1926,6 +1927,26 @@ export async function enqueue(prompt) {
     refreshProjects();
   } catch (e) {
     fail(e);
+  }
+}
+
+// updateQueuedModel changes one waiting prompt's saved choice. The session
+// picker is left alone until that prompt starts, so other queued prompts keep
+// their own choices too.
+export async function updateQueuedModel(queuedID, provider, model, effort) {
+  const tab = S.owner;
+  if (tab?.kind !== "session" || !queuedID) return;
+  try {
+    const updated = await api("PATCH", "/api/sessions/" + tab.sessionID + "/queue/" + queuedID, {
+      provider,
+      model,
+      effort,
+    });
+    const queued = tab.detail.queued.find((item) => item.id === queuedID);
+    if (queued) Object.assign(queued, updated);
+  } catch (e) {
+    fail(e);
+    throw e;
   }
 }
 

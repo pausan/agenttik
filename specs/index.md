@@ -33,7 +33,9 @@
 | [029-desktop-proxy-logging.md](029-desktop-proxy-logging.md) | Why the window logged broken pipes, and the abort it recovers instead |
 | [030-project-archived-sessions.md](030-project-archived-sessions.md) | The project page's archived list and its fuzzy filter |
 
-Status: a project page now lists what it has archived under its open
+Status: queued prompts now retain, show and let users change their individual
+provider, model and effort before starting — see 012. A project page now lists
+what it has archived under its open
 sessions, newest first, behind a fuzzy filter — see 030. The desktop window no
 longer logs a broken pipe every time the UI reopens its event stream — see
 029. A commit row in the Commits pane now shows only hash, author and time,

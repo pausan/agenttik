@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
-import { forceQueued, S } from "../store";
+import { forceQueued, providerOf, S, updateQueuedModel } from "../store";
 import Message from "./Message.vue";
 import ToolGroup from "./ToolGroup.vue";
 
@@ -44,6 +44,26 @@ const rows = computed(() => {
    been waiting, so opening a session shows the text that is going to run. */
 const queued = computed(() => S.detail?.queued || []);
 const forcing = ref(0);
+const changing = ref(0);
+const NONE = "__default";
+
+const modelOf = (provider, model) => providerOf(provider)?.models.find((candidate) => candidate.id === model);
+const labelOf = (provider, model) => modelOf(provider, model)?.label || model;
+const effortsFor = (q) => modelOf(q.provider, q.model)?.efforts || providerOf(q.provider)?.efforts || [];
+const effortItems = (q) => [
+  { label: "default effort", value: NONE },
+  ...effortsFor(q).map((effort) => ({ label: effort, value: effort })),
+];
+const modelGroups = computed(() => S.providers.map((provider) => ({
+  id: provider.name,
+  label: provider.display_name,
+  items: provider.models.map((model) => ({
+    label: model.label,
+    description: model.id,
+    value: ["model", provider.name, model.id].join(":"),
+    disabled: !provider.available,
+  })),
+})));
 
 /* Sending a queued prompt now always interrupts something: this session's own
    turn, or the turn elsewhere in the project it is waiting behind. Only the
@@ -59,6 +79,28 @@ const sendNowHint = computed(() =>
 function waitLabel(since) {
   const secs = Math.max(0, Math.floor((now.value - Number(since || 0)) / 1000));
   return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
+}
+
+async function setQueuedChoice(q, provider, model, effort) {
+  changing.value = q.id;
+  try {
+    await updateQueuedModel(q.id, provider, model, effort);
+  } catch {
+    /* updateQueuedModel has already shown the failure */
+  } finally {
+    changing.value = 0;
+  }
+}
+
+function pickQueuedModel(q, value) {
+  const [, provider, model] = value.split(":", 3);
+  const next = modelOf(provider, model);
+  const efforts = next?.efforts || providerOf(provider)?.efforts || [];
+  setQueuedChoice(q, provider, model, efforts.includes(q.effort) ? q.effort : "");
+}
+
+function pickQueuedEffort(q, effort) {
+  setQueuedChoice(q, q.provider, q.model, effort === NONE ? "" : effort);
 }
 
 async function force(q) {
@@ -130,17 +172,48 @@ watch(
         >
           {{ q.prompt }}
         </div>
-        <UButton
-          class="mt-1"
-          color="warning"
-          variant="ghost"
-          size="xs"
-          :label="sendNowLabel"
-          :loading="forcing === q.id"
-          :disabled="forcing !== 0"
-          :title="sendNowHint"
-          @click="force(q)"
-        />
+        <div class="mt-1 flex items-center gap-1">
+          <UPopover>
+            <UButton
+              color="neutral"
+              variant="ghost"
+              size="xs"
+              trailing-icon="i-lucide-chevron-down"
+              :label="labelOf(q.provider, q.model)"
+              :loading="changing === q.id"
+              :disabled="forcing !== 0 || changing !== 0"
+              title="Change queued model"
+            />
+            <template #content>
+              <UCommandPalette
+                class="w-80"
+                :groups="modelGroups"
+                value-key="value"
+                placeholder="Search models…"
+                :fuse="{ fuseOptions: { keys: ['label', 'description'], threshold: 0.35, ignoreLocation: true }, resultLimit: 20 }"
+                @update:model-value="pickQueuedModel(q, $event)"
+              />
+            </template>
+          </UPopover>
+          <USelect
+            :model-value="q.effort || NONE"
+            :items="effortItems(q)"
+            size="xs"
+            :disabled="forcing !== 0 || changing !== 0"
+            title="Change queued effort"
+            @update:model-value="pickQueuedEffort(q, $event)"
+          />
+          <UButton
+            color="warning"
+            variant="ghost"
+            size="xs"
+            :label="sendNowLabel"
+            :loading="forcing === q.id"
+            :disabled="forcing !== 0 || changing !== 0"
+            :title="sendNowHint"
+            @click="force(q)"
+          />
+        </div>
       </div>
     </div>
   </div>

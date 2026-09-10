@@ -33,9 +33,10 @@ type Event struct {
 	Event     agent.Event `json:"event"`
 	// Stats is attached to the done event so the panel can refresh without
 	// a second request.
-	Stats  *store.Stats `json:"stats,omitempty"`
-	Turn   *store.Turn  `json:"turn,omitempty"`
-	Prompt string       `json:"prompt,omitempty"`
+	Stats   *store.Stats   `json:"stats,omitempty"`
+	Turn    *store.Turn    `json:"turn,omitempty"`
+	Session *store.Session `json:"session,omitempty"`
+	Prompt  string         `json:"prompt,omitempty"`
 }
 
 // activeTurn is a turn in flight. It carries the project so scanning for
@@ -173,7 +174,7 @@ func (r *Runner) Send(sessionID, prompt string) (*store.Turn, error) {
 	// must not read fields while they are being updated.
 	snapshot := *turn
 	started := Event{SessionID: sess.ID, ProjectID: sess.ProjectID, TurnID: turn.ID,
-		Event: agent.Event{Type: "started"}, Turn: &snapshot, Prompt: prompt}
+		Event: agent.Event{Type: "started"}, Turn: &snapshot, Session: sess, Prompt: prompt}
 	r.hub.Publish(sess.ID, started)
 	r.hub.Publish(ProjectTopic(sess.ProjectID), started)
 
@@ -194,7 +195,7 @@ func (r *Runner) Enqueue(sessionID, prompt string) ([]store.QueuedMessage, error
 	// session before it enters that queue so the sidebar never shows a blank
 	// placeholder while it waits.
 	r.titleQueuedSession(sess, prompt)
-	if _, err := r.store.EnqueueMessage(sessionID, prompt); err != nil {
+	if _, err := r.store.EnqueueMessage(sessionID, prompt, sess.Provider, sess.Model, sess.Effort); err != nil {
 		return nil, err
 	}
 	r.schedule(sess.ProjectID, "")
@@ -253,12 +254,28 @@ func (r *Runner) runForced(projectID int64, queuedID int64) {
 
 	queued, err := r.store.GetQueuedMessage(queuedID)
 	if err == nil && !r.projectBusy(projectID) {
-		if _, err := r.Send(queued.SessionID, queued.Prompt); err == nil {
+		if _, err := r.sendQueued(queued); err == nil {
 			_ = r.store.RemoveQueuedMessage(queued.ID)
 			return
 		}
 	}
 	r.dispatch(projectID, "")
+}
+
+// sendQueued makes a queued prompt's saved choice the session's choice just
+// before it runs. Provider switches clear an opaque provider thread id; model
+// and effort changes within one provider keep that conversation intact.
+func (r *Runner) sendQueued(queued *store.QueuedMessage) (*store.Turn, error) {
+	sess, err := r.store.GetSession(queued.SessionID)
+	if err != nil {
+		return nil, err
+	}
+	if queued.Provider != sess.Provider || queued.Model != sess.Model || queued.Effort != sess.Effort {
+		if err := r.store.SetSessionModel(sess.ID, queued.Provider, queued.Model, queued.Effort, queued.Provider != sess.Provider); err != nil {
+			return nil, err
+		}
+	}
+	return r.Send(queued.SessionID, queued.Prompt)
 }
 
 // dispatchLock serializes queue dispatch within one project. One lock per
@@ -301,7 +318,7 @@ func (r *Runner) dispatch(projectID int64, preferredSessionID string) {
 	if err != nil || queued == nil {
 		return
 	}
-	if _, err := r.Send(sess.ID, queued.Prompt); err == ErrBusy {
+	if _, err := r.sendQueued(queued); err == ErrBusy {
 		return
 	} else if err != nil {
 		_ = r.store.RemoveQueuedMessage(queued.ID)

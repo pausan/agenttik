@@ -158,6 +158,18 @@ CREATE INDEX idx_schedule_runs ON schedule_runs(schedule_id, id DESC);
 -- that started it, rather than a lookup per turn.
 ALTER TABLE sessions ADD COLUMN schedule_id INTEGER NOT NULL DEFAULT 0;
 	`,
+	`
+-- A queued prompt keeps the provider choice it was made with. A session's
+-- picker remains the default for its next prompt, while each waiting prompt
+-- can independently be inspected or changed before it starts.
+ALTER TABLE queued_messages ADD COLUMN provider TEXT NOT NULL DEFAULT '';
+ALTER TABLE queued_messages ADD COLUMN model    TEXT NOT NULL DEFAULT '';
+ALTER TABLE queued_messages ADD COLUMN effort   TEXT NOT NULL DEFAULT '';
+UPDATE queued_messages
+SET provider = (SELECT provider FROM sessions WHERE sessions.id = queued_messages.session_id),
+    model    = (SELECT model FROM sessions WHERE sessions.id = queued_messages.session_id),
+    effort   = (SELECT effort FROM sessions WHERE sessions.id = queued_messages.session_id);
+	`,
 }
 
 func migrate(db *sql.DB) error {

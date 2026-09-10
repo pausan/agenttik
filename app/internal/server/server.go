@@ -110,6 +110,7 @@ func (s *Server) routes() {
 	api.Post("/sessions/:id/messages", s.postMessage)
 	api.Post("/sessions/:id/messages/:message/edit", s.editMessage)
 	api.Post("/sessions/:id/queue", s.enqueueMessage)
+	api.Patch("/sessions/:id/queue/:queuedID", s.updateQueuedMessage)
 	api.Post("/sessions/:id/queue/force", s.forceQueuedMessage)
 	api.Post("/sessions/:id/stop", s.stopSession)
 

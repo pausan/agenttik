@@ -232,12 +232,13 @@ func (s *Store) ReorderSessions(projectID int64, ids []string) error {
 	return nil
 }
 
-// EnqueueMessage persists a prompt until the project runner selects its
-// session. Queue order inside one session is always first in, first out.
-func (s *Store) EnqueueMessage(sessionID, prompt string) (*QueuedMessage, error) {
-	v := &QueuedMessage{SessionID: sessionID, Prompt: prompt, CreatedAt: nowMillis()}
-	res, err := s.db.Exec(`INSERT INTO queued_messages (session_id, prompt, created_at) VALUES (?, ?, ?)`,
-		v.SessionID, v.Prompt, v.CreatedAt)
+// EnqueueMessage persists a prompt and its chosen provider settings until the
+// project runner selects it. Queue order inside one session is first in, first
+// out.
+func (s *Store) EnqueueMessage(sessionID, prompt, provider, model, effort string) (*QueuedMessage, error) {
+	v := &QueuedMessage{SessionID: sessionID, Prompt: prompt, Provider: provider, Model: model, Effort: effort, CreatedAt: nowMillis()}
+	res, err := s.db.Exec(`INSERT INTO queued_messages (session_id, prompt, provider, model, effort, created_at)
+		VALUES (?, ?, ?, ?, ?, ?)`, v.SessionID, v.Prompt, v.Provider, v.Model, v.Effort, v.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("enqueue message: %w", err)
 	}
@@ -248,9 +249,9 @@ func (s *Store) EnqueueMessage(sessionID, prompt string) (*QueuedMessage, error)
 // NextQueuedMessage returns the oldest prompt waiting in one session.
 func (s *Store) NextQueuedMessage(sessionID string) (*QueuedMessage, error) {
 	v := &QueuedMessage{}
-	err := s.db.QueryRow(`SELECT id, session_id, prompt, created_at FROM queued_messages
+	err := s.db.QueryRow(`SELECT id, session_id, prompt, provider, model, effort, created_at FROM queued_messages
 		WHERE session_id = ? ORDER BY id LIMIT 1`, sessionID).
-		Scan(&v.ID, &v.SessionID, &v.Prompt, &v.CreatedAt)
+		Scan(&v.ID, &v.SessionID, &v.Prompt, &v.Provider, &v.Model, &v.Effort, &v.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -264,8 +265,8 @@ func (s *Store) NextQueuedMessage(sessionID string) (*QueuedMessage, error) {
 // verify that a queue item belongs to the session they are acting on.
 func (s *Store) GetQueuedMessage(id int64) (*QueuedMessage, error) {
 	v := &QueuedMessage{}
-	err := s.db.QueryRow(`SELECT id, session_id, prompt, created_at FROM queued_messages WHERE id = ?`, id).
-		Scan(&v.ID, &v.SessionID, &v.Prompt, &v.CreatedAt)
+	err := s.db.QueryRow(`SELECT id, session_id, prompt, provider, model, effort, created_at FROM queued_messages WHERE id = ?`, id).
+		Scan(&v.ID, &v.SessionID, &v.Prompt, &v.Provider, &v.Model, &v.Effort, &v.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -279,7 +280,7 @@ func (s *Store) GetQueuedMessage(id int64) (*QueuedMessage, error) {
 // first, which is the order the scheduler will run them in. Always a slice, so
 // the transcript can iterate it without a guard.
 func (s *Store) ListQueuedMessages(sessionID string) ([]QueuedMessage, error) {
-	rows, err := s.db.Query(`SELECT id, session_id, prompt, created_at FROM queued_messages
+	rows, err := s.db.Query(`SELECT id, session_id, prompt, provider, model, effort, created_at FROM queued_messages
 		WHERE session_id = ? ORDER BY id`, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("list queued messages: %w", err)
@@ -289,12 +290,29 @@ func (s *Store) ListQueuedMessages(sessionID string) ([]QueuedMessage, error) {
 	out := []QueuedMessage{}
 	for rows.Next() {
 		var v QueuedMessage
-		if err := rows.Scan(&v.ID, &v.SessionID, &v.Prompt, &v.CreatedAt); err != nil {
+		if err := rows.Scan(&v.ID, &v.SessionID, &v.Prompt, &v.Provider, &v.Model, &v.Effort, &v.CreatedAt); err != nil {
 			return nil, fmt.Errorf("list queued messages: %w", err)
 		}
 		out = append(out, v)
 	}
 	return out, rows.Err()
+}
+
+// SetQueuedMessageModel changes one waiting prompt without altering the
+// session default. The runner applies the choice when it claims the prompt.
+func (s *Store) SetQueuedMessageModel(id int64, provider, model, effort string) error {
+	res, err := s.db.Exec(`UPDATE queued_messages SET provider = ?, model = ?, effort = ? WHERE id = ?`, provider, model, effort, id)
+	if err != nil {
+		return fmt.Errorf("set queued message model: %w", err)
+	}
+	changed, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("set queued message model: %w", err)
+	}
+	if changed == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // RemoveQueuedMessage is called immediately after its turn has claimed it.

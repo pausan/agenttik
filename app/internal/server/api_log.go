@@ -25,10 +25,6 @@ const (
 // element. Anything but hex could be read as a flag rather than a revision.
 var commitHash = regexp.MustCompile(`^[0-9a-fA-F]{4,40}$`)
 
-// shortstat picks the numbers out of git's " 3 files changed, 9 insertions(+),
-// 2 deletions(-)" summary line.
-var shortstat = regexp.MustCompile(`(\d+) (files?|insertions?|deletions?)`)
-
 type commitEntry struct {
 	// Hash is abbreviated to the eight characters the row shows.
 	Hash    string `json:"hash"`
@@ -37,12 +33,7 @@ type commitEntry struct {
 	// Date is already formatted as YYYY-MM-DD HH:MM in the committer's own
 	// zone: git knows the offset each commit was made in and the browser does
 	// not, so formatting it here is both cheaper and more truthful.
-	Date  string `json:"date"`
-	Files int    `json:"files"`
-	// Changes counts insertions and deletions together — an edited line is one
-	// of each, which is what makes the figure a measure of work rather than of
-	// growth.
-	Changes int `json:"changes"`
+	Date string `json:"date"`
 }
 
 type projectLog struct {
@@ -78,7 +69,7 @@ func (s *Server) projectLog(c *fiber.Ctx) error {
 	}
 	out, err := runGit(root, "log", "--no-color", "--max-count="+strconv.Itoa(limit),
 		"--pretty=format:"+logRecordSep+"%H"+logFieldSep+"%an"+logFieldSep+"%ad"+logFieldSep+"%s",
-		"--date=format:%Y-%m-%d %H:%M", "--shortstat")
+		"--date=format:%Y-%m-%d %H:%M")
 	if err != nil {
 		return c.JSON(body)
 	}
@@ -86,47 +77,28 @@ func (s *Server) projectLog(c *fiber.Ctx) error {
 	return c.JSON(body)
 }
 
-// parseLog reads the record-separated log. Each record is a header line and,
-// for a commit that touched anything, a shortstat line under it — a merge
-// reports no stat at all, and reads as zero files rather than being dropped.
+// parseLog reads the record-separated log, one record per commit. The
+// separator, rather than the newline between records, is what keeps a subject
+// full of punctuation from being read as a record of its own.
 func parseLog(out string) []commitEntry {
 	commits := []commitEntry{}
 	for _, record := range strings.Split(out, logRecordSep) {
 		if strings.TrimSpace(record) == "" {
 			continue
 		}
-		lines := strings.Split(record, "\n")
-		fields := strings.Split(lines[0], logFieldSep)
+		header, _, _ := strings.Cut(record, "\n")
+		fields := strings.Split(header, logFieldSep)
 		if len(fields) < 4 {
 			continue
 		}
-		entry := commitEntry{
+		commits = append(commits, commitEntry{
 			Hash:    shortHash(fields[0]),
 			Author:  fields[1],
 			Date:    fields[2],
 			Subject: fields[3],
-		}
-		for _, line := range lines[1:] {
-			if strings.Contains(line, "changed") {
-				entry.Files, entry.Changes = parseShortstat(line)
-				break
-			}
-		}
-		commits = append(commits, entry)
+		})
 	}
 	return commits
-}
-
-func parseShortstat(line string) (files, changes int) {
-	for _, m := range shortstat.FindAllStringSubmatch(line, -1) {
-		n, _ := strconv.Atoi(m[1])
-		if strings.HasPrefix(m[2], "file") {
-			files = n
-			continue
-		}
-		changes += n
-	}
-	return files, changes
 }
 
 func shortHash(hash string) string {

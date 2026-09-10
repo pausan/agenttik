@@ -2,18 +2,18 @@
 /* The Logs pane: the history of the branch the project is on.
 
    A row is a commit — its subject, then its identity underneath: short hash,
-   author, date, and how much it moved. Clicking one expands the files it
-   touched; clicking a file opens it as that commit changed it.
+   author and date. Clicking one expands the files it touched; clicking a file
+   opens it as that commit changed it. Right-clicking one offers its hash to
+   the clipboard.
 
    Typing filters what has already been fetched, the same subsequence match
    the Tree pane uses, against the subject, the author and the hash together —
    so a hash prefix, a name, or the words of a message all reach the same
    commit. */
-import { computed } from "vue";
+import { computed, ref } from "vue";
 
-import { S, openCommitFile, toggleCommit } from "../store";
+import { S, copyText, openCommitFile, toggleCommit } from "../store";
 import { fuzzy, segments } from "../fuzzy";
-import { nf } from "../api";
 
 /* Each commit is matched once against one string. Building it per keystroke
    is cheaper than three matches per row, and it lets "pau context" find a
@@ -44,14 +44,23 @@ function subjectParts(commit) {
 
 const filesOf = (hash) => S.logFiles[hash] || null;
 
-function meta(commit) {
-  return [
-    commit.author,
-    commit.date,
-    `${nf.format(commit.files)} ${commit.files === 1 ? "file" : "files"}`,
-    `${nf.format(commit.changes)} ${commit.changes === 1 ? "change" : "changes"}`,
-  ].join(" · ");
-}
+/* One menu for the whole list, aimed by the event on its way to the trigger,
+   the way Message.vue answers its file links with a single listener: a menu
+   component per row would be 500 of them for a full log, and only the row
+   under the pointer has anything to offer. A right click that lands beside
+   the rows aims at nothing, and the item greys out rather than copying
+   whatever was aimed at last. */
+const aimed = ref("");
+const aim = (e) => (aimed.value = e.target.closest("[data-hash]")?.dataset.hash || "");
+
+const menu = computed(() => [
+  {
+    label: "Copy hash",
+    icon: "i-lucide-copy",
+    disabled: !aimed.value,
+    onSelect: () => copyText(aimed.value),
+  },
+]);
 </script>
 
 <template>
@@ -81,52 +90,56 @@ function meta(commit) {
       Nothing matches “{{ S.logFilter }}”.
     </p>
 
-    <div v-else class="min-h-0 flex-1 overflow-auto">
-      <div v-for="{ commit } in rows" :key="commit.hash">
-        <button
-          type="button"
-          class="w-full rounded-[var(--ui-radius)] px-1.5 py-1 text-left hover:bg-elevated"
-          :aria-expanded="S.logOpen === commit.hash"
-          @click="toggleCommit(commit.hash)"
-        >
-          <span class="block truncate text-xs text-highlighted">
-            <span v-for="(part, i) in subjectParts(commit)" :key="i" :class="part.hit ? 'text-primary' : ''">{{ part.text }}</span>
-          </span>
-          <!-- Wraps rather than truncates: the hash, the author, the date and
-               the size of the change do not fit one narrow line, and a panel
-               that hides half of them is worse than one that uses two. -->
-          <span class="block font-mono text-[11px] leading-snug text-dimmed tabular-nums">
-            {{ commit.hash }} · {{ meta(commit) }}
-          </span>
-        </button>
-
-        <div v-if="S.logOpen === commit.hash" class="mb-1 ml-2 border-l border-default pl-2">
-          <p v-if="!filesOf(commit.hash)" class="px-1.5 py-1 text-xs text-dimmed">Loading…</p>
-          <p
-            v-else-if="!filesOf(commit.hash).length"
-            class="px-1.5 py-1 text-xs text-dimmed"
-          >
-            No files — a merge commit.
-          </p>
+    <!-- The trigger is the scroller itself: as-child, so it adds no element
+         and the pane keeps its one flex column. -->
+    <UContextMenu v-else :items="menu">
+      <div class="min-h-0 flex-1 overflow-auto" @contextmenu="aim">
+        <div v-for="{ commit } in rows" :key="commit.hash" :data-hash="commit.hash">
           <button
-            v-for="file in filesOf(commit.hash) || []"
-            :key="file.path"
             type="button"
-            class="flex w-full select-none items-center gap-1.5 rounded-[var(--ui-radius)] px-1.5 py-0.5 text-left font-mono text-xs hover:bg-elevated hover:text-highlighted"
-            :title="file.path"
-            @click="openCommitFile(commit.hash, file.path)"
-            @dblclick="openCommitFile(commit.hash, file.path, true)"
+            class="w-full rounded-[var(--ui-radius)] px-1.5 py-1 text-left hover:bg-elevated"
+            :aria-expanded="S.logOpen === commit.hash"
+            @click="toggleCommit(commit.hash)"
           >
-            <span class="w-8 shrink-0 text-primary">{{ file.status }}</span>
-            <span class="path-clip min-w-0 flex-1 truncate"><span>{{ file.path }}</span></span>
-            <span v-if="file.binary" class="shrink-0 text-dimmed">bin</span>
-            <template v-else>
-              <span class="shrink-0 text-success tabular-nums">+{{ file.additions }}</span>
-              <span class="shrink-0 text-error tabular-nums">−{{ file.deletions }}</span>
-            </template>
+            <span class="block truncate text-xs text-highlighted">
+              <span v-for="(part, i) in subjectParts(commit)" :key="i" :class="part.hit ? 'text-primary' : ''">{{ part.text }}</span>
+            </span>
+            <!-- Wraps rather than truncates: the hash, the author and the date
+                 need not fit one narrow line, and a panel that hides half of
+                 them is worse than one that uses two. -->
+            <span class="block font-mono text-[11px] leading-snug text-dimmed tabular-nums">
+              {{ commit.hash }} · {{ commit.author }} · {{ commit.date }}
+            </span>
           </button>
+
+          <div v-if="S.logOpen === commit.hash" class="mb-1 ml-2 border-l border-default pl-2">
+            <p v-if="!filesOf(commit.hash)" class="px-1.5 py-1 text-xs text-dimmed">Loading…</p>
+            <p
+              v-else-if="!filesOf(commit.hash).length"
+              class="px-1.5 py-1 text-xs text-dimmed"
+            >
+              No files — a merge commit.
+            </p>
+            <button
+              v-for="file in filesOf(commit.hash) || []"
+              :key="file.path"
+              type="button"
+              class="flex w-full select-none items-center gap-1.5 rounded-[var(--ui-radius)] px-1.5 py-0.5 text-left font-mono text-xs hover:bg-elevated hover:text-highlighted"
+              :title="file.path"
+              @click="openCommitFile(commit.hash, file.path)"
+              @dblclick="openCommitFile(commit.hash, file.path, true)"
+            >
+              <span class="w-8 shrink-0 text-primary">{{ file.status }}</span>
+              <span class="path-clip min-w-0 flex-1 truncate"><span>{{ file.path }}</span></span>
+              <span v-if="file.binary" class="shrink-0 text-dimmed">bin</span>
+              <template v-else>
+                <span class="shrink-0 text-success tabular-nums">+{{ file.additions }}</span>
+                <span class="shrink-0 text-error tabular-nums">−{{ file.deletions }}</span>
+              </template>
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </UContextMenu>
   </div>
 </template>

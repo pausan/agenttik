@@ -31,7 +31,8 @@
 | [027-ignored-files-in-the-tree.md](027-ignored-files-in-the-tree.md) | Every file in the Tree, the ignored ones grey |
 | [028-scheduled-jobs.md](028-scheduled-jobs.md) | Repeating a prompt on a clock, and the sessions it spawns |
 
-Status: a prompt can now be scheduled to repeat — every X hours Y minutes, or
+Status: a commit row in the Commits pane now shows only hash, author and time,
+and right-clicking one copies its hash — see 013. A prompt can be scheduled to repeat — every X hours Y minutes, or
 daily, weekly or monthly at a time — for a number of runs or forever; each run
 is a fresh session that leaves the project list when its turn ends, a run that
 comes due behind its own predecessor is skipped rather than queued, and the

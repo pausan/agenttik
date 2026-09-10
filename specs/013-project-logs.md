@@ -11,15 +11,18 @@ A row is the commit subject, and under it, in grey, what identifies it:
 
 ```
 Read the subscription allowance each CLI reports
-1323b7ae · Pau Sanchez · 2026-09-09 16:46 · 13 files · 408 changes
+1323b7ae · Pau Sanchez · 2026-09-09 16:46
 ```
 
 The hash is abbreviated to eight characters. The date is `YYYY-MM-DD HH:MM`,
 formatted by git in the zone the commit was made in — git knows that offset
-and the browser does not. `changes` is insertions plus deletions together: an
-edited line is one of each, which makes the figure a measure of work rather
-than of growth. That line wraps to two rather than truncating; a panel that
-hides half of it is worse than one that uses the space.
+and the browser does not. That line wraps rather than truncating in a narrow
+panel; hiding half of it is worse than using two lines.
+
+How much a commit moved is not shown. It was, as `13 files · 408 changes`,
+but a size next to every subject reads as a ranking the pane does not mean,
+and it cost a `--shortstat` — git diffing all 500 commits — on a log that is
+re-read after every turn.
 
 Typing filters what has already been fetched, with the same subsequence match
 the Tree pane uses, against subject, author and hash as one string — so a hash
@@ -30,6 +33,13 @@ arbitrary characters in the title.
 Clicking a row expands the files that commit touched, each with its status
 letter and its own `+`/`−` counts. Clicking a file opens it as a tab, showing
 that commit's diff.
+
+Right-clicking a row offers **Copy hash**, and so does right-clicking one of
+its expanded files — that file belongs to that commit. One menu serves the
+whole list rather than one per row, which would be 500 of them for a full
+log: the row under the pointer is read off the event on its way to the
+trigger, and a click that reaches no row leaves the item greyed rather than
+copying whatever was aimed at last.
 
 ## Commit file tabs
 
@@ -49,8 +59,8 @@ other, revision included.
 | GET | `/api/projects/:id/commit?hash=` | `{hash, files[{path,status,additions,deletions,binary}]}` |
 | GET | `/api/projects/:id/commit/diff?hash=&path=` | the same `{path, diff, partial}` a working-tree diff answers |
 
-The log is one `git log --shortstat` with a record-separated pretty format;
-the file list is `git show --numstat` plus `--name-status`, which override each
+The log is one `git log` with a record-separated pretty format; the file
+list is `git show --numstat` plus `--name-status`, which override each
 other and so cannot be one call. A commit's files are fetched once per commit
 — history does not change underneath — and the whole log is re-read when a
 turn ends, because a turn that commits has changed history as well as the tree.
@@ -72,10 +82,19 @@ destination is cleaned rather than concatenated; without that it reads
 
 `go build ./...`, `go vet ./...` and `npm run build` pass. Browser-checked
 against this repository: 36 commits listed on `fix-context-window`, the first
-row reading `1323b7ae · Pau Sanchez · 2026-09-09 16:46 · 13 files · 408
-changes`; `subscr` narrows to 2 rows and `1323b7` to 1; expanding gives 13
-files with `M app/internal/agent/agent.go +38 −0`; opening one renders 65 diff
-lines in a Diff-only tab headed `@ 1323b7ae`. The endpoints were also checked
-against a rename commit (63 files, 30 renames, every status letter matched)
-and the repository's root commit, and `hash=--all` is refused. No page or
-console errors.
+row reading `1323b7ae · Pau Sanchez · 2026-09-09 16:46`; `subscr` narrows to 2
+rows and `1323b7` to 1; expanding gives 13 files with
+`M app/internal/agent/agent.go +38 −0`; opening one renders 65 diff lines in a
+Diff-only tab headed `@ 1323b7ae`. The endpoints were also checked against a
+rename commit (63 files, 30 renames, every status letter matched) and the
+repository's root commit, and `hash=--all` is refused. No page or console
+errors.
+
+Copy hash was browser-checked on `feat/scheduled-jobs`, 71 rows: right-clicking
+the second row copies `92a4a26d`, not the first row's hash; right-clicking a
+file inside an expanded commit copies that commit's `aaa1f592`; right-clicking
+a fourth row after that copies `3bff73ba`, so the aim follows the pointer.
+Left-clicking still expands, and a file still opens as `@ aaa1f592`. The greyed
+item was not reachable in the layout as it stands — the scroller hugs its rows,
+so a right click beside them lands outside the menu's trigger and opens
+nothing, which is the same outcome.

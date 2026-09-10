@@ -62,7 +62,13 @@ func run() error {
 		return err
 	}
 
-	registry := agent.NewRegistry(claudecode.New(), codex.New(), copilot.New())
+	github := copilot.New()
+	registry := agent.NewRegistry(claudecode.New(), codex.New(), github)
+
+	// Copilot reports its own model list, and asking costs a CLI start. Ask
+	// now so the UI's first request finds the answer already cached.
+	go github.Models()
+
 	turns := runner.New(db, registry, runner.NewHub())
 	srv := server.New(db, registry, turns)
 

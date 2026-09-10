@@ -19,44 +19,12 @@ import (
 
 var Binary = "copilot"
 
-type Provider struct{}
+type Provider struct{ cache modelCache }
 
 func New() *Provider { return &Provider{} }
 
 func (p *Provider) Name() string        { return "copilot" }
 func (p *Provider) DisplayName() string { return "GitHub Copilot" }
-
-// Models are the models advertised by the current Copilot CLI. They are
-// aliases rather than pinned provider ids, so the CLI remains responsible for
-// resolving the model available to the signed-in account.
-func (p *Provider) Models() []agent.Model {
-	return []agent.Model{
-		{ID: "claude-sonnet-4.6", Label: "Claude Sonnet 4.6"},
-		{ID: "claude-sonnet-4.5", Label: "Claude Sonnet 4.5"},
-		{ID: "claude-haiku-4.5", Label: "Claude Haiku 4.5"},
-		{ID: "claude-opus-4.6", Label: "Claude Opus 4.6"},
-		{ID: "claude-opus-4.6-fast", Label: "Claude Opus 4.6 Fast"},
-		{ID: "claude-opus-4.5", Label: "Claude Opus 4.5"},
-		{ID: "claude-sonnet-4", Label: "Claude Sonnet 4"},
-		{ID: "gpt-5.4", Label: "GPT-5.4"},
-		{ID: "gpt-5.3-codex", Label: "GPT-5.3 Codex"},
-		{ID: "gpt-5.2-codex", Label: "GPT-5.2 Codex"},
-		{ID: "gpt-5.2", Label: "GPT-5.2"},
-		{ID: "gpt-5.1", Label: "GPT-5.1"},
-		{ID: "gpt-5.4-mini", Label: "GPT-5.4 Mini"},
-		{ID: "gpt-5-mini", Label: "GPT-5 Mini"},
-		{ID: "gpt-4.1", Label: "GPT-4.1"},
-	}
-}
-
-func (p *Provider) Efforts() []string {
-	return []string{"low", "medium", "high", "xhigh"}
-}
-
-// TitleModel is a small Copilot model suitable for a one-shot session title.
-func (p *Provider) TitleModel() (model, effort string) {
-	return "gpt-5.4-mini", "low"
-}
 
 func (p *Provider) Available() error {
 	if _, err := exec.LookPath(Binary); err != nil {

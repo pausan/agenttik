@@ -46,11 +46,31 @@ var quotaLabels = map[string]string{
 	"completions":          "Completions",
 }
 
+// quotaTimeout bounds the quota query. It sits on a UI refresh path, so a CLI
+// that is slow to start is better reported as unreachable than waited on.
+const quotaTimeout = 5 * time.Second
+
 // SubscriptionLimits asks the headless Copilot CLI for the signed-in
 // account's current quota. This is a read-only RPC and does not create a
 // session or send a model request; the CLI supplies the existing login.
 func (p *Provider) SubscriptionLimits(ctx context.Context) ([]agent.RateLimit, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	result, err := serverQuery(ctx, quotaTimeout, "account.getQuota")
+	if err != nil {
+		return nil, fmt.Errorf("read subscription limits: %w", err)
+	}
+	var quota accountQuotaResult
+	if err := json.Unmarshal(result, &quota); err != nil {
+		return nil, fmt.Errorf("decode subscription limits: %w", err)
+	}
+	return publicQuotaLimits(quota.QuotaSnapshots), nil
+}
+
+// serverQuery starts the headless CLI, waits for it to answer a ping, then
+// sends one read-only request and returns its result. Starting the CLI is
+// most of the cost, so a caller that needs two answers is better served by
+// two constants than by two queries.
+func serverQuery(ctx context.Context, timeout time.Duration, method string) (json.RawMessage, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, Binary, "--headless", "--no-auto-update",
@@ -80,32 +100,30 @@ func (p *Provider) SubscriptionLimits(ctx context.Context) ([]agent.RateLimit, e
 	if err := waitRPC(ctx, reader, 1); err != nil {
 		return nil, fmt.Errorf("read Copilot server: %w", err)
 	}
-	if err := writeRPC(stdin, 2, "account.getQuota"); err != nil {
-		return nil, fmt.Errorf("write Copilot quota request: %w", err)
+	if err := writeRPC(stdin, 2, method); err != nil {
+		return nil, fmt.Errorf("write Copilot %s request: %w", method, err)
 	}
 
 	for {
 		response, err := readRPC(reader)
 		if err != nil {
 			if ctx.Err() != nil {
-				return nil, fmt.Errorf("read subscription limits: %w", ctx.Err())
+				return nil, ctx.Err()
 			}
+			// The CLI explains a refused query on stderr, and that reads
+			// better than the EOF it closes the pipe with.
 			if text := strings.TrimSpace(stderr.String()); text != "" {
-				return nil, fmt.Errorf("read subscription limits: %s", text)
+				return nil, fmt.Errorf("%s", text)
 			}
-			return nil, fmt.Errorf("read subscription limits: %w", err)
+			return nil, err
 		}
 		if response.ID == nil || *response.ID != 2 {
 			continue
 		}
 		if response.Error != nil {
-			return nil, fmt.Errorf("read subscription limits: %s", response.Error.Message)
+			return nil, fmt.Errorf("%s", response.Error.Message)
 		}
-		var result accountQuotaResult
-		if err := json.Unmarshal(response.Result, &result); err != nil {
-			return nil, fmt.Errorf("decode subscription limits: %w", err)
-		}
-		return publicQuotaLimits(result.QuotaSnapshots), nil
+		return response.Result, nil
 	}
 }
 

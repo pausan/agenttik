@@ -7,7 +7,9 @@ locally installed `copilot` CLI, streams its JSONL events into the existing
 transcript, resumes the CLI session id, and reports token/context usage.
 
 The provider also implements `agent.Metered`. The server starts a short-lived
-headless Copilot CLI process and sends the read-only `account.getQuota` RPC.
+headless Copilot CLI process and sends the read-only `account.getQuota` RPC
+through the shared `serverQuery` transport, which the model list uses too —
+see 036.
 Each non-empty quota snapshot becomes one subscription bar. The known buckets
 are `premium_interactions`, `chat`, and `completions`; unknown bucket ids are
 shown with a readable title. Copilot's remaining percentage is converted to

@@ -37,8 +37,11 @@
 | [033-prompt-model-picker.md](033-prompt-model-picker.md) | Bounded, collapsible provider groups in the prompt model picker |
 | [034-claude-update-retry.md](034-claude-update-retry.md) | Retrying Claude Code startup during a self-update |
 | [035-missing-work-dir.md](035-missing-work-dir.md) | Reporting a renamed or deleted project folder as itself |
+| [036-copilot-model-list.md](036-copilot-model-list.md) | Asking the Copilot CLI which models the account has |
 
-Status: The prompt model picker now has a bounded scrolling viewport, collapsible
+Status: GitHub Copilot's model list now comes from the CLI instead of a
+hand-written list that had gone stale in both directions — see 036. The prompt
+model picker now has a bounded scrolling viewport, collapsible
 provider groups and provider context in filtered results — see 033. Claude Code startup retries once if its updater briefly removes the executable — see 034. A turn whose project folder is gone now says so instead of blaming the CLI — see 035. Queued prompts now retain, show and let users change their individual
 provider, model and effort before starting — see 012. A project page now lists
 what it has archived under its open

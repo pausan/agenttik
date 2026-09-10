@@ -45,7 +45,8 @@ narrows both, drawn 25 rows to a page with 10, 50 and 100 on offer; see 030. An 
 so changing focus or starting another task leaves the text where it was; see
 004. The prompt bar reads the subscription allowance again whenever the task
 or the model changes, and no longer repeats "running…" next to the header
-badge that already says so; see 011. GitHub Copilot's model list now comes from the CLI instead of a
+badge that already says so. Its allowance panel now draws each window as a
+name, a figure, a bar and a reset rather than one wrapping line; see 011. GitHub Copilot's model list now comes from the CLI instead of a
 hand-written list that had gone stale in both directions — see 036. The prompt
 model picker now has a bounded scrolling viewport, collapsible
 provider groups and provider context in filtered results — see 033. Claude Code startup retries once if its updater briefly removes the executable — see 034. A turn whose project folder is gone now says so instead of blaming the CLI — see 035. Queued prompts now retain, show and let users change their individual

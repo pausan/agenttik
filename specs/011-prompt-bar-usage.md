@@ -30,9 +30,8 @@ When the selected provider reports subscription buckets, the prompt bar also
 shows one thin bar per allowance window in that shared click target — one per
 window across every bucket the provider sends, because Codex packs its two
 into a single bucket while Claude Code sends a bucket per window and a plan can
-meter more than two. The panel reveals the current percent, exact window/reset
-time, plan, and any reached-limit status. There are two ways a provider can
-supply a reading:
+meter more than two. The panel behind it is described below. There are two
+ways a provider can supply a reading:
 
 - **Ask.** Codex answers `account/rateLimits/read` on its local app-server, so
   its figures are current on every request. `agent.Metered` is the optional
@@ -54,6 +53,31 @@ token totals. A provider with neither shows no allowance bars.
 The event carries no window duration, so the bucket type names the bar
 (`five_hour` → 5-hour, `seven_day` → Weekly, `overage` → Overage); an
 unrecognised type is shown as it arrived rather than guessed at.
+
+## The panel
+
+Each window is a row of three lines: its name with its figure opposite, a
+full-width bar under them, and its reset under that. The three used to share
+one line — name on the left, `56% used · resets Sep 10, 2026, 8:59 AM` on the
+right — which wrapped a 5-hour bucket's name to `5-` and `hour` and its value
+to three rows in a 16rem panel.
+
+A window's name belongs to the plan rather than to this app — `Current week
+(Fable)` arrived without a release note — so it is drawn truncated with the
+whole of it on the hover, and the figure beside it never moves.
+
+The bar and the figure share one pair of thresholds with the context ring:
+amber from 70%, red from 90%. A bucket near its ceiling is then one red thing
+rather than a number to compare against a colour, and the same function draws
+the thin tracks on the button.
+
+The reset drops the year unless the reset really is in another one, which is
+what kept the line to one row. A bucket that reported no reset says so instead
+of showing a formatted epoch.
+
+Plan, reached-limit status and how old a remembered reading is sit under the
+windows, in the same two-column form the context half of the panel uses, and
+only when there is something to say.
 
 ## When the reading is taken
 
@@ -136,6 +160,17 @@ app-server path still answers in 0.9s. The migration was applied against a
 copy of the real database. `go test ./app/internal/agent/...` passes;
 `TestDoneReachesProjectTopic` and `TestReorderSessionsDrivesProjectOrder`
 already failed before this change and still do.
+
+Headless against a CLI reporting four windows — 56%, 92%, 22% and a 74% one
+named `Weekly (Some Very Long Model Name Indeed)` with no reset — every row
+drew its name, figure, bar and reset on three lines with nothing wrapped and
+nothing past the panel's edge; the long name ellipsised and its figure stayed
+in place; 92% and its bar came out red-500, 74% amber-500, the other two the
+theme's strongest text over a green bar, and the dark theme's 400 variants of
+each. A turn that volunteered a `seven_day` reading at 93% drew one red bar
+with `Status allowed_warning` and `Reported just now` beneath it. A reset in
+2027 read `resets Dec 28, 2027, 2:20 PM`, one in this year `resets Sep 15,
+3:59 PM`.
 
 Headless against the running app, with two providers answering: opening a
 task read its own provider and drew that provider's bars (Codex 12%/73%);

@@ -165,6 +165,13 @@ const contextTotal = computed(() => contextWindow(S.detail?.session, S.detail?.s
 const contextPct = computed(() => contextTotal.value ? Math.min(100, Math.round((contextUsed.value / contextTotal.value) * 100)) : 0);
 const contextTone = computed(() => contextPct.value >= 90 ? "var(--color-red-500)" : contextPct.value >= 70 ? "var(--color-amber-500)" : "var(--ui-primary)");
 
+/* One pair of thresholds for every allowance reading, the ring's own: amber
+   from 70%, red from 90%. The bar carries it and so does the figure, so a
+   bucket near its ceiling reads as one thing rather than a number to compare
+   against a colour. */
+const barTone = (percent) => (percent >= 90 ? "bg-error" : percent >= 70 ? "bg-warning" : "bg-primary");
+const textTone = (percent) => (percent >= 90 ? "text-error" : percent >= 70 ? "text-warning" : "text-highlighted");
+
 /* One bar per window the provider reports, across every bucket it sends:
    Codex packs its two windows into one bucket, Claude Code sends one bucket
    per window, and a plan can meter more than two. */
@@ -189,8 +196,18 @@ function allowanceLabel(window, index) {
   return index === 0 ? "Hourly" : "Allowance";
 }
 
+/* A reset is hours or days away, so the year is noise that pushed the line
+   onto a third row; it is only drawn when the reset really is in another
+   one. */
 function resetAt(seconds) {
-  return seconds ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(seconds * 1000) : "not reported";
+  const at = new Date(seconds * 1000);
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: at.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(at);
 }
 
 /* An asked reading is current and carries no stamp. A remembered one — the
@@ -371,7 +388,7 @@ function runOther(action) {
               <span v-for="(window, i) in subscriptionWindows" :key="window.label + i" class="subscription-limit-track">
                 <span
                   class="subscription-limit-fill"
-                  :class="window.used_percent >= 90 ? 'bg-error' : window.used_percent >= 70 ? 'bg-warning' : 'bg-primary'"
+                  :class="barTone(window.used_percent)"
                   :style="{ width: Math.min(100, window.used_percent) + '%' }"
                 />
               </span>
@@ -380,22 +397,43 @@ function runOther(action) {
           <template #content>
             <div class="flex divide-x divide-default">
               <ContextPane />
+              <!-- One window per row: its name and figure on a line, its bar
+                   under them, its reset under that. A name is a plan's to
+                   choose and can be long, so it truncates with the whole of
+                   it on the hover; putting the reset on its own line is what
+                   keeps the three from fighting over one. -->
               <div v-if="subscriptionWindows.length" class="w-64 p-3">
                 <p class="m-0 text-xs font-medium text-muted">
                   {{ planType ? planType + ' subscription' : 'Subscription allowance' }}
                 </p>
-                <dl class="mt-1.5 mb-0 space-y-1 text-xs tabular-nums">
-                  <div v-for="(window, i) in subscriptionWindows" :key="window.label + i" class="flex justify-between gap-3">
-                    <dt class="text-muted">{{ window.label }}</dt>
-                    <dd class="m-0 text-highlighted">{{ Math.round(window.used_percent) }}% used · resets {{ resetAt(window.resets_at) }}</dd>
+                <ul class="mt-2 mb-0 list-none space-y-2.5 p-0">
+                  <li v-for="(window, i) in subscriptionWindows" :key="window.label + i">
+                    <div class="flex items-baseline justify-between gap-2 text-xs">
+                      <span class="truncate text-muted" :title="window.label">{{ window.label }}</span>
+                      <span class="shrink-0 font-medium tabular-nums" :class="textTone(window.used_percent)">
+                        {{ Math.round(window.used_percent) }}%
+                      </span>
+                    </div>
+                    <span class="mt-1 block h-1.5 overflow-hidden rounded-full bg-accented">
+                      <span
+                        class="block h-full rounded-full"
+                        :class="barTone(window.used_percent)"
+                        :style="{ width: Math.min(100, window.used_percent) + '%' }"
+                      />
+                    </span>
+                    <p class="mt-1 mb-0 text-[11px] text-dimmed tabular-nums">
+                      {{ window.resets_at ? 'resets ' + resetAt(window.resets_at) : 'reset time not reported' }}
+                    </p>
+                  </li>
+                </ul>
+                <dl v-if="reachedType || reportedAgo" class="mt-3 mb-0 border-t border-default pt-1">
+                  <div v-if="reachedType" class="flex justify-between gap-2.5 py-0.5 text-xs">
+                    <dt class="shrink-0 text-muted">Status</dt>
+                    <dd class="m-0 truncate text-highlighted">{{ reachedType }}</dd>
                   </div>
-                  <div v-if="reachedType" class="flex justify-between gap-3">
-                    <dt class="text-muted">Status</dt>
-                    <dd class="m-0 text-highlighted">{{ reachedType }}</dd>
-                  </div>
-                  <div v-if="reportedAgo" class="flex justify-between gap-3">
-                    <dt class="text-muted">Reported</dt>
-                    <dd class="m-0 text-highlighted">{{ reportedAgo }}</dd>
+                  <div v-if="reportedAgo" class="flex justify-between gap-2.5 py-0.5 text-xs">
+                    <dt class="shrink-0 text-muted">Reported</dt>
+                    <dd class="m-0 truncate text-highlighted tabular-nums">{{ reportedAgo }}</dd>
                   </div>
                 </dl>
               </div>

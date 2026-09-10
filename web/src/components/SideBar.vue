@@ -18,6 +18,7 @@ import {
   setTaskArchived,
   switchProject,
   stopTask,
+  toggleProjectTasks,
 } from "../store";
 import { SEGMENTED } from "../ui";
 import FileTree from "./FileTree.vue";
@@ -51,12 +52,10 @@ defineExpose({
 const draggingProject = ref(0);
 const draggingTask = ref(null);
 const renaming = ref(""); // the task whose title is being edited
-const collapsedProjects = ref(new Set());
-function toggleProject(id) {
-  const collapsed = collapsedProjects.value;
-  if (collapsed.has(id)) collapsed.delete(id);
-  else collapsed.add(id);
-}
+
+/* Folded projects live in the store, since Alt and a project's letter folds
+   it as well as the chevron does. */
+const folded = (p) => S.collapsedProjects.has(p.id);
 
 /* The first eight rows answer to Alt and a letter, so the letter is where the
    row is, and dragging a project changes it. */
@@ -186,7 +185,7 @@ function onTaskDrop(e) {
         <div
           v-for="(p, i) in S.projects"
           :key="p.id"
-          class="px-2.5 pt-1 pb-2.5 not-first:mt-2.5 not-first:border-t not-first:border-default"
+          class="px-2.5 pt-1 pb-2.5"
           @dragover="onProjectOver($event, p.id)"
           @drop.prevent="onProjectDrop"
         >
@@ -203,12 +202,12 @@ function onTaskDrop(e) {
             <button
               type="button"
               class="mt-0.5 shrink-0"
-              :title="`${collapsedProjects.has(p.id) ? 'Expand' : 'Collapse'} tasks`"
-              :aria-expanded="!collapsedProjects.has(p.id)"
-              @click.stop="toggleProject(p.id)"
+              :title="`${folded(p) ? 'Expand' : 'Collapse'} tasks`"
+              :aria-expanded="!folded(p)"
+              @click.stop="toggleProjectTasks(p.id)"
             >
               <UIcon
-                :name="collapsedProjects.has(p.id) ? 'i-lucide-chevron-right' : 'i-lucide-chevron-down'"
+                :name="folded(p) ? 'i-lucide-chevron-right' : 'i-lucide-chevron-down'"
                 class="size-3.5 block text-dimmed"
               />
             </button>
@@ -234,7 +233,7 @@ function onTaskDrop(e) {
             </button>
           </div>
           <ScheduleRow
-            v-for="sched in collapsedProjects.has(p.id) ? [] : p.schedules"
+            v-for="sched in folded(p) ? [] : p.schedules"
             :key="'sched' + sched.id"
             :schedule="sched"
             :active="activeSchedule === sched.id"
@@ -244,7 +243,7 @@ function onTaskDrop(e) {
             @rename="renameSchedule(sched, $event)"
           />
           <div
-            v-if="!collapsedProjects.has(p.id)"
+            v-if="!folded(p)"
             v-for="s in p.recent_sessions"
             :key="s.id"
             :class="[

@@ -20,7 +20,7 @@ export const ACTIONS = [
   { id: "task.prev", group: "Tasks", what: "Previous task in this project", keys: ["Ctrl+PageUp"] },
   { id: "task.next", group: "Tasks", what: "Next task in this project", keys: ["Ctrl+PageDown"] },
   { id: "task.at", group: "Tasks", what: "Go straight to one of the first nine tasks", keys: ["Alt+1…9"], fixed: true },
-  { id: "project.at", group: "Tabs", what: "Switch to one of the first eight projects", keys: ["Alt+A…H"], fixed: true },
+  { id: "project.at", group: "Tabs", what: "Switch to one of the first eight projects, again to fold its tasks", keys: ["Alt+A…H"], fixed: true },
 
   { id: "goto", group: "Panels", what: "Go to anywhere", keys: ["Ctrl+P"] },
   { id: "panel.projects", group: "Panels", what: "Projects", keys: ["Alt+P"] },

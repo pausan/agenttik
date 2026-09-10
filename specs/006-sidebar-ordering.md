@@ -10,10 +10,11 @@ only Changed/Stats for a session and Options/Stats for a project.
 Projects and every open session under each project can be reordered with native
 browser drag and drop. The list moves below the pointer immediately, then sends
 one request on drop. Project order is stored in `projects.position`; a new
-forward-only migration adds it. The existing `sessions.position` is used for
-the sidebar as well as the project page. The project endpoint now includes all
-open session rows, rather than a five-row subset, so a sidebar drop always sends
-the complete order.
+forward-only migration adds it. A project is created with the next position
+rather than the default 0, so it lands at the end of the list. The existing
+`sessions.position` is used for the sidebar as well as the project page. The
+project endpoint now includes all open session rows, rather than a five-row
+subset, so a sidebar drop always sends the complete order.
 
 Project-session archive icons archive a session and remove it from that project.
 The Sessions tab retains archived rows, with a right-side unarchive icon to

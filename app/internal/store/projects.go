@@ -24,10 +24,15 @@ func pathTaken(err error) bool {
 	return errors.As(err, &se) && se.Code() == sqlite3.SQLITE_CONSTRAINT_UNIQUE
 }
 
+// CreateProject adds a project below the ones already there: it takes the
+// next position rather than the default 0, which would put it at the top of a
+// list the user has already arranged. Archived projects count, so restoring
+// one does not land it on top of a newer project's number.
 func (s *Store) CreateProject(name, path string) (*Project, error) {
 	p := &Project{Name: name, Path: path, CreatedAt: nowMillis()}
 	res, err := s.db.Exec(
-		`INSERT INTO projects (name, path, created_at) VALUES (?, ?, ?)`,
+		`INSERT INTO projects (name, path, created_at, position)
+		 VALUES (?, ?, ?, (SELECT COALESCE(MAX(position), 0) + 1 FROM projects))`,
 		p.Name, p.Path, p.CreatedAt)
 	if pathTaken(err) {
 		return nil, ErrPathInUse
@@ -207,8 +212,8 @@ func (s *Store) recentSessions(projectID int64, limit int) ([]SessionRef, error)
 }
 
 // ReorderProjects numbers the supplied projects 1..n. The caller sends the
-// whole visible list, so a freshly created project can retain its 0 position
-// until the user explicitly places it.
+// whole visible list, so the numbers it writes are dense and a project added
+// afterwards still sorts below them all.
 func (s *Store) ReorderProjects(ids []int64) error {
 	tx, err := s.db.Begin()
 	if err != nil {

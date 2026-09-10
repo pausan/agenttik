@@ -75,9 +75,14 @@ function onKey(e) {
   if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
   const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
   if (digit) return run(e, () => selectTaskAt(Number(digit[1])));
-  // A … H are the first eight projects, in sidebar order.
+  // A … H are the first eight projects, in sidebar order. The letter is
+  // always consumed but acts once: pressing it on the project already showing
+  // folds its tasks, and a held key would only flap them.
   const letter = /^Key([A-H])$/.exec(e.code);
-  if (letter) run(e, () => selectProjectAt(letter[1].charCodeAt(0) - 65));
+  if (letter) {
+    e.preventDefault();
+    if (!e.repeat) selectProjectAt(letter[1].charCodeAt(0) - 65);
+  }
 }
 
 function run(e, action) {

@@ -43,8 +43,13 @@
 | [039-single-instance.md](039-single-instance.md) | One app per data directory, and the window a second launch raises |
 | [040-editable-project-path.md](040-editable-project-path.md) | Repointing a project at a moved folder, by typing or by browsing |
 | [041-project-archiving.md](041-project-archiving.md) | Putting a project away without deleting it, and the Settings list it waits in |
+| [042-sidebar-project-rows.md](042-sidebar-project-rows.md) | A project added lands last, no rule between projects, and the letter that folds one |
 
-Status: A project can now be archived instead of deleted: it leaves the
+Status: A project added now lands at the end of the sidebar instead of on top
+of the order the user arranged, nothing but space separates one project from
+the next, and Alt with a project's letter folds its tasks away once that
+project is the one showing; see 042.
+A project can now be archived instead of deleted: it leaves the
 sidebar and the Go To list, its tabs close and its schedules stop, while its
 tasks and history are kept and Settings › Projects restores it. Delete is
 unchanged and still asks first; see 041.

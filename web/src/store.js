@@ -76,6 +76,9 @@ export const S = reactive({
   closedTabs: {}, // project id -> most recently closed tabs and archived sessions
   activeTab: "",
   activeProjectID: null, // the project the strip and the sidebar show
+  /* The projects whose tasks are folded away in the sidebar. Held here rather
+     than in the sidebar because Alt and the project's letter reaches it. */
+  collapsedProjects: new Set(),
   lastTab: {}, // per project, the tab it was last left on
   fileMode: "edit", // "edit", "diff" or "preview", carried to the next file
   diffView: "unified", // "unified" or "split", likewise
@@ -406,10 +409,22 @@ export async function switchProject(id) {
 }
 
 /* Alt+A … Alt+H address the first eight projects by where they sit in the
-   sidebar, so dragging one changes the letter that reaches it. */
+   sidebar, so dragging one changes the letter that reaches it. The letter of
+   the project already showing folds its tasks away, and pressing it again
+   brings them back: the same chord is how the row is reached and how it is
+   opened and shut, so nothing needs the mouse. */
 export function selectProjectAt(i) {
   const p = S.projects[i];
-  if (p) switchProject(p.id);
+  if (!p) return;
+  if (S.activeProjectID === p.id) toggleProjectTasks(p.id);
+  else switchProject(p.id);
+}
+
+/* The chevron beside a project name, and Alt with its letter a second time. */
+export function toggleProjectTasks(id) {
+  const collapsed = S.collapsedProjects;
+  if (collapsed.has(id)) collapsed.delete(id);
+  else collapsed.add(id);
 }
 
 /* closeTab also closes the files opened from the tab, which have nothing to

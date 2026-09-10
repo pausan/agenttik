@@ -44,8 +44,8 @@ func (s *Store) GetProject(id int64) (*Project, error) {
 	// Both lists are always arrays, never null, so the UI iterates without a guard.
 	p.RecentSessions, p.Schedules = []SessionRef{}, []Schedule{}
 	err := s.db.QueryRow(
-		`SELECT id, name, path, created_at, position FROM projects WHERE id = ?`, id).
-		Scan(&p.ID, &p.Name, &p.Path, &p.CreatedAt, &p.Position)
+		`SELECT id, name, path, created_at, position, archived_at FROM projects WHERE id = ?`, id).
+		Scan(&p.ID, &p.Name, &p.Path, &p.CreatedAt, &p.Position, &p.ArchivedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -83,6 +83,24 @@ func (s *Store) SetProjectPath(id int64, path string) error {
 	return nil
 }
 
+// SetProjectArchived puts a project away, or brings it back. Nothing under it
+// is touched: its tasks, its history and its position all stay, so restoring
+// puts it back where it was. Deleting is the destructive one.
+func (s *Store) SetProjectArchived(id int64, archived bool) error {
+	var at int64
+	if archived {
+		at = nowMillis()
+	}
+	res, err := s.db.Exec(`UPDATE projects SET archived_at = ? WHERE id = ?`, at, id)
+	if err != nil {
+		return fmt.Errorf("archive project %d: %w", id, err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (s *Store) DeleteProject(id int64) error {
 	res, err := s.db.Exec(`DELETE FROM projects WHERE id = ?`, id)
 	if err != nil {
@@ -94,9 +112,12 @@ func (s *Store) DeleteProject(id int64) error {
 	return nil
 }
 
-// ListProjects returns every project with its open session titles attached.
+// ListProjects returns every active project with its open session titles
+// attached. Archived ones are ArchivedProjects' business.
 func (s *Store) ListProjects() ([]Project, error) {
-	rows, err := s.db.Query(`SELECT id, name, path, created_at, position FROM projects ORDER BY position, name`)
+	rows, err := s.db.Query(
+		`SELECT id, name, path, created_at, position FROM projects
+		 WHERE archived_at = 0 ORDER BY position, name`)
 	if err != nil {
 		return nil, fmt.Errorf("list projects: %w", err)
 	}
@@ -129,6 +150,30 @@ func (s *Store) ListProjects() ([]Project, error) {
 		projects[i].Schedules = schedules
 	}
 	return projects, nil
+}
+
+// ArchivedProjects lists what has been put away, most recently archived
+// first. Settings is the only place that shows them, and it shows a name, a
+// folder and a date, so neither the session titles nor the schedules
+// ListProjects attaches are read.
+func (s *Store) ArchivedProjects() ([]Project, error) {
+	rows, err := s.db.Query(
+		`SELECT id, name, path, created_at, position, archived_at FROM projects
+		 WHERE archived_at <> 0 ORDER BY archived_at DESC`)
+	if err != nil {
+		return nil, fmt.Errorf("list archived projects: %w", err)
+	}
+	defer rows.Close()
+
+	projects := []Project{}
+	for rows.Next() {
+		p := Project{RecentSessions: []SessionRef{}, Schedules: []Schedule{}}
+		if err := rows.Scan(&p.ID, &p.Name, &p.Path, &p.CreatedAt, &p.Position, &p.ArchivedAt); err != nil {
+			return nil, fmt.Errorf("list archived projects: %w", err)
+		}
+		projects = append(projects, p)
+	}
+	return projects, rows.Err()
 }
 
 // recentSessions feeds the Projects sidebar, so it hides ticked-off sessions

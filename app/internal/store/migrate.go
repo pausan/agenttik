@@ -170,6 +170,14 @@ SET provider = (SELECT provider FROM sessions WHERE sessions.id = queued_message
     model    = (SELECT model FROM sessions WHERE sessions.id = queued_messages.session_id),
     effort   = (SELECT effort FROM sessions WHERE sessions.id = queued_messages.session_id);
 	`,
+	`
+-- A project can be put away without being deleted. An archived project leaves
+-- the sidebar, the Go To list and the scheduler; its tasks, its history and
+-- its position are all kept, so restoring it from Settings puts it back where
+-- it was. Deleting is still the destructive one. No index: a handful of rows
+-- is scanned faster than a second B-tree is read.
+ALTER TABLE projects ADD COLUMN archived_at INTEGER NOT NULL DEFAULT 0;
+	`,
 }
 
 func migrate(db *sql.DB) error {

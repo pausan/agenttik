@@ -1,7 +1,14 @@
 <script setup>
-import { nextTick, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 
-import { S, removeProject, renameProject, startTask, updateProjectPath } from "../store";
+import {
+  S,
+  removeProject,
+  renameProject,
+  setProjectArchived,
+  startTask,
+  updateProjectPath,
+} from "../store";
 import FolderPicker from "./FolderPicker.vue";
 
 const name = ref("");
@@ -43,6 +50,18 @@ async function remove() {
   confirming.value = false;
   await removeProject(S.project.project);
 }
+
+/* Archiving takes the project's rows out of the sidebar, and with them the
+   only way to reach a turn and stop it. So it waits for the work to finish,
+   the same rule a running task's own archive icon follows. */
+const busy = computed(() => {
+  const p = S.projects.find((candidate) => candidate.id === S.project?.project.id);
+  if (!p) return false;
+  return (
+    p.recent_sessions.some((task) => task.status === "running" || task.queue_count > 0) ||
+    p.schedules.some((schedule) => schedule.running)
+  );
+});
 </script>
 
 <template>
@@ -79,6 +98,21 @@ async function remove() {
     </div>
 
     <UButton block label="New task" @click="startTask(S.project.project)" />
+
+    <p class="mt-3.5 mb-1.5 text-xs text-dimmed">
+      Archiving takes the project out of the sidebar and stops its schedules. Its tasks and
+      history are kept — Settings › Projects brings it back.
+    </p>
+    <UButton
+      block
+      color="neutral"
+      variant="soft"
+      icon="i-lucide-archive"
+      label="Archive project"
+      :disabled="busy"
+      :title="busy ? 'Wait for its tasks to finish, or stop them first.' : ''"
+      @click="setProjectArchived(S.project.project, true)"
+    />
 
     <p class="mt-3.5 mb-1.5 text-xs text-dimmed">
       Deleting removes its tasks and history from agenttik. The folder on disk is untouched.

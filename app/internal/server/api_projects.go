@@ -9,8 +9,14 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+// listProjects serves the sidebar's active projects, or — with ?archived=true
+// — the put-away ones Settings restores from.
 func (s *Server) listProjects(c *fiber.Ctx) error {
-	projects, err := s.store.ListProjects()
+	list := s.store.ListProjects
+	if c.QueryBool("archived", false) {
+		list = s.store.ArchivedProjects
+	}
+	projects, err := list()
 	if err != nil {
 		return err
 	}
@@ -79,25 +85,26 @@ func (s *Server) reorderProjects(c *fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-// updateProject renames a project, repoints it at a new folder, or both. Each
-// field is applied only when sent, so a rename does not require the path and
-// a move does not require the name.
+// updateProject renames a project, repoints it at a new folder, archives or
+// restores it, or any combination. Each field is applied only when sent, so a
+// rename does not require the path and archiving requires neither.
 func (s *Server) updateProject(c *fiber.Ctx) error {
 	id, err := projectID(c)
 	if err != nil {
 		return err
 	}
 	var body struct {
-		Name string `json:"name"`
-		Path string `json:"path"`
+		Name     string `json:"name"`
+		Path     string `json:"path"`
+		Archived *bool  `json:"archived"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return badRequest("invalid body: %v", err)
 	}
 	name := strings.TrimSpace(body.Name)
 	path := strings.TrimSpace(body.Path)
-	if name == "" && path == "" {
-		return badRequest("name or path is required")
+	if name == "" && path == "" && body.Archived == nil {
+		return badRequest("name, path or archived is required")
 	}
 	if name != "" {
 		if err := s.store.SetProjectName(id, name); err != nil {
@@ -110,6 +117,11 @@ func (s *Server) updateProject(c *fiber.Ctx) error {
 			return err
 		}
 		if err := s.store.SetProjectPath(id, abs); err != nil {
+			return err
+		}
+	}
+	if body.Archived != nil {
+		if err := s.store.SetProjectArchived(id, *body.Archived); err != nil {
 			return err
 		}
 	}

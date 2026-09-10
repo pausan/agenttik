@@ -8,10 +8,11 @@
    the filter changes. They are small enough that this costs nothing. */
 import { computed, reactive, ref, watch } from "vue";
 
-import { fail, loadProviders } from "../store";
+import { fail, loadArchivedProjects, loadProviders } from "../store";
 import AppearanceSettings from "./settings/AppearanceSettings.vue";
 import GeneralSettings from "./settings/GeneralSettings.vue";
 import ModelSettings from "./settings/ModelSettings.vue";
+import ProjectSettings from "./settings/ProjectSettings.vue";
 import ShortcutSettings from "./settings/ShortcutSettings.vue";
 
 const open = defineModel("open", { type: Boolean, default: false });
@@ -19,13 +20,14 @@ const section = defineModel("section", { type: String, default: "general" });
 
 const SECTIONS = [
   { id: "general", label: "General", icon: "i-lucide-settings" },
+  { id: "projects", label: "Projects", icon: "i-lucide-archive" },
   { id: "appearance", label: "Appearance", icon: "i-lucide-palette" },
   { id: "models", label: "Models", icon: "i-lucide-sparkles" },
   { id: "shortcuts", label: "Shortcuts", icon: "i-lucide-keyboard" },
 ];
 
 const filter = ref("");
-const counts = reactive({ general: 0, appearance: 0, models: 0, shortcuts: 0 });
+const counts = reactive({ general: 0, projects: 0, appearance: 0, models: 0, shortcuts: 0 });
 
 const shown = computed(() => (filter.value ? SECTIONS.filter((s) => counts[s.id]) : SECTIONS));
 
@@ -37,13 +39,14 @@ watch([filter, counts], () => {
 });
 
 /* Re-read the providers every time it opens, so installing a CLI shows up
-   without a restart. A filter left behind from last time would hide most of
-   what the dialog is for. */
+   without a restart, and the archived projects with them — this is the only
+   place they are shown, so nothing else has to keep them current. A filter
+   left behind from last time would hide most of what the dialog is for. */
 watch(open, async (on) => {
   if (!on) return;
   filter.value = "";
   try {
-    await loadProviders();
+    await Promise.all([loadProviders(), loadArchivedProjects()]);
   } catch (e) {
     fail(e);
     open.value = false;
@@ -87,6 +90,11 @@ watch(open, async (on) => {
             v-show="section === 'general'"
             :filter="filter"
             @count="counts.general = $event"
+          />
+          <ProjectSettings
+            v-show="section === 'projects'"
+            :filter="filter"
+            @count="counts.projects = $event"
           />
           <AppearanceSettings
             v-show="section === 'appearance'"

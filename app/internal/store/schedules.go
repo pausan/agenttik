@@ -129,10 +129,12 @@ func (s *Store) ListSchedules(f ScheduleFilter) ([]Schedule, error) {
 
 // DueSchedules is the one query the ticker runs. Paused, archived and
 // exhausted schedules are excluded here rather than in the runner, so a tick
-// that finds nothing touches one index and stops.
+// that finds nothing touches one index and stops. An archived project's
+// schedules go with it: a project nobody can see must not be starting tasks.
 func (s *Store) DueSchedules(now int64) ([]Schedule, error) {
 	rows, err := s.db.Query(`SELECT `+scheduleCols+scheduleFrom+
 		` WHERE s.paused = 0 AND s.done_at = 0 AND s.remaining <> 0 AND s.next_run_at <= ?
+		  AND p.archived_at = 0
 		  ORDER BY s.next_run_at`, now)
 	if err != nil {
 		return nil, fmt.Errorf("due schedules: %w", err)

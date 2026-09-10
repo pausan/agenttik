@@ -61,6 +61,9 @@ export const S = reactive({
   providers: [],
   stars: [],
   projects: [],
+  // Archived projects: read when Settings opens, which is the only place
+  // they are shown. See specs/041-project-archiving.md.
+  archivedProjects: [],
   subscriptionLimits: {}, // provider -> its latest subscription allowance buckets
   /* sessionID -> unsent prompt, for a conversation with no tab of its own.
      A project has one context slot, so opening anything else in it drops the
@@ -636,20 +639,54 @@ export async function addProject(path, name) {
 export async function removeProject(p) {
   try {
     await api("DELETE", "/api/projects/" + p.id);
-    // Deselect before closing: the strip cannot show a project that is gone,
-    // and an emptied workspace must not try to reopen its page.
-    const wasShowing = S.activeProjectID === p.id;
-    if (wasShowing) S.activeProjectID = null;
-    // Its sessions went with it, so their tabs cannot stay open. The project
-    // is already gone by here, so an unsaved file has nowhere to be saved to.
-    for (const t of [...S.tabs]) {
-      if (projectOfTab(t) === p.id) closeTab(t.id, false, true);
-    }
+    const wasShowing = detachProject(p.id);
     await Promise.all([refreshProjects(), refreshSessions()]);
     if (wasShowing && S.projects.length) await switchProject(S.projects[0].id);
   } catch (e) {
     fail(e);
   }
+}
+
+/* detachProject takes a project off the screen, and says whether it was the
+   selected one. Nothing in the strip can belong to a project that has left
+   the sidebar, deleted or archived. Deselecting comes first, so an emptied
+   workspace does not try to reopen its page. Files close unsaved on purpose:
+   a deleted project has nowhere to save to, and an archived one is being put
+   away. */
+function detachProject(id) {
+  const wasShowing = S.activeProjectID === id;
+  if (wasShowing) S.activeProjectID = null;
+  for (const t of [...S.tabs]) {
+    if (projectOfTab(t) === id) closeTab(t.id, false, true);
+  }
+  return wasShowing;
+}
+
+/* setProjectArchived puts a project away, or brings it back. Unlike deleting,
+   nothing is destroyed: its tasks, its history and its place in the order all
+   wait for it. Archiving takes it out of the sidebar, the Go To list and the
+   scheduler; Settings is where the archived ones are, and where they come
+   back from. */
+export async function setProjectArchived(p, archived) {
+  try {
+    await api("PATCH", "/api/projects/" + p.id, { archived });
+    const wasShowing = archived && detachProject(p.id);
+    await Promise.all([refreshProjects(), refreshSessions(), loadArchivedProjects()]);
+    // Restoring the only project there is leaves nothing selected, and the
+    // sidebar, the Tree and Ctrl+N all want one.
+    if ((wasShowing || !S.activeProjectID) && S.projects.length) {
+      await switchProject(archived ? S.projects[0].id : p.id);
+    }
+  } catch (e) {
+    fail(e);
+  }
+}
+
+/* Read when Settings opens rather than with every project list: the archived
+   ones do not change while it is shut, and refreshProjects runs on every turn
+   that starts or ends. */
+export async function loadArchivedProjects() {
+  S.archivedProjects = await api("GET", "/api/projects?archived=true");
 }
 
 /* Every tab names its project: a file carries one of its own because the view

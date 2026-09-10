@@ -42,8 +42,13 @@
 | [038-task-naming.md](038-task-naming.md) | Task naming and hover-popup content |
 | [039-single-instance.md](039-single-instance.md) | One app per data directory, and the window a second launch raises |
 | [040-editable-project-path.md](040-editable-project-path.md) | Repointing a project at a moved folder, by typing or by browsing |
+| [041-project-archiving.md](041-project-archiving.md) | Putting a project away without deleting it, and the Settings list it waits in |
 
-Status: A project's folder can now be repointed after it is added, from the
+Status: A project can now be archived instead of deleted: it leaves the
+sidebar and the Go To list, its tabs close and its schedules stop, while its
+tasks and history are kept and Settings › Projects restores it. Delete is
+unchanged and still asks first; see 041.
+A project's folder can now be repointed after it is added, from the
 Options pane's Folder field — typed, or browsed for with the same picker Add
 project uses — for when it has moved on disk. Two projects still cannot share
 a folder, and now say so rather than leaking SQLite's wording; see 040.

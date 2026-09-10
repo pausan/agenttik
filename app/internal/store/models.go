@@ -11,6 +11,11 @@ type Project struct {
 	Position   int64 `json:"position"`
 	QueueCount int64 `json:"queue_count"`
 
+	// ArchivedAt is 0 while the project is active and the time it was put
+	// away otherwise. An archived project leaves every list but Settings;
+	// nothing under it is touched. See 041-project-archiving.md.
+	ArchivedAt int64 `json:"archived_at"`
+
 	// Filled by ListProjects: titles of the project's open sessions. Always
 	// encoded, empty included, so the UI can iterate it without a guard.
 	RecentSessions []SessionRef `json:"recent_sessions"`

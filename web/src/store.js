@@ -824,6 +824,20 @@ export function openFile(path, pin = false) {
   return openFileIn(currentProjectID(), S.owner?.id || "", path, { pin });
 }
 
+/* openFileRef answers a file mentioned in a transcript: same temporary tab a
+   click in the Tree uses, scrolled to the line the reference named.
+
+   The path is the agent's, so it may be absolute. The file API only takes
+   paths inside the project, so the project's own folder is trimmed off the
+   front; anything else is passed as it was and refused with a message that
+   says so, which beats guessing at what an outside path meant. */
+export function openFileRef(path, line = 0) {
+  const id = currentProjectID();
+  const root = S.projects.find((p) => p.id === id)?.path || "";
+  const rel = root && path.startsWith(root + "/") ? path.slice(root.length + 1) : path;
+  return openFileIn(id, S.owner?.id || "", rel, { line });
+}
+
 /* At most one temporary tab per project, because the strip is per project:
    the tab a click takes over is one the user can see. */
 function tempFileIn(projectID) {
@@ -833,12 +847,31 @@ function tempFileIn(projectID) {
 /* selectOpenFile brings a file already open to the front, pinning it when
    that is what the click asked for — never the other way round, so clicking
    a kept file's row does not make it temporary again. */
-function selectOpenFile(tabID, pin) {
+function selectOpenFile(tabID, pin, line = 0) {
   const open = S.tabs.find((t) => t.id === tabID);
   if (!open) return false;
   if (pin) open.temp = false;
+  if (line) gotoLine(open, line);
   selectTab(tabID);
   return true;
+}
+
+/* goto is a request rather than state: the editor scrolls to the line and
+   clears it, so the same reference clicked twice scrolls twice. A line only
+   means anything in the editor, so a tab left on Diff or Preview is switched
+   — without moving S.fileMode, which is the choice the user made and not one
+   a link should make for them. A commit's file has only its diff. */
+async function gotoLine(tab, line) {
+  if (tab.commit) return;
+  if (tab.mode !== "edit") {
+    tab.mode = "edit";
+    try {
+      await loadFileTab(tab);
+    } catch (e) {
+      return fail(e);
+    }
+  }
+  tab.goto = line;
 }
 
 /* openFileIn also rebuilds a saved tab, whose owner may be gone. A file
@@ -851,10 +884,14 @@ function selectOpenFile(tabID, pin) {
    opens read-only in Diff and stays there. Its id carries the revision, so
    the same path can be open once per commit and once for the working tree. */
 async function openFileIn(projectID, ownerID, path, opts = {}) {
-  const { silent = false, commit = "", pin = false } = opts;
+  const { silent = false, commit = "", pin = false, line = 0 } = opts;
   if (!projectID) return;
   const tabID = commit ? `file:${projectID}:${commit}:${path}` : `file:${projectID}:${path}`;
-  if (selectOpenFile(tabID, pin)) return;
+  if (selectOpenFile(tabID, pin, line)) return;
+  // A file opened at a line opens in the editor, the one view a line can be
+  // shown in. Preview is remembered like the other two, but a file that
+  // renders as nothing opens in the editor instead of on a blank pane.
+  const view = line || (S.fileMode === "preview" && !canPreview(path)) ? "edit" : S.fileMode;
   const tab = {
     id: tabID,
     kind: "file",
@@ -866,9 +903,9 @@ async function openFileIn(projectID, ownerID, path, opts = {}) {
     // temp is the tab a click opens: the next file clicked takes it over,
     // until a double click or a keystroke pins it.
     temp: !pin,
-    // Preview is remembered like the other two, but a file that renders as
-    // nothing opens in the editor instead of on a blank pane.
-    mode: commit ? "diff" : S.fileMode === "preview" && !canPreview(path) ? "edit" : S.fileMode,
+    mode: commit ? "diff" : view,
+    // The line to scroll to once the editor has the text, cleared by it.
+    goto: line,
     content: null,
     diff: null,
     edited: null,
@@ -884,7 +921,7 @@ async function openFileIn(projectID, ownerID, path, opts = {}) {
   }
   // A double click is two clicks, so the second call can arrive while this
   // one is still fetching: whichever tab is open by now is the tab.
-  if (selectOpenFile(tabID, pin)) return;
+  if (selectOpenFile(tabID, pin, line)) return;
   const previous = tab.temp ? tempFileIn(projectID) : null;
   if (previous) swapTab(previous.id, tab);
   else addTab(tab);

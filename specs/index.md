@@ -23,9 +23,12 @@
 | [019-file-watching.md](019-file-watching.md) | Tree and Changed following the disk as it moves |
 | [020-queued-session-titles.md](020-queued-session-titles.md) | Isolated small-model titles for queued sessions |
 | [021-stop-active-sessions.md](021-stop-active-sessions.md) | Stopping active or scheduled sessions from the sidebar |
+| [022-transcript-file-links.md](022-transcript-file-links.md) | Clicking a path in a reply to open the file at its line |
 
-Status: the tree and the changed list now follow the project folder as it
-moves on disk — see 019 for the watcher and what it deliberately ignores.
+Status: a path an agent names in its reply now opens the file in a tab, at
+the line it named — see 022. The tree and the changed list follow the project
+folder as it moves on disk — see 019 for the watcher and what it deliberately
+ignores.
 The General settings section and the Enter / Ctrl+Enter swap, the
 temporary file tab that a click reuses and a double click keeps, the Settings
 rail with its fuzzy filter and editable shortcuts, the Commits pane and its commit
@@ -41,7 +44,7 @@ undo/redo, clickable usage details, renaming a session in its row, the
 per-project tab strip, the file tab's three views, and queued prompts are all
 implemented.
 
-`go build ./...`, `go vet ./...`, `make ui` and the web unit tests (32) pass.
+`go build ./...`, `go vet ./...`, `make ui` and the web unit tests (33) pass.
 Two Go tests fail and did so before this work: `TestDoneReachesProjectTopic`
 in runner and `TestReorderSessionsDrivesProjectOrder` in store. Two e2e cases
 fail the same way, both driving the model picker as the `USelect` it stopped

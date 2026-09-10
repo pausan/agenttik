@@ -74,6 +74,19 @@ test("links open outside the app and drop unsafe schemes", () => {
     '<p><a href="https://example.com/a.png" target="_blank" rel="noreferrer noopener">shot</a></p>');
 });
 
+test("a path becomes a button that opens the file, a name that is not does not", () => {
+  assert.equal(markdown("in `web/src/store.js:801` now"),
+    '<p>in <button type="button" class="file" data-file="web/src/store.js" data-line="801" ' +
+    'title="Open web/src/store.js:801"><code>web/src/store.js:801</code></button> now</p>');
+  assert.equal(markdown("[the handler](app/internal/server/api_files.go)"),
+    '<p><button type="button" class="file" data-file="app/internal/server/api_files.go" ' +
+    'title="Open app/internal/server/api_files.go">the handler</button></p>');
+  // A code span holds far more than paths, and only paths are clickable.
+  assert.equal(markdown("`S.detail` and `account/rateLimits/read` and `npm run build`"),
+    "<p><code>S.detail</code> and <code>account/rateLimits/read</code> and " +
+    "<code>npm run build</code></p>");
+});
+
 test("a bare url is linked without its trailing punctuation", () => {
   assert.equal(markdown("see https://example.com/a."),
     '<p>see <a href="https://example.com/a" target="_blank" rel="noreferrer noopener">' +

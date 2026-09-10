@@ -219,6 +219,16 @@ button[draggable="true"]:active { cursor: grabbing; }
 .markdown li > ul, .markdown li > ol { margin: 0.15em 0; }
 .markdown strong { font-weight: 600; color: var(--ui-text-highlighted); }
 .markdown a { color: var(--ui-primary); text-decoration: underline; }
+/* A path in a transcript opens the file in a tab. It is coloured like a link
+   so it reads as one, but keeps the shape of the text it sits in — a code
+   span stays a code span — and saves the underline for the pointer. */
+.markdown button.file {
+  font: inherit;
+  color: var(--ui-primary);
+  cursor: pointer;
+}
+.markdown button.file:hover { text-decoration: underline; }
+.markdown button.file code { color: inherit; }
 .markdown code {
   padding: 0.1em 0.32em;
   border-radius: 4px;

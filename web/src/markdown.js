@@ -10,7 +10,8 @@
 
    Supported: fenced code, headings, rules, blockquotes, pipe tables, nested
    ordered and unordered lists, paragraphs, and inline code, bold, italic,
-   strikethrough and links. Anything else renders as its own text. */
+   strikethrough, links, and paths, which open the file rather than a page.
+   Anything else renders as its own text. */
 
 const ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" };
 
@@ -224,7 +225,9 @@ function inline(src) {
     out += esc(src.slice(at, m.index));
     at = m.index + m[0].length;
     if (m[2] !== undefined) {
-      out += "<code>" + esc(m[2].replace(/^ (.*) $/, "$1")) + "</code>";
+      const text = m[2].replace(/^ (.*) $/, "$1");
+      const code = "<code>" + esc(text) + "</code>";
+      out += fileLink(text, code) || code;
     } else if (m[3] !== undefined || m[4] !== undefined) {
       out += "<strong>" + inline(m[3] ?? m[4]) + "</strong>";
     } else if (m[6] !== undefined) {
@@ -250,10 +253,48 @@ function inline(src) {
   return (out + esc(src.slice(at))).replace(/\n/g, "<br>");
 }
 
-/* link drops any scheme that could do something when clicked, and opens what
-   is left in the browser rather than navigating the app away. */
+/* link keeps the schemes that can be handed to the browser and opens them in
+   it, rather than navigating the app away. Anything else is offered to
+   fileLink: an agent writing [store.js](web/src/store.js) means the file, and
+   an absolute path would otherwise become a link to our own origin. A scheme
+   that could do something when clicked matches neither and stays as text. */
 function link(url, text) {
   const href = url.trim();
-  if (!/^(?:https?:|mailto:|#|\/)/i.test(href)) return text;
-  return `<a href="${esc(href)}" target="_blank" rel="noreferrer noopener">${text}</a>`;
+  if (/^(?:https?:|mailto:|#)/i.test(href)) {
+    return `<a href="${esc(href)}" target="_blank" rel="noreferrer noopener">${text}</a>`;
+  }
+  return fileLink(href, text) || text;
+}
+
+/* ------------------------------------------------------------ file links */
+
+/* What a coding agent writes when it points at a file: `web/src/store.js:801`
+   in a code span, far more often than a markdown link. Both open the file in
+   a tab, which is the transcript's own business rather than the browser's —
+   so this is a button carrying the path in a data attribute, not an anchor
+   that would navigate somewhere, and Message.vue answers the click.
+
+   An extension is what tells a path from the other things a code span holds:
+   `S.detail` and `account/rateLimits/read` are not files. */
+const FILE_EXT =
+  /\.(?:js|mjs|cjs|jsx|ts|tsx|vue|svelte|go|mod|sum|rs|py|rb|php|java|kt|swift|c|h|cc|cpp|hpp|cs|sh|bash|fish|zsh|sql|css|scss|html?|xml|json|ya?ml|toml|ini|conf|env|lock|md|markdown|txt|csv|svg|png|jpe?g|gif|webp)$/i;
+
+/* An optional file:// prefix, the path, and the line it named — as `:801`,
+   or `#L801` the way a forge writes it. A trailing column is dropped. */
+const FILE_REF = /^(?:file:\/\/)?(\/?[\w.@~+-]+(?:\/[\w.@~+-]+)*)(?::(\d+)(?::\d+)?|#L?(\d+))?$/;
+
+function fileRef(target) {
+  const m = FILE_REF.exec(target.trim());
+  if (!m || !FILE_EXT.test(m[1])) return null;
+  return { path: m[1], line: m[2] || m[3] || "" };
+}
+
+/* fileLink returns null when the target is not a path, so a caller that has
+   something else — a code span, a link to nowhere — renders it as it was. */
+function fileLink(target, inner) {
+  const ref = fileRef(target);
+  if (!ref) return null;
+  const label = ref.line ? `${ref.path}:${ref.line}` : ref.path;
+  const line = ref.line ? ` data-line="${ref.line}"` : "";
+  return `<button type="button" class="file" data-file="${esc(ref.path)}"${line} title="Open ${esc(label)}">${inner}</button>`;
 }

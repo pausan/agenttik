@@ -12,7 +12,7 @@
    id to rewrite. */
 import { computed, nextTick, ref } from "vue";
 
-import { S, copyText, editMessage } from "../store";
+import { S, copyText, editMessage, openFileRef } from "../store";
 import { markdown } from "../markdown";
 
 const props = defineProps({ message: { type: Object, required: true } });
@@ -45,6 +45,14 @@ const classes = computed(() => [
 const editable = computed(
   () => props.message.role === "user" && !!props.message.id && !props.message.streaming,
 );
+
+/* A path the agent wrote is a button inside the rendered markdown, so one
+   listener on the bubble answers all of them however many there are. */
+function onClick(e) {
+  const hit = e.target.closest("button.file");
+  if (!hit) return;
+  openFileRef(hit.dataset.file, Number(hit.dataset.line) || 0);
+}
 
 const copied = ref(false);
 async function copy() {
@@ -145,7 +153,7 @@ function onKey(e) {
     </form>
 
     <template v-else>
-      <div v-if="rendered" :class="classes" v-html="html" />
+      <div v-if="rendered" :class="classes" v-html="html" @click="onClick" />
       <div v-else :class="classes">{{ message.content }}</div>
     </template>
   </div>

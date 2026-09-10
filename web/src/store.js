@@ -398,10 +398,14 @@ export function selectTab(id) {
   S.lastTab[projectID] = id;
 }
 
-/* Alt+1 … Alt+9 selects a session by its top-to-bottom sidebar position. */
-export function selectTaskAt(n) {
+/* Alt+1 … Alt+9 selects a session by its top-to-bottom sidebar position and
+   leaves the prompt ready for the next message. */
+export async function selectTaskAt(n) {
   const session = S.projects.find((project) => project.id === S.activeProjectID)?.recent_sessions[n - 1];
-  if (session) openTask(session.id);
+  if (!session) return;
+  await openTask(session.id);
+  await nextTick();
+  focusPrompt();
 }
 
 /* Ctrl+PageUp and Ctrl+PageDown walk this project's sessions, including those

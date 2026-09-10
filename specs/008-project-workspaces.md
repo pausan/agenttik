@@ -6,7 +6,7 @@ Each project has one leading context tab in its own strip. The context tab shows
 
 Files, commit diffs, schedules, and other independent views remain ordinary tabs. A single click still uses the temporary file tab, and a double click keeps a file tab. `Ctrl+W` still removes only the active tab, so closing a context tab does not close its independent files.
 
-The sidebar owns active-session order. Its first nine sessions in the selected project carry numbers 1 through 9 from top to bottom. `Alt+1` through `Alt+9` select those sessions. `Ctrl+PageUp` and `Ctrl+PageDown` wrap through every active session in that same order, so they reach sessions past nine. `Ctrl+Tab` and `Ctrl+Shift+Tab` wrap right and left through every visible tab in the project strip.
+The sidebar owns active-session order. Its first nine sessions in the selected project carry numbers 1 through 9 from top to bottom. `Alt+1` through `Alt+9` select those sessions and put the cursor in their prompt. `Ctrl+PageUp` and `Ctrl+PageDown` wrap through every active session in that same order, so they reach sessions past nine. `Ctrl+Tab` and `Ctrl+Shift+Tab` wrap right and left through every visible tab in the project strip.
 
 Selecting a project still changes to that project strip. Switching back restores the last tab used there. The tabs remain one flat array, narrowed by `S.activeProjectID` for display.
 

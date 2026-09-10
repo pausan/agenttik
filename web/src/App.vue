@@ -56,7 +56,6 @@ function onKey(e) {
   if (hit(e, "tab.reopen")) return run(e, reopenClosedTab);
   if (hit(e, "goto")) return run(e, () => (goTo.value = true));
   if (hit(e, "panel.tree")) return run(e, () => sideBar.value?.showTree());
-  if (hit(e, "panel.sessions")) return run(e, () => sideBar.value?.showSessions());
   if (hit(e, "panel.projects")) return run(e, () => sideBar.value?.showProjects());
   if (hit(e, "file.save")) {
     // The editor handles its own save; this is the same chord with the caret
@@ -123,7 +122,6 @@ onUnmounted(() => window.removeEventListener("keydown", onKey));
     <GoToModal
       v-model:open="goTo"
       @projects="sideBar?.showProjects()"
-      @sessions="sideBar?.showSessions()"
       @tree="sideBar?.showTree()"
       @add-project="addProject = true"
       @settings="openSettings('general')"

@@ -197,6 +197,14 @@ type ProjectStats struct {
 	LastActiveAt int64 `json:"last_active_at"`
 }
 
+// DailyMetric is one UTC calendar day's project activity. A turn belongs to
+// the day it started; its duration is still the whole agent time it consumed.
+type DailyMetric struct {
+	Date       string `json:"date"`
+	Sessions   int64  `json:"sessions"`
+	DurationMS int64  `json:"duration_ms"`
+}
+
 type Star struct {
 	Provider  string `json:"provider"`
 	Model     string `json:"model"`

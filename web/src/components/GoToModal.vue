@@ -15,7 +15,7 @@ import {
 } from "../store";
 
 const open = defineModel("open", { type: Boolean, default: false });
-const emit = defineEmits(["projects", "sessions", "tree", "add-project", "settings", "shortcuts"]);
+const emit = defineEmits(["projects", "tree", "add-project", "settings", "shortcuts"]);
 
 function choose(action) {
   open.value = false;
@@ -27,11 +27,6 @@ const navigation = computed(() => [
     label: "Projects",
     icon: "i-lucide-folder-kanban",
     onSelect: () => choose(() => emit("projects")),
-  },
-  {
-    label: "Sessions",
-    icon: "i-lucide-messages-square",
-    onSelect: () => choose(() => emit("sessions")),
   },
   {
     label: "Tree",
@@ -46,10 +41,10 @@ const navigation = computed(() => [
     onSelect: () => choose(() => (S.inspector.active = "changed")),
   },
   {
-    label: "Stats",
-    description: "Current project or session",
+    label: "Session stats",
+    description: "Current session",
     icon: "i-lucide-chart-no-axes-combined",
-    disabled: !S.owner,
+    disabled: !S.detail,
     onSelect: () => choose(() => (S.inspector.active = "stats")),
   },
 ]);

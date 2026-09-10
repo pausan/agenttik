@@ -90,6 +90,7 @@ func (s *Server) routes() {
 	api.Patch("/projects/:id", s.updateProject)
 	api.Delete("/projects/:id", s.deleteProject)
 	api.Get("/projects/:id/stats", s.projectStats)
+	api.Get("/projects/:id/metrics", s.projectMetrics)
 	api.Get("/projects/:id/tree", s.projectTree)
 	api.Get("/projects/:id/changes", s.projectChanges)
 	api.Get("/projects/:id/log", s.projectLog)

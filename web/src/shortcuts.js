@@ -24,7 +24,6 @@ export const ACTIONS = [
 
   { id: "goto", group: "Panels", what: "Go to anywhere", keys: ["Ctrl+P"] },
   { id: "panel.projects", group: "Panels", what: "Projects", keys: ["Alt+P"] },
-  { id: "panel.sessions", group: "Panels", what: "Sessions, cursor in the filter", keys: ["Alt+S"] },
   { id: "panel.tree", group: "Panels", what: "Tree, cursor in the filter", keys: ["Alt+T"] },
   { id: "divider.resize", group: "Panels", what: "Resize a selected divider", keys: ["←", "→"], fixed: true },
 

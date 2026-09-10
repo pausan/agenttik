@@ -1,17 +1,13 @@
 <script setup>
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, ref } from "vue";
 
 import {
   PROJECT_KEYS,
   S,
-  SESSION_WINDOWS,
   TAB_CHORDS,
-  isArchived,
   openProject,
   openSchedule,
   openSession,
-  refreshSchedules,
-  refreshSessions,
   renameSchedule,
   renameSession,
   reorderProjects,
@@ -20,12 +16,9 @@ import {
   setScheduleArchived,
   setSchedulePaused,
   setSessionArchived,
-  setWindow,
   switchProject,
   stopSession,
 } from "../store";
-import { ago } from "../api";
-import { debounce } from "../debounce";
 import { SEGMENTED } from "../ui";
 import FileTree from "./FileTree.vue";
 import ScheduleRow from "./ScheduleRow.vue";
@@ -35,46 +28,30 @@ import StatusDot from "./StatusDot.vue";
 defineEmits(["add-project", "setup", "shortcuts"]);
 
 const tab = ref("projects");
-const sessionFilter = ref(null);
 const fileTree = ref(null);
 
 const tabs = [
   { label: "Projects", value: "projects" },
-  { label: "Sessions", value: "sessions" },
   { label: "Tree", value: "tree" },
 ];
 
-/* Sessions and Tree are each a filter over a list, so showing either one puts
-   the cursor in that filter — the pane is opened to search it. Every way in
-   goes through here, the strip's own clicks included, and repeating the chord
-   on the pane already in front focuses it again rather than doing nothing. */
+/* Opening Tree focuses its filter, including when it is already in front. */
 function show(which) {
   tab.value = which;
   if (which === "projects") return;
-  nextTick(() =>
-    which === "sessions" ? sessionFilter.value?.inputRef?.focus() : fileTree.value?.focus(),
-  );
+  nextTick(() => fileTree.value?.focus());
 }
 
 defineExpose({
   showProjects: () => show("projects"),
-  showSessions: () => show("sessions"),
   showTree: () => show("tree"),
 });
 
-/* Both lists answer the same filter and the same window, so both are
-   re-read. */
-const reload = debounce(() => {
-  refreshSessions().catch(() => {});
-  refreshSchedules().catch(() => {});
-}, 150);
-watch(() => S.query, reload);
 
 const draggingProject = ref(0);
 const draggingSession = ref(null);
 const renaming = ref(""); // the session whose title is being edited
 const collapsedProjects = ref(new Set());
-
 function toggleProject(id) {
   const collapsed = collapsedProjects.value;
   if (collapsed.has(id)) collapsed.delete(id);
@@ -300,63 +277,6 @@ function onSessionDrop(e) {
       </div>
     </template>
 
-    <!-- Sessions -->
-    <template v-else-if="tab === 'sessions'">
-      <div class="shrink-0 px-2.5 pb-2">
-        <UInput
-          ref="sessionFilter"
-          v-model="S.query"
-          type="search"
-          icon="i-lucide-search"
-          placeholder="Filter sessions and schedules"
-          class="w-full"
-        />
-      </div>
-      <div class="shrink-0 px-2.5 pb-2">
-        <USelect
-          :model-value="S.window"
-          :items="SESSION_WINDOWS"
-          class="w-full"
-          @update:model-value="setWindow"
-        />
-      </div>
-      <div class="min-h-0 flex-1 overflow-auto px-2.5">
-        <!-- Schedules first, archived ones included: a schedule stays a
-             schedule, so this is where an archived one is restored from. -->
-        <ScheduleRow
-          v-for="sched in S.schedules"
-          :key="'sched' + sched.id"
-          :schedule="sched"
-          :sub="`${scheduleLabel(sched)} · ${sched.project_name}`"
-          :active="activeSchedule === sched.id"
-          :archived="isArchived(sched)"
-          @select="openSchedule(sched.id)"
-          @toggle-paused="setSchedulePaused(sched, !sched.paused)"
-          @toggle-archive="setScheduleArchived(sched, !isArchived(sched))"
-          @rename="renameSchedule(sched, $event)"
-        />
-        <p v-if="!S.sessions.length && !S.schedules.length" class="px-3 py-5 text-center text-dimmed">
-          Nothing in this window.
-        </p>
-        <SessionRow
-          v-for="s in S.sessions"
-          :key="s.id"
-          :title="s.title"
-          :prompt="s.prompt"
-          :status="s.status"
-          :queued="s.queue_count"
-          :sub="`${s.project_name} · ${s.project_path} · ${ago(s.last_active_at)}`"
-          :active="S.detail?.session.id === s.id"
-          :archived="isArchived(s)"
-          :stoppable="!isArchived(s) && (s.status === 'running' || s.queue_count > 0)"
-          :archive="isArchived(s) || (s.status !== 'running' && s.queue_count === 0)"
-          @stop="stopSession(s.id)"
-          @select="openSession(s.id)"
-          @toggle-archive="setSessionArchived(s, !isArchived(s))"
-          @rename="renameSession(s, $event)"
-        />
-      </div>
-    </template>
 
     <!-- Tree -->
     <template v-else>

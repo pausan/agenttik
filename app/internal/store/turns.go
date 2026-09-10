@@ -132,6 +132,40 @@ func (s *Store) ProjectStats(projectID int64) (*ProjectStats, error) {
 	return ps, nil
 }
 
+// ProjectDailyMetrics supplies the small activity charts on a project page.
+// Sessions and turns are grouped separately, so a quiet day with only one
+// kind of activity still has a row. Running turns include time spent so far.
+func (s *Store) ProjectDailyMetrics(projectID int64) ([]DailyMetric, error) {
+	rows, err := s.db.Query(
+		`SELECT day, SUM(sessions), SUM(duration_ms) FROM (
+			SELECT strftime('%Y-%m-%d', created_at / 1000, 'unixepoch') AS day,
+			       COUNT(*) AS sessions, 0 AS duration_ms
+			FROM sessions WHERE project_id = ? GROUP BY day
+			UNION ALL
+			SELECT strftime('%Y-%m-%d', t.started_at / 1000, 'unixepoch') AS day,
+			       0 AS sessions, SUM(COALESCE(t.ended_at, ?) - t.started_at) AS duration_ms
+			FROM turns t JOIN sessions s ON s.id = t.session_id
+			WHERE s.project_id = ? GROUP BY day
+		) GROUP BY day ORDER BY day`, projectID, nowMillis(), projectID)
+	if err != nil {
+		return nil, fmt.Errorf("project daily metrics %d: %w", projectID, err)
+	}
+	defer rows.Close()
+
+	out := []DailyMetric{}
+	for rows.Next() {
+		var metric DailyMetric
+		if err := rows.Scan(&metric.Date, &metric.Sessions, &metric.DurationMS); err != nil {
+			return nil, fmt.Errorf("project daily metrics %d: %w", projectID, err)
+		}
+		out = append(out, metric)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("project daily metrics %d: %w", projectID, err)
+	}
+	return out, nil
+}
+
 func (s *Store) ListTurns(sessionID string) ([]Turn, error) {
 	rows, err := s.db.Query(
 		`SELECT id, session_id, model, effort, started_at, COALESCE(ended_at,0),

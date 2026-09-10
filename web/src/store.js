@@ -512,11 +512,12 @@ export async function openProject(id, silent = false) {
   const open = S.tabs.find((t) => t.id === tabID);
   if (open) return setContextTab(open);
 
-  let project, stats, sessions, archived;
+  let project, stats, metrics, sessions, archived;
   try {
-    [project, stats, sessions, archived] = await Promise.all([
+    [project, stats, metrics, sessions, archived] = await Promise.all([
       api("GET", "/api/projects/" + id),
       api("GET", `/api/projects/${id}/stats`),
+      api("GET", `/api/projects/${id}/metrics`),
       projectSessions(id),
       projectArchived(id),
     ]);
@@ -529,7 +530,7 @@ export async function openProject(id, silent = false) {
     kind: "project",
     label: project.name,
     projectID: id,
-    data: { project, stats, sessions, archived },
+    data: { project, stats, metrics, sessions, archived },
   });
   await Promise.all([refreshProjects(), refreshSessions()]).catch(fail);
 }
@@ -549,12 +550,14 @@ function projectArchived(id) {
 async function reloadProjectTab(tab) {
   const id = tab.projectID;
   try {
-    const [stats, sessions, archived] = await Promise.all([
+    const [metrics, stats, sessions, archived] = await Promise.all([
+      api("GET", `/api/projects/${id}/metrics`),
       api("GET", `/api/projects/${id}/stats`),
       projectSessions(id),
       projectArchived(id),
     ]);
     tab.data.stats = stats;
+    tab.data.metrics = metrics;
     tab.data.sessions = sessions;
     tab.data.archived = archived;
   } catch {
@@ -1644,7 +1647,7 @@ watch(
   () => S.owner?.kind || "",
   (kind) =>
     setInspectorPanes(
-      kind === "project" ? ["options", "logs", "stats"] : ["changed", "logs", "stats"],
+      kind === "project" ? ["options", "logs"] : ["changed", "logs", "stats"],
     ),
   { immediate: true },
 );

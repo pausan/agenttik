@@ -136,9 +136,24 @@ func (s *Server) projectStats(c *fiber.Ctx) error {
 	return c.JSON(stats)
 }
 
+func (s *Server) projectMetrics(c *fiber.Ctx) error {
+	id, err := projectID(c)
+	if err != nil {
+		return err
+	}
+	if _, err := s.store.GetProject(id); err != nil {
+		return err
+	}
+	metrics, err := s.store.ProjectDailyMetrics(id)
+	if err != nil {
+		return err
+	}
+	return c.JSON(metrics)
+}
 func expandHome(path string) string {
 	if path == "~" || len(path) > 1 && path[:2] == "~/" {
 		if home, err := os.UserHomeDir(); err == nil {
+
 			return filepath.Join(home, path[1:])
 		}
 	}

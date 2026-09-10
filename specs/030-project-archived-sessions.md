@@ -2,18 +2,14 @@
 
 ## Outcome
 
-A project page is now two lists. Its open sessions stay on top, in the order
-they were dragged into ([006](006-sidebar-ordering.md)); under them sits
-**Archived**, a filter bar and everything the project has ticked off, newest
-at the top and oldest at the bottom.
+A project page keeps open sessions on top, in the order they were dragged into
+([006](006-sidebar-ordering.md)). Below that working list, **Sessions** and
+**Stats** tabs keep the project's history and aggregate activity together.
 
-Until now an archived conversation could only be found in the Sessions pane,
-which is scoped to a time window and mixes in every other project. A project
-that has run for a month has far more archived conversations than open ones,
-and its own page said nothing about them.
-
-The section is only drawn once the project has archived something, so a new
-project still looks exactly as it did.
+Sessions contains everything the project has archived, newest at the top and
+oldest at the bottom, behind its filter. It is project-scoped rather than a
+time-windowed list mixed with other projects. A project with no archived
+sessions shows an empty state instead of omitting the tab.
 
 ## The filter
 
@@ -49,9 +45,9 @@ An archived-only listing is ordered `last_active_at DESC` even when it is
 scoped to a project, where every other project-scoped listing is ordered by
 `position`. The timestamp shown on the row is the one it is sorted by.
 
-A project tab therefore loads and reloads three things — stats, open
-sessions, archived sessions — in one `Promise.all`. The reload is the
-existing debounced one that already runs at the end of a turn.
+A project tab loads and reloads totals, daily metrics, open sessions, and
+archived sessions in one `Promise.all`. The reload is the existing debounced
+one that already runs at the end of a turn.
 
 ## Validation
 

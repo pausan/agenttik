@@ -12,7 +12,7 @@
 | [008-project-workspaces.md](008-project-workspaces.md) | Per-project tab strips, tab groups, file diffs |
 | [009-model-picker.md](009-model-picker.md) | Cross-provider model and favourite selection |
 | [010-working-indicator.md](010-working-indicator.md) | Live turn progress in the transcript |
-| [011-prompt-bar-usage.md](011-prompt-bar-usage.md) | Fuzzy models, context ring, subscription allowance |
+| [011-prompt-bar-usage.md](011-prompt-bar-usage.md) | Fuzzy models, context ring, every subscription window |
 | [012-session-queue.md](012-session-queue.md) | Queued prompts and project scheduling |
 | [013-project-logs.md](013-project-logs.md) | The Commits pane, commit files, commit diffs |
 | [014-transcript-messages.md](014-transcript-messages.md) | Copying messages, editing a prompt in place |

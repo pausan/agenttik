@@ -134,8 +134,19 @@ const contextTotal = computed(() => contextWindow(S.detail?.session, S.detail?.s
 const contextPct = computed(() => contextTotal.value ? Math.min(100, Math.round((contextUsed.value / contextTotal.value) * 100)) : 0);
 const contextTone = computed(() => contextPct.value >= 90 ? "var(--color-red-500)" : contextPct.value >= 70 ? "var(--color-amber-500)" : "var(--ui-primary)");
 
-const subscriptionLimit = computed(() => (S.subscriptionLimits[S.detail?.session?.provider] || []).find((limit) => limit.limit_id === "codex") || (S.subscriptionLimits[S.detail?.session?.provider] || [])[0]);
-const subscriptionWindows = computed(() => [subscriptionLimit.value?.primary, subscriptionLimit.value?.secondary].filter(Boolean).map((window, index) => ({ ...window, label: allowanceLabel(window, index) })));
+/* One bar per window the provider reports, across every bucket it sends:
+   Codex packs its two windows into one bucket, Claude Code sends one bucket
+   per window, and a plan can meter more than two. */
+const subscriptionLimits = computed(() => S.subscriptionLimits[S.detail?.session?.provider] || []);
+const subscriptionWindows = computed(() =>
+  subscriptionLimits.value.flatMap((limit) =>
+    [limit.primary, limit.secondary]
+      .filter(Boolean)
+      .map((window, index) => ({ ...window, label: allowanceLabel(window, index) })),
+  ),
+);
+const planType = computed(() => subscriptionLimits.value.find((limit) => limit.plan_type)?.plan_type || "");
+const reachedType = computed(() => subscriptionLimits.value.find((limit) => limit.reached_type)?.reached_type || "");
 
 /* A provider that names its own buckets wins; one that only sizes them gets
    the duration turned into a name. */
@@ -151,12 +162,14 @@ function resetAt(seconds) {
   return seconds ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(seconds * 1000) : "not reported";
 }
 
-/* Claude Code only names its allowance during a turn, so a reading can be
-   older than the panel it is shown in. Saying when it was taken is the honest
-   alternative to presenting a stale figure as current. */
-const reportedAgo = computed(() =>
-  subscriptionLimit.value?.reported_at ? ago(subscriptionLimit.value.reported_at) : "",
-);
+/* An asked reading is current and carries no stamp. A remembered one — the
+   bucket Claude Code named mid-turn — can be older than the panel it is shown
+   in, so saying when it was taken is the honest alternative to presenting a
+   stale figure as current. */
+const reportedAgo = computed(() => {
+  const stamps = subscriptionLimits.value.map((limit) => limit.reported_at).filter(Boolean);
+  return stamps.length ? ago(Math.max(...stamps)) : "";
+});
 
 watch(
   () => S.detail?.session?.provider,
@@ -289,7 +302,7 @@ function runOther() {
               <span class="context-ring-value">{{ contextTotal ? contextPct + '%' : '—' }}</span>
             </span>
             <span v-if="subscriptionWindows.length" class="subscription-limits">
-              <span v-for="window in subscriptionWindows" :key="window.label" class="subscription-limit-track">
+              <span v-for="(window, i) in subscriptionWindows" :key="window.label + i" class="subscription-limit-track">
                 <span
                   class="subscription-limit-fill"
                   :class="window.used_percent >= 90 ? 'bg-error' : window.used_percent >= 70 ? 'bg-warning' : 'bg-primary'"
@@ -303,16 +316,16 @@ function runOther() {
               <ContextPane />
               <div v-if="subscriptionWindows.length" class="w-64 p-3">
                 <p class="m-0 text-xs font-medium text-muted">
-                  {{ subscriptionLimit.plan_type ? subscriptionLimit.plan_type + ' subscription' : 'Subscription allowance' }}
+                  {{ planType ? planType + ' subscription' : 'Subscription allowance' }}
                 </p>
                 <dl class="mt-1.5 mb-0 space-y-1 text-xs tabular-nums">
-                  <div v-for="window in subscriptionWindows" :key="window.label" class="flex justify-between gap-3">
+                  <div v-for="(window, i) in subscriptionWindows" :key="window.label + i" class="flex justify-between gap-3">
                     <dt class="text-muted">{{ window.label }}</dt>
                     <dd class="m-0 text-highlighted">{{ Math.round(window.used_percent) }}% used · resets {{ resetAt(window.resets_at) }}</dd>
                   </div>
-                  <div v-if="subscriptionLimit.reached_type" class="flex justify-between gap-3">
+                  <div v-if="reachedType" class="flex justify-between gap-3">
                     <dt class="text-muted">Status</dt>
-                    <dd class="m-0 text-highlighted">{{ subscriptionLimit.reached_type }}</dd>
+                    <dd class="m-0 text-highlighted">{{ reachedType }}</dd>
                   </div>
                   <div v-if="reportedAgo" class="flex justify-between gap-3">
                     <dt class="text-muted">Reported</dt>

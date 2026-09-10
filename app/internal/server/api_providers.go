@@ -36,48 +36,67 @@ func (s *Server) listProviders(c *fiber.Ctx) error {
 }
 
 // subscriptionLimits returns the signed-in CLI's own subscription allowance,
-// never an estimate from token totals. There are two ways to get one and a
-// provider has at most one of them:
+// never an estimate from token totals. There are two ways to get one:
 //
-//   - ask, if the CLI answers a read-only local query (Codex app-server);
-//   - remember, if it only volunteers a reading mid-turn (Claude Code, on a
-//     rate_limit_event line). The newest turn that reported one is served,
-//     stamped with when it was recorded so the panel can say how old it is.
+//   - ask, if the CLI answers a read-only local query (Codex app-server,
+//     Claude Code's own /usage). The reading is current, so it is unstamped.
+//   - remember, from the mid-turn readings a CLI volunteers on its own
+//     (Claude Code, on a rate_limit_event line). The newest turn that
+//     reported one is served, stamped with when it was recorded so the panel
+//     can say how old it is.
 //
-// A provider with neither has no allowance bars at all.
+// A CLI that does both is asked first, and the remembered reading stands in
+// whenever the ask fails or comes back empty — an unreachable CLI, or a report
+// worded in a way the parser no longer recognises, then shows the last known
+// bars instead of none. A provider that does neither has no allowance bars.
 func (s *Server) subscriptionLimits(c *fiber.Ctx) error {
 	name := c.Params("provider")
 	provider, ok := s.registry.Get(name)
 	if !ok {
 		return badRequest("unknown provider %q", name)
 	}
+	var asked []agent.RateLimit
+	var askErr error
 	if metered, ok := provider.(agent.Metered); ok {
-		limits, err := metered.SubscriptionLimits(c.UserContext())
-		if err != nil {
-			return err
+		asked, askErr = metered.SubscriptionLimits(c.UserContext())
+		if askErr == nil && len(asked) > 0 {
+			return c.JSON(asked)
 		}
-		if limits == nil {
-			limits = []agent.RateLimit{}
-		}
-		return c.JSON(limits)
 	}
 
-	body, at, err := s.store.LatestRateLimits(name)
+	remembered, err := s.rememberedLimits(name)
 	if err != nil {
 		return err
 	}
-	limits := []agent.RateLimit{}
-	if body != "" {
-		if err := json.Unmarshal([]byte(body), &limits); err != nil {
-			// A reading we can no longer read is not worth an error: the panel
-			// simply shows no bars, as it does before the first turn.
-			return c.JSON([]agent.RateLimit{})
-		}
-		for i := range limits {
-			limits[i].ReportedAt = at
-		}
+	if len(remembered) > 0 {
+		return c.JSON(remembered)
 	}
-	return c.JSON(limits)
+	if askErr != nil {
+		return askErr // nothing to stand in for it, so the ask's error is the answer
+	}
+	return c.JSON([]agent.RateLimit{})
+}
+
+// rememberedLimits is the newest allowance a provider volunteered during a
+// turn, stamped with when it was recorded.
+func (s *Server) rememberedLimits(name string) ([]agent.RateLimit, error) {
+	body, at, err := s.store.LatestRateLimits(name)
+	if err != nil {
+		return nil, err
+	}
+	limits := []agent.RateLimit{}
+	if body == "" {
+		return limits, nil
+	}
+	if err := json.Unmarshal([]byte(body), &limits); err != nil {
+		// A reading we can no longer read is not worth an error: the panel
+		// simply shows no bars, as it does before the first turn.
+		return []agent.RateLimit{}, nil
+	}
+	for i := range limits {
+		limits[i].ReportedAt = at
+	}
+	return limits, nil
 }
 
 func (s *Server) listStars(c *fiber.Ctx) error {

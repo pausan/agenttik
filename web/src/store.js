@@ -144,9 +144,10 @@ export function contextWindow(session, stats) {
 }
 
 // Subscription allowances are provider-reported account limits, not guesses
-// from token totals. Codex answers a local query; Claude Code only volunteers
-// a reading during a turn, and the server serves back the newest one it saw.
-// A provider that does neither returns no buckets.
+// from token totals. Codex and Claude Code both answer a local query — the
+// latter through its own /usage — and the server falls back to the newest
+// reading a turn volunteered if the query fails. A provider that does neither
+// returns no buckets.
 export async function refreshSubscriptionLimits(provider) {
   if (!provider) return;
   S.subscriptionLimits[provider] = await api(
@@ -1491,12 +1492,16 @@ function onSessionEvent(tab, msg) {
       break;
     case "limits":
       // The provider named its own allowance mid-turn, so the bars move now
-      // rather than after the next reload.
+      // rather than after the next reload. It names one bucket and not the
+      // whole allowance, so the reading updates that bar by id and leaves the
+      // other windows standing.
       if (ev.limits?.length) {
-        S.subscriptionLimits[tab.detail.session.provider] = ev.limits.map((limit) => ({
-          ...limit,
-          reported_at: Date.now(),
-        }));
+        const known = S.subscriptionLimits[tab.detail.session.provider] || [];
+        const fresh = ev.limits.map((limit) => ({ ...limit, reported_at: Date.now() }));
+        S.subscriptionLimits[tab.detail.session.provider] = [
+          ...known.map((limit) => fresh.find((f) => f.limit_id === limit.limit_id) || limit),
+          ...fresh.filter((f) => !known.some((limit) => limit.limit_id === f.limit_id)),
+        ];
       }
       break;
     case "error":

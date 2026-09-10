@@ -31,7 +31,7 @@
 | [027-ignored-files-in-the-tree.md](027-ignored-files-in-the-tree.md) | Every file in the Tree, the ignored ones grey |
 | [028-scheduled-jobs.md](028-scheduled-jobs.md) | Repeating a prompt on a clock, and the sessions it spawns |
 | [029-desktop-proxy-logging.md](029-desktop-proxy-logging.md) | Why the window logged broken pipes, and the abort it recovers instead |
-| [030-project-tasks.md](030-project-tasks.md) | Every task of a project in one list, behind a focused filter |
+| [030-project-tasks.md](030-project-tasks.md) | Every task of a project in one paged list, behind a focused filter |
 | [031-copilot-subscription.md](031-copilot-subscription.md) | GitHub Copilot CLI sessions and account quota |
 | [032-single-tab-close-shortcut.md](032-single-tab-close-shortcut.md) | Ctrl+W closes one active tab, including when held |
 | [033-prompt-model-picker.md](033-prompt-model-picker.md) | Bounded, collapsible provider groups in the prompt model picker |
@@ -41,7 +41,7 @@
 
 Status: A project page now holds every task it has in one list under Tasks —
 open ones black, archived ones grey — with the cursor in the filter that
-narrows both; see 030. An unsent prompt now outlives the tab it was typed in,
+narrows both, drawn 25 rows to a page with 10, 50 and 100 on offer; see 030. An unsent prompt now outlives the tab it was typed in,
 so changing focus or starting another task leaves the text where it was; see
 004. The prompt bar reads the subscription allowance again whenever the task
 or the model changes, and no longer repeats "running…" next to the header

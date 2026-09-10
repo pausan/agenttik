@@ -5,7 +5,8 @@
    One list holds both states. Open tasks come first, in the order they were
    dragged into, drawn in the strongest text the theme has; archived ones
    follow, newest first, drawn grey — the colour is what says which is which,
-   so a history and a working list read as one place rather than two.
+   so a history and a working list read as one place rather than two. It is
+   drawn a page at a time, 25 rows by default.
 
    Open rows are dragged with the browser's own drag and drop rather than
    pointer maths. The list reorders under the cursor as you go, so where the
@@ -17,10 +18,12 @@ import { computed, nextTick, onMounted, ref, watch } from "vue";
 
 import {
   S,
+  TASK_PAGE_SIZES,
   openTask,
   renameTask,
   reorderTasks,
   setTaskArchived,
+  setTaskPageSize,
   startTask,
   stopTask,
 } from "../store";
@@ -34,6 +37,7 @@ const dragging = ref("");
 const renaming = ref(""); // the task whose title is being edited
 const filter = ref("");
 const filterField = ref(null);
+const page = ref(1);
 
 const lower = ref("tasks");
 const lowerTabs = [
@@ -50,6 +54,19 @@ onMounted(focusFilter);
 watch(lower, (which) => {
   if (which === "tasks") focusFilter();
 });
+
+/* One ProjectView serves every project — switching to another one hands it a
+   new tab rather than mounting a second component — so what belongs to the
+   page in front is put back by hand. A filter or a page number carried into
+   another project's tasks means nothing. */
+watch(
+  () => props.tab.data.project.id,
+  () => {
+    filter.value = "";
+    page.value = 1;
+    focusFilter();
+  },
+);
 
 const statsRows = computed(() => {
   const stats = props.tab.data.stats;
@@ -86,7 +103,34 @@ const matching = (tasks) =>
 const open = computed(() => matching(props.tab.data.sessions));
 const archived = computed(() => matching(props.tab.data.archived || []));
 const total = computed(() => props.tab.data.sessions.length + (props.tab.data.archived?.length || 0));
-const shown = computed(() => open.value.length + archived.value.length);
+
+/* One array of rows, each saying which state it is in, so the two lists page
+   as one and the template stays a single loop. */
+const rows = computed(() => [
+  ...open.value.map((task) => ({ task, archived: false })),
+  ...archived.value.map((task) => ({ task, archived: true })),
+]);
+const shown = computed(() => rows.value.length);
+
+const sizeItems = TASK_PAGE_SIZES.map((size) => ({ label: `${size} / page`, value: size }));
+const size = computed({
+  get: () => S.taskPageSize,
+  set: setTaskPageSize,
+});
+const pages = computed(() => Math.max(1, Math.ceil(shown.value / size.value)));
+const visible = computed(() => rows.value.slice((page.value - 1) * size.value, page.value * size.value));
+const range = computed(() => {
+  const first = (page.value - 1) * size.value;
+  return `${first + 1}–${first + visible.value.length} of ${shown.value}`;
+});
+
+/* Narrowing the list, or making the pages bigger, is a new question: it is
+   asked from the top. A list that shrinks under the page in front — a task
+   archived off the last page — pulls it back to the last one there is. */
+watch([filter, size], () => (page.value = 1));
+watch(pages, (count) => {
+  if (page.value > count) page.value = count;
+});
 
 /* Dragging moves a row within the whole open list, so it is only offered
    when the whole open list is on screen. */
@@ -133,8 +177,8 @@ function onDrop() {
 
       <UTabs v-model="lower" :items="lowerTabs" :content="false" size="sm" class="mb-4" />
 
-      <!-- Every task of the project: what is open, then what it has
-           archived. -->
+      <!-- Every task of the project, a page at a time: what is open, then
+           what it has archived. -->
       <template v-if="lower === 'tasks'">
         <div class="mb-2 flex items-center gap-3">
           <UInput
@@ -145,64 +189,69 @@ function onDrop() {
             placeholder="Filter tasks"
             class="min-w-0 flex-1"
           />
+          <USelect
+            v-if="total > TASK_PAGE_SIZES[0]"
+            v-model="size"
+            :items="sizeItems"
+            size="sm"
+            class="shrink-0"
+            title="Tasks per page"
+          />
           <span class="shrink-0 text-xs text-dimmed tabular-nums">{{ shown }}/{{ total }}</span>
         </div>
 
         <p v-if="!total" class="px-3 py-5 text-center text-dimmed">No tasks in this project yet.</p>
         <p v-else-if="!shown" class="px-3 py-4 text-center text-dimmed">No task matches that.</p>
 
+        <!-- An archived row is not dragged, and holds the grip column empty so
+             both kinds line up. It carries the restore icon rather than the
+             archive one, so this is also where a conversation comes back. -->
         <div
-          v-for="s in open"
-          :key="s.id"
+          v-for="row in visible"
+          :key="row.task.id"
           class="flex items-center gap-1"
-          :class="dragging === s.id ? 'opacity-40' : ''"
-          :draggable="renaming !== s.id && !filtering"
-          @dragstart="onStart($event, s.id)"
-          @dragover="onOver($event, s.id)"
+          :class="dragging === row.task.id ? 'opacity-40' : ''"
+          :draggable="!row.archived && renaming !== row.task.id && !filtering"
+          @dragstart="onStart($event, row.task.id)"
+          @dragover="onOver($event, row.task.id)"
           @drop.prevent="onDrop"
           @dragend="onDrop"
         >
           <UIcon
+            v-if="!row.archived"
             name="i-lucide-grip-vertical"
             class="size-3.5 shrink-0 text-dimmed"
             :class="filtering ? 'opacity-30' : 'cursor-grab'"
             :title="filtering ? 'Clear the filter to reorder' : 'Drag to reorder'"
           />
+          <span v-else class="size-3.5 shrink-0" aria-hidden="true" />
           <TaskRow
             class="min-w-0 flex-1"
-            :title="s.title"
-            :prompt="s.prompt"
-            :status="s.status"
-            :queued="s.queue_count"
-            :sub="subtitle(s)"
-            :active="S.detail?.session.id === s.id"
-            :stoppable="s.status === 'running' || s.queue_count > 0"
-            :archive="s.status !== 'running' && s.queue_count === 0"
-            @stop="stopTask(s.id)"
-            @select="openTask(s.id)"
-            @toggle-archive="setTaskArchived(s, true)"
-            @rename="renameTask(s, $event)"
-            @editing="renaming = $event ? s.id : ''"
+            :title="row.task.title"
+            :prompt="row.task.prompt"
+            :status="row.task.status"
+            :queued="row.task.queue_count"
+            :sub="subtitle(row.task)"
+            :active="S.detail?.session.id === row.task.id"
+            :archived="row.archived"
+            :stoppable="row.task.status === 'running' || row.task.queue_count > 0"
+            :archive="row.archived || (row.task.status !== 'running' && row.task.queue_count === 0)"
+            @stop="stopTask(row.task.id)"
+            @select="openTask(row.task.id)"
+            @toggle-archive="setTaskArchived(row.task, !row.archived)"
+            @rename="renameTask(row.task, $event)"
+            @editing="renaming = $event ? row.task.id : ''"
           />
         </div>
 
-        <!-- Archived rows carry the restore icon rather than the archive one,
-             so this is also where a conversation comes back. The grip column
-             is held empty so both kinds line up. -->
-        <div v-for="s in archived" :key="s.id" class="flex items-center gap-1">
-          <span class="size-3.5 shrink-0" aria-hidden="true" />
-          <TaskRow
-            class="min-w-0 flex-1"
-            :title="s.title"
-            :prompt="s.prompt"
-            :status="s.status"
-            :sub="subtitle(s)"
-            :active="S.detail?.session.id === s.id"
-            archived
-            archive
-            @select="openTask(s.id)"
-            @toggle-archive="setTaskArchived(s, false)"
-            @rename="renameTask(s, $event)"
+        <div v-if="pages > 1" class="mt-3 flex items-center justify-between gap-3">
+          <span class="text-xs text-dimmed tabular-nums">{{ range }}</span>
+          <UPagination
+            v-model:page="page"
+            :total="shown"
+            :items-per-page="size"
+            :sibling-count="1"
+            size="sm"
           />
         </div>
       </template>

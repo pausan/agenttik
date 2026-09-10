@@ -12,6 +12,11 @@ is which, so the working list and the history read as one place instead of two
 stacked sections — the question "where is that task" is asked without knowing
 first whether it was archived.
 
+It is drawn a page at a time: 25 rows by default, changeable to 10, 50 or 100
+beside the filter. The choice is remembered across launches, because how much
+of a list someone wants to see at once is a preference rather than a question
+worth asking again on every project.
+
 The page opens with the cursor in the filter, and returning to the Tasks tab
 puts it back there. Opening a project is asking which task.
 
@@ -36,7 +41,40 @@ jumping to the top loses the order each list is kept in for a reason.
 Rows are dragged to reorder, and dragging is offered only while the filter is
 empty: the drop lands a row where the pointer is *in the whole open list*, and
 a hidden neighbour makes that meaningless. The grip greys out and says so
-while a filter is typed.
+while a filter is typed. A drag inside a page is still exact — the row moves
+against the full list by id, not by its position on screen — but a row cannot
+be dragged onto another page.
+
+## Paging
+
+Open and archived rows page as one sequence, so a page boundary falls wherever
+it falls rather than each state getting a pager of its own. `1–25 of 63` sits
+beside the pager under the list, and the counter above still reads
+`matches/total` — one says which slice, the other says what the filter cut.
+
+Three rules keep the page honest:
+
+- Typing in the filter, or asking for a different page size, goes back to
+  page 1. Both are new questions, and the answer to a new question starts at
+  the top.
+- A list that shrinks under the page in front pulls it back to the last page
+  there is, so archiving the only row on page 3 lands on page 2 rather than on
+  an empty page.
+- Switching to another project resets the filter and the page and re-focuses
+  the filter. One `ProjectView` serves every project — the component is handed
+  a new tab rather than mounted again — so what belongs to the page in front is
+  put back by hand.
+
+The page size select is only drawn once a project has more tasks than the
+smallest size, and the pager only once there is more than one page. A project
+with a handful of tasks is still just its tasks.
+
+Paging is a slice of a list already in the browser, so turning a page fetches
+nothing. That is bounded by what the project tab loaded: `/api/sessions`
+answers at most 200 rows per request, so a project with more than 200 archived
+tasks pages through the newest 200 of them. Going past that means paging on
+the server — an offset and a total count on the endpoint — which nothing yet
+needs.
 
 Archived rows are never draggable. `sessions.position` is the order someone
 chose for the work in front of them; a history is ordered by the clock. They
@@ -73,4 +111,21 @@ archived tasks:
   `Filter tasks`, so typing filtered without clicking first.
 - `arch` narrowed to the three archived rows and the counter to `3/5`; `one`
   to the single open row and `1/5`; `zzzz` drew "No task matches that."
+- No console or page errors throughout.
+
+Paging, against a project seeded with 8 open and 55 archived tasks:
+
+- Page 1 drew 25 rows, `Open task 00` first and `Archived task 46` last, over
+  `1–25 of 63`; page 2 drew `26–50 of 63`; page 3 drew its 13 remaining rows
+  as `51–63 of 63`.
+- `10 / page` went back to page 1 and drew 10; `100 / page` drew all 63 and
+  removed the pager.
+- Filtering to `Archived task 1` from page 1 of 7 gave `1–10 of 15` with the
+  counter at `15/63`.
+- The size stayed at 10 across leaving the project page and a full reload.
+- On page 3 of 3 of a project of 21 untitled tasks, archiving the only row
+  there deleted it and the view fell back to `11–20 of 20` rather than an
+  empty page.
+- A project of 3 tasks drew no size select and no pager. Switching to it from
+  a filtered project reset the filter to `3/3` and re-focused it.
 - No console or page errors throughout.

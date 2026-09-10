@@ -26,6 +26,7 @@ const DIFF_VIEW_KEY = "agenttik.diffView";
 const COLORS_KEY = "agenttik.colors";
 const KEYS_KEY = "agenttik.keys";
 const WINDOW_KEY = "agenttik.window";
+const TASK_PAGE_KEY = "agenttik.taskPageSize";
 const SCHEDULE_KEY = "agenttik.schedule";
 const LAYOUT_LIMITS = { left: [180, 520], right: [200, 620] };
 
@@ -36,6 +37,12 @@ export const PROJECT_KEYS = "ABCDEFGH";
 /* Alt+1 … Alt+9 reach the first nine tasks in the selected project's
    sidebar order. */
 export const TAB_CHORDS = 9;
+
+/* How many tasks a project page draws at once. 25 is a page worth reading
+   without scrolling past what was asked for; the rest are a click away. The
+   choice is remembered, like the Sessions window below, because it is a
+   preference rather than a question asked again on every project. */
+export const TASK_PAGE_SIZES = [10, 25, 50, 100];
 
 /* How far back the Sessions list reaches, and the order the picker offers.
    The first is the default: the usual question is what is running now, not
@@ -84,6 +91,7 @@ export const S = reactive({
   treeFilter: "",
   query: "", // sidebar session filter
   window: TASK_WINDOWS[0].value,
+  taskPageSize: 25,
   lastUsed: null,
   layout: { left: 272, right: 312 },
   colors: { ...DEFAULT_COLORS }, // the accent and the grey, from Settings
@@ -864,6 +872,24 @@ export function setWindow(value) {
   persist(WINDOW_KEY, value);
   refreshSessions().catch(() => {});
   refreshSchedules().catch(() => {});
+}
+
+/* setTaskPageSize changes how many task rows a project page draws and
+   remembers it. It is a slice of a list already loaded, so nothing is
+   fetched. */
+export function setTaskPageSize(size) {
+  if (size === S.taskPageSize || !TASK_PAGE_SIZES.includes(size)) return;
+  S.taskPageSize = size;
+  persist(TASK_PAGE_KEY, size);
+}
+
+function loadTaskPageSize() {
+  try {
+    const saved = Number(localStorage.getItem(TASK_PAGE_KEY));
+    if (TASK_PAGE_SIZES.includes(saved)) S.taskPageSize = saved;
+  } catch {
+    /* keep the default */
+  }
 }
 
 /* A window the app no longer offers is dropped rather than sent on, since an
@@ -2299,6 +2325,7 @@ export async function init() {
   loadKeys();
   loadFileMode();
   loadWindow();
+  loadTaskPageSize();
   // Open tabs are saved, but an edited file is not — it would put a whole
   // working copy in localStorage — so the browser's own warning is what
   // stands between unsaved edits and a reload.

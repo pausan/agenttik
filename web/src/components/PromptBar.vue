@@ -55,6 +55,20 @@ const combos = computed(() =>
   S.stars.filter((s) => modelOf(s.provider, s.model)),
 );
 
+const modelSearch = ref("");
+const collapsedProviders = ref(new Set());
+
+function providerCollapsed(providerName) {
+  return !modelSearch.value.trim() && collapsedProviders.value.has(providerName);
+}
+
+function toggleProvider(providerName) {
+  const next = new Set(collapsedProviders.value);
+  if (next.has(providerName)) next.delete(providerName);
+  else next.add(providerName);
+  collapsedProviders.value = next;
+}
+
 const onCombo = computed(() =>
   combos.value.some(
     (c) =>
@@ -80,12 +94,19 @@ const modelGroups = computed(() => [
   ...S.providers.map((p) => ({
     id: p.name,
     label: p.display_name,
-    items: p.models.map((m) => ({
-      label: m.label,
-      description: m.id,
-      value: `model:${p.name}:${m.id}`,
-      disabled: !p.available,
-    })),
+    items: providerCollapsed(p.name)
+      ? [{
+          label: `Show ${p.models.length} models`,
+          description: p.display_name,
+          value: `expand:${p.name}`,
+          icon: "i-lucide-chevron-right",
+        }]
+      : p.models.map((m) => ({
+          label: m.label,
+          description: `${p.display_name} · ${m.id}`,
+          value: `model:${p.name}:${m.id}`,
+          disabled: !p.available,
+        })),
   })),
 ]);
 
@@ -127,9 +148,17 @@ const effortValue = computed({
 
 
 function pickModel(value) {
+  if (value.startsWith("expand:")) {
+    toggleProvider(value.slice("expand:".length));
+    return;
+  }
   model.value = value;
   modelOpen.value = false;
 }
+
+watch(modelOpen, (open) => {
+  if (!open) modelSearch.value = "";
+});
 
 const contextUsed = computed(() => S.detail?.stats.context_tokens || 0);
 const contextTotal = computed(() => contextWindow(S.detail?.session, S.detail?.stats));
@@ -286,9 +315,27 @@ function runOther(action) {
               :groups="modelGroups"
               value-key="value"
               placeholder="Search models…"
+              v-model:search-term="modelSearch"
+              preserve-group-order
+              :ui="{ viewport: 'max-h-[min(28rem,60vh)]' }"
               :fuse="{ fuseOptions: { keys: ['label', 'description'], threshold: 0.35, ignoreLocation: true }, resultLimit: 20 }"
               @update:model-value="pickModel"
-            />
+            >
+              <template #group-label="{ group, label }">
+                <button
+                  v-if="group.id !== 'favourites'"
+                  type="button"
+                  class="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left font-semibold text-highlighted hover:bg-elevated"
+                  :aria-expanded="!providerCollapsed(group.id)"
+                  :aria-label="`${providerCollapsed(group.id) ? 'Expand' : 'Collapse'} ${label}`"
+                  @click.stop="toggleProvider(group.id)"
+                >
+                  <UIcon :name="providerCollapsed(group.id) ? 'i-lucide-chevron-right' : 'i-lucide-chevron-down'" class="size-3.5" />
+                  <span class="truncate">{{ label }}</span>
+                </button>
+                <span v-else class="block px-1 py-0.5 font-semibold text-highlighted">{{ label }}</span>
+              </template>
+            </UCommandPalette>
           </template>
         </UPopover>
         <USelect v-model="effortValue" :items="effortItems" size="sm" title="Effort" />

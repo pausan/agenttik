@@ -34,8 +34,10 @@
 | [030-project-archived-sessions.md](030-project-archived-sessions.md) | The project page's archived list and its fuzzy filter |
 | [031-copilot-subscription.md](031-copilot-subscription.md) | GitHub Copilot CLI sessions and account quota |
 | [032-single-tab-close-shortcut.md](032-single-tab-close-shortcut.md) | Ctrl+W closes one active tab, including when held |
+| [033-prompt-model-picker.md](033-prompt-model-picker.md) | Bounded, collapsible provider groups in the prompt model picker |
 
-Status: queued prompts now retain, show and let users change their individual
+Status: The prompt model picker now has a bounded scrolling viewport, collapsible
+provider groups and provider context in filtered results — see 033. Queued prompts now retain, show and let users change their individual
 provider, model and effort before starting — see 012. A project page now lists
 what it has archived under its open
 sessions, newest first, behind a fuzzy filter — see 030. The desktop window no

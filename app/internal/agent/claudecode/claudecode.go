@@ -8,8 +8,10 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os/exec"
 	"strings"
 	"sync"
@@ -113,22 +115,9 @@ func (p *Provider) Run(ctx context.Context, req agent.TurnRequest) (<-chan agent
 	if err := p.Available(); err != nil {
 		return nil, err
 	}
-	cmd := exec.Command(Binary, buildArgs(req)...)
-	cmd.Dir = req.WorkDir
-	// The prompt goes in on stdin, never as an argv element.
-	cmd.Stdin = strings.NewReader(req.Prompt)
-	// Own process group so cancelling kills the CLI's children too.
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-
-	stdout, err := cmd.StdoutPipe()
+	cmd, stdout, stderr, err := start(req)
 	if err != nil {
-		return nil, fmt.Errorf("stdout pipe: %w", err)
-	}
-	var stderr strings.Builder
-	cmd.Stderr = &stderr
-
-	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("start %s: %w", Binary, err)
+		return nil, err
 	}
 
 	events := make(chan agent.Event, 64)
@@ -164,6 +153,38 @@ func (p *Provider) Run(ctx context.Context, req agent.TurnRequest) (<-chan agent
 		}
 	}()
 	return events, nil
+}
+
+// start recreates the command once when the CLI disappears between LookPath
+// and exec. Claude Code replaces its versioned executable while updating, so a
+// short ENOENT window should not fail an otherwise valid turn.
+func start(req agent.TurnRequest) (*exec.Cmd, io.ReadCloser, *strings.Builder, error) {
+	for attempt := 0; attempt < 2; attempt++ {
+		cmd := exec.Command(Binary, buildArgs(req)...)
+		cmd.Dir = req.WorkDir
+		// The prompt goes in on stdin, never as an argv element.
+		cmd.Stdin = strings.NewReader(req.Prompt)
+		// Own process group so cancelling kills the CLI's children too.
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+
+		stdout, err := cmd.StdoutPipe()
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("stdout pipe: %w", err)
+		}
+		var stderr strings.Builder
+		cmd.Stderr = &stderr
+
+		if err := cmd.Start(); err == nil {
+			return cmd, stdout, &stderr, nil
+		} else if attempt == 0 && errors.Is(err, fs.ErrNotExist) {
+			stdout.Close()
+			continue
+		} else {
+			stdout.Close()
+			return nil, nil, nil, fmt.Errorf("start %s: %w", Binary, err)
+		}
+	}
+	panic("unreachable")
 }
 
 // parse turns the CLI's JSONL stream into provider-neutral events. model is

@@ -86,9 +86,11 @@ function commit() {
           class="min-w-0 flex-1 px-2 py-1 text-left"
           @click="$emit('select')"
         >
+          <!-- Grey says archived: on a list holding both, the colour is what
+               separates a task still in play from one that is history. -->
           <span
             class="flex items-center gap-2 overflow-hidden"
-            :class="active ? 'text-primary' : 'text-highlighted'"
+            :class="active ? 'text-primary' : archived ? 'text-muted' : 'text-highlighted'"
           >
             <span
               v-if="number !== null"

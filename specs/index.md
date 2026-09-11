@@ -88,11 +88,10 @@ subscription allowance, and resume across turns. Codex is implemented against
 the current CLI JSONL contract and its app-server allowance query answers live,
 but no live subscription turn has ever been run through it.
 
-`go build ./...`, `go vet ./...`, `make ui` and the 33 web unit tests pass. Two
-Go tests fail: `TestDoneReachesProjectTopic` in `runner` and
-`TestReorderSessionsDrivesProjectOrder` in `store`. The Playwright suite has not
-been carried through the sessions-to-tasks rename and mostly fails at `HEAD`;
-see [005](005-testing.md).
+`go build ./...`, `go vet ./...`, `make ui`, the 33 web unit tests and the full
+Playwright suite all pass. Two Go tests fail: `TestDoneReachesProjectTopic` in
+`runner` and `TestReorderSessionsDrivesProjectOrder` in `store`. See
+[005](005-testing.md).
 
 [review-notes.md](review-notes.md) lists what these specs and the code still
 disagree about, for a human to settle.

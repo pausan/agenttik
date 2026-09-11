@@ -123,6 +123,14 @@ session contract, permission mapping and quota query are
 than written down here, because both the catalogue and the account's
 entitlement change without a release — see [036](036-copilot-model-list.md).
 
+## Fake, for the browser tests
+
+A fourth provider, `app/internal/agent/fake`, implements the same interface
+against no process and no account: a turn is scripted from directive lines in
+the prompt instead. It exists only for the end-to-end suite and is registered
+only when `AGENTTIK_FAKE_PROVIDER` is set, which nothing but
+`e2e/fixtures.js` does — see [005](005-testing.md).
+
 ## Later: key-based providers
 
 OpenRouter and direct APIs implement the same interface but talk HTTP instead of

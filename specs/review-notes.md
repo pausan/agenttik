@@ -48,8 +48,6 @@ group names, so the dialog shows both words for the same thing.
 - `TestDoneReachesProjectTopic` (`runner`) and
   `TestReorderSessionsDrivesProjectOrder` (`store`) fail at `HEAD` and have for
   several commits.
-- The Playwright suite still drives the pre-rename labels and mostly fails; see
-  [005](005-testing.md).
 - [036](036-copilot-model-list.md) documents a live gap: a Copilot model that
   takes no reasoning effort is still offered the provider-wide levels, because
   `agent.Model.Efforts` is `omitempty` and an empty list is indistinguishable

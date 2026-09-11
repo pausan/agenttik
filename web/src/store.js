@@ -85,9 +85,11 @@ export const S = reactive({
   /* The projects whose tasks are folded away in the sidebar. Held here rather
      than in the sidebar because Alt and the project's letter reaches it. */
   collapsedProjects: new Set(),
-  // Whether selecting a project folds every other one away. From Settings,
-  // and unlike the fold state above it is remembered.
-  foldOthers: false,
+  // Whether selecting a project folds every other one away. On unless it has
+  // been turned off, so a window nobody has answered for shows one project's
+  // tasks rather than eight projects' at once. From Settings, and unlike the
+  // fold state above it is remembered.
+  foldOthers: true,
   fileMode: "edit", // "edit", "diff" or "preview", carried to the next file
   diffView: "unified", // "unified" or "split", likewise
   closing: null, // a close waiting on what to do with unsaved edits
@@ -492,7 +494,7 @@ export function toggleProjectTasks(id) {
 export function setFoldOthers(on) {
   if (on === S.foldOthers) return;
   S.foldOthers = on;
-  persist(FOLD_KEY, on ? "1" : "");
+  persist(FOLD_KEY, on ? "1" : "0");
   // At once, like the colours: the sidebar is behind the dialog.
   if (on) foldOtherProjects(S.activeProjectID);
 }
@@ -506,9 +508,13 @@ function foldOtherProjects(id) {
 
 watch(() => S.activeProjectID, foldOtherProjects);
 
+/* Nothing stored is a window that has never been asked, which keeps the
+   default on rather than reading as off — only an answer turns it off. "" is
+   how off was written before the default changed, and still reads as off. */
 function loadFoldOthers() {
   try {
-    S.foldOthers = localStorage.getItem(FOLD_KEY) === "1";
+    const saved = localStorage.getItem(FOLD_KEY);
+    if (saved !== null) S.foldOthers = saved === "1";
   } catch {
     /* keep the default */
   }

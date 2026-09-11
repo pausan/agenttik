@@ -38,11 +38,17 @@ a turn is the point of it.
 
 ## One project unfolded, or each keeping its own
 
-`S.foldOthers` is off by default: selecting a project changes which tasks are
-numbered and which strip is on screen, and leaves every project folded or
-unfolded exactly as it was. Turned on, a selection unfolds that project and
-folds every other one, so a column of eight projects shows one project's tasks
-rather than all of them.
+`S.foldOthers` is on unless it has been turned off: selecting a project
+unfolds it and folds every other one, so a column of eight projects shows one
+project's tasks rather than all of them. Turned off, a selection changes which
+tasks are numbered and which strip is on screen, and leaves every project
+folded or unfolded exactly as it was.
+
+Which way round the default goes is a question about the first launch, so the
+key is read as three answers rather than two: an absent key is a window that
+has never been asked and keeps the default, and only a stored one turns it
+off. Off is written `"0"` — the `""` earlier versions wrote still reads as off,
+so a window that answered before the default changed keeps its answer.
 
 It is applied at selection rather than stored as a second flag per project,
 which leaves the fold state itself the one fact it already was (see

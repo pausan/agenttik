@@ -178,6 +178,34 @@ func (s *Store) SetScheduleRecurrence(id int64, every string, intervalMinutes, a
 	return nil
 }
 
+// SetSchedulePrompt changes the prompt every future run sends. Runs already
+// spawned are ordinary sessions and keep the text they were started with.
+func (s *Store) SetSchedulePrompt(id int64, prompt string) error {
+	res, err := s.db.Exec(`UPDATE schedules SET prompt = ? WHERE id = ?`, prompt, id)
+	if err != nil {
+		return fmt.Errorf("set schedule prompt: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SetScheduleModel changes what future runs are sent to. The three fields
+// move together because they are one answer: an effort belongs to a model,
+// and a model to a provider.
+func (s *Store) SetScheduleModel(id int64, provider, model, effort string) error {
+	res, err := s.db.Exec(`UPDATE schedules SET provider = ?, model = ?, effort = ? WHERE id = ?`,
+		provider, model, effort, id)
+	if err != nil {
+		return fmt.Errorf("set schedule model: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (s *Store) SetScheduleTitle(id int64, title string) error {
 	res, err := s.db.Exec(`UPDATE schedules SET title = ? WHERE id = ?`, title, id)
 	if err != nil {

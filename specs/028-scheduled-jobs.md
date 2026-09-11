@@ -149,7 +149,20 @@ colour on the strip. Its header carries the recurrence in words, when the next
 run is due, a Run menu ([above](#running-one-now)), Pause/Resume and Delete.
 Under it sit the prompt, the model, the
 **Repeats** fields and the runs-left input; and under those every run it has
-spawned, newest first, each with its timestamp as `YYYY-MM-DD HH:mm:ss`. A
+spawned, newest first, each with its timestamp as `YYYY-MM-DD HH:mm:ss`.
+
+**The prompt and the model are as editable as the clock.** The prompt is a
+text box that commits when it is left, and the model is the prompt bar's own
+picker with its effort select beside it — less the favourites, which a
+schedule has no bar to star from. Nothing about what a schedule repeats is a
+decision made once: a typo, or a model that turned out to be the wrong one,
+should not cost the runs the schedule has already recorded. Only future runs
+follow the change — a run already spawned is an ordinary session and keeps the
+prompt and model it was started with. The title does not follow the prompt; it
+is named once from the first prompt and renamed by hand after that, so a
+schedule someone has already named does not lose that name to an edit.
+Switching to a model that has no such effort drops the effort rather than
+sending one its provider would reject. A
 spawned run is a task, so its row opens it. A skipped run is a row with no task
 and the reason it was skipped; a run of consecutive skips is still one row, its
 single timestamp widened to the range it spans and its reason naming how many
@@ -230,12 +243,15 @@ idle cost of the feature is a query every quarter minute.
 | GET | `/api/schedules` | `?window=&q=&project_id=&include_done=` — the sidebar list |
 | POST | `/api/schedules` | `{project_id, prompt, provider, model, effort, permission, every, interval_minutes, at_minute, remaining}` |
 | GET | `/api/schedules/:id` | the schedule and its runs |
-| PATCH | `/api/schedules/:id` | `{title, remaining, paused, done, every, interval_minutes, at_minute}` — any subset |
+| PATCH | `/api/schedules/:id` | `{title, prompt, provider, model, effort, remaining, paused, done, every, interval_minutes, at_minute}` — any subset |
 | DELETE | `/api/schedules/:id` | drops the schedule and its run history; the sessions it spawned stay |
 | POST | `/api/schedules/:id/run` | `{enqueue}` — force one run now; see [Running one now](#running-one-now) |
 
 The three recurrence fields move together on a PATCH, because they are one
-answer: `every` names the form and the other two carry it. They are read by
+answer: `every` names the form and the other two carry it. `provider`, `model`
+and `effort` move together for the same reason — an effort belongs to a model
+and a model to a provider — and are read by the same check `POST` uses, so a
+model can never name a provider the row has never heard of. They are read by
 the same check `POST` uses, so the two cannot drift apart, and a rejected
 clock changes nothing. Both a new clock and a resume book `next_run_at` once,
 after whichever came in has been applied — a request carrying both gets one

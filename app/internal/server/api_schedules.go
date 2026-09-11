@@ -160,16 +160,24 @@ func (s *Server) getSchedule(c *fiber.Ctx) error {
 	return c.JSON(scheduleDetail{Schedule: sched, Runs: runs})
 }
 
-// updateSchedule takes any subset. The clock and the counter are both plain
-// fields the view can change whenever — every 15 minutes to every morning,
-// infinite to five — because neither how often something runs nor how many
-// times it still should is a decision made once.
+// updateSchedule takes any subset. The prompt, the model, the clock and the
+// counter are all plain fields the view can change whenever — every 15
+// minutes to every morning, infinite to five, one model to another — because
+// none of what a schedule repeats is a decision made once.
 func (s *Server) updateSchedule(c *fiber.Ctx) error {
 	var body struct {
 		Title     *string `json:"title"`
 		Remaining *int64  `json:"remaining"`
 		Paused    *bool   `json:"paused"`
 		Done      *bool   `json:"done"`
+
+		// The prompt and the model are as changeable as the clock: a
+		// schedule worth keeping is rarely worth remaking over a typo or a
+		// model that turned out to be the wrong one.
+		Prompt   *string `json:"prompt"`
+		Provider *string `json:"provider"`
+		Model    string  `json:"model"`
+		Effort   string  `json:"effort"`
 
 		// The three recurrence fields move together, since they are one
 		// answer: every names the form, and the other two carry it.
@@ -193,6 +201,32 @@ func (s *Server) updateSchedule(c *fiber.Ctx) error {
 			if err := s.store.SetScheduleTitle(sched.ID, title); err != nil {
 				return err
 			}
+		}
+	}
+	if body.Prompt != nil {
+		prompt := strings.TrimSpace(*body.Prompt)
+		if prompt == "" {
+			return badRequest("prompt is required")
+		}
+		if err := s.store.SetSchedulePrompt(sched.ID, prompt); err != nil {
+			return err
+		}
+	}
+	// Provider, model and effort move together for the same reason the clock's
+	// three fields do: an effort belongs to a model and a model to a provider,
+	// so a model picked without its provider could name one the provider on
+	// the row has never heard of.
+	if body.Provider != nil {
+		provider, ok := s.registry.Get(*body.Provider)
+		if !ok {
+			return badRequest("unknown provider %q", *body.Provider)
+		}
+		model := body.Model
+		if model == "" {
+			model = provider.Models()[0].ID
+		}
+		if err := s.store.SetScheduleModel(sched.ID, provider.Name(), model, body.Effort); err != nil {
+			return err
 		}
 	}
 	if body.Remaining != nil {

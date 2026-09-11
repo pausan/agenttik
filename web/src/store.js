@@ -991,6 +991,28 @@ export function setScheduleRemaining(schedule, remaining) {
   return patchSchedule(schedule, { remaining: n < -1 ? -1 : n });
 }
 
+/* Nor is the prompt: a schedule worth keeping is not worth remaking over a
+   typo. Runs already spawned are ordinary sessions and keep the text they
+   were started with; only future ones follow the new prompt. */
+export function setSchedulePrompt(schedule, prompt) {
+  prompt = prompt.trim();
+  if (!prompt || prompt === schedule.prompt) return;
+  return patchSchedule(schedule, { prompt });
+}
+
+/* Nor the model. Provider, model and effort travel together, since an effort
+   belongs to a model and a model to a provider. */
+export function setScheduleModel(schedule, provider, model, effort) {
+  if (
+    provider === schedule.provider &&
+    model === schedule.model &&
+    effort === (schedule.effort || "")
+  ) {
+    return;
+  }
+  return patchSchedule(schedule, { provider, model, effort });
+}
+
 /* Neither is the clock: a schedule can be moved from every 15 minutes to
    every morning without being made again. Changing the form re-anchors on the
    server, so one switched to weekly today runs on today's weekday. */

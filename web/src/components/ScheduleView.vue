@@ -9,15 +9,19 @@
 import { computed, ref, watch } from "vue";
 
 import {
+  S,
   enterDoes,
   EVERY,
   openTask,
+  providerOf,
   removeSchedule,
   runScheduleNow,
   scheduleForm,
   scheduleLabel,
   setSchedulePaused,
   setScheduleFrequency,
+  setScheduleModel,
+  setSchedulePrompt,
   setScheduleRemaining,
 } from "../store";
 import { isoLocal } from "../api";
@@ -49,11 +53,77 @@ function runMenuAction(action) {
    in: a fire arriving mid-edit would otherwise take the caret with it. */
 const editingCount = ref(false);
 const editingFreq = ref(false);
+const editingPrompt = ref(false);
 const count = ref(String(schedule.value.remaining));
 const freq = ref(scheduleForm(schedule.value));
+const prompt = ref(schedule.value.prompt);
 watch(schedule, (s) => {
   if (!editingCount.value) count.value = String(s.remaining);
   if (!editingFreq.value) freq.value = scheduleForm(s);
+  if (!editingPrompt.value) prompt.value = s.prompt;
+});
+
+/* The prompt is what the schedule repeats, and it is as changeable as the
+   clock beside it: a schedule worth keeping is not worth remaking over a
+   typo. It commits when it is left, as the other fields do — the runs
+   already spawned keep the text they were started with. */
+function commitPrompt() {
+  editingPrompt.value = false;
+  setSchedulePrompt(schedule.value, prompt.value);
+}
+
+/* So is the model. The picker is the prompt bar's, less the favourites a
+   schedule has no bar to star from: the providers, their models, and the
+   efforts of whichever model is chosen. Provider, model and effort travel
+   together, so switching to a model whose provider has no such effort drops
+   it rather than sending one the provider would reject. */
+const NONE = "__default";
+const modelOpen = ref(false);
+const modelSearch = ref("");
+const provider = computed(() => providerOf(schedule.value.provider));
+const selectedModel = computed(() =>
+  provider.value?.models.find((m) => m.id === schedule.value.model),
+);
+const modelLabel = computed(() => selectedModel.value?.label || schedule.value.model);
+const efforts = computed(() => selectedModel.value?.efforts || provider.value?.efforts || []);
+
+const modelGroups = computed(() =>
+  S.providers.map((p) => ({
+    id: p.name,
+    label: p.display_name,
+    items: p.models.map((m) => ({
+      label: m.label,
+      description: `${p.display_name} · ${m.id}`,
+      value: `${p.name}:${m.id}`,
+      disabled: !p.available,
+    })),
+  })),
+);
+
+function pickModel(value) {
+  modelOpen.value = false;
+  const [providerName, modelID] = [value.slice(0, value.indexOf(":")), value.slice(value.indexOf(":") + 1)];
+  const next = providerOf(providerName);
+  const nextModel = next?.models.find((m) => m.id === modelID);
+  const nextEfforts = nextModel?.efforts || next?.efforts || [];
+  const effort = schedule.value.effort || "";
+  setScheduleModel(schedule.value, providerName, modelID, nextEfforts.includes(effort) ? effort : "");
+}
+
+const effortItems = computed(() => [
+  { label: "default effort", value: NONE },
+  ...efforts.value.map((e) => ({ label: e, value: e })),
+]);
+
+const effortValue = computed({
+  get: () => schedule.value.effort || NONE,
+  set: (v) =>
+    setScheduleModel(schedule.value, schedule.value.provider, schedule.value.model,
+      v === NONE ? "" : v),
+});
+
+watch(modelOpen, (open) => {
+  if (!open) modelSearch.value = "";
 });
 
 function commitCount() {
@@ -155,13 +225,42 @@ function runTime(run) {
 
       <div class="mb-4 grid grid-cols-[auto_1fr] items-start gap-x-4 gap-y-2 text-sm">
         <div class="pt-1.5 text-muted">Prompt</div>
-        <div class="rounded-[var(--ui-radius)] bg-elevated px-3 py-1.5 whitespace-pre-wrap">
-          {{ schedule.prompt }}
-        </div>
+        <UTextarea
+          v-model="prompt"
+          :rows="3"
+          autoresize
+          class="w-full"
+          aria-label="Prompt"
+          :ui="{ base: 'resize-y' }"
+          @focus="editingPrompt = true"
+          @blur="commitPrompt"
+        />
         <div class="pt-1.5 text-muted">Model</div>
-        <div class="pt-1.5 text-dimmed">
-          {{ schedule.provider }} · {{ schedule.model
-          }}{{ schedule.effort ? " · " + schedule.effort : "" }}
+        <div class="flex flex-wrap items-center gap-2">
+          <UPopover v-model:open="modelOpen">
+            <UButton
+              type="button"
+              color="neutral"
+              variant="outline"
+              trailing-icon="i-lucide-chevron-down"
+              :label="modelLabel"
+              title="Choose model"
+            />
+            <template #content>
+              <UCommandPalette
+                class="w-80"
+                :groups="modelGroups"
+                value-key="value"
+                placeholder="Search models…"
+                v-model:search-term="modelSearch"
+                preserve-group-order
+                :ui="{ viewport: 'max-h-[min(28rem,60vh)]' }"
+                :fuse="{ fuseOptions: { keys: ['label', 'description'], threshold: 0.35, ignoreLocation: true }, resultLimit: 20 }"
+                @update:model-value="pickModel"
+              />
+            </template>
+          </UPopover>
+          <USelect v-model="effortValue" :items="effortItems" title="Effort" />
         </div>
         <div class="pt-1.5 text-muted">Repeats</div>
         <div class="flex flex-wrap items-center gap-2">

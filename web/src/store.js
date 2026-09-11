@@ -2557,10 +2557,11 @@ export async function init() {
     if (S.tabs.some(isDirty)) e.preventDefault();
   });
   try {
-    await loadProviders();
-    await refreshProjects();
-    await refreshSessions();
-    await refreshSchedules();
+    // None of these four depend on each other's result, so they go over the
+    // wire together instead of one after another — a launch with several
+    // saved tabs was paying for four round trips in a row before the first
+    // one of them could even start restoring.
+    await Promise.all([loadProviders(), refreshProjects(), refreshSessions(), refreshSchedules()]);
     await restoreOpenTabs();
     // A first launch has no tabs to say which project is selected, and the
     // sidebar, the Tree and Ctrl+N all want one.

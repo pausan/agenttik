@@ -31,6 +31,11 @@ const settings = ref(false);
 const settingsSection = ref("general");
 const goTo = ref(false);
 const sideBar = ref(null);
+// init() populates the sidebar, the open tabs and everything in them; a slow
+// launch — a lot of restored tabs, a cold disk — would otherwise sit there
+// looking empty rather than working. Delayed so a launch under a second,
+// the common case, never flashes it.
+const bootSpinner = ref(false);
 
 /* Settings opens on the section that was asked for: the sidebar's keyboard
    button and the launcher's shortcut entry both land on Shortcuts, and
@@ -92,7 +97,11 @@ function run(e, action) {
 }
 
 onMounted(() => {
-  init();
+  const showSpinner = setTimeout(() => (bootSpinner.value = true), 1000);
+  init().finally(() => {
+    clearTimeout(showSpinner);
+    bootSpinner.value = false;
+  });
   window.addEventListener("keydown", onKey);
 });
 onUnmounted(() => window.removeEventListener("keydown", onKey));
@@ -120,6 +129,14 @@ onUnmounted(() => window.removeEventListener("keydown", onKey));
         <Splitter side="right" />
         <InspectorPanel />
       </template>
+    </div>
+
+    <div
+      v-if="bootSpinner"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-default"
+      aria-label="Loading"
+    >
+      <UIcon name="i-lucide-loader-circle" class="size-6 animate-spin text-muted" />
     </div>
 
     <UnsavedModal />

@@ -2087,6 +2087,17 @@ const parentPath = (path) => (path.includes("/") ? path.slice(0, path.lastIndexO
    server cleans and bounds it. */
 const joinPath = (parent, name) => [parent, name.trim()].filter(Boolean).join("/");
 
+/* openInSystem hands a path to the machine agenttik runs on, which opens it
+   the way a double click in a file manager would: a folder in the file
+   browser, a file in whatever is registered for its type. An empty path is
+   the project folder itself, which is what a sidebar project row asks for.
+   The project is named rather than assumed, because the sidebar offers this
+   on every row and not only on the one in front. */
+export function openInSystem(path = "", projectID = currentProjectID()) {
+  if (!projectID) return;
+  return api("POST", `/api/projects/${projectID}/open`, { path }).catch(fail);
+}
+
 /* The panel follows the tab in front: which panes it offers depends on the
    kind of view, and what they list depends on its project. Two tabs in the
    same project share the listing, so it is only re-read when the project

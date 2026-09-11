@@ -120,6 +120,7 @@ func (s *Server) routes() {
 	api.Post("/projects/:id/entry", s.createEntry)
 	api.Post("/projects/:id/entry/rename", s.renameEntry)
 	api.Delete("/projects/:id/entry", s.deleteEntry)
+	api.Post("/projects/:id/open", s.openEntry)
 	api.Get("/projects/:id/diff", s.projectDiff)
 	api.Get("/projects/:id/raw", s.projectRawImage)
 	api.Post("/projects/:id/sessions/order", s.reorderSessions)

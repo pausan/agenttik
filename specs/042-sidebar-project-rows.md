@@ -29,6 +29,13 @@ reaches — and `TaskRow` keeps the twelve-pixel column whether or not it has a
 digit to put in it. `null` still drops the column, for the lists that are not
 numbered at all: a project's own page and the archive.
 
+**A right click on the row opens the project on the desktop.** One item, and a
+menu per row rather than the Tree's one menu aimed by the click: a sidebar
+holds a handful of projects, and each row already knows which project it is.
+The menu wraps the row itself, not the block around it: a right click on the
+jobs and tasks below is not aimed at the project — see
+[048](048-open-in-system-browser.md).
+
 **The letter that reaches a project also folds it.** `Alt+A` … `Alt+H` still
 address the first eight rows by position. Pressing the letter of the project
 already showing now folds its tasks and schedules away, and pressing it again

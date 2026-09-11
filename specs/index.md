@@ -58,6 +58,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [026](026-image-preview.md) | Previewing an SVG or an image, and diffing two pictures |
 | [027](027-ignored-files-in-the-tree.md) | Every file in the Tree, the ignored ones grey |
 | [046](046-tree-file-actions.md) | Making, renaming and deleting a file from the Tree |
+| [048](048-open-in-system-browser.md) | Opening a project folder or a Tree row on the desktop itself |
 
 ## Settings, shell and packaging
 

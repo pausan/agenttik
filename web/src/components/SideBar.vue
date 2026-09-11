@@ -5,6 +5,7 @@ import {
   PROJECT_KEYS,
   S,
   TAB_CHORDS,
+  openInSystem,
   openProject,
   openSchedule,
   openTask,
@@ -91,6 +92,17 @@ const folded = (p) => S.collapsedProjects.has(p.id);
 /* The first eight rows answer to Alt and a letter, so the letter is where the
    row is, and dragging a project changes it. */
 const projectKey = (i) => PROJECT_KEYS[i] || "";
+
+/* A menu per project row, unlike the Tree's one menu for every file: a
+   sidebar holds a handful of projects, and each one already knows which it
+   is without a click having to be aimed at it. */
+const projectMenu = (p) => [
+  {
+    label: "Open in system browser",
+    icon: "i-lucide-external-link",
+    onSelect: () => openInSystem("", p.id),
+  },
+];
 
 /* A number in the sidebar is the task shortcut number:
    Alt and that digit go there. It is the task top-to-bottom position in
@@ -210,53 +222,58 @@ function onTaskDrop(e) {
           @dragover="onProjectOver($event, p.id)"
           @drop.prevent="onProjectDrop"
         >
-          <div
-            draggable="true"
-            class="mb-0.5 flex cursor-grab items-start gap-1 rounded-[var(--ui-radius)] px-1.5 py-1 active:cursor-grabbing"
-            :class="[
-              draggingProject === p.id ? 'opacity-40' : '',
-              S.activeProjectID === p.id ? 'bg-primary/10' : 'hover:bg-elevated',
-            ]"
-            @dragstart="onProjectStart($event, p.id)"
-            @dragend="onProjectDrop"
-          >
-            <button
-              type="button"
-              class="mt-0.5 shrink-0"
-              :title="`${folded(p) ? 'Expand' : 'Collapse'} tasks`"
-              :aria-expanded="!folded(p)"
-              @click.stop="toggleProjectTasks(p.id)"
+          <!-- The menu wraps the project row itself, not the block around
+               it: what follows are the project's jobs and tasks, and a right
+               click on one of those is not aimed at the project. -->
+          <UContextMenu :items="projectMenu(p)" :ui="{ content: 'w-56' }">
+            <div
+              draggable="true"
+              class="mb-0.5 flex cursor-grab items-start gap-1 rounded-[var(--ui-radius)] px-1.5 py-1 active:cursor-grabbing"
+              :class="[
+                draggingProject === p.id ? 'opacity-40' : '',
+                S.activeProjectID === p.id ? 'bg-primary/10' : 'hover:bg-elevated',
+              ]"
+              @dragstart="onProjectStart($event, p.id)"
+              @dragend="onProjectDrop"
             >
-              <UIcon
-                :name="folded(p) ? 'i-lucide-chevron-right' : 'i-lucide-chevron-down'"
-                class="size-3.5 block text-dimmed"
-              />
-            </button>
-            <!-- A click on the row opens the project's own page, selected or
-                 not: it is the overview, and the only way back to it once a
-                 conversation is open on top. Alt and the project's letter is
-                 the way to the work instead. -->
-            <button
-              type="button"
-              class="min-w-0 flex-1 text-left"
-              :title="projectKey(i) ? `${p.name}  (Alt+${projectKey(i)})` : p.name"
-              @click="openProject(p.id)"
-            >
-              <span class="flex items-center gap-1.5">
-                <span
-                  class="w-2.5 shrink-0 font-mono text-[10px] text-dimmed"
-                  aria-hidden="true"
-                  >{{ projectKey(i) }}</span
-                >
-                <span
-                  class="min-w-0 flex-1 truncate font-semibold"
-                  :class="S.activeProjectID === p.id ? 'text-primary' : 'text-highlighted'"
-                >{{ p.name }}</span>
-                <StatusDot v-if="busy(p)" status="running" />
-              </span>
-              <span class="block truncate pl-4 text-xs text-dimmed">{{ p.path }}</span>
-            </button>
-          </div>
+              <button
+                type="button"
+                class="mt-0.5 shrink-0"
+                :title="`${folded(p) ? 'Expand' : 'Collapse'} tasks`"
+                :aria-expanded="!folded(p)"
+                @click.stop="toggleProjectTasks(p.id)"
+              >
+                <UIcon
+                  :name="folded(p) ? 'i-lucide-chevron-right' : 'i-lucide-chevron-down'"
+                  class="size-3.5 block text-dimmed"
+                />
+              </button>
+              <!-- A click on the row opens the project's own page, selected or
+                   not: it is the overview, and the only way back to it once a
+                   conversation is open on top. Alt and the project's letter is
+                   the way to the work instead. -->
+              <button
+                type="button"
+                class="min-w-0 flex-1 text-left"
+                :title="projectKey(i) ? `${p.name}  (Alt+${projectKey(i)})` : p.name"
+                @click="openProject(p.id)"
+              >
+                <span class="flex items-center gap-1.5">
+                  <span
+                    class="w-2.5 shrink-0 font-mono text-[10px] text-dimmed"
+                    aria-hidden="true"
+                    >{{ projectKey(i) }}</span
+                  >
+                  <span
+                    class="min-w-0 flex-1 truncate font-semibold"
+                    :class="S.activeProjectID === p.id ? 'text-primary' : 'text-highlighted'"
+                  >{{ p.name }}</span>
+                  <StatusDot v-if="busy(p)" status="running" />
+                </span>
+                <span class="block truncate pl-4 text-xs text-dimmed">{{ p.path }}</span>
+              </button>
+            </div>
+          </UContextMenu>
           <ScheduleRow
             v-for="sched in folded(p) ? [] : p.schedules"
             :key="'sched' + sched.id"

@@ -1,13 +1,14 @@
 # Making, renaming and deleting files from the Tree
 
 The Tree pane is a file manager as well as a listing. A right click anywhere in
-it opens one menu — **New file**, **New folder**, then **Rename** and
-**Delete** — and **F2** renames the row the keyboard is on without going
-through the menu at all.
+it opens one menu — **Open in system browser** ([048](048-open-in-system-browser.md)),
+then **New file**, **New folder**, then **Rename** and **Delete** — and **F2**
+renames the row the keyboard is on without going through the menu at all.
 
-Each of the four asks first. Three ask for a name, the fourth asks for a yes;
-all four are `TreeActionModal`, because three of them differ only in their
-wording and a component each would have been four copies of the same dialog.
+The four that follow the first are what this file is about, and each of them
+asks first: three ask for a name, the fourth asks for a yes. All four are
+`TreeActionModal`, because three of them differ only in their wording and a
+component each would have been four copies of the same dialog.
 
 ## What the click was aimed at
 

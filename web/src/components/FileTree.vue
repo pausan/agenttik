@@ -15,10 +15,11 @@
    The tree is also where files are made, renamed and deleted: a right click
    offers the four, and F2 on the row under the cursor renames it. Each one
    asks first — a name, or in the case of a delete a yes — in
-   TreeActionModal. */
+   TreeActionModal. The same menu opens the row on the desktop itself, which
+   asks nothing at all. */
 import { computed, ref, watch } from "vue";
 
-import { S, openFile } from "../store";
+import { S, openFile, openInSystem } from "../store";
 import { buildTree, countFiles, filterTree } from "../tree";
 import { segments } from "../fuzzy";
 import TreeActionModal from "./TreeActionModal.vue";
@@ -72,6 +73,15 @@ function ask(kind, node) {
 }
 
 const menu = computed(() => [
+  [
+    // A click that missed every row aims at the project folder, which is
+    // something to open even though it is nothing to rename or delete.
+    {
+      label: "Open in system browser",
+      icon: "i-lucide-external-link",
+      onSelect: () => openInSystem(aimed.value.path),
+    },
+  ],
   [
     { label: "New file", icon: "i-lucide-file-plus", onSelect: () => ask("file") },
     { label: "New folder", icon: "i-lucide-folder-plus", onSelect: () => ask("folder") },
@@ -144,7 +154,7 @@ const rows = computed(() => {
     <!-- The trigger is the pane itself, as-child so it adds no element: a
          right click that misses every row still offers New file, and the
          empty states are inside it for the same reason. -->
-    <UContextMenu :items="menu" :ui="{ content: 'w-44' }">
+    <UContextMenu :items="menu" :ui="{ content: 'w-56' }">
       <div class="min-h-0 flex-1" @contextmenu="aim">
         <p v-if="!S.tree.length && !S.treeDirs.length" class="px-3 py-5 text-center text-dimmed">
           {{ S.owner ? "No files." : "Pick a project or task to browse its files." }}

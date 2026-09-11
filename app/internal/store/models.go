@@ -284,6 +284,17 @@ type ServerConfig struct {
 	Enabled bool   `json:"enabled"`
 	Host    string `json:"host"`
 	Port    int    `json:"port"`
+
+	// The lock in front of that exposed listener, and nothing else: the
+	// window's own connection never asks for it. AuthEnabled with either of
+	// the other two blank is a half-set lock, which app/internal/netauth
+	// treats as closed to everybody rather than open to everybody.
+	// PasswordHash is bcrypt and never leaves the process; TOTPSecret has to
+	// be readable, because Settings shows it as text and as a QR to pair
+	// from. See 043-exposed-server.md.
+	AuthEnabled  bool   `json:"auth_enabled"`
+	PasswordHash string `json:"-"`
+	TOTPSecret   string `json:"-"`
 }
 
 // Session status values. Waiting is idle with a reason: the session has a

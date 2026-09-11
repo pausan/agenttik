@@ -8,8 +8,10 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/valyala/fasthttp v1.51.0
 	github.com/wailsapp/wails/v2 v2.15.0
+	golang.org/x/crypto v0.53.0
 	golang.org/x/sys v0.46.0
 	modernc.org/sqlite v1.29.10
+	rsc.io/qr v0.2.0
 )
 
 require (
@@ -44,7 +46,6 @@ require (
 	github.com/valyala/tcplisten v1.0.0 // indirect
 	github.com/wailsapp/go-webview2 v1.0.22 // indirect
 	github.com/wailsapp/mimetype v1.4.1 // indirect
-	golang.org/x/crypto v0.53.0 // indirect
 	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/text v0.39.0 // indirect
 	modernc.org/gc/v3 v3.0.0-20240107210532-573471604cb6 // indirect

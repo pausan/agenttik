@@ -305,3 +305,78 @@ func ids(sessions []Session) []string {
 	}
 	return out
 }
+
+// TestServerConfigStartsEmpty checks the "never saved" answer the caller
+// fills in with the app's own default, and that no lock comes turned on.
+func TestServerConfigStartsEmpty(t *testing.T) {
+	s := testStore(t)
+	got, err := s.GetServerConfig()
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got != (ServerConfig{}) {
+		t.Errorf("GetServerConfig() = %+v, want the zero value", got)
+	}
+}
+
+// TestServerConfigAndAuthAreWrittenApart is the property the two writers
+// exist for: they share one row, and neither may clear the other's columns.
+// Moving the server to a new port must not drop the password, and setting a
+// password must not move the server.
+func TestServerConfigAndAuthAreWrittenApart(t *testing.T) {
+	s := testStore(t)
+	if err := s.SetServerConfig(ServerConfig{Enabled: true, Host: "0.0.0.0", Port: 7717}); err != nil {
+		t.Fatalf("set config: %v", err)
+	}
+	auth := ServerConfig{AuthEnabled: true, PasswordHash: "$2a$10$hash", TOTPSecret: "GEZDGNBVGY3TQOJQ"}
+	if err := s.SetServerAuth(auth); err != nil {
+		t.Fatalf("set auth: %v", err)
+	}
+
+	// The lock survives a move.
+	if err := s.SetServerConfig(ServerConfig{Enabled: true, Host: "127.0.0.1", Port: 9000}); err != nil {
+		t.Fatalf("move: %v", err)
+	}
+	got, err := s.GetServerConfig()
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.Host != "127.0.0.1" || got.Port != 9000 {
+		t.Errorf("address = %s:%d, want 127.0.0.1:9000", got.Host, got.Port)
+	}
+	if !got.AuthEnabled || got.PasswordHash != auth.PasswordHash || got.TOTPSecret != auth.TOTPSecret {
+		t.Errorf("the lock was lost moving the server: %+v", got)
+	}
+
+	// And the address survives a new password.
+	if err := s.SetServerAuth(ServerConfig{AuthEnabled: true, PasswordHash: "$2a$10$other", TOTPSecret: auth.TOTPSecret}); err != nil {
+		t.Fatalf("change password: %v", err)
+	}
+	got, err = s.GetServerConfig()
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if !got.Enabled || got.Host != "127.0.0.1" || got.Port != 9000 {
+		t.Errorf("the address was lost changing the password: %+v", got)
+	}
+	if got.PasswordHash != "$2a$10$other" {
+		t.Errorf("PasswordHash = %q, want the new one", got.PasswordHash)
+	}
+}
+
+// TestSetServerAuthOnAFreshRow checks the lock can be the first thing ever
+// written, which is what happens when somebody turns it on before ever
+// touching the host or the port.
+func TestSetServerAuthOnAFreshRow(t *testing.T) {
+	s := testStore(t)
+	if err := s.SetServerAuth(ServerConfig{AuthEnabled: true, PasswordHash: "h", TOTPSecret: "GEZDGNBVGY3TQOJQ"}); err != nil {
+		t.Fatalf("set auth: %v", err)
+	}
+	got, err := s.GetServerConfig()
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if !got.AuthEnabled || got.Host != "" || got.Port != 0 {
+		t.Errorf("got %+v, want the lock set and the address still unsaved", got)
+	}
+}

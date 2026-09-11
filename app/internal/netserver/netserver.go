@@ -26,6 +26,10 @@ const shutdownTimeout = 3 * time.Second
 // a port change is applied without a gap.
 type Manager struct {
 	target string // loopback address every request is proxied to
+	// wrap goes in front of the proxy on every listener this manager opens:
+	// the exposed server's optional lock, see app/internal/netauth. Nil
+	// means there is nothing in front of it.
+	wrap func(http.Handler) http.Handler
 
 	mu   sync.Mutex
 	srv  *http.Server
@@ -36,6 +40,11 @@ type Manager struct {
 // New returns a manager that proxies to target, the loopback address the
 // desktop window's own view is already served from.
 func New(target string) *Manager { return &Manager{target: target} }
+
+// Use puts h in front of the proxy, for every listener this manager opens
+// from here on. Call it during wiring, before Start; nothing guards the
+// field afterwards.
+func (m *Manager) Use(wrap func(http.Handler) http.Handler) { m.wrap = wrap }
 
 // Status is the manager's actual state, as opposed to what was last asked
 // for — the two can disagree when a saved setting fails to bind again on
@@ -75,7 +84,11 @@ func (m *Manager) Start(addr string) error {
 
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.FlushInterval = -1 // flush at once, so SSE still streams
-	srv := &http.Server{Handler: proxy}
+	var handler http.Handler = proxy
+	if m.wrap != nil {
+		handler = m.wrap(proxy)
+	}
+	srv := &http.Server{Handler: handler}
 
 	m.mu.Lock()
 	old := m.srv

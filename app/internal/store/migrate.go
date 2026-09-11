@@ -246,6 +246,15 @@ ALTER TABLE sessions        ADD COLUMN account_id INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE schedules       ADD COLUMN account_id INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE queued_messages ADD COLUMN account_id INTEGER NOT NULL DEFAULT 0;
 	`,
+	`
+-- The exposed server's optional lock: a password and an authenticator seed,
+-- checked in front of the extra listener only — the window's own loopback
+-- connection never sees it. Blank means never set, and an enabled flag with
+-- either of them blank opens for nobody rather than for everybody.
+ALTER TABLE server_config ADD COLUMN auth_enabled  INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE server_config ADD COLUMN password_hash TEXT    NOT NULL DEFAULT '';
+ALTER TABLE server_config ADD COLUMN totp_secret   TEXT    NOT NULL DEFAULT '';
+	`,
 }
 
 func migrate(db *sql.DB) error {

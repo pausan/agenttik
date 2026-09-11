@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en" style="color-scheme: dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>agenttik</title>
+<style>
+  :root { color: #e6e7ea; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #111215; }
+  form { width: 18rem; display: flex; flex-direction: column; gap: .75rem; }
+  h1 { margin: 0 0 .25rem; font-size: 1.05rem; font-weight: 600; }
+  p { margin: 0; font-size: .78rem; line-height: 1.45; color: #8b8f99; }
+  label { display: flex; flex-direction: column; gap: .3rem; font-size: .75rem; color: #b4b8c2; }
+  input { padding: .45rem .6rem; border: 1px solid #2a2c33; border-radius: .375rem;
+          background: #191a1f; color: inherit; font: inherit; font-size: .85rem; }
+  input:focus { outline: none; border-color: #5b6caf; box-shadow: 0 0 0 2px #5b6caf40; }
+  #code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .2em; }
+  button { margin-top: .25rem; padding: .45rem; border: 0; border-radius: .375rem;
+           background: #4f5bd5; color: #fff; font: inherit; font-size: .85rem; font-weight: 500; cursor: pointer; }
+  button:hover { background: #5b67e0; }
+  .bad { color: #f0787c; }
+</style>
+</head>
+<body>
+<form method="post" action="/__auth/login" autocomplete="off">
+  <div>
+    <h1>agenttik</h1>
+    <p>This server asks for a password and the six-digit code from your authenticator.</p>
+  </div>
+  {{if .Why}}<p class="bad">{{.Why}}</p>{{end}}
+  {{if not .Ready}}<p class="bad">No password or seed has been set in Settings &rsaquo; Server on the machine running agenttik.</p>{{end}}
+  <input type="hidden" name="next" value="{{.Next}}">
+  <label>Password
+    <input type="password" name="password" autocomplete="current-password" autofocus required>
+  </label>
+  <label>Code
+    <input type="text" id="code" name="code" inputmode="numeric" pattern="[0-9]*" maxlength="6"
+           autocomplete="one-time-code" placeholder="000000" required>
+  </label>
+  <button type="submit">Sign in</button>
+</form>
+</body>
+</html>

@@ -1,16 +1,21 @@
-// Package server exposes the HTTP API and the embedded UI. It has no
-// authentication — agenttik is a local tool — and binds to loopback by
-// default; the desktop shell can optionally expose it further, on a host and
-// port of the user's choosing, through app/internal/netserver.
+// Package server exposes the HTTP API and the embedded UI. It binds to
+// loopback and asks nothing of whoever reaches it there — agenttik is a local
+// tool and the window's own connection is that loopback one. The desktop
+// shell can expose the same server further, on a host and port of the user's
+// choosing, through app/internal/netserver; that listener alone can be put
+// behind a password and an authenticator code, which is what
+// app/internal/netauth is and what the routes under /api/server/auth set up.
 package server
 
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -19,6 +24,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/recover"
 
 	"github.com/pausan/agenttik/app/internal/agent"
+	"github.com/pausan/agenttik/app/internal/netauth"
 	"github.com/pausan/agenttik/app/internal/netserver"
 	"github.com/pausan/agenttik/app/internal/runner"
 	"github.com/pausan/agenttik/app/internal/store"
@@ -49,6 +55,18 @@ type Server struct {
 	network            *netserver.Manager
 	networkDefaultHost string
 	networkDefaultPort int
+
+	// auth is the lock that listener can be put behind. It exists in every
+	// mode so the routes that set it up have something to call; only the
+	// exposed listener is ever actually wrapped in it.
+	//
+	// creds is what it checks against, held here rather than read from
+	// SQLite per request: the gate sees every request that listener takes,
+	// including each frame of an open stream. The two routes that write
+	// credentials are the only things that invalidate it, so a change is
+	// still in force for the very next request.
+	auth  *netauth.Gate
+	creds atomic.Pointer[netauth.Credentials]
 }
 
 func New(s *store.Store, reg *agent.Registry, r *runner.Runner) *Server {
@@ -68,6 +86,7 @@ func New(s *store.Store, reg *agent.Registry, r *runner.Runner) *Server {
 
 	srv := &Server{app: app, store: s, runner: r, registry: reg,
 		watchers: newWatchers(r.Hub()), closing: make(chan struct{})}
+	srv.auth = netauth.New(srv.credentials)
 	srv.routes()
 
 	// The UI is a Vite build, so a binary made without it says so rather than
@@ -109,6 +128,9 @@ func (s *Server) routes() {
 	api.Post("/foreground", s.raiseWindow)
 	api.Get("/server", s.getServerConfig)
 	api.Put("/server", s.putServerConfig)
+	api.Put("/server/auth", s.putServerAuth)
+	api.Post("/server/auth/totp", s.resetServerTOTP)
+	api.Get("/server/auth/totp.png", s.serverTOTPQR)
 
 	api.Get("/projects", s.listProjects)
 	api.Post("/projects", s.createProject)
@@ -192,6 +214,7 @@ func (s *Server) OnForeground(raise func() bool) { s.foreground = raise }
 // OnForeground; leave unset in web mode, where GET /api/server answers that
 // there is nothing to configure.
 func (s *Server) SetNetworkManager(m *netserver.Manager, defaultHost string, defaultPort int) {
+	m.Use(s.auth.Wrap)
 	s.network = m
 	s.networkDefaultHost = defaultHost
 	s.networkDefaultPort = defaultPort
@@ -212,6 +235,37 @@ func (s *Server) ApplyStoredNetworkConfig() {
 		return
 	}
 	s.network.Start(net.JoinHostPort(s.withDefaults(cfg)))
+}
+
+// credentials is what the gate on the exposed listener checks a login
+// against. It is read on every attempt rather than cached, so a password set
+// in Settings is in force for the very next request; a read that fails
+// answers "enabled with nothing to check", which netauth treats as closed.
+func (s *Server) credentials() netauth.Credentials {
+	if c := s.creds.Load(); c != nil {
+		return *c
+	}
+	return s.reloadCredentials()
+}
+
+// reloadCredentials re-reads the lock from SQLite and caches it. Two
+// goroutines racing here both do the same read and store the same answer, so
+// the only cost of the race is the second read. A failed read answers
+// "enabled with nothing to check", which netauth closes rather than opens,
+// and is not cached — the next request tries again.
+func (s *Server) reloadCredentials() netauth.Credentials {
+	cfg, err := s.store.GetServerConfig()
+	if err != nil {
+		log.Printf("server: read auth config: %v", err)
+		return netauth.Credentials{Enabled: true}
+	}
+	c := netauth.Credentials{
+		Enabled:      cfg.AuthEnabled,
+		PasswordHash: cfg.PasswordHash,
+		Secret:       cfg.TOTPSecret,
+	}
+	s.creds.Store(&c)
+	return c
 }
 
 // withDefaults fills in the app's compiled-in host and port wherever cfg

@@ -175,6 +175,12 @@ mid-burst.
 Archived or not, a schedule stays a schedule. It is a row in `schedules`, so no
 list has to guess whether something was a schedule or an ordinary prompt.
 
+A job's row answers to `Ctrl+PageUp` and `Ctrl+PageDown` with every other row
+in the sidebar, in the order the sidebar draws them — the project, then its
+jobs, then its tasks ([004](004-ui.md#tabs)). A job is a row like any other and
+is reached like one; the numbered `Alt` chords stay on tasks, which are what
+gets typed into.
+
 **The project's sidebar list holds the schedule, not its runs.** A schedule
 that has fired forty times would otherwise bury the project it belongs to. A
 run appears there while it is going, the way any task does, and is archived the
@@ -184,8 +190,14 @@ page's Tasks tab, which is what archiving already means
 
 ## The view
 
-A schedule tab looks like a project page ([004](004-ui.md#tabs)) and is its own
-colour on the strip. Its header carries the job's name and number
+A schedule tab looks like a project page ([004](004-ui.md#tabs)), is its own
+colour on the strip, and sits in the same **context slot** a project page and a
+conversation share ([008](008-project-workspaces.md)): opening a job replaces
+whichever of the three was in front rather than adding a tab beside it. A job
+is read the way a page is, and walking a project's jobs with `Ctrl+PageDown`
+would otherwise leave one tab behind per job looked at. Its label is cut to the
+same 20 characters a task's is, since a job names itself from a prompt exactly
+as a task does ([above](#the-name)). Its header carries the job's name and number
 ([above](#the-number)), the recurrence in words, when the next run is due, a
 Run menu ([above](#running-one-now)), Pause/Resume and Delete.
 Under it sit the prompt, the model, the

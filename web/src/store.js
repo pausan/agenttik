@@ -252,11 +252,12 @@ function addTab(tab) {
 
 
 function isContextTab(tab) {
-  return tab.kind === "project" || tab.kind === "session";
+  return tab.kind === "project" || tab.kind === "session" || tab.kind === "schedule";
 }
 
-/* A project has one leading context slot. Selecting a project or a session
-   replaces that slot without disturbing files opened from the prior view.
+/* A project has one leading context slot. Selecting a project, a session or a
+   scheduled job replaces that slot without disturbing files opened from the
+   prior view.
    Those files follow the new context so their inspector and Tree context stay
    useful. This also folds old saved layouts with several session tabs into
    the current shape as they are restored. */
@@ -413,24 +414,29 @@ export async function selectTaskAt(n) {
   focusPrompt();
 }
 
+/* Which field on the tab in front carries the id of the row it stands for. */
+const ROW_ID = { project: "projectID", schedule: "scheduleID", session: "sessionID" };
+
 /* Ctrl+PageUp and Ctrl+PageDown walk every row of the sidebar, top to bottom —
-   each project and, under it, that project's tasks — wrapping at both ends
-   rather than staying inside the active project. A project row opens its
-   page; a task row opens the task. The tab in front only supplies where to
-   start. */
+   each project and, under it, that project's scheduled jobs and then its
+   tasks — wrapping at both ends rather than staying inside the active
+   project. The order is the sidebar's own, jobs above tasks, so the keys walk
+   what the eye reads. A project row opens its page, a job row its job and a
+   task row the task. The tab in front only supplies where to start. */
 export function selectAdjacentSidebarRow(step) {
   const rows = S.projects.flatMap((project) => [
     { kind: "project", id: project.id },
+    ...project.schedules.map((schedule) => ({ kind: "schedule", id: schedule.id })),
     ...project.recent_sessions.map((session) => ({ kind: "session", id: session.id })),
   ]);
   if (!rows.length) return;
   const owner = S.owner;
-  const isOwner = (row) =>
-    row.kind === owner?.kind && row.id === (row.kind === "project" ? owner.projectID : owner.sessionID);
+  const isOwner = (row) => row.kind === owner?.kind && row.id === owner[ROW_ID[row.kind]];
   const at = rows.findIndex(isOwner);
   const next = at < 0 ? (step > 0 ? 0 : rows.length - 1) : (at + step + rows.length) % rows.length;
   const row = rows[next];
   if (row.kind === "project") openProject(row.id);
+  else if (row.kind === "schedule") openSchedule(row.id);
   else openTask(row.id);
 }
 
@@ -989,8 +995,10 @@ export function scheduleForm(schedule) {
   };
 }
 
-/* openSchedule puts a schedule in a tab: its prompt, its clock, and every run
-   it has spawned or skipped. */
+/* openSchedule puts a schedule in the project's context slot — the same one a
+   project page and a conversation share, so a job read on the way past does
+   not leave a tab behind. It shows its prompt, its clock, and every run it has
+   spawned or skipped. */
 export async function openSchedule(id, silent = false) {
   const tabID = "schedule:" + id;
   const open = S.tabs.find((t) => t.id === tabID);
@@ -1005,7 +1013,7 @@ export async function openSchedule(id, silent = false) {
     if (!silent) fail(e);
     return;
   }
-  addTab({
+  setContextTab({
     id: tabID,
     kind: "schedule",
     label: detail.schedule.title,

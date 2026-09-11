@@ -21,9 +21,14 @@ import FileView from "./FileView.vue";
 import PromptBar from "./PromptBar.vue";
 import StatusDot from "./StatusDot.vue";
 
-/* A session title can be a whole sentence, and the strip has to stay
-   readable with a dozen of them open. */
-const MAX_TASK_LABEL = 20;
+/* A session title can be a whole sentence, and a job names itself exactly as
+   a task does, so both are cut to keep the strip readable with a dozen of them
+   open. Projects and files are named by a folder and a file, which are already
+   as short as they are going to get. */
+const MAX_LABEL = 20;
+const named = (kind) => kind === "session" || kind === "schedule";
+const short = (label) =>
+  label.length > MAX_LABEL ? label.slice(0, MAX_LABEL - 3) + "..." : label;
 
 /* One colour per kind, so what a tab is reads before its label does. */
 const KINDS = {
@@ -40,10 +45,7 @@ const items = computed(() =>
     // The tab is named by its whole label even when the strip shows less of
     // it, so a truncated tab is still addressable.
     name: t.label,
-    label:
-      t.kind === "session" && t.label.length > MAX_TASK_LABEL
-        ? t.label.slice(0, MAX_TASK_LABEL - 3) + "..."
-        : t.label,
+    label: named(t.kind) ? short(t.label) : t.label,
     title:
       t.label +
       (t.temp ? "  (temporary — double click the file to keep it)" : ""),

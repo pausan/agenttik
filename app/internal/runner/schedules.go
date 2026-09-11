@@ -200,6 +200,33 @@ func (r *Runner) closeFailedForcedRun(sessionID string) {
 	_, _ = r.store.FinishScheduleRun(sessionID, store.RunError)
 }
 
+// NameSchedule names a job the way a task is named (020-task-titles.md): the
+// prompt's first line is already on the row, so nothing is ever drawn
+// untitled, and a better name is fetched behind it and put in its place. The
+// dialog therefore asks for a clock and nothing else — a job that had to be
+// named by hand before it existed would be one more field in the way of the
+// common case, and F2 renames it afterwards for the times the guess is wrong.
+//
+// Only the placeholder is replaced, so a job named by hand while the request
+// was in flight keeps that name, and a job created with a title of its own is
+// never guessed at in the first place.
+func (r *Runner) NameSchedule(s *store.Schedule) {
+	go r.refineScheduleTitle(s.ID, s.ProjectID, s.Provider, s.Title, s.Prompt)
+}
+
+func (r *Runner) refineScheduleTitle(id, projectID int64, providerName, placeholder, prompt string) {
+	title := r.askTitle(providerName, prompt)
+	if title == "" || title == placeholder {
+		return
+	}
+	if replaced, err := r.store.RetitleSchedule(id, title, placeholder); err != nil || !replaced {
+		return
+	}
+	// The sidebar row, the tab strip and the job's own page all draw the
+	// title, and every one of them re-reads on this event.
+	r.publishSchedule(projectID)
+}
+
 func (r *Runner) publishSchedule(projectID int64) {
 	r.hub.Publish(ProjectTopic(projectID), Event{ProjectID: projectID,
 		Event: agent.Event{Type: EventScheduleChanged}})

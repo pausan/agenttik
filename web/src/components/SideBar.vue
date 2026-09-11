@@ -42,32 +42,41 @@ function show(which) {
   nextTick(() => fileTree.value?.focus());
 }
 
-// One TaskRow per open task, so F2 can reach the row for whichever task is
-// current without a dialog of its own.
+// One TaskRow per open task and one ScheduleRow per job, so F2 can reach the
+// row for whatever is current without a dialog of its own.
 const taskRows = new Map();
 function setTaskRow(id, el) {
   if (el) taskRows.set(id, el);
   else taskRows.delete(id);
 }
 
-/* F2 edits the current task's own row. It may be behind Tree, or folded away
-   under its project, so both are opened first — the same way a click would
-   have to. */
-async function editCurrentTask() {
-  const session = S.detail?.session;
-  if (!session) return;
-  const project = S.projects.find((p) => p.id === session.project_id);
+const scheduleRows = new Map();
+function setScheduleRow(id, el) {
+  if (el) scheduleRows.set(id, el);
+  else scheduleRows.delete(id);
+}
+
+/* F2 edits the row of whatever is in front — a task, or a scheduled job,
+   which is named and renamed exactly as a task is. The row may be behind
+   Tree, or folded away under its project, so both are opened first: the same
+   way a click would have to. */
+async function editCurrent() {
+  const schedule = S.owner?.kind === "schedule" ? S.owner : null;
+  const session = schedule ? null : S.detail?.session;
+  const projectID = schedule ? schedule.projectID : session?.project_id;
+  const project = S.projects.find((p) => p.id === projectID);
   if (!project) return;
   show("projects");
   if (folded(project)) toggleProjectTasks(project.id);
   await nextTick();
-  taskRows.get(session.id)?.edit();
+  if (schedule) scheduleRows.get(schedule.scheduleID)?.edit();
+  else taskRows.get(session.id)?.edit();
 }
 
 defineExpose({
   showProjects: () => show("projects"),
   showTree: () => show("tree"),
-  editCurrentTask,
+  editCurrent,
 });
 
 
@@ -251,6 +260,7 @@ function onTaskDrop(e) {
           <ScheduleRow
             v-for="sched in folded(p) ? [] : p.schedules"
             :key="'sched' + sched.id"
+            :ref="(el) => setScheduleRow(sched.id, el)"
             :schedule="sched"
             :active="activeSchedule === sched.id"
             @select="openSchedule(sched.id)"
@@ -280,10 +290,12 @@ function onTaskDrop(e) {
               :queued="s.queue_count"
               :active="S.detail?.session.id === s.id"
               :number="taskNumber(p, s)"
+              :job="s.schedule_id"
               :stoppable="s.status === 'running' || s.queue_count > 0"
               :archive="s.status !== 'running' && s.queue_count === 0"
               @stop="stopTask(s.id)"
               @select="openTask(s.id)"
+              @open-job="openSchedule(s.schedule_id)"
               @toggle-archive="setTaskArchived(s, true)"
               @rename="renameTask(s, $event)"
               @editing="renaming = $event ? s.id : ''"

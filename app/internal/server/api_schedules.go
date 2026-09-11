@@ -108,9 +108,11 @@ func (s *Server) createSchedule(c *fiber.Ctx) error {
 		body.Remaining = -1
 	}
 
-	title := strings.TrimSpace(body.Title)
+	// The first line is the name the job is drawn with straight away; a
+	// better one is fetched behind it, below, so no dialog has to ask for one.
+	title, named := strings.TrimSpace(body.Title), true
 	if title == "" {
-		title = scheduleTitle(prompt)
+		title, named = scheduleTitle(prompt), false
 	}
 	sched := &store.Schedule{
 		ProjectID:       project.ID,
@@ -129,6 +131,11 @@ func (s *Server) createSchedule(c *fiber.Ctx) error {
 	sched.NextRunAt = runner.FirstRun(sched, time.Now()).UnixMilli()
 	if err := s.store.CreateSchedule(sched); err != nil {
 		return err
+	}
+	// A job created with a name of its own is not guessed at; one named from
+	// its first line is, and the guess arrives a few seconds later.
+	if !named {
+		s.runner.NameSchedule(sched)
 	}
 	full, err := s.store.GetSchedule(sched.ID)
 	if err != nil {
@@ -347,9 +354,11 @@ func (s *Server) reorderSchedules(c *fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-// scheduleTitle names a schedule from its prompt's first line. Every run
-// carries the same name, which is what makes forty of them readable in the
-// Sessions list; the runs are told apart by their timestamps.
+// scheduleTitle is the name a job is drawn with until the model behind it
+// answers (runner.NameSchedule), and the one it keeps if that never happens.
+// Every run carries the same name, which is what makes forty of them readable
+// in the Sessions list; the runs are told apart by their timestamps and by the
+// job number they share.
 func scheduleTitle(prompt string) string {
 	title := strings.TrimSpace(strings.SplitN(prompt, "\n", 2)[0])
 	const max = 80

@@ -21,6 +21,10 @@ const props = defineProps({
   // null keeps the row out of a numbered list. 0 is a row in one that no
   // chord reaches, and holds the column so the titles still line up.
   number: { type: Number, default: null },
+  // The scheduled job that spawned this task, or 0 for one started by hand.
+  // Forty runs of a job share a name, so the number is what says which job
+  // this is a run of. See specs/028-scheduled-jobs.md.
+  job: { type: Number, default: 0 },
   active: Boolean,
   archived: Boolean,
   archive: Boolean,
@@ -31,7 +35,7 @@ const props = defineProps({
   stoppable: Boolean,
 });
 
-const emit = defineEmits(["select", "stop", "toggle-archive", "delete", "rename", "editing"]);
+const emit = defineEmits(["select", "stop", "toggle-archive", "delete", "rename", "editing", "open-job"]);
 
 const editing = ref(false);
 const draft = ref("");
@@ -120,6 +124,20 @@ defineExpose({ edit });
           </div>
         </template>
       </UTooltip>
+      <!-- The job this run came from. It is a control rather than a label
+           because a finished run is archived, so its job's page is the only
+           place its history is kept — and this is the way back to it. It sits
+           in the action strip since a button inside the row's own button is
+           not valid markup. -->
+      <button
+        v-if="job"
+        type="button"
+        class="mr-1 shrink-0 rounded px-1 py-0.5 font-mono text-[10px] text-dimmed tabular-nums hover:bg-elevated hover:text-primary"
+        :title="`Run of scheduled job #${job} — open it`"
+        @click.stop="$emit('open-job')"
+      >
+        #{{ job }}
+      </button>
       <button
         type="button"
         class="mr-1 shrink-0 rounded p-1 text-dimmed hover:text-primary"

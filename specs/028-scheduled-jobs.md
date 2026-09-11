@@ -12,6 +12,46 @@ ordinary tasks. That is why it is its own table and its own kind of tab rather
 than a flag on `sessions`: nearly every list, count and view that reads a
 session would otherwise need to say "unless it is a schedule".
 
+## The name
+
+A job names itself the way a task does ([020](020-task-titles.md)). The
+prompt's first line, trimmed to 80 characters, is the title the moment the
+dialog is submitted, so nothing is ever drawn `Untitled schedule`, and a
+better name is fetched behind it from the provider's lightest model and put in
+its place a few seconds later. The same isolated, read-only request a task
+uses — no project files, no session, no transcript — so the two cannot drift
+apart; `runner.askTitle` is the one that makes it.
+
+**Only the placeholder is replaced.** Renaming the job by hand while the
+request is in flight keeps the name that was chosen, and a job created with a
+title of its own is never guessed at.
+
+The dialog does not ask for a name. What a job is called is worth changing and
+not worth typing before it exists: the common case is a prompt that is already
+its own description, and the rare one is a rename. **F2** is that rename, the
+same chord and the same in-place field a task's title uses
+([004](004-ui.md#tabs)) — it edits the job's sidebar row whenever the job's
+page is the tab in front, so the row's pencil and the keyboard reach one
+control rather than two.
+
+The title does not follow the prompt afterwards. It is named once, from the
+first prompt, and renamed by hand after that, so a job someone has already
+named does not lose that name to an edit.
+
+## The number
+
+A job is `schedules.id`, and that number is on screen: `#7` beside its name on
+its own page and in the sidebar, and `#7` again on every task it has spawned.
+`sessions.schedule_id` already recorded which job a run came from
+([Data](#data)); drawing it is what makes the relation readable, since forty
+runs of one job otherwise share a name and nothing else. The badge on a run
+opens the job it belongs to, which is the only route back — a finished run is
+archived, so the job's page is where its history lives.
+
+It is the row id rather than a code of its own: it is already unique, already
+stored on both sides, and a second identifier would only be a thing to keep in
+step with the first.
+
 ## The recurrence
 
 Two forms, which is what the dialog offers:
@@ -145,8 +185,9 @@ page's Tasks tab, which is what archiving already means
 ## The view
 
 A schedule tab looks like a project page ([004](004-ui.md#tabs)) and is its own
-colour on the strip. Its header carries the recurrence in words, when the next
-run is due, a Run menu ([above](#running-one-now)), Pause/Resume and Delete.
+colour on the strip. Its header carries the job's name and number
+([above](#the-number)), the recurrence in words, when the next run is due, a
+Run menu ([above](#running-one-now)), Pause/Resume and Delete.
 Under it sit the prompt, the model, the
 **Repeats** fields and the runs-left input; and under those every run it has
 spawned, newest first, each with its timestamp as `YYYY-MM-DD HH:mm:ss`.
@@ -158,9 +199,8 @@ schedule has no bar to star from. Nothing about what a schedule repeats is a
 decision made once: a typo, or a model that turned out to be the wrong one,
 should not cost the runs the schedule has already recorded. Only future runs
 follow the change — a run already spawned is an ordinary session and keeps the
-prompt and model it was started with. The title does not follow the prompt; it
-is named once from the first prompt and renamed by hand after that, so a
-schedule someone has already named does not lose that name to an edit.
+prompt and model it was started with. The title is not one of them: it is
+named once and renamed by hand after that ([above](#the-name)).
 Switching to a model that has no such effort drops the effort rather than
 sending one its provider would reject. A
 spawned run is a task, so its row opens it. A skipped run is a row with no task
@@ -241,7 +281,7 @@ idle cost of the feature is a query every quarter minute.
 | Method | Path | Purpose |
 |--------|------|---------|
 | GET | `/api/schedules` | `?window=&q=&project_id=&include_done=` — the sidebar list |
-| POST | `/api/schedules` | `{project_id, prompt, provider, model, effort, permission, every, interval_minutes, at_minute, remaining}` |
+| POST | `/api/schedules` | `{project_id, prompt, provider, model, effort, permission, every, interval_minutes, at_minute, remaining, title}` — `title` optional; without it the job names itself ([above](#the-name)) |
 | GET | `/api/schedules/:id` | the schedule and its runs |
 | PATCH | `/api/schedules/:id` | `{title, prompt, provider, model, effort, remaining, paused, done, every, interval_minutes, at_minute}` — any subset |
 | DELETE | `/api/schedules/:id` | drops the schedule and its run history; the sessions it spawned stay |
@@ -259,4 +299,6 @@ booking, off the new recurrence.
 
 `GET /api/projects/:id` also carries the project's open schedules, the way it
 already carries its open tasks, so the Projects sidebar needs no second
-request.
+request. Each of its task refs carries `schedule_id` with it, which is the
+number a run draws; a sidebar that had to ask per row which job a task came
+from would cost a request per run.

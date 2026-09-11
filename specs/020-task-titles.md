@@ -27,6 +27,9 @@ conditional on the row still holding the first line that was written for it,
 so renaming the task by hand while the request is in flight keeps the name the
 user chose. A provider that returns the placeholder unchanged writes nothing.
 
+A scheduled job names itself the same way, from the prompt it repeats, and
+through the same request — see [028](028-scheduled-jobs.md#the-name).
+
 ## Reaching the screen
 
 The replacement is published as a `session_titled` event on both the session's

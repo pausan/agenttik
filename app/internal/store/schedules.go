@@ -206,6 +206,23 @@ func (s *Store) SetScheduleModel(id int64, provider, model, effort string) error
 	return nil
 }
 
+// RetitleSchedule replaces a title only if the row still holds the one the
+// caller last wrote, and reports whether it did. The generated name arrives
+// seconds after the placeholder it replaces, and by then the job may have been
+// named by hand; that name wins. The same rule RetitleSession follows.
+func (s *Store) RetitleSchedule(id int64, title, expect string) (bool, error) {
+	res, err := s.db.Exec(`UPDATE schedules SET title = ? WHERE id = ? AND title = ?`,
+		title, id, expect)
+	if err != nil {
+		return false, fmt.Errorf("retitle schedule: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("retitle schedule: %w", err)
+	}
+	return n > 0, nil
+}
+
 func (s *Store) SetScheduleTitle(id int64, title string) error {
 	res, err := s.db.Exec(`UPDATE schedules SET title = ? WHERE id = ?`, title, id)
 	if err != nil {

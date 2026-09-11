@@ -40,7 +40,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [012](012-task-queue.md) | Queued prompts and project scheduling |
 | [020](020-task-titles.md) | Instant first-line title, refined by an isolated small model |
 | [024](024-instant-prompt-echo.md) | Drawing sent and queued prompts on the keypress |
-| [028](028-scheduled-jobs.md) | Repeating a prompt on a clock, and the tasks it spawns |
+| [028](028-scheduled-jobs.md) | Repeating a prompt on a clock, the tasks it spawns, and the number they share |
 | [033](033-prompt-model-picker.md) | Bounded, collapsible provider groups in the prompt model picker |
 | [045](045-provider-outage-retry.md) | A prompt whose provider was away waits, and starts itself when it answers |
 | [047](047-project-prompt.md) | The standing prompt a project puts in front of every conversation's first |

@@ -36,6 +36,11 @@ type SessionRef struct {
 	Status     string `json:"status"`
 	QueueCount int64  `json:"queue_count"`
 
+	// ScheduleID is the job that spawned this task, or 0. The sidebar draws
+	// it as the job's number, so a run can be traced back to the schedule it
+	// came from without opening it. See 028-scheduled-jobs.md.
+	ScheduleID int64 `json:"schedule_id"`
+
 	// Prompt is what the session was opened with, capped; the sidebar shows it
 	// when a row is hovered. See firstPromptCol.
 	Prompt string `json:"prompt,omitempty"`
@@ -64,7 +69,8 @@ type Session struct {
 	QueueCount int64 `json:"queue_count"`
 
 	// ScheduleID is the schedule that spawned this session, or 0 for one
-	// started by hand. See 028-scheduled-jobs.md.
+	// started by hand. It is the job's number on screen, drawn on the run so
+	// the two are readable as parent and child. See 028-scheduled-jobs.md.
 	ScheduleID int64 `json:"schedule_id"`
 
 	// ProjectPrompt is the copy of the project's prompt this conversation was

@@ -101,7 +101,7 @@ word Delete on a red button. In a repository the file is still in git, which is
 the only safety net that was going to exist.
 
 **F2 is not in the shortcut list.** It is already bound there to renaming the
-current *task*. The tree's row handles the key itself and stops it before the
+current *task* or scheduled job. The tree's row handles the key itself and stops it before the
 window listener sees it, so the same key renames whatever the keyboard is on. A
 second F2 entry in Settings would be reported as a conflict by
 `keyConflicts()` — which is exactly what it is not.

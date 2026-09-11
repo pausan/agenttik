@@ -200,7 +200,8 @@ func (s *Store) ArchivedProjects() ([]Project, error) {
 // and follows the order its sessions were dragged into. A limit of 0 means all.
 func (s *Store) recentSessions(projectID int64, limit int) ([]SessionRef, error) {
 	query := `SELECT s.id, s.title, s.status,
-		(SELECT COUNT(*) FROM queued_messages q WHERE q.session_id = s.id), ` +
+		(SELECT COUNT(*) FROM queued_messages q WHERE q.session_id = s.id),
+		s.schedule_id, ` +
 		firstPromptCol + ` FROM sessions s
 		 WHERE s.project_id = ? AND s.done_at = 0
 		 ORDER BY s.position, s.last_active_at DESC`
@@ -218,7 +219,8 @@ func (s *Store) recentSessions(projectID int64, limit int) ([]SessionRef, error)
 	refs := []SessionRef{}
 	for rows.Next() {
 		var r SessionRef
-		if err := rows.Scan(&r.ID, &r.Title, &r.Status, &r.QueueCount, &r.Prompt); err != nil {
+		if err := rows.Scan(&r.ID, &r.Title, &r.Status, &r.QueueCount,
+			&r.ScheduleID, &r.Prompt); err != nil {
 			return nil, fmt.Errorf("recent sessions for project %d: %w", projectID, err)
 		}
 		refs = append(refs, r)

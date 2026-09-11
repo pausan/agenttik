@@ -34,6 +34,10 @@ function commit() {
   setEditing(false);
   emit("rename", draft.value);
 }
+
+// Let a parent start the rename from outside the row, as TaskRow does: F2
+// edits whichever job's page is in front.
+defineExpose({ edit });
 </script>
 
 <template>
@@ -64,6 +68,12 @@ function commit() {
             :class="schedule.paused ? 'text-dimmed' : 'text-primary'"
           />
           <span class="truncate">{{ schedule.title || "Untitled schedule" }}</span>
+          <!-- The job's number, which every task it spawns carries too. -->
+          <span
+            class="shrink-0 font-mono text-[10px] text-dimmed tabular-nums"
+            :title="`Job #${schedule.id} — its runs carry this number`"
+            >#{{ schedule.id }}</span
+          >
           <span class="shrink-0 font-mono text-[10px] text-dimmed tabular-nums">
             {{ schedule.remaining < 0 ? "∞" : schedule.remaining }}
           </span>

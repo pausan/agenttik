@@ -178,6 +178,14 @@ function runTime(run) {
               :class="schedule.paused ? 'text-dimmed' : 'text-primary'"
             />
             {{ schedule.title }}
+            <!-- The job's number. Every task it spawns carries the same one,
+                 which is how forty runs that share a name are told from
+                 another job's. F2 renames the job from its sidebar row. -->
+            <span
+              class="font-mono text-xs font-normal text-dimmed tabular-nums"
+              title="Job number — its runs carry it too. F2 renames the job."
+              >#{{ schedule.id }}</span
+            >
           </h2>
           <div class="text-xs text-dimmed">
             {{ scheduleLabel(schedule) }} ·

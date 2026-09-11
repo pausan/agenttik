@@ -12,7 +12,7 @@
 
 export const ACTIONS = [
   { id: "task.new", group: "Tasks", what: "New task in the current project", keys: ["Ctrl+N", "Ctrl+T"] },
-  { id: "task.rename", group: "Tasks", what: "Rename the current task", keys: ["F2"] },
+  { id: "task.rename", group: "Tasks", what: "Rename the current task or scheduled job", keys: ["F2"] },
   { id: "tab.close", group: "Conversations", what: "Close the current tab", keys: ["Ctrl+W"] },
   { id: "tab.reopen", group: "Conversations", what: "Restore the last closed tab in this project", keys: ["Ctrl+Shift+T"] },
 

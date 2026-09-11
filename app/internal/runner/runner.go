@@ -622,19 +622,22 @@ func (r *Runner) nameTask(sess *store.Session, prompt string) {
 	go r.refineTitle(sess.ID, sess.Provider, title, prompt)
 }
 
-// refineTitle asks the provider's lightest model to name the prompt and puts
-// what it returns in place of the first line. It is deliberately a new,
-// read-only request in /tmp: it gets the prompt but no session id, transcript,
-// or project files, so it cannot join the real conversation. A timeout or any
-// provider failure leaves the first line standing.
-func (r *Runner) refineTitle(sessionID, providerName, placeholder, prompt string) {
+// askTitle asks the provider's lightest model to name a prompt, and returns
+// "" if it will not or cannot. It is deliberately a new, read-only request in
+// /tmp: it gets the prompt but no session id, transcript, or project files, so
+// it cannot join the real conversation. A timeout or any provider failure
+// returns nothing, which leaves whatever placeholder was written standing.
+//
+// A task and a scheduled job both name themselves this way, so the request
+// lives here rather than in either.
+func (r *Runner) askTitle(providerName, prompt string) string {
 	provider, ok := r.registry.Get(providerName)
 	if !ok {
-		return
+		return ""
 	}
 	generator, ok := provider.(agent.TitleGenerator)
 	if !ok {
-		return
+		return ""
 	}
 	model, effort := generator.TitleModel()
 	ctx, cancel := context.WithTimeout(context.Background(), titleTimeout)
@@ -648,7 +651,7 @@ func (r *Runner) refineTitle(sessionID, providerName, placeholder, prompt string
 		Isolated:   true,
 	})
 	if err != nil {
-		return
+		return ""
 	}
 	var response strings.Builder
 	for event := range events {
@@ -656,7 +659,13 @@ func (r *Runner) refineTitle(sessionID, providerName, placeholder, prompt string
 			response.WriteString(event.Text)
 		}
 	}
-	title := titleFromResponse(response.String())
+	return titleFromResponse(response.String())
+}
+
+// refineTitle puts what askTitle returns in place of the first line the task
+// was named with.
+func (r *Runner) refineTitle(sessionID, providerName, placeholder, prompt string) {
+	title := r.askTitle(providerName, prompt)
 	if title == "" || title == placeholder {
 		return
 	}

@@ -58,7 +58,7 @@ function onKey(e) {
   if (hit(e, "tab.prev")) return run(e, () => selectAdjacentTab(-1));
   if (hit(e, "tab.next")) return run(e, () => selectAdjacentTab(1));
   if (hit(e, "task.new")) return run(e, startCurrentTask);
-  if (hit(e, "task.rename")) return run(e, () => sideBar.value?.editCurrentTask());
+  if (hit(e, "task.rename")) return run(e, () => sideBar.value?.editCurrent());
   if (hit(e, "tab.reopen")) return run(e, reopenClosedTab);
   if (hit(e, "goto")) return run(e, () => (goTo.value = true));
   if (hit(e, "panel.tree")) return run(e, () => sideBar.value?.showTree());

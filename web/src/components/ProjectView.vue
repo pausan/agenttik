@@ -19,6 +19,7 @@ import { computed, nextTick, onMounted, ref, watch } from "vue";
 import {
   S,
   TASK_PAGE_SIZES,
+  openSchedule,
   openTask,
   removeTask,
   renameTask,
@@ -270,6 +271,7 @@ async function doDelete() {
             :status="row.task.status"
             :queued="row.task.queue_count"
             :sub="subtitle(row.task)"
+            :job="row.task.schedule_id"
             :active="S.detail?.session.id === row.task.id"
             :archived="row.archived"
             :stoppable="row.task.status === 'running' || row.task.queue_count > 0"
@@ -277,6 +279,7 @@ async function doDelete() {
             deletable
             @stop="stopTask(row.task.id)"
             @select="openTask(row.task.id)"
+            @open-job="openSchedule(row.task.schedule_id)"
             @toggle-archive="setTaskArchived(row.task, !row.archived)"
             @rename="renameTask(row.task, $event)"
             @editing="renaming = $event ? row.task.id : ''"

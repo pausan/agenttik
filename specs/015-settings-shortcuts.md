@@ -34,15 +34,19 @@ with the other action's name. Which one runs is whichever handler asks first,
 and that is not something to find out by accident.
 
 The dialog grew a rail to hold all this: **General**, **Projects**,
-**Appearance**, **Models**, **Server**, **Shortcuts** — General is
-[017](017-general-settings.md), Projects lists what has been archived
-([041](041-project-archiving.md)), and Server is
+**Appearance**, **Models**, **Subscriptions**, **Server**, **Shortcuts** —
+General is [017](017-general-settings.md), Projects lists what has been
+archived ([041](041-project-archiving.md)), Subscriptions is which account
+each provider runs on ([050](050-subscription-accounts.md)), and Server is
 [043](043-exposed-server.md) — with a filter above them. The filter fuzzy-matches every row in every section — a palette name, a
-model, a shortcut and its keys — and each section reports how many it kept, so
+model, a subscription, a shortcut and its keys — and each section reports how
+many it kept, so
 the count beside a section says where the answer is before you click.
 Filtering into a section that has no matches moves to one that does. Every
 pane stays mounted, which is what keeps those counts live; they are small
-enough that this costs nothing.
+enough that this costs nothing — and it is why a provider's rows are a
+labelled group in both Models and Subscriptions, since its name is now in two
+lists at once.
 
 Matching is per field rather than over one joined string: a subsequence match
 against a label and its keys run together is loose enough to hit almost

@@ -41,6 +41,11 @@ MCP servers.
 
 ## Authentication boundary
 
+More than one account is selected with `--config-dir`, which every command
+here carries: the token itself is in the machine's own vault, keyed per
+account, and `<dir>/config.json` records which one to open it with. See
+[050](050-subscription-accounts.md).
+
 agenttik does not read VS Code extension storage, GitHub tokens, or Copilot
 credentials. The installed `copilot` CLI must already be authenticated with
 the GitHub account that owns the Copilot subscription. A machine with only the

@@ -84,7 +84,10 @@ only when there is something to say.
 ## When the reading is taken
 
 The bars answer for the model in the box, so the allowance is read again when
-the task changes, when the provider changes, and when the *model*
+the task changes, when the provider changes, when the **subscription** changes
+([050](050-subscription-accounts.md)) — two accounts of one provider have two
+allowances, so the cache is keyed `provider:account` and the panel names the
+account under the plan — and when the *model*
 changes. The last of those matters because a provider can meter a single model
 on a window of its own — Claude Code's `Current week (Fable)` — which makes a
 different model a different allowance rather than the same one relabelled.

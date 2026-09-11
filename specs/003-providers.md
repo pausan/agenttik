@@ -13,11 +13,20 @@ type Provider interface {
 }
 ```
 
-Two halves are optional. `TitleGenerator` names a task from its first prompt
-([020](020-task-titles.md)); `Metered` answers the signed-in account's own
+Three halves are optional. `TitleGenerator` names a task from its first prompt
+([020](020-task-titles.md)); `Metered` answers one signed-in account's own
 subscription allowance without ever holding its credentials
-([011](011-prompt-bar-usage.md)). A provider that only volunteers an allowance
-mid-turn implements neither and is read off its limits event instead.
+([011](011-prompt-bar-usage.md)); `MultiAccount` says where that account's
+login is kept, so one machine can hold a company subscription and a personal
+one for the same provider ([050](050-subscription-accounts.md)). A provider
+that only volunteers an allowance mid-turn implements neither of the first two
+and is read off its limits event instead.
+
+`TurnRequest.AccountHome` is the login directory the turn runs on, empty for
+the machine's own. Each provider applies it the way its CLI expects —
+`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `copilot --config-dir` — and an empty one
+inherits this process's environment untouched, so a machine with a single
+subscription runs exactly the command it always ran.
 
 `Run` starts the CLI and returns a channel that closes when the turn is over. The
 channel carries provider-neutral events:
@@ -51,6 +60,9 @@ If `auto` turns out to withhold something a task needs, the lever is
 Edit"`) rather than widening the whole task to `full`.
 
 ## Claude Code
+
+The account is whichever `CLAUDE_CONFIG_DIR` names, and everything about one
+login — the credential, the settings, the history — is under it.
 
 ```
 claude -p --output-format stream-json --include-partial-messages --verbose \

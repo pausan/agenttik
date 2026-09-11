@@ -83,6 +83,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [034](034-claude-update-retry.md) | Retrying Claude Code startup during a self-update |
 | [035](035-missing-work-dir.md) | Reporting a renamed or deleted project folder as itself |
 | [036](036-copilot-model-list.md) | Asking the Copilot CLI which models the account has |
+| [050](050-subscription-accounts.md) | A work and a personal subscription on one machine, named wherever a model is picked |
 
 ## Status
 
@@ -91,6 +92,12 @@ transcript, record per-turn token metrics, report their context window and
 subscription allowance, and resume across turns. Codex is implemented against
 the current CLI JSONL contract and its app-server allowance query answers live,
 but no live subscription turn has ever been run through it.
+
+Multiple subscriptions per provider ([050](050-subscription-accounts.md)) are
+exercised end to end against the fake provider, and each real CLI's directory
+mechanism was verified on the machine this was built on, but no live turn has
+been run on a *second* real subscription — doing so needs a second paid
+account.
 
 `go build ./...`, `go vet ./...`, `make ui` and the 33 web unit tests all pass.
 Two Go tests and one Playwright test fail; see

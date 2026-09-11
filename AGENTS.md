@@ -12,4 +12,4 @@
 7. **Performance matters.** Memory and CPU cycles are not free. Let's design
 with this in mind. Fast is a feature.
 8. **Document in `specs/`.** Technical details, current behaviour and status. Describe the design as it stands, not the ones it replaced — when behaviour changes, rewrite the spec rather than appending to it. Keep an index file, keep index short, keep files short and organized.
-9. **Commits.** Commit each self-contained change as you finish it, without asking. Small, regular, descriptive. No AI tool mentions in commit messages. Never push.
+9. **Commits.** Commit each self-contained change as you finish it, without asking. Small, regular, descriptive. No AI tool mentions in commit messages — a `commit-msg` hook rejects such trailers, install it once per clone with `make hooks`. Never push.

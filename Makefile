@@ -19,7 +19,7 @@ VERSION := $(shell git rev-parse --short=12 HEAD 2>/dev/null || echo dev)
 endif
 VERSION_LDFLAGS := -X main.version=$(VERSION)
 
-.PHONY: all build build-web build-windows-amd64 build-macos-arm64 run run-web test e2e vet fmt clean deps ui ui-dev
+.PHONY: all build build-web build-windows-amd64 build-macos-arm64 run run-web test e2e vet fmt clean deps hooks ui ui-dev
 
 all: build
 
@@ -75,6 +75,11 @@ fmt:
 clean:
 	rm -rf bin $(DIST) $(E2E)/test-results $(E2E)/playwright-report
 	find web/dist -mindepth 1 ! -name .gitkeep -delete
+
+## hooks: point git at .githooks, which rejects Co-Authored-By trailers.
+## Config is per clone, so every clone runs this once.
+hooks:
+	git config core.hooksPath .githooks
 
 ## deps: system packages the desktop build needs on Debian/Ubuntu. The UI
 ## build needs node 20 or newer, which is not installed from here.

@@ -1,0 +1,10 @@
+#!/bin/sh
+# Reject the Co-Authored-By trailer. AGENTS.md rule 9: no AI tool mentions in
+# commit messages. Only trailer-form lines are matched, so prose may still name
+# the trailer. Install with `make hooks`.
+
+if git stripspace --strip-comments <"$1" | grep -qiE '^[[:space:]]*Co-Authored-By[[:space:]]*:'; then
+	echo "commit-msg: Co-Authored-By trailers are not allowed (AGENTS.md rule 9)." >&2
+	echo "            Drop the line and commit again." >&2
+	exit 1
+fi

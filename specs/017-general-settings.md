@@ -1,11 +1,15 @@
-# General settings, and which key submits
+# General settings: which key submits, and what a selection folds
 
 Settings grew a fourth section, **General**, and it is where the dialog now
 opens: the sidebar's Settings button and the launcher's Settings entry both
 land there, the keyboard button still lands on Shortcuts.
 
-It holds one question so far — does the plain Enter send the prompt or queue
-it? Picking the other way round swaps the pair: Enter enqueues and `Ctrl+Enter`
+It holds two questions: does the plain Enter send the prompt or queue it, and
+does selecting a project fold the other projects away?
+
+## Enter sends, or Enter enqueues
+
+Picking the other way round swaps the pair: Enter enqueues and `Ctrl+Enter`
 sends.
 
 The answer is not a flag kept beside the shortcuts, it *is* the shortcuts.
@@ -22,9 +26,6 @@ option is ticked and the pane names the chords actually bound, with picking
 either option putting the pair back. A setting that quietly undoes what the
 next pane did would be worse than one that admits the state it is in.
 
-Both panes count their rows for the rail's filter like the other three, so
-`enqueue` narrows to General 2 and Shortcuts 1.
-
 The prompt bar's button *is* the selected default, not just its label: it reads
 Enqueue and enqueues by default, and Send and sends when the pair is swapped,
 each with its own icon. The caret beside it opens the Send menu (see
@@ -34,3 +35,36 @@ whichever one is already on the button. It is still one field group, one pill,
 one seam at the caret, because the button and its menu are one control. Only
 sending is refused while a turn runs, wherever it sits, since enqueueing during
 a turn is the point of it.
+
+## One project unfolded, or each keeping its own
+
+`S.foldOthers` is off by default: selecting a project changes which tasks are
+numbered and which strip is on screen, and leaves every project folded or
+unfolded exactly as it was. Turned on, a selection unfolds that project and
+folds every other one, so a column of eight projects shows one project's tasks
+rather than all of them.
+
+It is applied at selection rather than stored as a second flag per project,
+which leaves the fold state itself the one fact it already was (see
+[042](042-sidebar-project-rows.md)): the chevron and Alt with a project's
+letter still fold the selected project on top of the rule, and it stays folded
+until it is selected again. A project's chevron also still unfolds it without
+folding the selection — only selecting enforces the rule, because that is the
+question the setting asks.
+
+What is watched is `S.activeProjectID`, not a call inside `switchProject`. A
+project is reached by clicking its row and by `Alt` and its letter, but also by
+`Ctrl+PageDown` and by Go to anywhere, which land on a *task* and bring its
+project with them; one watcher covers all four and cannot be forgotten by the
+fifth. Nothing selected folds nothing, so the gap `detachProject` leaves before
+the next project is chosen passes through. A project that arrives while the
+rule is on arrives folded — `refreshProjects` knows which ids are new — since
+it is neither the selected one nor one anybody has opened.
+
+The choice is remembered in `localStorage`, unlike the fold state it acts on:
+which projects are folded is where the user is in the list, and this is how
+they want the list to behave. Turning it on applies at once, like the colours
+in Appearance, because the sidebar it changes is visible behind the dialog.
+
+Both panes count their rows for the rail's filter like the other three, so
+`enqueue` narrows to General 2 and Shortcuts 1, and `fold` to General 2.

@@ -28,6 +28,7 @@ const KEYS_KEY = "agenttik.keys";
 const WINDOW_KEY = "agenttik.window";
 const TASK_PAGE_KEY = "agenttik.taskPageSize";
 const SCHEDULE_KEY = "agenttik.schedule";
+const FOLD_KEY = "agenttik.foldOthers";
 const LAYOUT_LIMITS = { left: [180, 520], right: [200, 620] };
 
 /* The letters Alt reaches a project with. The first eight rows of the
@@ -84,6 +85,9 @@ export const S = reactive({
   /* The projects whose tasks are folded away in the sidebar. Held here rather
      than in the sidebar because Alt and the project's letter reaches it. */
   collapsedProjects: new Set(),
+  // Whether selecting a project folds every other one away. From Settings,
+  // and unlike the fold state above it is remembered.
+  foldOthers: false,
   lastTab: {}, // per project, the tab it was last left on
   fileMode: "edit", // "edit", "diff" or "preview", carried to the next file
   diffView: "unified", // "unified" or "split", likewise
@@ -471,6 +475,41 @@ export function toggleProjectTasks(id) {
   else collapsed.add(id);
 }
 
+/* One project open at a time, or each keeping its own fold state — the
+   General setting. Folding the others is applied on selection rather than
+   stored as an extra flag per project, so the chevron and Alt-letter keep
+   working on top of it: a project selected and then folded stays folded
+   until it is selected again.
+
+   Selection is watched rather than switchProject called from, because a
+   project is also reached by Ctrl+PageDown and by Go to anywhere, which land
+   on a task and take its project with them. Nothing selected folds nothing:
+   a project being deleted deselects before the next one is chosen. */
+export function setFoldOthers(on) {
+  if (on === S.foldOthers) return;
+  S.foldOthers = on;
+  persist(FOLD_KEY, on ? "1" : "");
+  // At once, like the colours: the sidebar is behind the dialog.
+  if (on) foldOtherProjects(S.activeProjectID);
+}
+
+function foldOtherProjects(id) {
+  if (!S.foldOthers || !id) return;
+  const collapsed = S.collapsedProjects;
+  collapsed.clear();
+  for (const p of S.projects) if (p.id !== id) collapsed.add(p.id);
+}
+
+watch(() => S.activeProjectID, foldOtherProjects);
+
+function loadFoldOthers() {
+  try {
+    S.foldOthers = localStorage.getItem(FOLD_KEY) === "1";
+  } catch {
+    /* keep the default */
+  }
+}
+
 /* closeTab also closes the files opened from the tab, which have nothing to
    belong to once it is gone, and moves to the neighbour in the same project
    rather than back to the first tab. `closeTabOnly` is the keyboard variant:
@@ -596,6 +635,14 @@ export async function refreshProjects() {
   const read = ++projectsRead;
   const projects = await api("GET", "/api/projects");
   if (read !== projectsRead) return;
+  // A project that turns up while one project at a time is the rule arrives
+  // folded: it is not the selected one, and nothing has opened it yet.
+  if (S.foldOthers) {
+    const known = new Set(S.projects.map((project) => project.id));
+    for (const p of projects) {
+      if (p.id !== S.activeProjectID && !known.has(p.id)) S.collapsedProjects.add(p.id);
+    }
+  }
   S.projects = projects;
   for (const project of S.projects) {
     syncProjectSessionOrder(project.id, project.recent_sessions.map((session) => session.id));
@@ -2767,6 +2814,7 @@ export async function init() {
   loadFileMode();
   loadWindow();
   loadTaskPageSize();
+  loadFoldOthers();
   // Open tabs are saved, but an edited file is not — it would put a whole
   // working copy in localStorage — so the browser's own warning is what
   // stands between unsaved edits and a reload.

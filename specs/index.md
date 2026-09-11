@@ -64,7 +64,7 @@ screen, **session** for the row, the route or the CLI flag.
 | Doc | What it covers |
 |-----|----------------|
 | [015](015-settings-shortcuts.md) | Settings sections, the filter, editable chords |
-| [017](017-general-settings.md) | The General section, and which key sends |
+| [017](017-general-settings.md) | The General section: which key sends, and what selecting a project folds |
 | [018](018-readme-icon.md) | The project overview, and the one SVG the README, favicon and window share |
 | [029](029-desktop-proxy-logging.md) | Why the window logged broken pipes, and the abort it recovers instead |
 | [032](032-single-tab-close-shortcut.md) | Ctrl+W closes one active tab, including when held |

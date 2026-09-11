@@ -2606,6 +2606,18 @@ export async function copyText(text) {
   }
 }
 
+/* openExternal hands a URL to the machine's own browser. A browser tab
+   follows the link by itself, so this only has to step in for the desktop
+   window, whose webview opens nothing at all for target="_blank". Wails'
+   runtime is both the way to do it there and the way to tell the two apart:
+   it is injected into the window's own page and into no other. Answers
+   whether it took the click. */
+export function openExternal(url) {
+  if (!window.runtime?.BrowserOpenURL) return false;
+  window.runtime.BrowserOpenURL(url);
+  return true;
+}
+
 /* claimProjectPrompt is the client half of the rule the runner applies: a
    conversation accepting its first prompt — sent or queued — opens with the
    project's standing prompt in front of it. The text is already here, so the

@@ -26,6 +26,10 @@ switch, and again as a standing warning whenever the host is not loopback:
 picking Everybody or a LAN address means anyone who can reach that address
 and port has the same access this window does.
 
+Once it is up, the pane says what to open: `Listening on` and the address as
+a link, which hands that page to the machine's own browser, with an icon
+beside it that copies the same URL.
+
 ## Choices
 
 **Two listeners, one backend, one `*fiber.App`.** `app/internal/netserver`
@@ -60,6 +64,22 @@ fresh address and pointing a running one at a new address are the same
 request: validate the host as an IP and the port as 1–65535, attempt the
 bind, and only write to SQLite once that succeeds. A rejected `PUT` changes
 neither the live listener nor the saved setting.
+
+**The link is the address that can be opened, not always the one that was
+bound.** Everybody asks for 0.0.0.0, and a dual-stack machine reports the
+listener it got back as `[::]`; neither is somewhere a browser can go. Both
+are drawn as `http://localhost:<port>`, which reaches that same listener from
+the machine it runs on — the standing warning above is what says it answers
+the network as well. Any other host is shown exactly as it bound.
+
+**A browser keeps the click; the window hands it to Wails.** The line is a
+plain `target="_blank"` anchor, which is the whole story in a browser: a web
+launch, or another machine reading this same pane over the exposed server,
+opens a tab of its own. The desktop window's webview opens nothing at all for
+one, so there the click comes off the anchor and goes to `BrowserOpenURL`
+instead. Wails' runtime is injected into the window's own page and into no
+other, so whether it is there is both the way to do this and the way to tell
+the two shells apart — no flag has to be plumbed through for it.
 
 **The UI applies each control at the moment it means something.** The switch
 and the Everybody/localhost radio choices call `PUT` the instant they change,

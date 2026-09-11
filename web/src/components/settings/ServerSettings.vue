@@ -5,7 +5,7 @@
    the server on the address it was started with. */
 import { computed, ref, watch, watchEffect } from "vue";
 
-import { S, fail, setServerConfig } from "../../store";
+import { S, copyText, fail, openExternal, setServerConfig } from "../../store";
 import { fuzzyAny } from "../../fuzzy";
 
 const props = defineProps({ filter: { type: String, default: "" } });
@@ -75,6 +75,36 @@ function applyPort() {
   if (n === S.serverConfig.port) return;
   setServerConfig({ port: n });
 }
+
+/* WILDCARD is what a listener bound to every interface reports itself as.
+   Everybody asks for 0.0.0.0, but a dual-stack machine answers [::], which
+   is where the address a browser is handed parts ways with the one that was
+   bound. */
+const WILDCARD = ["0.0.0.0", "::", "[::]"];
+
+/* The address to actually open. A wildcard is every interface, not a
+   destination — no browser resolves it — so the link points at loopback,
+   which reaches that same listener from the machine it runs on. The warning
+   above is what says it answers the network as well. */
+const url = computed(() => {
+  const addr = S.serverConfig.addr || "";
+  const colon = addr.lastIndexOf(":");
+  const host = colon < 0 ? addr : addr.slice(0, colon);
+  return WILDCARD.includes(host) ? `http://localhost${addr.slice(colon)}` : `http://${addr}`;
+});
+
+/* The anchor is the whole story in a browser, which opens the tab itself.
+   Only the desktop window needs the click taken off it. */
+function follow(e) {
+  if (openExternal(url.value)) e.preventDefault();
+}
+
+const copied = ref(false);
+async function copyLink() {
+  if (!(await copyText(url.value))) return;
+  copied.value = true;
+  window.setTimeout(() => (copied.value = false), 1200);
+}
 </script>
 
 <template>
@@ -135,10 +165,28 @@ function applyPort() {
 
       <p
         v-if="enabled"
-        class="mt-3 text-xs"
+        class="mt-3 flex items-center gap-1.5 text-xs"
         :class="S.serverConfig.listening ? 'text-dimmed' : 'text-error'"
       >
-        <template v-if="S.serverConfig.listening">Listening on {{ S.serverConfig.addr }}.</template>
+        <template v-if="S.serverConfig.listening">
+          <span>Listening on</span>
+          <a
+            :href="url"
+            target="_blank"
+            rel="noreferrer noopener"
+            class="font-mono text-primary hover:underline"
+            @click="follow"
+          >{{ url }}</a>
+          <UButton
+            :icon="copied ? 'i-lucide-check' : 'i-lucide-copy'"
+            size="xs"
+            color="neutral"
+            variant="ghost"
+            aria-label="Copy the server link"
+            title="Copy link"
+            @click="copyLink"
+          />
+        </template>
         <template v-else>Not listening{{ S.serverConfig.error ? ": " + S.serverConfig.error : "" }}.</template>
       </p>
     </template>

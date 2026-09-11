@@ -88,10 +88,9 @@ subscription allowance, and resume across turns. Codex is implemented against
 the current CLI JSONL contract and its app-server allowance query answers live,
 but no live subscription turn has ever been run through it.
 
-`go build ./...`, `go vet ./...`, `make ui`, the 33 web unit tests and the full
-Playwright suite all pass. Two Go tests fail: `TestDoneReachesProjectTopic` in
-`runner` and `TestReorderSessionsDrivesProjectOrder` in `store`. See
-[005](005-testing.md).
+`go build ./...`, `go vet ./...`, `make ui` and the 33 web unit tests all pass.
+Two Go tests and one Playwright test fail; see
+[review-notes.md](review-notes.md) and [005](005-testing.md).
 
 [review-notes.md](review-notes.md) lists what these specs and the code still
 disagree about, for a human to settle.

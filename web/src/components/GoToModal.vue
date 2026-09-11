@@ -162,12 +162,16 @@ const groups = computed(() =>
         autofocus
         @update:open="open = $event"
       >
+        <!-- One wrapper: the palette spaces the label's children apart, which
+             would put a gap around every matched letter. -->
         <template #item-label="{ item }">
-          <span
-            v-for="(seg, i) in segments(item.label, item.hits)"
-            :key="i"
-            :class="seg.hit ? 'font-semibold text-primary' : ''"
-            >{{ seg.text }}</span
+          <span class="text-highlighted"
+            ><span
+              v-for="(seg, i) in segments(item.label, item.hits)"
+              :key="i"
+              :class="seg.hit ? 'font-semibold' : ''"
+              >{{ seg.text }}</span
+            ></span
           >
         </template>
       </UCommandPalette>

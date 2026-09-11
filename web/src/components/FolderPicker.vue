@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from "vue";
+import { computed, nextTick, ref } from "vue";
 
 import { api } from "../api";
 import { debounce } from "../debounce";
@@ -14,12 +14,16 @@ import { filterDirs, segments } from "../fuzzy";
    directory is far too big to send, and only one level is ever shown. */
 
 const path = defineModel({ type: String, default: "" });
+defineProps({ label: { type: String, default: "Folder" } });
 const emit = defineEmits(["submit"]);
 
 const hidden = ref(false);
 const listing = ref(null);
 const filter = ref("");
 const error = ref("");
+const naming = ref(false); // the New folder row is open
+const newName = ref("");
+const nameField = ref(null);
 
 let at = ""; // folder currently listed
 let key = null; // query that produced `listing`, so filtering does not refetch
@@ -85,6 +89,32 @@ async function onEnter() {
   emit("submit");
 }
 
+/* New folder makes one folder in the folder on screen and walks into it, so
+   the picker ends up on it the same way clicking an existing one would. A
+   project can then be started somewhere that did not exist a moment ago
+   without leaving for a shell. */
+async function startNaming() {
+  naming.value = true;
+  newName.value = "";
+  await nextTick();
+  nameField.value?.inputRef?.focus();
+}
+
+async function create() {
+  const name = newName.value.trim();
+  if (!name) return (naming.value = false);
+  let dir;
+  try {
+    dir = await api("POST", "/api/fs/dir", { path: at, name });
+  } catch (e) {
+    error.value = e.message; // the row stays open on the name to change
+    return;
+  }
+  naming.value = false;
+  key = null; // the listing in hand predates the folder just made
+  browse(dir.path);
+}
+
 function toggleHidden() {
   key = null; // the listing changes shape, so it has to be fetched again
   browseTyped(path.value);
@@ -94,6 +124,7 @@ function toggleHidden() {
    may have changed since last time. */
 function open(to) {
   key = null;
+  naming.value = false;
   browse(to || at);
 }
 
@@ -103,7 +134,7 @@ defineExpose({ open });
 <template>
   <div>
     <label class="mb-3 block text-xs font-medium text-muted">
-      Folder
+      {{ label }}
       <UInput
         v-model="path"
         class="mt-1 w-full font-normal"
@@ -116,33 +147,61 @@ defineExpose({ open });
     </label>
 
     <div class="mb-3 overflow-hidden rounded-[var(--ui-radius)] inset-ring inset-ring-accented">
-      <div class="flex items-center gap-px overflow-x-auto border-b border-default bg-muted px-1.5 py-1 whitespace-nowrap [scrollbar-width:none]">
-        <UButton
-          v-if="listing?.home"
-          color="neutral"
-          variant="ghost"
-          size="xs"
-          icon="i-lucide-house"
-          :title="listing.home"
-          @click="browse(listing.home)"
-        />
-        <template v-for="(c, i) in listing?.crumbs || []" :key="c.path">
-          <span v-if="i > 1" class="shrink-0 text-xs text-dimmed">/</span>
+      <div class="flex items-center border-b border-default bg-muted">
+        <div class="flex min-w-0 flex-1 items-center gap-px overflow-x-auto px-1.5 py-1 whitespace-nowrap [scrollbar-width:none]">
           <UButton
+            v-if="listing?.home"
             color="neutral"
             variant="ghost"
             size="xs"
-            class="max-w-40 shrink-0 truncate"
-            :class="i === (listing.crumbs.length - 1) ? 'font-medium text-highlighted' : ''"
-            :label="c.name"
-            @click="browse(c.path)"
+            icon="i-lucide-house"
+            :title="listing.home"
+            @click="browse(listing.home)"
           />
-        </template>
+          <template v-for="(c, i) in listing?.crumbs || []" :key="c.path">
+            <span v-if="i > 1" class="shrink-0 text-xs text-dimmed">/</span>
+            <UButton
+              color="neutral"
+              variant="ghost"
+              size="xs"
+              class="max-w-40 shrink-0 truncate"
+              :class="i === (listing.crumbs.length - 1) ? 'font-medium text-highlighted' : ''"
+              :label="c.name"
+              @click="browse(c.path)"
+            />
+          </template>
+        </div>
+        <UButton
+          color="neutral"
+          variant="ghost"
+          size="xs"
+          class="mr-1 shrink-0"
+          icon="i-lucide-folder-plus"
+          title="New folder"
+          aria-label="New folder"
+          :disabled="!listing"
+          @click="startNaming"
+        />
       </div>
 
       <div class="h-[190px] overflow-auto p-1">
+        <div v-if="naming" class="flex items-center gap-1.5 px-1.5 py-1">
+          <span class="shrink-0 text-dimmed">▸</span>
+          <UInput
+            ref="nameField"
+            v-model="newName"
+            class="w-full font-normal"
+            size="xs"
+            placeholder="new folder name"
+            autocomplete="off"
+            @keydown.enter.stop.prevent="create"
+            @keydown.esc.stop.prevent="naming = false"
+            @blur="naming = false"
+          />
+        </div>
+
         <button
-          v-if="listing?.parent && !filter"
+          v-if="listing?.parent && !filter && !naming"
           type="button"
           class="flex w-full items-center gap-1.5 rounded-[var(--ui-radius)] px-1.5 py-1 text-left hover:bg-elevated hover:text-highlighted"
           @click="browse(listing.parent)"

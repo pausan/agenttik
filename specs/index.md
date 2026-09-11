@@ -29,6 +29,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [040](040-editable-project-path.md) | Repointing a project at a moved folder, by typing or by browsing |
 | [041](041-project-archiving.md) | Putting a project away without deleting it, and the Settings list it waits in |
 | [042](042-sidebar-project-rows.md) | A project added lands last, the rule between projects, and the letter that folds one |
+| [049](049-project-creation-modes.md) | Adding a project on a folder, or on a base folder of repositories cloned into it |
 
 ## Prompting and turns
 

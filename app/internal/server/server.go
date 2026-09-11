@@ -98,6 +98,8 @@ func (s *Server) routes() {
 	api.Get("/providers", s.listProviders)
 	api.Get("/providers/:provider/subscription-limits", s.subscriptionLimits)
 	api.Get("/fs", s.browseDir)
+	api.Post("/fs/dir", s.makeDir)
+	api.Post("/fs/clone", s.cloneRepo)
 	api.Post("/foreground", s.raiseWindow)
 	api.Get("/server", s.getServerConfig)
 	api.Put("/server", s.putServerConfig)

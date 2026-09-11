@@ -22,7 +22,14 @@ export default defineConfig({
   plugins: [
     vue(),
     // The defaults; Settings changes both at runtime through the same config.
-    ui({ ui: { colors: { primary: "agenttik", neutral: "zinc" } } }),
+    // `icon.clientBundle.scan` is off by default for this plugin (unlike
+    // `@nuxt/icon`'s own, which scans by default) — without it, only Nuxt UI's
+    // built-in icons are bundled and every icon agenttik actually uses falls
+    // back to a live fetch against the Iconify API the first time it renders.
+    ui({
+      ui: { colors: { primary: "agenttik", neutral: "zinc" } },
+      icon: { clientBundle: { scan: true } },
+    }),
     keepPlaceholder(),
   ],
   resolve: {

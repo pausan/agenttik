@@ -87,6 +87,14 @@ func (s *Server) subscriptionLimits(c *fiber.Ctx) error {
 			return badRequest("subscription %q does not belong to %s", account.Alias, name)
 		}
 		home = account.Home
+		// A subscription with no login yet has no allowance of its own, and
+		// must not be shown someone else's: asked about a directory nothing
+		// has signed into, the Copilot CLI answers with the account in the
+		// machine's vault. No bars is the honest answer until it is signed
+		// in. See 050-subscription-accounts.md.
+		if multi, ok := provider.(agent.MultiAccount); ok && !multi.AccountStatus(home).SignedIn {
+			return c.JSON([]agent.RateLimit{})
+		}
 	}
 	var asked []agent.RateLimit
 	var askErr error

@@ -43,8 +43,14 @@ MCP servers.
 
 More than one account is selected with `--config-dir`, which every command
 here carries: the token itself is in the machine's own vault, keyed per
-account, and `<dir>/config.json` records which one to open it with. See
-[050](050-subscription-accounts.md).
+account, and `<dir>/config.json` records which one to open it with.
+
+That makes this CLI the one whose directory is not a wall on its own. Given a
+directory nothing has signed into, it does not refuse — it uses the vault's
+token, and answered `account.getQuota` with the machine's own quota to the
+decimal. So a turn on a Copilot subscription that holds no login is refused
+before the CLI starts, and its allowance reads as no bars rather than another
+account's. See [050](050-subscription-accounts.md).
 
 agenttik does not read VS Code extension storage, GitHub tokens, or Copilot
 credentials. The installed `copilot` CLI must already be authenticated with

@@ -3,7 +3,9 @@ package server
 import (
 	"context"
 	"net/http"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/pausan/agenttik/app/internal/agent"
@@ -33,8 +35,18 @@ func (p singleLoginProvider) Run(context.Context, agent.TurnRequest) (<-chan age
 }
 
 func (p twoLoginProvider) DefaultHome() string { return "/tmp/" + p.name }
+
+// AccountStatus models the real CLIs: a directory holds a login only once
+// something has signed into it, which for the two file-based providers means
+// once the directory is there at all.
 func (p twoLoginProvider) AccountStatus(home string) agent.AccountStatus {
-	return agent.AccountStatus{SignedIn: home != "", Detail: home}
+	if home == "" {
+		return agent.AccountStatus{SignedIn: true, Detail: "the machine's own"}
+	}
+	if _, err := os.Stat(home); err != nil {
+		return agent.AccountStatus{}
+	}
+	return agent.AccountStatus{SignedIn: true, Detail: home}
 }
 func (p twoLoginProvider) LoginCommand(home string) agent.LoginCommand {
 	return agent.LoginCommand{Args: []string{p.name, "login"}}
@@ -241,6 +253,47 @@ func TestRemovedSubscriptionStopsItsTasksRatherThanMovingThem(t *testing.T) {
 	resp := do(t, s, "POST", "/api/sessions/"+session.ID+"/messages", map[string]any{"prompt": "hi"})
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("a prompt on a removed subscription answered %d, want 400", resp.StatusCode)
+	}
+}
+
+// The guard that makes a subscription mean something. Copilot keeps its token
+// in the machine's vault and, given a directory nobody has signed into, uses
+// that token instead of refusing — so a task on such a subscription would run
+// on the account the machine already had. Measured; see
+// specs/050-subscription-accounts.md.
+func TestATaskWillNotRunOnASubscriptionNothingHasSignedInto(t *testing.T) {
+	s, st := accountServer(t)
+	created := decode[accountInfo](t, do(t, s, "POST", "/api/providers/multi/accounts",
+		map[string]any{"alias": "Work"}))
+	project, err := st.CreateProject("p", t.TempDir())
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	session := decode[store.Session](t, do(t, s, "POST", "/api/sessions",
+		map[string]any{"project_id": project.ID, "provider": "multi", "account_id": created.ID}))
+
+	// Nothing has signed in: the directory does not even exist yet.
+	resp := do(t, s, "POST", "/api/sessions/"+session.ID+"/messages", map[string]any{"prompt": "hi"})
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("a prompt on a signed-out subscription answered %d, want 400", resp.StatusCode)
+	}
+	if body := decode[map[string]string](t, resp); !strings.Contains(body["error"], "not signed in") {
+		t.Errorf("error was %q, want it to say the subscription is not signed in", body["error"])
+	}
+	// Nor is it shown another account's allowance while it waits.
+	limits := decode[[]any](t, do(t, s, "GET",
+		"/api/providers/multi/subscription-limits?account="+itoa(created.ID), nil))
+	if len(limits) != 0 {
+		t.Errorf("a signed-out subscription showed %d allowance buckets", len(limits))
+	}
+
+	// Once it is signed in, the same prompt goes through.
+	if err := os.MkdirAll(created.Home, 0o700); err != nil {
+		t.Fatalf("sign in: %v", err)
+	}
+	if resp := do(t, s, "POST", "/api/sessions/"+session.ID+"/messages",
+		map[string]any{"prompt": "hi"}); resp.StatusCode >= 400 {
+		t.Errorf("a prompt on a signed-in subscription answered %d", resp.StatusCode)
 	}
 }
 

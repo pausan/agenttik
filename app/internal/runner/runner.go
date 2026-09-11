@@ -32,6 +32,13 @@ var (
 	// own login: running a work prompt on a personal allowance, quietly, is
 	// worse than not running it. See 050-subscription-accounts.md.
 	ErrUnknownAccount = errors.New("subscription no longer configured")
+	// ErrAccountSignedOut says the subscription exists but its directory holds
+	// no login yet. This is the same rule as above, and for Copilot it is the
+	// only thing enforcing it: given a directory nothing has signed into, that
+	// CLI does not refuse — it quietly uses the token in the machine's vault,
+	// which is the other account. Measured directly; see
+	// 050-subscription-accounts.md.
+	ErrAccountSignedOut = errors.New("subscription is not signed in")
 )
 
 // Event is what the UI receives over SSE: a provider event tagged with the
@@ -108,6 +115,15 @@ const EventProjectsChanged agent.EventType = "projects_changed"
 // accountHome is the directory holding the login a task runs on: empty for
 // the machine's own CLI, which is what a task has unless it was given a
 // subscription of its own.
+//
+// A named subscription is also checked for actually holding a login, and the
+// turn is refused if it does not. Two of the three CLIs would refuse it
+// themselves — Claude Code answers "Not logged in · Please run /login" for a
+// directory with no credential — but Copilot keeps its token in the machine's
+// vault and falls back to it, so a directory nobody has signed into runs on
+// whatever account the machine already had. That is precisely the
+// interference having subscriptions at all is meant to prevent, so it is
+// stopped here, for every provider, before a process starts.
 func (r *Runner) accountHome(providerName string, accountID int64) (string, error) {
 	if accountID == store.SystemAccount {
 		return "", nil
@@ -123,6 +139,17 @@ func (r *Runner) accountHome(providerName string, accountID int64) (string, erro
 		// Only reachable through a hand-edited database: the API refuses to
 		// pair an account with another provider.
 		return "", fmt.Errorf("%w: %s is not a %s subscription", ErrUnknownAccount, account.Alias, providerName)
+	}
+	provider, ok := r.registry.Get(providerName)
+	if !ok {
+		return "", fmt.Errorf("%w: %s", ErrUnknownProvider, providerName)
+	}
+	// Read now rather than remembered from the last provider listing: a login
+	// finished in a terminal a moment ago must count, and one signed out must
+	// not.
+	if multi, ok := provider.(agent.MultiAccount); ok && !multi.AccountStatus(account.Home).SignedIn {
+		return "", fmt.Errorf("%w: sign in to %s, or move this task to another subscription",
+			ErrAccountSignedOut, account.Alias)
 	}
 	return account.Home, nil
 }

@@ -69,6 +69,69 @@ Two rules follow from money rather than from code:
 - **A title request runs on the task's subscription.** Naming a task is a
   small charge, but it belongs on the account that asked for the work.
 
+## What is isolated, and what a named account does not get
+
+The whole point is that choosing a subscription here cannot disturb anything
+outside this tool, including CLIs run by hand at the same time. It does not:
+
+- The directory is set on the child process only — `cmd.Env` for the two
+  environment-variable providers, an argument for Copilot. This process's own
+  environment is never modified, so nothing leaks to the next turn or to
+  anything else on the machine.
+- Nothing here writes to a CLI's own configuration directory. The one write in
+  the whole feature is `MkdirAll(<account home>, 0700)` when a login is
+  launched, and the system account has no home to make. `UserHomeDir` is used
+  only to *name* the default directory and to read a status out of it.
+- Concurrency is the CLIs' own: each turn is a separate process with its own
+  directory, so two subscriptions run side by side, and a CLI started in a
+  terminal is unaffected. Two tasks both on the system account share that
+  directory exactly as two hand-started CLIs already do.
+
+Measured on the machine this was built on, rather than assumed:
+
+| Check | Result |
+|-------|--------|
+| `CODEX_HOME=<fresh> codex login status` | `Not logged in`, while the real home says `Logged in using ChatGPT` |
+| `CLAUDE_CONFIG_DIR=<fresh> claude -p "say ok"` | `Not logged in · Please run /login`, cost 0 |
+| `copilot --config-dir <fresh>`, `account.getQuota` | **the machine's own quota**, identical figures — see below |
+
+The other side of that isolation is worth saying plainly: **a named account
+starts blank.** A fresh Claude Code directory has no `settings.json`, no user
+memory, no agents, commands or plugins, and no MCP servers; a fresh
+`CODEX_HOME` has no `config.toml` and no `~/.codex/AGENTS.md`; a fresh Copilot
+directory has no `mcp-config.json` and no custom instructions. Only the system
+account carries the machine-wide setup. That is the correct default for the
+problem this solves — a work subscription should not inherit a personal
+account's tools — and a subscription that wants some of it has to be given it,
+by copying or linking the non-credential files into its directory.
+
+## Copilot's vault, and the guard it needs
+
+Asked about a directory nothing has signed into, the Copilot CLI does not
+refuse: it finds the token in the machine's vault and answers for **that**
+account. A fresh config directory reported the same quota as the machine's own
+login, to the decimal. So for Copilot the directory selects the settings and
+records which login to use, but it is not on its own a wall around the
+account.
+
+`runner.accountHome` therefore refuses a turn on any named subscription whose
+directory holds no login, for every provider —
+`runner.ErrAccountSignedOut`, a 400 saying which subscription to sign in.
+Claude Code and Codex would refuse it themselves, so the rule costs them only
+a clearer message; for Copilot it is the only thing preventing a task from
+running on the account the machine already had. The allowance query is guarded
+the same way: a subscription that is not signed in shows no bars rather than
+another account's.
+
+What this does **not** prove is that two genuinely signed-in Copilot accounts
+stay apart — the vault keys its entries per account and `config.json` records
+which one a directory uses, which is the CLI's own design, but verifying it
+needs a second paid Copilot subscription and none was available. If it turns
+out not to hold, the documented alternative is the environment token the CLI
+checks first (`COPILOT_GITHUB_TOKEN`, then `GH_TOKEN`, then `GITHUB_TOKEN`),
+which would be held as the *name* of a variable or a command to read it from,
+never as a stored secret.
+
 ## Allowances
 
 `Metered.SubscriptionLimits(ctx, home)` asks about one login, and remembered
@@ -149,7 +212,10 @@ subscription a turn *actually* ran on, using the fake provider's `@account`
 directive to report the login directory the runner resolved — the only way to
 see that from a browser.
 
-## Known gap
+## Known gaps
+
+Two subscriptions of one real Copilot account have never been run side by
+side; see the section above for what was measured and what stands in for it.
 
 A Copilot model list is per account: which models exist and which the account
 is entitled to both come from the CLI ([036](036-copilot-model-list.md)), and

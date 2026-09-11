@@ -12,6 +12,14 @@ export async function api(method, path, body) {
   // the reason phrase rather than JSON. Failures are always JSON.
   const isJSON = res.headers.get("content-type")?.includes("json");
   const data = text && isJSON ? JSON.parse(text) : null;
+  // A 401 can only be the lock on the exposed server: agenttik's own API
+  // never asks for one. The session has lapsed mid-use, so the page is
+  // reloaded into the login form rather than left showing a toast on a UI
+  // that can no longer load anything. See specs/043-exposed-server.md.
+  if (res.status === 401) {
+    window.location.reload();
+    throw new Error("Signed out");
+  }
   if (!res.ok) throw new Error((data && data.error) || res.statusText);
   return data;
 }

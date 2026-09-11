@@ -70,7 +70,8 @@ export const S = reactive({
   // reach, read when Settings opens like the archived projects beside it.
   // available is false on a web launch, which already is the server. See
   // specs/043-exposed-server.md.
-  serverConfig: { available: false, enabled: false, host: "", port: 0, listening: false },
+  serverConfig: { available: false, enabled: false, host: "", port: 0, listening: false,
+    auth_enabled: false, has_password: false, totp_secret: "", totp_uri: "" },
   /* sessionID -> unsent prompt, for a conversation with no tab of its own.
      A project has one context slot, so opening anything else in it drops the
      session tab the text was typed into; the text is the user's and outlives
@@ -308,6 +309,32 @@ export async function setServerConfig(patch) {
   } catch (e) {
     fail(e);
   }
+}
+
+/* setServerAuth sets the lock in front of that exposed server: whether it is
+   asked for, the password, and the authenticator seed. A blank password or
+   seed means "leave that one alone", so changing one does not mean resending
+   the other — and the password is never sent back down to be resent with.
+
+   Any change that goes through ends every browser session already open, this
+   one included when Settings is being read over the exposed server itself.
+   Errors are thrown rather than swallowed: the caller draws them next to the
+   field that caused them, since "the password is too short" belongs under the
+   password box and not in a corner. */
+export async function setServerAuth(patch) {
+  S.serverConfig = await api("PUT", "/api/server/auth", {
+    enabled: S.serverConfig.auth_enabled,
+    password: "",
+    totp_secret: "",
+    ...patch,
+  });
+}
+
+/* resetServerTOTP rolls a fresh random seed, for a seed that has been seen by
+   the wrong person. Whatever was paired against the old one stops working at
+   once, so the pane re-draws its QR straight after. */
+export async function resetServerTOTP() {
+  S.serverConfig = await api("POST", "/api/server/auth/totp", {});
 }
 
 /* contextWindow is how many tokens the session's model holds, which the

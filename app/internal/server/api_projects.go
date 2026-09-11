@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/pausan/agenttik/app/internal/agent"
 	"github.com/pausan/agenttik/app/internal/runner"
+	"github.com/pausan/agenttik/app/internal/store"
 )
 
 // listProjects serves the sidebar's active projects, or — with ?archived=true
@@ -45,6 +47,11 @@ func (s *Server) createProject(c *fiber.Ctx) error {
 		body.Name = filepath.Base(abs)
 	}
 	p, err := s.store.CreateProject(body.Name, abs)
+	// The store says the folder is taken; from here it can only be taken by
+	// this same add, so say that rather than point at "another project".
+	if errors.Is(err, store.ErrPathInUse) {
+		return fiber.NewError(fiber.StatusConflict, "you cannot add the same folder twice")
+	}
 	if err != nil {
 		return err
 	}

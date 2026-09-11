@@ -20,9 +20,10 @@ than cached on the session.
 
 Two projects cannot share a folder — `projects.path` is unique, and one
 folder with two owners would give its Tree, its Changed pane and its turns
-two of everything. Picking a folder another project holds answers `409` with
-"another project already uses that folder", for a repoint and for Add
-project alike.
+two of everything. Picking a folder another project holds answers `409` both
+ways, worded for what was asked: a repoint says "another project already uses
+that folder", and Add project says "you cannot add the same folder twice",
+since from there the other owner is the folder just picked.
 
 ## Choices
 
@@ -43,7 +44,16 @@ read as a change.
 **The constraint is translated once, in the store.** `pathTaken` matches
 `SQLITE_CONSTRAINT_UNIQUE` and returns `ErrPathInUse`, which the error
 handler maps to `409`. Doing it at the store covers create and update from
-one place, and keeps SQLite's own wording out of a toast.
+one place, and keeps SQLite's own wording off the screen. Only `createProject`
+rewords it, because only there is the project already holding the folder known
+to be the one the user is trying to add.
+
+**Add project reports its failures inline.** A rejected folder leaves the
+dialog open on the field that has to change, so the reason sits under it in
+`text-error` rather than in a toast behind the dialog — the same place
+`FolderPicker` already reports a folder it could not list. Moving anywhere in
+the picker clears the message, since it was about the folder left behind. The
+repoint in Options keeps its toast: it has no dialog to stay open in.
 
 **The pane refetches on success, the same way switching projects does.**
 `updateProjectPath` calls `refreshInspector()` after a successful move, so

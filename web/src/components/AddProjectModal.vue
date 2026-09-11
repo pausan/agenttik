@@ -1,22 +1,30 @@
 <script setup>
 import { nextTick, ref, watch } from "vue";
 
-import { addProject, fail } from "../store";
+import { addProject } from "../store";
 import FolderPicker from "./FolderPicker.vue";
 
 const open = defineModel("open", { type: Boolean, default: false });
 
 const path = ref("");
 const name = ref("");
+const error = ref("");
 const picker = ref(null);
 
 watch(open, async (on) => {
   if (!on) return;
   path.value = "";
   name.value = "";
+  error.value = "";
   await nextTick();
   picker.value?.open();
 });
+
+/* A rejected folder — one already added, or one that is not a directory —
+   leaves the dialog open on the field that has to change, so the reason
+   belongs beside that field rather than in a toast behind the dialog. Moving
+   anywhere in the picker clears it: the message was about the old folder. */
+watch(path, () => (error.value = ""));
 
 async function add() {
   if (!path.value.trim()) return;
@@ -24,7 +32,7 @@ async function add() {
     await addProject(path.value.trim(), name.value.trim());
     open.value = false;
   } catch (e) {
-    fail(e);
+    error.value = e?.message || String(e);
   }
 }
 </script>
@@ -41,6 +49,7 @@ async function add() {
           placeholder="defaults to the folder name"
         />
       </label>
+      <p v-if="error" class="mt-3 text-xs text-error">{{ error }}</p>
     </template>
     <template #footer>
       <div class="flex w-full justify-end gap-2">

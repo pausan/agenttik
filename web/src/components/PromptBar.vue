@@ -210,6 +210,21 @@ function resetAt(seconds) {
   }).format(at);
 }
 
+/* The reset date says when; this says how long, which is the number a 5-hour
+   bucket is actually watched for. Days drop to the hour the same way resetAt
+   drops the year: precision nobody reads a week out. Already-passed reads as
+   nothing rather than a negative duration. */
+function remaining(seconds) {
+  const ms = seconds * 1000 - Date.now();
+  if (ms <= 0) return "";
+  const minutes = Math.round(ms / 60000);
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor((minutes % 1440) / 60);
+  if (days) return `${days}d ${hours}h remaining`;
+  if (hours) return `${hours}h ${minutes % 60}min remaining`;
+  return `${minutes}min remaining`;
+}
+
 /* An asked reading is current and carries no stamp. A remembered one — the
    bucket Claude Code named mid-turn — can be older than the panel it is shown
    in, so saying when it was taken is the honest alternative to presenting a
@@ -421,7 +436,9 @@ function runMenuAction(action) {
                       />
                     </span>
                     <p class="mt-1 mb-0 text-[11px] text-dimmed tabular-nums">
-                      {{ window.resets_at ? 'resets ' + resetAt(window.resets_at) : 'reset time not reported' }}
+                      {{ window.resets_at
+                        ? 'resets ' + resetAt(window.resets_at) + (remaining(window.resets_at) ? ' · ' + remaining(window.resets_at) : '')
+                        : 'reset time not reported' }}
                     </p>
                   </li>
                 </ul>

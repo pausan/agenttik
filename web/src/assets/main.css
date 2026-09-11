@@ -82,6 +82,7 @@ button[draggable="true"]:active { cursor: grabbing; }
   background: var(--ui-bg-accented);
 }
 .subscription-limit-fill {
+  display: block;
   height: 100%;
   border-radius: inherit;
   transition: width 150ms ease;

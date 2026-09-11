@@ -71,7 +71,11 @@ the thin tracks on the button.
 
 The reset drops the year unless the reset really is in another one, which is
 what kept the line to one row. A bucket that reported no reset says so instead
-of showing a formatted epoch.
+of showing a formatted epoch. The same line also carries how long that is from
+now — `4h 32min remaining`, dropping to `Xd Yh` past a day out — since a
+countdown is what a 5-hour bucket is actually watched for, and a bare date
+makes you do that subtraction yourself. It is left off a reset already in the
+past rather than shown as negative.
 
 Plan, reached-limit status and how old a remembered reading is sit under the
 windows, in the same two-column form the context half of the panel uses, and

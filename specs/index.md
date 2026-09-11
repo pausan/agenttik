@@ -24,7 +24,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [008](008-project-workspaces.md) | Per-project tab strips, the context tab, what a letter and a click open |
 | [021](021-stop-active-tasks.md) | Stopping an active or scheduled task from the sidebar |
 | [025](025-blank-task-reuse.md) | Starting a task lands on an untitled one wherever it is |
-| [030](030-project-tasks.md) | Every task of a project in one paged list, behind a focused filter |
+| [030](030-project-tasks.md) | Every task of a project in one paged list, behind a focused filter, and its jobs beside them |
 | [038](038-task-naming.md) | What a task is called, on screen and on the wire |
 | [040](040-editable-project-path.md) | Repointing a project at a moved folder, by typing or by browsing |
 | [041](041-project-archiving.md) | Putting a project away without deleting it, and the Settings list it waits in |

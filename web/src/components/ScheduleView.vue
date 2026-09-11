@@ -18,6 +18,7 @@ import {
   runScheduleNow,
   scheduleForm,
   scheduleLabel,
+  setScheduleArchived,
   setSchedulePaused,
   setScheduleFrequency,
   setScheduleModel,
@@ -30,6 +31,13 @@ const props = defineProps({ tab: { type: Object, required: true } });
 
 const schedule = computed(() => props.tab.data.schedule);
 const runs = computed(() => props.tab.data.runs);
+
+/* Archived is the stronger of the two stopped states: the job has been put
+   away, so the header offers the way back instead of a Resume that would
+   schedule nothing and a Run that would start work from something shelved.
+   Everything it repeats stays editable — the project page's Jobs tab is the
+   other place it can be restored from. */
+const archived = computed(() => !!schedule.value.done_at);
 
 /* Run now: the same Send/Enqueue choice the prompt bar's Send menu offers,
    minus Schedule — scheduling a schedule does not mean anything. It runs even
@@ -173,9 +181,9 @@ function runTime(run) {
         <div class="min-w-0">
           <h2 class="m-0 flex items-center gap-2 text-[17px] tracking-tight text-highlighted">
             <UIcon
-              :name="schedule.paused ? 'i-lucide-pause' : 'i-lucide-repeat'"
+              :name="archived ? 'i-lucide-archive' : schedule.paused ? 'i-lucide-pause' : 'i-lucide-repeat'"
               class="size-4 block shrink-0"
-              :class="schedule.paused ? 'text-dimmed' : 'text-primary'"
+              :class="archived || schedule.paused ? 'text-dimmed' : 'text-primary'"
             />
             {{ schedule.title }}
             <!-- The job's number. Every task it spawns carries the same one,
@@ -189,37 +197,53 @@ function runTime(run) {
           </h2>
           <div class="text-xs text-dimmed">
             {{ scheduleLabel(schedule) }} ·
-            {{ schedule.paused ? "paused" : "next run " + isoLocal(schedule.next_run_at) }}
+            {{
+              archived
+                ? "archived " + isoLocal(schedule.done_at)
+                : schedule.paused
+                  ? "paused"
+                  : "next run " + isoLocal(schedule.next_run_at)
+            }}
           </div>
         </div>
         <div class="ml-auto flex shrink-0 items-center gap-2">
-          <UFieldGroup>
-            <UButton :icon="runPrimary.icon" :label="runPrimary.label" @click="runPrimary.run()" />
-            <UPopover v-model:open="runMenuOpen">
-              <UButton icon="i-lucide-chevron-down" aria-label="More run actions" />
-              <template #content>
-                <div class="p-1">
-                  <UButton
-                    v-for="action in runMenu"
-                    :key="action.label"
-                    color="neutral"
-                    variant="ghost"
-                    block
-                    class="justify-start"
-                    :label="action.label"
-                    :trailing-icon="action.icon"
-                    @click="runMenuAction(action)"
-                  />
-                </div>
-              </template>
-            </UPopover>
-          </UFieldGroup>
+          <template v-if="!archived">
+            <UFieldGroup>
+              <UButton :icon="runPrimary.icon" :label="runPrimary.label" @click="runPrimary.run()" />
+              <UPopover v-model:open="runMenuOpen">
+                <UButton icon="i-lucide-chevron-down" aria-label="More run actions" />
+                <template #content>
+                  <div class="p-1">
+                    <UButton
+                      v-for="action in runMenu"
+                      :key="action.label"
+                      color="neutral"
+                      variant="ghost"
+                      block
+                      class="justify-start"
+                      :label="action.label"
+                      :trailing-icon="action.icon"
+                      @click="runMenuAction(action)"
+                    />
+                  </div>
+                </template>
+              </UPopover>
+            </UFieldGroup>
+            <UButton
+              :color="schedule.paused ? 'primary' : 'neutral'"
+              :variant="schedule.paused ? 'solid' : 'outline'"
+              :icon="schedule.paused ? 'i-lucide-play' : 'i-lucide-pause'"
+              :label="schedule.paused ? 'Resume' : 'Pause'"
+              @click="setSchedulePaused(schedule, !schedule.paused)"
+            />
+          </template>
+          <!-- Put away: the one control it needs is the way back, and it
+               comes back paused rather than mid-burst. -->
           <UButton
-            :color="schedule.paused ? 'primary' : 'neutral'"
-            :variant="schedule.paused ? 'solid' : 'outline'"
-            :icon="schedule.paused ? 'i-lucide-play' : 'i-lucide-pause'"
-            :label="schedule.paused ? 'Resume' : 'Pause'"
-            @click="setSchedulePaused(schedule, !schedule.paused)"
+            v-else
+            icon="i-lucide-archive-restore"
+            label="Unarchive"
+            @click="setScheduleArchived(schedule, false)"
           />
           <UButton
             color="error"

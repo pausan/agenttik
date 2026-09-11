@@ -1,8 +1,13 @@
 <script setup>
-/* One schedule in a list. Pause and Resume sit here because that is the
+/* One schedule in a list: the sidebar's open jobs, or a project page's, which
+   holds the archived ones too. Pause and Resume sit here because that is the
    control a schedule needs most, and the archive icon only appears once it is
    paused: a hidden schedule that kept starting sessions is the one state
-   nothing here would explain. */
+   nothing here would explain.
+
+   An archived row is grey, as an archived task's is, and offers neither Pause
+   nor Resume — archived already means paused, and resuming something put away
+   would schedule nothing. Its archive icon is the way back. */
 import { nextTick, ref } from "vue";
 
 const props = defineProps({
@@ -60,12 +65,12 @@ defineExpose({ edit });
       <button type="button" class="min-w-0 flex-1 px-2 py-1 text-left" @click="$emit('select')">
         <span
           class="flex items-center gap-2 overflow-hidden"
-          :class="active ? 'text-primary' : 'text-highlighted'"
+          :class="active ? 'text-primary' : archived ? 'text-muted' : 'text-highlighted'"
         >
           <UIcon
-            :name="schedule.paused ? 'i-lucide-pause' : 'i-lucide-repeat'"
+            :name="archived ? 'i-lucide-archive' : schedule.paused ? 'i-lucide-pause' : 'i-lucide-repeat'"
             class="size-3.5 block shrink-0"
-            :class="schedule.paused ? 'text-dimmed' : 'text-primary'"
+            :class="archived || schedule.paused ? 'text-dimmed' : 'text-primary'"
           />
           <span class="truncate">{{ schedule.title || "Untitled schedule" }}</span>
           <!-- The job's number, which every task it spawns carries too. -->
@@ -89,6 +94,7 @@ defineExpose({ edit });
         <UIcon name="i-lucide-pencil" class="size-3.5 block" />
       </button>
       <button
+        v-if="!archived"
         type="button"
         class="mr-1 shrink-0 rounded p-1 text-dimmed hover:text-primary"
         :title="schedule.paused ? 'Resume schedule' : 'Pause schedule'"

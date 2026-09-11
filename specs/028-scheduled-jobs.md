@@ -172,6 +172,19 @@ state nothing in the UI would explain. Archived therefore implies paused, and
 unarchiving leaves it paused — a schedule comes back where it was put down, not
 mid-burst.
 
+**An archived job is not a lost one.** The sidebar holds what a project has
+scheduled; the project page's **Jobs** tab holds that and the archive under it
+— open jobs first, in the order the sidebar was dragged into, then the
+archived ones, newest first and grey. That is the same list in the same two
+colours the Tasks tab beside it draws ([030](030-project-tasks.md)), because
+the question being asked is the same one: where is that job. The restore icon
+on a grey row is the way back.
+
+An archived row offers no Pause or Resume. Archived already means paused, and
+resuming something put away would schedule nothing — so the row carries its
+name, its clock, when it was archived, and the one control that changes any of
+it.
+
 Archived or not, a schedule stays a schedule. It is a row in `schedules`, so no
 list has to guess whether something was a schedule or an ordinary prompt.
 
@@ -200,6 +213,13 @@ same 20 characters a task's is, since a job names itself from a prompt exactly
 as a task does ([above](#the-name)). Its header carries the job's name and number
 ([above](#the-number)), the recurrence in words, when the next run is due, a
 Run menu ([above](#running-one-now)), Pause/Resume and Delete.
+
+**An archived job's header is the shelf it sits on.** It reads *archived* and
+the date in place of the next run, and carries **Unarchive** where an open one
+carries Run and Pause: nothing put away offers to start work, and the one
+thing worth doing to it is bringing it back. What it repeats stays editable,
+so a job whose prompt was the reason it was archived can be fixed before it
+returns.
 Under it sit the prompt, the model, the
 **Repeats** fields and the runs-left input; and under those every run it has
 spawned, newest first, each with its timestamp as `YYYY-MM-DD HH:mm:ss`.
@@ -292,7 +312,7 @@ idle cost of the feature is a query every quarter minute.
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/schedules` | `?window=&q=&project_id=&include_done=` — the sidebar list |
+| GET | `/api/schedules` | `?window=&q=&project_id=&include_done=` — the sidebar list, and with `include_done` the project page's Jobs tab, which draws both states |
 | POST | `/api/schedules` | `{project_id, prompt, provider, model, effort, permission, every, interval_minutes, at_minute, remaining, title}` — `title` optional; without it the job names itself ([above](#the-name)) |
 | GET | `/api/schedules/:id` | the schedule and its runs |
 | PATCH | `/api/schedules/:id` | `{title, prompt, provider, model, effort, remaining, paused, done, every, interval_minutes, at_minute}` — any subset |

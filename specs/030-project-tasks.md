@@ -1,7 +1,9 @@
 # Tasks on the project page
 
-A project page is two tabs under its name: **Tasks**, which is every task the
-project has, and **Stats**, which is its totals and daily activity.
+A project page is four tabs under its name: **Tasks**, which is every task the
+project has; **Jobs**, which is every schedule it has ([below](#the-jobs-tab));
+**Prompt**, the standing instructions every task here opens with
+([047](047-project-prompt.md)); and **Stats**, its totals and daily activity.
 
 Tasks is one list. Open tasks come first, in the order they were dragged into
 ([006](006-sidebar-ordering.md)), drawn in the strongest text the theme has.
@@ -91,6 +93,23 @@ once. Unlike archiving there is no way back: `Ctrl+Shift+T` has nothing to
 restore, and a tab already open on the task closes with it — see
 [007](007-task-closing.md) for what closing unsaved on the way out means.
 
+## The jobs tab
+
+The project's scheduled jobs ([028](028-scheduled-jobs.md)) read like the
+tasks beside them: what is still scheduled first, in the order the sidebar was
+dragged into, then what has been archived, newest first and grey. The sidebar
+carries only the open ones, so this is the only place an archived job can be
+seen, and the restore icon on its row is the only way back.
+
+There is no filter and no pager here. A project's tasks run to hundreds; its
+jobs are made by hand one at a time, and a handful of rows is a list, not a
+search problem.
+
+A row says what its clock is and what is being done with it — the next run,
+*paused*, or when it was archived — and carries the same rename the sidebar
+row does. An archived row has no Pause or Resume, since archived already means
+paused.
+
 ## Data
 
 `GET /api/sessions` takes `only_done=true` beside the existing
@@ -103,6 +122,12 @@ An archived-only listing is ordered `last_active_at DESC` even when it is
 scoped to a project, where every other project-scoped listing is ordered by
 `position`. The timestamp shown on the row is the one it is sorted by.
 
-A project tab loads and reloads totals, daily metrics, open tasks, and
-archived tasks in one `Promise.all`. The reload is the existing debounced one
-that already runs at the end of a turn.
+A project tab loads and reloads totals, daily metrics, open tasks, archived
+tasks, and the project's jobs in one `Promise.all`. The reload is the existing
+debounced one that already runs at the end of a turn, and a schedule that
+changes — archived, renamed, or moved by a fire — runs it too.
+
+The jobs are one request carrying both states, where the tasks take two. The
+split exists because `limit` could otherwise cut open tasks out of a project
+with a long history; jobs are created by hand and a project has a handful, so
+one `include_done=true` listing is the whole list.

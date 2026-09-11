@@ -12,9 +12,9 @@ Three layers, each cheap enough to run often.
 server and drives a real browser against it; it is the slower one, kept
 separate so the fast loop stays fast.
 
-This is a prototype, so tests are written when asked for rather than with every
-change — see rule 6 in `AGENTS.md`. What exists is what guards the logic that
-is hard to eyeball.
+Tests are written with the change they guard, where writing one is reasonable
+— see rule 6 in `AGENTS.md`. What exists guards the logic that is hard to
+eyeball and the flows that are tedious to click through by hand.
 
 ## UI unit tests
 
@@ -54,12 +54,14 @@ path that cannot resolve on purpose, to check the picker shrugs it off.
 Tests use the agenttik checkout itself as the project under test, so the tree,
 the git status and the folder picker all read something real.
 
-Four files, one per area: `folder-picker` (the fuzzy walk over real
+Five files, one per area: `folder-picker` (the fuzzy walk over real
 directories), `inspector` (which panes the right-hand strip offers a project
 versus a task, and that the one in use survives switching), `projects` (add,
-rename, delete, archive, the per-project task list and its filter) and `tasks`
+rename, delete, archive, the per-project task list and its filter), `tasks`
 (creating one, the model and effort pickers, sending a prompt, and everything
-below that a live turn touches — see the fake provider below).
+below that a live turn touches — see the fake provider below) and `schedules`
+(scheduling a prompt, and the archived job waiting on the project page until
+it is restored — [028](028-scheduled-jobs.md)).
 
 ## The fake provider
 

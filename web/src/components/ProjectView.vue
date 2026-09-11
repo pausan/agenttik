@@ -22,16 +22,21 @@ import {
   openSchedule,
   openTask,
   removeTask,
+  renameSchedule,
   renameTask,
   reorderTasks,
+  scheduleLabel,
   setProjectPrompt,
+  setScheduleArchived,
+  setSchedulePaused,
   setTaskArchived,
   setTaskPageSize,
   startTask,
   stopTask,
 } from "../store";
-import { ago, cost, duration, isoDate, nf, tokens } from "../api";
+import { ago, cost, duration, isoDate, isoLocal, nf, tokens } from "../api";
 import { fuzzyAny } from "../fuzzy";
+import ScheduleRow from "./ScheduleRow.vue";
 import TaskRow from "./TaskRow.vue";
 
 const props = defineProps({ tab: { type: Object, required: true } });
@@ -53,6 +58,7 @@ const lower = computed({
 });
 const lowerTabs = [
   { label: "Tasks", value: "tasks" },
+  { label: "Jobs", value: "jobs" },
   { label: "Prompt", value: "prompt" },
   { label: "Stats", value: "stats" },
 ];
@@ -144,6 +150,34 @@ const rows = computed(() => [
   ...archived.value.map((task) => ({ task, archived: true })),
 ]);
 const shown = computed(() => rows.value.length);
+
+/* The project's scheduled jobs, read the way its tasks are: what is still
+   scheduled first, in the order the sidebar was dragged into, then what has
+   been archived, newest first and grey. The sidebar holds only the open ones,
+   so this is the only place an archived job is seen — and the restore icon on
+   its row is the only way back. See specs/028-scheduled-jobs.md. */
+const jobs = computed(() => {
+  const all = props.tab.data.schedules || [];
+  return [
+    ...all.filter((s) => !s.done_at).map((schedule) => ({ schedule, archived: false })),
+    ...all
+      .filter((s) => s.done_at)
+      .sort((a, b) => b.done_at - a.done_at)
+      .map((schedule) => ({ schedule, archived: true })),
+  ];
+});
+
+const activeJob = computed(() => (S.owner?.kind === "schedule" ? S.owner.scheduleID : 0));
+
+/* A job's clock, then what it is doing with it: when the next run is due, or
+   that it is stopped — a paused job has no next run, and an archived one is
+   dated by when it was put away. */
+function jobSub({ schedule, archived }) {
+  const clock = scheduleLabel(schedule);
+  if (archived) return `${clock} · archived ${ago(schedule.done_at)}`;
+  if (schedule.paused) return `${clock} · paused`;
+  return `${clock} · next run ${isoLocal(schedule.next_run_at)}`;
+}
 
 const sizeItems = TASK_PAGE_SIZES.map((size) => ({ label: `${size} / page`, value: size }));
 const size = computed({
@@ -297,6 +331,27 @@ async function doDelete() {
             size="sm"
           />
         </div>
+      </template>
+
+      <!-- Every job of the project: what is still scheduled, then what it has
+           archived. An archived job is paused by definition, so its row drops
+           the pause control and carries the restore one. -->
+      <template v-else-if="lower === 'jobs'">
+        <p v-if="!jobs.length" class="px-3 py-5 text-center text-dimmed">
+          No scheduled jobs in this project yet.
+        </p>
+        <ScheduleRow
+          v-for="row in jobs"
+          :key="row.schedule.id"
+          :schedule="row.schedule"
+          :sub="jobSub(row)"
+          :archived="row.archived"
+          :active="activeJob === row.schedule.id"
+          @select="openSchedule(row.schedule.id)"
+          @toggle-paused="setSchedulePaused(row.schedule, !row.schedule.paused)"
+          @toggle-archive="setScheduleArchived(row.schedule, !row.archived)"
+          @rename="renameSchedule(row.schedule, $event)"
+        />
       </template>
 
       <template v-else-if="lower === 'prompt'">

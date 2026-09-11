@@ -25,18 +25,6 @@ them, and the specs still described it until this pass. It is gone from
 Either the pane is coming back or this is dead weight on every turn. Worth
 deciding which.
 
-## An archived schedule cannot be reached
-
-[028](028-scheduled-jobs.md) says a paused schedule can be archived and later
-unarchived. Archiving still works, but nothing draws it afterwards:
-`ListProjects` attaches schedules with `ExcludeDone: true`, so the sidebar never
-sees it, and the project page's Tasks tab reads `/api/sessions` only. The
-Sessions pane was the one place archived schedules were listed.
-
-`GET /api/schedules?include_done=true` still answers, so the row is intact and
-only the way back to it is missing. The spec now stops short of promising a
-restore path.
-
 ## Vocabulary in the shortcut registry
 
 `shortcuts.js` groups `tab.close` and `tab.reopen` under `Conversations` while

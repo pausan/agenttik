@@ -685,14 +685,15 @@ export async function openProject(id, silent = false) {
   const open = S.tabs.find((t) => t.id === tabID);
   if (open) return setContextTab(open);
 
-  let project, stats, metrics, sessions, archived;
+  let project, stats, metrics, sessions, archived, schedules;
   try {
-    [project, stats, metrics, sessions, archived] = await Promise.all([
+    [project, stats, metrics, sessions, archived, schedules] = await Promise.all([
       api("GET", "/api/projects/" + id),
       api("GET", `/api/projects/${id}/stats`),
       api("GET", `/api/projects/${id}/metrics`),
       projectSessions(id),
       projectArchived(id),
+      projectSchedules(id),
     ]);
   } catch (e) {
     if (!silent) fail(e);
@@ -703,7 +704,7 @@ export async function openProject(id, silent = false) {
     kind: "project",
     label: project.name,
     projectID: id,
-    data: { project, stats, metrics, sessions, archived },
+    data: { project, stats, metrics, sessions, archived, schedules },
   });
   await Promise.all([refreshProjects(), refreshSessions()]).catch(fail);
 }
@@ -720,19 +721,30 @@ function projectArchived(id) {
   return api("GET", `/api/sessions?window=all&project_id=${id}&only_done=true`);
 }
 
+/* The project's scheduled jobs, both states in one request: the sidebar shows
+   only the open ones, so the page is the only place an archived job can be
+   seen or brought back. One request rather than the two the sessions take,
+   because jobs are made by hand and a project has a handful, not the hundreds
+   a limit could cut. */
+function projectSchedules(id) {
+  return api("GET", `/api/schedules?window=all&project_id=${id}&include_done=true`);
+}
+
 async function reloadProjectTab(tab) {
   const id = tab.projectID;
   try {
-    const [metrics, stats, sessions, archived] = await Promise.all([
+    const [metrics, stats, sessions, archived, schedules] = await Promise.all([
       api("GET", `/api/projects/${id}/metrics`),
       api("GET", `/api/projects/${id}/stats`),
       projectSessions(id),
       projectArchived(id),
+      projectSchedules(id),
     ]);
     tab.data.stats = stats;
     tab.data.metrics = metrics;
     tab.data.sessions = sessions;
     tab.data.archived = archived;
+    tab.data.schedules = schedules;
   } catch {
     /* a refresh that fails is not worth interrupting anyone over */
   }
@@ -1039,6 +1051,9 @@ const reloadSchedules = debounce(() => {
   for (const t of S.tabs) if (t.kind === "schedule") reloadScheduleTab(t);
   refreshProjects().catch(() => {});
   refreshSchedules().catch(() => {});
+  // The project page lists the project's jobs, archived ones included, so a
+  // schedule that moved moves there too.
+  reloadProjects();
   // A finished run is archived rather than deleted, so the Sessions list is
   // where it goes. Nothing else re-reads it: the run had no tab of its own,
   // so its done event reached no session watcher here.
@@ -1054,6 +1069,9 @@ async function patchSchedule(schedule, body) {
       tab.label = updated.title;
     }
     await Promise.all([refreshProjects(), refreshSchedules()]).catch(() => {});
+    // The sidebar holds the open jobs; the project page holds those and the
+    // archived ones, which is where archiving and restoring are done.
+    reloadProjects();
     return updated;
   } catch (e) {
     fail(e);
@@ -1145,6 +1163,7 @@ export async function removeSchedule(schedule) {
     await api("DELETE", "/api/schedules/" + schedule.id);
     closeTab("schedule:" + schedule.id, false);
     await Promise.all([refreshProjects(), refreshSchedules()]).catch(() => {});
+    reloadProjects();
   } catch (e) {
     fail(e);
   }

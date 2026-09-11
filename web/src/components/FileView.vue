@@ -94,8 +94,12 @@ const stat = computed(() => {
         aria-label="Unsaved changes"
         >*</span
       >
+      <!-- Save belongs to the editor. A diff and a preview are not where text
+           is typed, and a file with no text to type — an image, a binary, a
+           commit's revision — never shows the editor at all. Ctrl+S still
+           reaches the file from any view: the edits are there either way. -->
       <UButton
-        v-if="!tab.readOnly && !tab.commit"
+        v-if="tab.mode === 'edit' && !tab.readOnly"
         icon="i-lucide-save"
         size="xs"
         color="neutral"

@@ -200,6 +200,12 @@ ALTER TABLE queued_messages ADD COLUMN retry_at    INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE queued_messages ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE queued_messages ADD COLUMN retry_error TEXT    NOT NULL DEFAULT '';
 	`,
+	`
+-- How many fires one schedule_runs row stands for. A run of skips collapses
+-- into the most recent skip row instead of adding one per fire, so existing
+-- rows — each already its own fire — backfill to 1 unchanged.
+ALTER TABLE schedule_runs ADD COLUMN count INTEGER NOT NULL DEFAULT 1;
+	`,
 }
 
 func migrate(db *sql.DB) error {

@@ -57,7 +57,23 @@ const STATUS = {
   interrupted: { label: "Interrupted", class: "text-warning" },
   skipped: { label: "Skipped — the previous run was still going", class: "text-dimmed" },
 };
-const status = (run) => STATUS[run.status] || { label: run.status, class: "text-dimmed" };
+/* A run of skips is written as one row with a count (schedules.go,
+   SkipScheduleRun), so the label pluralises rather than the list repeating
+   itself once per fire the schedule waited out. */
+function status(run) {
+  const s = STATUS[run.status] || { label: run.status, class: "text-dimmed" };
+  if (run.status === "skipped" && run.count > 1) {
+    return { ...s, label: `Skipped ${run.count} times — the previous run was still going` };
+  }
+  return s;
+}
+
+/* A single fire is one timestamp; a collapsed run of skips is the range it
+   spans. */
+function runTime(run) {
+  if (run.count > 1) return `${isoLocal(run.started_at)} – ${isoLocal(run.ended_at)}`;
+  return isoLocal(run.started_at);
+}
 </script>
 
 <template>
@@ -184,7 +200,7 @@ const status = (run) => STATUS[run.status] || { label: run.status, class: "text-
         @click="run.session_id && openTask(run.session_id)"
       >
         <span class="shrink-0 font-mono text-xs text-dimmed tabular-nums">
-          {{ isoLocal(run.started_at) }}
+          {{ runTime(run) }}
         </span>
         <span class="truncate text-sm" :class="status(run).class">{{ status(run).label }}</span>
         <span v-if="run.title" class="ml-auto truncate text-xs text-dimmed">{{ run.title }}</span>

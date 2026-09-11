@@ -142,6 +142,12 @@ type ScheduleRun struct {
 	StartedAt  int64  `json:"started_at"`
 	EndedAt    int64  `json:"ended_at"`
 
+	// Count is how many fires this row stands for. Always 1, except a run of
+	// skips: those collapse into the most recent skip row rather than adding a
+	// new one, so a schedule stuck behind a slow run for three hours reads as
+	// one line — a count and a time range — instead of one row per fire.
+	Count int64 `json:"count"`
+
 	// Title is the spawned session's title, so the runs list needs no request
 	// per row. Empty for a skip, which has no session.
 	Title string `json:"title,omitempty"`

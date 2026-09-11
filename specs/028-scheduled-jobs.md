@@ -78,6 +78,15 @@ independent as two tasks in one project, and the project queue
 ([012](012-task-queue.md)) is deliberately not involved: a schedule sends
 straight to its new task.
 
+A skip that follows another skip extends it rather than adding a row of its
+own: the view reads *skipped 12 times, 09:00–12:00* instead of twelve
+identical lines saying the same thing every fifteen minutes. The count and the
+time range live on the one row from the moment the second skip lands, so
+nothing is collapsed after the fact — a schedule stuck behind one slow run
+never has more than one skip row to show for it. A run finishing and the
+schedule falling behind again starts the next skip, if there is one, as a
+fresh row.
+
 ## Pause, archive and the sidebar
 
 A schedule row in the sidebar carries **Pause** / **Resume**. Paused, nothing is
@@ -108,7 +117,9 @@ run is due, Pause/Resume and Delete. Under it sit the prompt, the model, the
 **Repeats** fields and the runs-left input; and under those every run it has
 spawned, newest first, each with its timestamp as `YYYY-MM-DD HH:mm:ss`. A
 spawned run is a task, so its row opens it. A skipped run is a row with no task
-and the reason it was skipped.
+and the reason it was skipped; a run of consecutive skips is still one row, its
+single timestamp widened to the range it spans and its reason naming how many
+fires it stands for — *skipped 12 times*, not twelve identical lines.
 
 Repeats is the dialog's own control less the number of runs: the four forms,
 then hours and minutes, or a time of day. A field commits when it is left, and
@@ -147,9 +158,14 @@ Migration 7 adds two tables and one column:
   weekday and the day of the month. `done_at` and `position` mean what they mean on a
   session row: archived-at, and the order the sidebar was dragged into.
 - **schedule_runs** — `id, schedule_id, session_id, status, started_at,
-  ended_at`. `status` is `running`, `done`, `error`, `interrupted` or
+  ended_at, count`. `status` is `running`, `done`, `error`, `interrupted` or
   `skipped`. A skipped run has no `session_id`. This is the list the view
   draws, and it is why skips can be shown at all: they never become sessions.
+
+  `count` is how many fires one row stands for — 1 for everything except a
+  run of skips, which grows the latest skip row's `count` and `ended_at`
+  instead of inserting another: a schedule stuck behind one slow run reads as
+  one line, a count and a time range, not one row per fire it waited out.
 
   `interrupted` is what a restart leaves behind, and clearing those at startup
   is not optional: an open run row is what makes a schedule read as busy, so

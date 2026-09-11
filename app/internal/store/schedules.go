@@ -302,11 +302,31 @@ func (s *Store) StartScheduleRun(scheduleID int64, sessionID string) (*ScheduleR
 // SkipScheduleRun records a fire that was passed over because the schedule's
 // previous run was still going. It is written so the gap in the list has a
 // reason; it spends no run.
+//
+// A skip that follows another skip extends it rather than adding a row: the
+// schedule's most recent run is checked, and if that is itself a skip its
+// ended_at and count grow instead. A schedule stuck behind one slow run reads
+// as one line — a count and a time range — not one row per fire it waited
+// out. Anything else as the most recent row (a fresh schedule, or a run that
+// has since finished) starts a new group of one.
 func (s *Store) SkipScheduleRun(scheduleID int64) error {
 	now := nowMillis()
-	_, err := s.db.Exec(
-		`INSERT INTO schedule_runs (schedule_id, status, started_at, ended_at) VALUES (?,?,?,?)`,
-		scheduleID, RunSkipped, now, now)
+	var lastID int64
+	var lastStatus string
+	err := s.db.QueryRow(
+		`SELECT id, status FROM schedule_runs WHERE schedule_id = ? ORDER BY id DESC LIMIT 1`,
+		scheduleID).Scan(&lastID, &lastStatus)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("skip schedule run: %w", err)
+	}
+	if lastStatus == RunSkipped {
+		_, err = s.db.Exec(
+			`UPDATE schedule_runs SET ended_at = ?, count = count + 1 WHERE id = ?`, now, lastID)
+	} else {
+		_, err = s.db.Exec(
+			`INSERT INTO schedule_runs (schedule_id, status, started_at, ended_at, count) VALUES (?,?,?,?,1)`,
+			scheduleID, RunSkipped, now, now)
+	}
 	if err != nil {
 		return fmt.Errorf("skip schedule run: %w", err)
 	}
@@ -331,7 +351,7 @@ func (s *Store) FinishScheduleRun(sessionID, status string) (int64, error) {
 // ListScheduleRuns is the schedule view's list, newest first. The session
 // title comes along so a row needs no request of its own.
 func (s *Store) ListScheduleRuns(scheduleID int64, limit int) ([]ScheduleRun, error) {
-	query := `SELECT r.id, r.schedule_id, r.session_id, r.status, r.started_at, r.ended_at,
+	query := `SELECT r.id, r.schedule_id, r.session_id, r.status, r.started_at, r.ended_at, r.count,
 		COALESCE(sess.title, '')
 		FROM schedule_runs r LEFT JOIN sessions sess ON sess.id = r.session_id
 		WHERE r.schedule_id = ? ORDER BY r.id DESC`
@@ -350,7 +370,7 @@ func (s *Store) ListScheduleRuns(scheduleID int64, limit int) ([]ScheduleRun, er
 	for rows.Next() {
 		var v ScheduleRun
 		if err := rows.Scan(&v.ID, &v.ScheduleID, &v.SessionID, &v.Status,
-			&v.StartedAt, &v.EndedAt, &v.Title); err != nil {
+			&v.StartedAt, &v.EndedAt, &v.Count, &v.Title); err != nil {
 			return nil, fmt.Errorf("list schedule runs: %w", err)
 		}
 		out = append(out, v)

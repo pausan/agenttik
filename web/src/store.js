@@ -2271,24 +2271,38 @@ export async function enqueue(prompt) {
   }
 }
 
-// updateQueuedModel changes one waiting prompt's saved choice. The session
-// picker is left alone until that prompt starts, so other queued prompts keep
-// their own choices too.
-export async function updateQueuedModel(queuedID, provider, model, effort) {
+// The PATCH endpoint replaces a queued row whole, so a change to one field
+// travels with the other three as they stand on screen. Both callers below
+// hand patchQueued the row they already have and override just what changed.
+async function patchQueued(q, fields) {
   const tab = S.owner;
-  if (tab?.kind !== "session" || !queuedID) return;
+  if (tab?.kind !== "session" || !q?.id) return;
   try {
-    const updated = await api("PATCH", "/api/sessions/" + tab.sessionID + "/queue/" + queuedID, {
-      provider,
-      model,
-      effort,
+    const updated = await api("PATCH", "/api/sessions/" + tab.sessionID + "/queue/" + q.id, {
+      prompt: q.prompt,
+      provider: q.provider,
+      model: q.model,
+      effort: q.effort,
+      ...fields,
     });
-    const queued = tab.detail.queued.find((item) => item.id === queuedID);
-    if (queued) Object.assign(queued, updated);
+    Object.assign(q, updated);
   } catch (e) {
     fail(e);
     throw e;
   }
+}
+
+// updateQueuedModel changes one waiting prompt's saved choice. The session
+// picker is left alone until that prompt starts, so other queued prompts keep
+// their own choices too.
+export async function updateQueuedModel(q, provider, model, effort) {
+  return patchQueued(q, { provider, model, effort });
+}
+
+// updateQueuedPrompt rewrites the text of a prompt still waiting in the
+// queue, leaving its saved model choice untouched.
+export async function updateQueuedPrompt(q, prompt) {
+  return patchQueued(q, { prompt });
 }
 
 // forceQueued runs a waiting prompt now instead of when the project's queue
@@ -2314,13 +2328,20 @@ export async function stopTurn() {
 }
 
 // Stopping from a sidebar row works for an active turn and for work waiting in
-// the project queue. The server clears queued prompts in either case.
+// the project queue. The server clears queued prompts in either case; their
+// words are not the user's to lose, so — when this session is open in a tab —
+// they go back in the draft, the same box an ordinary unsent prompt waits in,
+// rather than vanishing with the queue. Left alone if something is already
+// typed there, same as a failed send or enqueue.
 export async function stopTask(sessionID) {
   if (!sessionID) return;
   try {
     await api("POST", `/api/sessions/${sessionID}/stop`);
     const tab = S.tabs.find((open) => open.kind === "session" && open.sessionID === sessionID);
     if (tab) {
+      if (!tab.draft && tab.detail.queued?.length) {
+        tab.draft = tab.detail.queued.map((q) => q.prompt).join("\n\n");
+      }
       tab.detail.queued = [];
       tab.detail.session.queue_count = 0;
     }

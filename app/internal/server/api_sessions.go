@@ -325,9 +325,10 @@ func (s *Server) enqueueMessage(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"queued": queued, "queue_count": len(queued)})
 }
 
-// updateQueuedMessage changes the model choice held by one prompt that has
-// not started yet. It deliberately does not change the session's picker: the
-// queued choice becomes active only when the runner claims that prompt.
+// updateQueuedMessage changes the text or model choice held by one prompt
+// that has not started yet. It deliberately does not change the session's
+// picker: the queued choice becomes active only when the runner claims that
+// prompt.
 func (s *Server) updateQueuedMessage(c *fiber.Ctx) error {
 	queuedID, err := strconv.ParseInt(c.Params("queuedID"), 10, 64)
 	if err != nil || queuedID <= 0 {
@@ -341,12 +342,17 @@ func (s *Server) updateQueuedMessage(c *fiber.Ctx) error {
 		return store.ErrNotFound
 	}
 	var body struct {
+		Prompt   string `json:"prompt"`
 		Provider string `json:"provider"`
 		Model    string `json:"model"`
 		Effort   string `json:"effort"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return badRequest("invalid body: %v", err)
+	}
+	prompt := strings.TrimSpace(body.Prompt)
+	if prompt == "" {
+		return badRequest("prompt is required")
 	}
 	provider, ok := s.registry.Get(body.Provider)
 	if !ok {
@@ -365,10 +371,10 @@ func (s *Server) updateQueuedMessage(c *fiber.Ctx) error {
 	if !knownModel {
 		return badRequest("unknown model %q for provider %q", body.Model, body.Provider)
 	}
-	if err := s.store.SetQueuedMessageModel(queuedID, body.Provider, body.Model, body.Effort); err != nil {
+	if err := s.store.SetQueuedMessage(queuedID, prompt, body.Provider, body.Model, body.Effort); err != nil {
 		return err
 	}
-	return c.JSON(&store.QueuedMessage{ID: queuedID, SessionID: queued.SessionID, Prompt: queued.Prompt,
+	return c.JSON(&store.QueuedMessage{ID: queuedID, SessionID: queued.SessionID, Prompt: prompt,
 		Provider: body.Provider, Model: body.Model, Effort: body.Effort, CreatedAt: queued.CreatedAt})
 }
 

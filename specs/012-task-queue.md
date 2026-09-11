@@ -58,12 +58,21 @@ The prompt box is cleared before the request rather than after it: the answer
 to one prompt arriving while the next is being typed would otherwise blank the
 box and lose it.
 
-## Per-item model choices
+## Editing a queued item
 
-Each queued prompt records the provider, model and effort selected when it was
-enqueued. Its dashed transcript bubble shows the model and offers the same
-cross-provider model search plus an effort picker. Editing one item does not
-change the task's default or other queued items.
+A queued prompt has not started, so its text is as editable as its model
+choice: a pencil on its dashed bubble opens it in place, the same shape as
+editing an already-sent prompt ([014](014-transcript-messages.md)), minus that
+editor's warnings about rewinding the agent or the disk — nothing has run yet,
+so there is nothing to undo.
+
+Each queued prompt also records the provider, model and effort selected when
+it was enqueued. Its bubble shows the model and offers the same cross-provider
+model search plus an effort picker. Editing one item — its text or its model —
+does not change the task's default or other queued items. The PATCH that saves
+either kind of edit carries all four fields at once, built from the row
+already on screen with just the changed ones overridden, so a text edit keeps
+the model choice and a model or effort change keeps the text.
 
 When the runner claims an item, it applies that saved choice immediately before
 starting the turn. A provider change clears the provider-owned thread id; a

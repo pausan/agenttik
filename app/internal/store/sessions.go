@@ -379,16 +379,17 @@ func (s *Store) RetryProjects(now int64) ([]int64, error) {
 	return out, rows.Err()
 }
 
-// SetQueuedMessageModel changes one waiting prompt without altering the
-// session default. The runner applies the choice when it claims the prompt.
-func (s *Store) SetQueuedMessageModel(id int64, provider, model, effort string) error {
-	res, err := s.db.Exec(`UPDATE queued_messages SET provider = ?, model = ?, effort = ? WHERE id = ?`, provider, model, effort, id)
+// SetQueuedMessage changes one waiting prompt's text and model choice without
+// altering the session default. The runner applies the choice when it claims
+// the prompt.
+func (s *Store) SetQueuedMessage(id int64, prompt, provider, model, effort string) error {
+	res, err := s.db.Exec(`UPDATE queued_messages SET prompt = ?, provider = ?, model = ?, effort = ? WHERE id = ?`, prompt, provider, model, effort, id)
 	if err != nil {
-		return fmt.Errorf("set queued message model: %w", err)
+		return fmt.Errorf("set queued message: %w", err)
 	}
 	changed, err := res.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("set queued message model: %w", err)
+		return fmt.Errorf("set queued message: %w", err)
 	}
 	if changed == 0 {
 		return ErrNotFound

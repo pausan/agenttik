@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
-import { forceQueued, providerOf, S, updateQueuedModel } from "../store";
+import { forceQueued, providerOf, S, updateQueuedModel, updateQueuedPrompt } from "../store";
 import Message from "./Message.vue";
 import ToolGroup from "./ToolGroup.vue";
 
@@ -48,6 +48,10 @@ const queued = computed(() => [
 ]);
 const forcing = ref(0);
 const changing = ref(0);
+const editing = ref(0); // id of the queued prompt whose text is being edited, 0 for none
+const editDraft = ref("");
+const editBox = ref(null);
+const saving = ref(false);
 const NONE = "__default";
 
 const modelOf = (provider, model) => providerOf(provider)?.models.find((candidate) => candidate.id === model);
@@ -107,11 +111,49 @@ async function setQueuedChoice(q, provider, model, effort) {
   if (q.pending) return;
   changing.value = q.id;
   try {
-    await updateQueuedModel(q.id, provider, model, effort);
+    await updateQueuedModel(q, provider, model, effort);
   } catch {
     /* updateQueuedModel has already shown the failure */
   } finally {
     changing.value = 0;
+  }
+}
+
+/* A queued prompt has not started, so its text is as editable as its model
+   choice — in place, the same shape as editing an already-sent one
+   (Message.vue), just without that editor's warnings about rewinding the
+   agent or the disk: nothing has run yet, so there is nothing to undo. */
+async function startEdit(q) {
+  if (q.pending || forcing.value || changing.value || editing.value) return;
+  editing.value = q.id;
+  editDraft.value = q.prompt;
+  await nextTick();
+  // editBox sits inside this v-for, so Vue collects it as an array — only one
+  // item is ever being edited, so it holds at most the one textarea mounted.
+  editBox.value?.[0]?.textareaRef?.focus();
+}
+
+function cancelEdit() {
+  editing.value = 0;
+  editDraft.value = "";
+}
+
+function onEditKey(e) {
+  if (e.key === "Escape") cancelEdit();
+}
+
+async function saveEdit(q) {
+  if (saving.value) return;
+  const prompt = editDraft.value.trim();
+  if (!prompt) return;
+  saving.value = true;
+  try {
+    await updateQueuedPrompt(q, prompt);
+    cancelEdit();
+  } catch {
+    /* updateQueuedPrompt has already shown the failure */
+  } finally {
+    saving.value = false;
   }
 }
 
@@ -195,61 +237,92 @@ watch(
             <span aria-hidden="true">{{ clockFace }}</span>{{ waitLabel(q.created_at) }}
           </span>
         </div>
-        <div
-          class="max-w-[85%] rounded-[var(--ui-radius)] border border-dashed bg-elevated/50 px-3 py-2 whitespace-pre-wrap text-muted wrap-anywhere"
-          :class="q.retry_at ? 'border-warning/50' : 'border-default'"
-        >
-          {{ q.prompt }}
-        </div>
-        <p
-          v-if="retryNote(q)"
-          class="mt-1 max-w-[85%] text-right text-[11px] text-dimmed wrap-anywhere"
-          aria-label="Why this prompt is waiting"
-        >
-          {{ retryNote(q) }}
-        </p>
-        <div class="mt-1 flex items-center gap-1">
-          <UPopover>
+        <!-- Editing replaces the bubble in place, same as an already-sent
+             prompt (Message.vue): the text is rewritten where it sits rather
+             than in a dialogue over it. -->
+        <form v-if="editing === q.id" class="w-full max-w-[85%]" @submit.prevent="saveEdit(q)">
+          <UTextarea
+            ref="editBox"
+            v-model="editDraft"
+            :rows="3"
+            autoresize
+            class="w-full"
+            @keydown="onEditKey"
+            @keydown.enter.exact.prevent="saveEdit(q)"
+          />
+          <div class="mt-1.5 flex items-center gap-2">
+            <UButton type="submit" size="xs" :loading="saving" :disabled="!editDraft.trim()" label="Save" />
+            <UButton type="button" size="xs" color="neutral" variant="ghost" label="Cancel" @click="cancelEdit" />
+          </div>
+        </form>
+
+        <template v-else>
+          <div
+            class="max-w-[85%] rounded-[var(--ui-radius)] border border-dashed bg-elevated/50 px-3 py-2 whitespace-pre-wrap text-muted wrap-anywhere"
+            :class="q.retry_at ? 'border-warning/50' : 'border-default'"
+          >
+            {{ q.prompt }}
+          </div>
+          <p
+            v-if="retryNote(q)"
+            class="mt-1 max-w-[85%] text-right text-[11px] text-dimmed wrap-anywhere"
+            aria-label="Why this prompt is waiting"
+          >
+            {{ retryNote(q) }}
+          </p>
+          <div class="mt-1 flex items-center gap-1">
             <UButton
               color="neutral"
               variant="ghost"
               size="xs"
-              trailing-icon="i-lucide-chevron-down"
-              :label="labelOf(q.provider, q.model)"
-              :loading="changing === q.id"
-              :disabled="q.pending || forcing !== 0 || changing !== 0"
-              title="Change queued model"
+              icon="i-lucide-pencil"
+              :disabled="q.pending || forcing !== 0 || changing !== 0 || editing !== 0"
+              aria-label="Edit queued prompt"
+              title="Edit this prompt"
+              @click="startEdit(q)"
             />
-            <template #content>
-              <UCommandPalette
-                class="w-80"
-                :groups="modelGroups"
-                value-key="value"
-                placeholder="Search models…"
-                :fuse="{ fuseOptions: { keys: ['label', 'description'], threshold: 0.35, ignoreLocation: true }, resultLimit: 20 }"
-                @update:model-value="pickQueuedModel(q, $event)"
+            <UPopover>
+              <UButton
+                color="neutral"
+                variant="ghost"
+                size="xs"
+                trailing-icon="i-lucide-chevron-down"
+                :label="labelOf(q.provider, q.model)"
+                :loading="changing === q.id"
+                :disabled="q.pending || forcing !== 0 || changing !== 0 || editing !== 0"
+                title="Change queued model"
               />
-            </template>
-          </UPopover>
-          <USelect
-            :model-value="q.effort || NONE"
-            :items="effortItems(q)"
-            size="xs"
-            :disabled="q.pending || forcing !== 0 || changing !== 0"
-            title="Change queued effort"
-            @update:model-value="pickQueuedEffort(q, $event)"
-          />
-          <UButton
-            color="warning"
-            variant="ghost"
-            size="xs"
-            :label="sendNowLabel"
-            :loading="forcing === q.id"
-            :disabled="q.pending || forcing !== 0 || changing !== 0"
-            :title="sendNowHint"
-            @click="force(q)"
-          />
-        </div>
+              <template #content>
+                <UCommandPalette
+                  class="w-80"
+                  :groups="modelGroups"
+                  value-key="value"
+                  placeholder="Search models…"
+                  :fuse="{ fuseOptions: { keys: ['label', 'description'], threshold: 0.35, ignoreLocation: true }, resultLimit: 20 }"
+                  @update:model-value="pickQueuedModel(q, $event)"
+                />
+              </template>
+            </UPopover>
+            <USelect
+              :model-value="q.effort || NONE"
+              :items="effortItems(q)"
+              size="xs"
+              :disabled="q.pending || forcing !== 0 || changing !== 0 || editing !== 0"
+              title="Change queued effort"
+              @update:model-value="pickQueuedEffort(q, $event)"
+            />
+            <UButton
+              color="warning"
+              variant="ghost"
+              size="xs"
+              :label="sendNowLabel"
+              :loading="forcing === q.id"
+              :disabled="q.pending || forcing !== 0 || changing !== 0 || editing !== 0"
+              :title="sendNowHint"
+              @click="force(q)"
+            />
+          </div>
+        </template>
       </div>
     </div>
   </div>

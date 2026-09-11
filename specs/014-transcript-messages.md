@@ -15,6 +15,10 @@ still arriving over the stream is built locally and has no id to rewrite, so
 the transcript is re-read from the store when a turn ends — which is also what
 reconciles anything the stream and the store disagree about.
 
+A prompt that has not started yet is edited the same way but is not one of
+these messages — it is still in the queue; see
+[012](012-task-queue.md#editing-a-queued-item).
+
 ## What editing does not do
 
 Two limits, both stated in the editor rather than discovered afterwards:

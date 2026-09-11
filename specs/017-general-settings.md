@@ -26,8 +26,11 @@ Both panes count their rows for the rail's filter like the other three, so
 `enqueue` narrows to General 2 and Shortcuts 1.
 
 The prompt bar's button *is* the selected default, not just its label: it reads
-🕒 Enqueue and enqueues by default, and Send and sends when the pair is swapped.
-The caret beside it holds the other action, so the pair never offers two
-enqueues, and it is one field group — one pill, one seam at the caret — because
-the two are one control. Only sending is refused while a turn runs, wherever it
-sits, since enqueueing during a turn is the point of it.
+Enqueue and enqueues by default, and Send and sends when the pair is swapped,
+each with its own icon. The caret beside it opens the Send menu (see
+[012](012-task-queue.md), [028](028-scheduled-jobs.md)), which always lists
+Send, Enqueue and Schedule in that order — it does not reshuffle to hide
+whichever one is already on the button. It is still one field group, one pill,
+one seam at the caret, because the button and its menu are one control. Only
+sending is refused while a turn runs, wherever it sits, since enqueueing during
+a turn is the point of it.

@@ -286,24 +286,23 @@ const hints = computed(() => [
   { chord: S.keys["prompt.newline"][0], what: "for a newline" },
 ]);
 
-/* The button does what Enter does, so the two never disagree, and the menu
-   beside it holds the rest — never a second copy of the same one. */
+/* The button does what Enter does, so its label, icon and disabled state
+   track the keybinding. The menu beside it is the Send menu (specs/012,
+   specs/028): Send, Enqueue and Schedule, always in that order, so it never
+   reshuffles when Settings moves Enter between Send and Enqueue. */
 const actions = computed(() => ({
-  send: { label: "Send", run: submit, disabled: !!S.detail?.running },
-  enqueue: { label: "🕒 Enqueue", run: enqueuePrompt, disabled: false },
+  send: { label: "Send", icon: "i-lucide-send", run: submit, disabled: !!S.detail?.running },
+  enqueue: { label: "Enqueue", icon: "i-lucide-clock", run: enqueuePrompt, disabled: false },
+  /* Schedule keeps the prompt rather than sending it: the dialog asks how
+     often and how many times, and every run after that is a session of its
+     own. See specs/028-scheduled-jobs.md. */
+  schedule: { label: "Schedule…", icon: "i-lucide-repeat", run: () => (scheduling.value = true), disabled: !text.value.trim() },
 }));
 const primary = computed(() => actions.value[enterDoes() === "enqueue" ? "enqueue" : "send"]);
-
-/* Schedule is only in the menu. It is not a way of sending this prompt but of
-   keeping it: the dialog asks how often and how many times, and every run
-   after that is a session of its own. See specs/028-scheduled-jobs.md. */
-const others = computed(() => [
-  actions.value[enterDoes() === "enqueue" ? "send" : "enqueue"],
-  { label: "🔁 Schedule…", run: () => (scheduling.value = true), disabled: !text.value.trim() },
-]);
+const menu = computed(() => [actions.value.send, actions.value.enqueue, actions.value.schedule]);
 
 /* The menu closes itself: whichever action was chosen has just been used. */
-function runOther(action) {
+function runMenuAction(action) {
   queueOpen.value = false;
   action.run();
 }
@@ -451,13 +450,13 @@ function runOther(action) {
           @click="stopTurn"
         />
         <UFieldGroup size="sm">
-          <UButton type="submit" :disabled="primary.disabled" :label="primary.label" />
+          <UButton type="submit" :disabled="primary.disabled" :label="primary.label" :trailing-icon="primary.icon" />
           <UPopover v-model:open="queueOpen">
             <UButton type="button" icon="i-lucide-chevron-down" aria-label="More prompt actions" />
             <template #content>
               <div class="p-1">
                 <UButton
-                  v-for="action in others"
+                  v-for="action in menu"
                   :key="action.label"
                   type="button"
                   color="neutral"
@@ -466,7 +465,8 @@ function runOther(action) {
                   class="justify-start"
                   :disabled="action.disabled"
                   :label="action.label"
-                  @click="runOther(action)"
+                  :trailing-icon="action.icon"
+                  @click="runMenuAction(action)"
                 />
               </div>
             </template>

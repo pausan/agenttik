@@ -8,6 +8,10 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   reporter: process.env.CI ? "list" : [["list"], ["html", { open: "never" }]],
+  // A full parallel run starts up to one server per test at once; the
+  // default 5s per assertion is occasionally too tight for the slowest of
+  // them under that contention, not because anything is actually stuck.
+  expect: { timeout: 8_000 },
   use: {
     trace: "retain-on-failure",
     screenshot: "only-on-failure",

@@ -57,7 +57,8 @@ the git status and the folder picker all read something real.
 Six files, one per area: `folder-picker` (the fuzzy walk over real
 directories), `inspector` (which panes the right-hand strip offers a project
 versus a task, and that the one in use survives switching), `projects` (add,
-rename, delete, archive, the per-project task list and its filter),
+rename, delete, archive, the per-project task list, its filter, and the outcome
+an archived row grows — [051](051-task-outcomes.md)),
 `subscriptions` (adding one, choosing which new tasks use it, the alias in the
 picker, the subscription a turn really ran on, and what removing one says —
 [050](050-subscription-accounts.md)), `tasks`
@@ -90,13 +91,18 @@ streamed back word by word:
 | `@error <message>` | end the turn in error; a message containing an outage phrase ("rate limit", "connection refused", ...) exercises the retry queue exactly as a real provider's outage would — see [045](045-provider-outage-retry.md) |
 | `@account` | reply with the login directory the runner resolved for this turn, `system` for the machine's own — the only way a browser test can see which subscription actually ran it ([050](050-subscription-accounts.md)) |
 
-An isolated request — title refinement, [020](020-task-titles.md) — is
-answered differently: instead of reading directives, it replies "Refined: "
-plus the subject line of the request it was actually asked to name, so two
-tasks started from different prompts keep two different refined titles rather
-than converging on one constant. `SubscriptionLimits` answers a fixed,
-made-up allowance, so the prompt bar's bars have something deterministic to
-show without needing a provider that answers a real one — and a different
+An isolated request is answered differently: instead of reading directives, it
+echoes the subject it was handed. Which of the two it is asked is read off the
+tag the runner wrapped that subject in, so the fake is never told: a title
+request ([020](020-task-titles.md)) is answered "Refined: " plus the first line
+of the prompt to name, and an outcome summary ([051](051-task-outcomes.md))
+"Outcome: " plus the first line of the reply to describe. Two tasks started
+from different prompts, or ending on different replies, keep two different
+answers rather than converging on one constant.
+
+`SubscriptionLimits` answers a fixed, made-up allowance, so the prompt bar's
+bars have something deterministic to show without needing a provider that
+answers a real one — and a different
 figure for a named subscription than for the machine's own login, so a test
 can see that swapping subscription re-read the allowance rather than
 relabelling one.
@@ -110,5 +116,5 @@ swapping and removing one with no CLI on PATH.
 A live turn against a real provider. Running one spends an actual subscription
 and needs the CLI installed, so nothing in the suite does that; the fake
 provider stands in for a turn's mechanics — streaming, tool calls, errors,
-retries, queueing, titles, allowance bars — and a real CLI's own event mapping
-is exercised by hand.
+retries, queueing, titles, outcome summaries, allowance bars — and a real CLI's
+own event mapping is exercised by hand.

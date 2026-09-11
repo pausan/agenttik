@@ -119,6 +119,7 @@ func (r *Runner) finishScheduledRun(sess *store.Session, turnStatus string) {
 	// is what archiving already means. Otherwise forty runs bury the project
 	// they belong to; the schedule's own view is where they are kept.
 	_ = r.store.SetSessionDone(sess.ID, true)
+	r.SummarizeTask(sess.ID)
 	r.publishSchedule(sess.ProjectID)
 }
 

@@ -20,6 +20,12 @@ worth asking again on every project.
 The page opens with the cursor in the filter, and returning to the Tasks tab
 puts it back there. Opening a project is asking which task.
 
+An archived row carries one line the others do not: what the task came to,
+drawn under its title in a lighter italic and written when it was archived. A
+row whose task was archived before there was a summary, or whose summary could
+not be written, simply has one line fewer. See
+[051](051-task-outcomes.md).
+
 A project with no tasks at all shows an empty state; a project with no archive
 simply has no grey rows.
 

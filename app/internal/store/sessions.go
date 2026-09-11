@@ -22,14 +22,15 @@ const sessionCols = `s.id, s.project_id, s.title, s.provider, s.account_id, s.pr
 	s.model, s.effort, s.permission, s.source, s.status,
 	s.created_at, s.updated_at, s.last_active_at, s.done_at, s.position,
 	(SELECT COUNT(*) FROM queued_messages q WHERE q.session_id = s.id),
-	s.schedule_id, s.project_prompt, p.name, p.path, ` + firstPromptCol
+	s.schedule_id, s.project_prompt, s.summary, p.name, p.path, ` + firstPromptCol
 
 func scanSession(sc interface{ Scan(...any) error }) (*Session, error) {
 	var v Session
 	err := sc.Scan(&v.ID, &v.ProjectID, &v.Title, &v.Provider, &v.AccountID, &v.ProviderSessionID,
 		&v.Model, &v.Effort, &v.Permission, &v.Source, &v.Status,
 		&v.CreatedAt, &v.UpdatedAt, &v.LastActiveAt, &v.DoneAt, &v.Position,
-		&v.QueueCount, &v.ScheduleID, &v.ProjectPrompt, &v.ProjectName, &v.ProjectPath, &v.Prompt)
+		&v.QueueCount, &v.ScheduleID, &v.ProjectPrompt, &v.Summary,
+		&v.ProjectName, &v.ProjectPath, &v.Prompt)
 	if err != nil {
 		return nil, err
 	}
@@ -235,6 +236,17 @@ func (s *Store) SetSessionDone(id string, done bool) error {
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
+	}
+	return nil
+}
+
+// SetSessionSummary records what a finished task turned out to be. Writing it
+// is not activity either: a summary is written as the task is archived, and
+// archiving deliberately leaves last_active_at alone.
+func (s *Store) SetSessionSummary(id, summary string) error {
+	_, err := s.db.Exec(`UPDATE sessions SET summary = ? WHERE id = ?`, summary, id)
+	if err != nil {
+		return fmt.Errorf("set session summary: %w", err)
 	}
 	return nil
 }

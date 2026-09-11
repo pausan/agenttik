@@ -2,6 +2,7 @@ package store
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -153,6 +154,86 @@ func TestStarsRoundTrip(t *testing.T) {
 	stars, _ = s.ListStars()
 	if len(stars) != 0 {
 		t.Errorf("got %d stars after remove, want 0", len(stars))
+	}
+}
+
+// TestLastReplyIsTheAgentsClosingProse covers what a finished task is
+// summarised from: the newest assistant row, ignoring the user's prompts, the
+// tool calls between them and any error the turn ended on.
+func TestLastReplyIsTheAgentsClosingProse(t *testing.T) {
+	s := testStore(t)
+	p, err := s.CreateProject("alpha", "/tmp/alpha")
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	sess := &Session{ID: "s1", ProjectID: p.ID, Provider: "claude", Model: "opus"}
+	must(t, s.CreateSession(sess))
+
+	// A task that has not run yet is blank rather than an error: nothing to
+	// summarise is the ordinary case, not a failure.
+	if reply, err := s.LastReply("s1"); err != nil || reply != "" {
+		t.Errorf("LastReply of a session with no messages = %q, %v; want blank", reply, err)
+	}
+
+	for _, m := range []struct{ role, content string }{
+		{RoleUser, "fix the flaky test"},
+		{RoleAssistant, "Looking at the scheduler now."},
+		{RoleTool, "Edit app/internal/runner/schedules.go"},
+		{RoleAssistant, "Done — the sleep is gone and the test passes."},
+		{RoleTool, "Bash go test ./..."},
+	} {
+		if _, err := s.AddMessage("s1", 0, m.role, m.content); err != nil {
+			t.Fatalf("add %s message: %v", m.role, err)
+		}
+	}
+	reply, err := s.LastReply("s1")
+	if err != nil {
+		t.Fatalf("last reply: %v", err)
+	}
+	if reply != "Done — the sleep is gone and the test passes." {
+		t.Errorf("LastReply = %q", reply)
+	}
+
+	// Long replies are capped rather than refused: the question is charged for
+	// every time a task is archived.
+	long := strings.Repeat("a", 5000)
+	if _, err := s.AddMessage("s1", 0, RoleAssistant, long); err != nil {
+		t.Fatalf("add long reply: %v", err)
+	}
+	reply, err = s.LastReply("s1")
+	if err != nil {
+		t.Fatalf("last reply: %v", err)
+	}
+	if len(reply) != 4000 {
+		t.Errorf("LastReply length = %d, want the 4000-character cap", len(reply))
+	}
+}
+
+// TestSummaryIsWrittenWithoutTouchingActivity guards the one rule the column
+// shares with archiving: a summary is written about a task, not by it, so the
+// clock the archive is ordered by must not move.
+func TestSummaryIsWrittenWithoutTouchingActivity(t *testing.T) {
+	s := testStore(t)
+	p, err := s.CreateProject("alpha", "/tmp/alpha")
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	must(t, s.CreateSession(&Session{ID: "s1", ProjectID: p.ID, Provider: "claude", Model: "opus"}))
+	before, err := s.GetSession("s1")
+	if err != nil {
+		t.Fatalf("get session: %v", err)
+	}
+
+	must(t, s.SetSessionSummary("s1", "Removed the sleep from the scheduler test"))
+	after, err := s.GetSession("s1")
+	if err != nil {
+		t.Fatalf("get session: %v", err)
+	}
+	if after.Summary != "Removed the sleep from the scheduler test" {
+		t.Errorf("summary = %q", after.Summary)
+	}
+	if after.LastActiveAt != before.LastActiveAt {
+		t.Errorf("last_active_at moved: %d then %d", before.LastActiveAt, after.LastActiveAt)
 	}
 }
 

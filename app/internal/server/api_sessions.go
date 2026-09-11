@@ -216,6 +216,12 @@ func (s *Server) updateSession(c *fiber.Ctx) error {
 		if err := s.store.SetSessionDone(id, *body.Done); err != nil {
 			return err
 		}
+		// What the task came to, written behind the response: the row is
+		// archived on the click and grows its summary a few seconds later.
+		// See 051-task-outcomes.md.
+		if *body.Done {
+			s.runner.SummarizeTask(id)
+		}
 	}
 	updated, err := s.store.GetSession(id)
 	if err != nil {

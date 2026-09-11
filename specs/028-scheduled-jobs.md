@@ -200,6 +200,9 @@ run appears there while it is going, the way any task does, and is archived the
 moment its turn ends — it leaves the sidebar for the grey half of the project
 page's Tasks tab, which is what archiving already means
 ([007](007-task-closing.md)). The schedule's own view is where the forty are.
+Archiving itself asks what the run came to, so those forty rows each say
+whether anything happened without being opened one at a time
+([051](051-task-outcomes.md)).
 
 ## The view
 

@@ -8,13 +8,17 @@ drawn as `Untitled task` and the keypress is not waiting on a provider. A
 better title is fetched behind it and replaces the first line when it arrives,
 usually a few seconds later.
 
-The selected provider supplies its lightest advertised model: Codex uses
-GPT-5.6 Luna with no reasoning and Claude Code uses Haiku with low effort.
-The one-shot request runs read-only from the system temporary directory and
-receives only the prompt to title. It has no project files, transcript, real
+The selected provider supplies its lightest advertised model (`SmallModel`):
+Codex uses GPT-5.6 Luna with no reasoning and Claude Code uses Haiku with low
+effort. The one-shot request runs read-only from the system temporary directory
+and receives only the prompt to title. It has no project files, transcript, real
 session ID, or provider session ID, so it cannot become part of the actual
 task. An 8-second limit or any provider failure leaves the first line
 standing.
+
+The same model and the same isolated request say what a task came to when it is
+archived — [051](051-task-outcomes.md) — so the isolation rules live in one
+place, `Runner.askSmall`, rather than in each caller.
 
 The request asks for the intent behind the prompt rather than a trim of its
 wording: an action verb, a subject named from the request itself, and none of

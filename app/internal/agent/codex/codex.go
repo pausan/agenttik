@@ -44,9 +44,10 @@ func (p *Provider) Efforts() []string {
 	return nil
 }
 
-// TitleModel is the smallest Codex model the app offers. Naming a session is
-// a one-shot request, so it does not need the model chosen for its real turn.
-func (p *Provider) TitleModel() (model, effort string) {
+// SmallModel is the smallest Codex model the app offers. Naming a session and
+// summarising a finished one are one-shot requests, so neither needs the model
+// chosen for its real turns.
+func (p *Provider) SmallModel() (model, effort string) {
 	return "gpt-5.6-luna", "none"
 }
 

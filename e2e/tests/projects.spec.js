@@ -97,6 +97,33 @@ test("the project's task list is filtered by title", async ({ page }) => {
   await expect(tasks.getByText("bravo task")).toHaveCount(0);
 });
 
+test("archiving a finished task writes what it came to under its row", async ({ page }) => {
+  await addProject(page);
+  await openProject(page);
+  await newTask(page);
+  await pickModel(page);
+  // The directive keeps the reply distinct from the prompt echoed above it,
+  // so the assertions below match one bubble rather than two.
+  await sendPrompt(page, "@wait 10\nthe scheduler is deterministic now");
+  await expect(page.getByText("the scheduler is deterministic now", { exact: true })).toBeVisible();
+  await expect(page.getByText("idle")).toBeVisible();
+
+  await openProject(page);
+  const tasks = page.locator("main");
+  await tasks.getByTitle("Archive task").click();
+
+  // The row goes grey at once and grows its outcome a beat later: the fake
+  // provider answers the isolated summary request with "Outcome: " plus the
+  // reply it was handed. See specs/051-task-outcomes.md.
+  await expect(tasks.getByTitle("Unarchive task")).toBeVisible();
+  await expect(tasks.getByText("Outcome: the scheduler is deterministic now")).toBeVisible();
+
+  // Restoring keeps the summary out of the way: it describes a finished task,
+  // and this one is back in the working list.
+  await tasks.getByTitle("Unarchive task").click();
+  await expect(tasks.getByText("Outcome: the scheduler is deterministic now")).toHaveCount(0);
+});
+
 test("project stats aggregate over every task", async ({ page }) => {
   await addProject(page);
   await openProject(page);

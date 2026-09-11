@@ -18,6 +18,10 @@ const props = defineProps({
   prompt: { type: String, default: "" },
   status: { type: String, default: "idle" },
   sub: { type: String, default: "" },
+  // What the task came to, written when it was archived. Empty draws nothing,
+  // which is every task archived before there was a summary to write.
+  // See specs/051-task-outcomes.md.
+  outcome: { type: String, default: "" },
   // null keeps the row out of a numbered list. 0 is a row in one that no
   // chord reaches, and holds the column so the titles still line up.
   number: { type: Number, default: null },
@@ -113,6 +117,11 @@ defineExpose({ edit });
             <span v-if="queued" class="shrink-0" title="Queued prompt">🕒</span>
             <span class="truncate">{{ title || "Untitled task" }}</span>
           </span>
+          <!-- The outcome reads in the same lighter voice the transcript
+               gives thinking: it is the row's own note on itself, not part of
+               the list's structure. Two lines at most — a summary is written
+               to a sentence, and a row is not a paragraph. -->
+          <span v-if="outcome" class="mt-0.5 block line-clamp-2 text-xs text-dimmed italic">{{ outcome }}</span>
           <span v-if="sub" class="block truncate text-xs text-dimmed">{{ sub }}</span>
         </button>
         <!-- Five lines is as much as is worth reading in a hover; the clamp

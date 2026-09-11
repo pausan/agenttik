@@ -30,6 +30,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [041](041-project-archiving.md) | Putting a project away without deleting it, and the Settings list it waits in |
 | [042](042-sidebar-project-rows.md) | A project added lands last, the rule between projects, and the letter that folds one |
 | [049](049-project-creation-modes.md) | Adding a project on a folder, or on a base folder of repositories cloned into it |
+| [051](051-task-outcomes.md) | What an archived task came to, written from its last reply and drawn under its row |
 
 ## Prompting and turns
 
@@ -102,6 +103,11 @@ account.
 `go build ./...`, `go vet ./...`, `make ui` and the 33 web unit tests all pass.
 Two Go tests and one Playwright test fail; see
 [review-notes.md](review-notes.md) and [005](005-testing.md).
+
+Task outcomes ([051](051-task-outcomes.md)) are exercised against the fake
+provider — the archive writes the line, a restore drops an answer still in
+flight — and against a real one only by hand, since a live small-model request
+spends a real subscription.
 
 [review-notes.md](review-notes.md) lists what these specs and the code still
 disagree about, for a human to settle.

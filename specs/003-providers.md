@@ -13,8 +13,10 @@ type Provider interface {
 }
 ```
 
-Three halves are optional. `TitleGenerator` names a task from its first prompt
-([020](020-task-titles.md)); `Metered` answers one signed-in account's own
+Three halves are optional. `SmallModel` names the provider's lightest model,
+which agenttik puts its own short questions to: naming a task from its first
+prompt ([020](020-task-titles.md)) and saying what a finished one came to
+([051](051-task-outcomes.md)). `Metered` answers one signed-in account's own
 subscription allowance without ever holding its credentials
 ([011](011-prompt-bar-usage.md)); `MultiAccount` says where that account's
 login is kept, so one machine can hold a company subscription and a personal

@@ -113,9 +113,9 @@ test("a task's title is refined shortly after its first prompt", async ({ page }
   await pickModel(page);
   await sendPrompt(page, "fix the flaky queue test");
 
-  // The first line names it at once; the fake provider's TitleGenerator
-  // replaces that placeholder a beat later, with a reply that still names the
-  // prompt. See specs/020-task-titles.md.
+  // The first line names it at once; the fake provider's small model replaces
+  // that placeholder a beat later, with a reply that still names the prompt.
+  // See specs/020-task-titles.md.
   await expect(sidebar(page).getByText("Refined: fix the flaky queue test")).toBeVisible();
 });
 

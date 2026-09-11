@@ -2441,6 +2441,13 @@ function onEvent(msg) {
     reloadProjects();
     return;
   }
+  // A background request has written what an archived task came to. Only the
+  // project's task list draws it, and only the archived half of it, so the
+  // lists that hold open tasks are left alone. See specs/051-task-outcomes.md.
+  if (msg.event?.type === "session_summarized") {
+    reloadProjects();
+    return;
+  }
   const turnMoved = ["started", "done"].includes(msg.event?.type);
   if (turnMoved) {
     const stage = msg.event.type === "done" && msg.stats ? "final" : "event";

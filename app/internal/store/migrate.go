@@ -255,6 +255,13 @@ ALTER TABLE server_config ADD COLUMN auth_enabled  INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE server_config ADD COLUMN password_hash TEXT    NOT NULL DEFAULT '';
 ALTER TABLE server_config ADD COLUMN totp_secret   TEXT    NOT NULL DEFAULT '';
 	`,
+	`
+-- What a finished task turned out to be: one line written from its last reply
+-- when it is archived, drawn under the row in the project's task list. Blank
+-- means never summarised, which is every task archived before this column
+-- existed and every one whose provider had nothing to summarise.
+ALTER TABLE sessions ADD COLUMN summary TEXT NOT NULL DEFAULT '';
+	`,
 }
 
 func migrate(db *sql.DB) error {

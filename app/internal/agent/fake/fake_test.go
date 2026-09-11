@@ -25,20 +25,23 @@ func TestCutDirective(t *testing.T) {
 	}
 }
 
-func TestTitleSubject(t *testing.T) {
+func TestWrapped(t *testing.T) {
 	cases := []struct {
-		name    string
-		wrapped string
-		want    string
+		name   string
+		prompt string
+		tag    string
+		want   string
 	}{
-		{"wrapped prompt", "Name the task.\n\n<user-request>\nfix the flaky test\n</user-request>", "fix the flaky test"},
-		{"only the first line of a multi-line request", "<user-request>\nfix it\nand also this\n</user-request>", "fix it"},
-		{"no wrapper at all", "just a plain prompt", "just a plain prompt"},
+		{"wrapped prompt", "Name the task.\n\n<user-request>\nfix the flaky test\n</user-request>", "user-request", "fix the flaky test"},
+		{"only the first line of a multi-line request", "<user-request>\nfix it\nand also this\n</user-request>", "user-request", "fix it"},
+		{"no wrapper at all falls back to the whole title prompt", "just a plain prompt", "user-request", "just a plain prompt"},
+		{"a reply to summarise", "Say what it came to.\n\n<agent-reply>\nDone: the test passes\n</agent-reply>", "agent-reply", "Done: the test passes"},
+		{"a title request carries no reply", "<user-request>\nfix it\n</user-request>", "agent-reply", ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := titleSubject(c.wrapped); got != c.want {
-				t.Errorf("titleSubject(%q) = %q, want %q", c.wrapped, got, c.want)
+			if got := wrapped(c.prompt, c.tag); got != c.want {
+				t.Errorf("wrapped(%q, %q) = %q, want %q", c.prompt, c.tag, got, c.want)
 			}
 		})
 	}

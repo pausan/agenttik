@@ -93,6 +93,12 @@ type Session struct {
 	// Prompt is what the session was opened with, capped; the sidebar shows it
 	// when a row is hovered. See firstPromptCol.
 	Prompt string `json:"prompt,omitempty"`
+
+	// Summary is what the task turned out to be: one line written from its
+	// last reply when it was archived, drawn under the row in the project's
+	// task list. Empty means nothing was written, which is every task archived
+	// before there was a summary to write. See 051-task-outcomes.md.
+	Summary string `json:"summary,omitempty"`
 }
 
 type QueuedMessage struct {

@@ -44,10 +44,10 @@ func (p *Provider) Models() []agent.Model {
 
 func (p *Provider) Efforts() []string { return []string{"low", "medium", "high"} }
 
-// TitleModel makes the fake provider also stand in for the background title
-// refinement in 020-task-titles.md: the placeholder first line is replaced
-// with titleReply shortly after a turn starts.
-func (p *Provider) TitleModel() (model, effort string) { return "fake-quick", "low" }
+// SmallModel makes the fake provider also stand in for the isolated requests
+// agenttik makes beside a turn: the refined title of 020-task-titles.md and
+// the outcome summary of 051-task-outcomes.md.
+func (p *Provider) SmallModel() (model, effort string) { return "fake-quick", "low" }
 
 // Available never fails: the fake provider has no CLI to be missing.
 func (p *Provider) Available() error { return nil }
@@ -86,7 +86,7 @@ func (p *Provider) Run(ctx context.Context, req agent.TurnRequest) (<-chan agent
 	go func() {
 		defer close(events)
 		if req.Isolated {
-			runTitle(ctx, req, events)
+			runIsolated(ctx, req, events)
 			return
 		}
 		runScript(ctx, req, events)
@@ -94,29 +94,44 @@ func (p *Provider) Run(ctx context.Context, req agent.TurnRequest) (<-chan agent
 	return events, nil
 }
 
-// runTitle answers an isolated title request almost instantly, with a reply
-// that still names what was actually asked — "Refined: " plus the subject
-// runner.titlePrompt wrapped — so two tasks started from different prompts
-// keep two different refined titles instead of converging on one constant.
-func runTitle(ctx context.Context, req agent.TurnRequest, events chan<- agent.Event) {
+// runIsolated answers one of the short requests agenttik makes about a task
+// rather than for it: the refined title of 020-task-titles.md, and the outcome
+// summary of 051-task-outcomes.md. Both answer almost instantly, and both echo
+// the subject they were actually given — "Refined: " or "Outcome: " plus its
+// first line — so two tasks started from different prompts, or ending on
+// different replies, keep two different answers instead of converging on one
+// constant.
+//
+// Which is which is read off the wrapper the runner puts the subject in, so
+// the fake never has to be told.
+func runIsolated(ctx context.Context, req agent.TurnRequest, events chan<- agent.Event) {
 	if !sleepCtx(ctx, 30*time.Millisecond) {
 		return
 	}
-	events <- agent.Event{Type: agent.EventText, Text: "Refined: " + titleSubject(req.Prompt)}
+	prefix, subject := "Refined: ", wrapped(req.Prompt, "user-request")
+	if reply := wrapped(req.Prompt, "agent-reply"); reply != "" {
+		prefix, subject = "Outcome: ", reply
+	}
+	events <- agent.Event{Type: agent.EventText, Text: prefix + subject}
 }
 
-// titleSubject reads the original prompt back out of runner.titlePrompt's
-// wrapper. A wrapper it does not recognise — the contract changed, or this
-// runs against some other caller entirely — is not fatal: the whole prompt
-// stands in, still visibly different from the placeholder it replaces.
-func titleSubject(wrapped string) string {
-	const open, close = "<user-request>\n", "\n</user-request>"
-	start := strings.Index(wrapped, open)
-	end := strings.LastIndex(wrapped, close)
+// wrapped reads the subject back out of the tag the runner wrapped it in, and
+// returns "" for a request that carries no such tag. The title request is the
+// fallback rather than a tag of its own: a wrapper this does not recognise —
+// the contract changed, or this runs against some other caller entirely — is
+// not fatal, and the whole prompt stands in, still visibly different from the
+// placeholder it replaces.
+func wrapped(prompt, tag string) string {
+	open, close := "<"+tag+">\n", "\n</"+tag+">"
+	start := strings.Index(prompt, open)
+	end := strings.LastIndex(prompt, close)
 	if start < 0 || end < 0 || end < start {
-		return strings.TrimSpace(wrapped)
+		if tag == "user-request" {
+			return strings.TrimSpace(prompt)
+		}
+		return ""
 	}
-	inner := wrapped[start+len(open) : end]
+	inner := prompt[start+len(open) : end]
 	return strings.TrimSpace(strings.SplitN(inner, "\n", 2)[0])
 }
 

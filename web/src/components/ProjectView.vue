@@ -305,6 +305,7 @@ async function doDelete() {
             :status="row.task.status"
             :queued="row.task.queue_count"
             :sub="subtitle(row.task)"
+            :outcome="row.archived ? row.task.summary : ''"
             :job="row.task.schedule_id"
             :active="S.detail?.session.id === row.task.id"
             :archived="row.archived"

@@ -188,11 +188,13 @@ type Provider interface {
 	Run(ctx context.Context, req TurnRequest) (<-chan Event, error)
 }
 
-// TitleGenerator optionally names a model suitable for a short, isolated
-// session-title request. The request is never resumed as part of the session
-// it names.
-type TitleGenerator interface {
-	TitleModel() (model, effort string)
+// SmallModel optionally names the provider's lightest model, which is what
+// agenttik puts its own short questions to: naming a task from its first
+// prompt (020-task-titles.md) and saying what a finished one came to, from its
+// last reply (051-task-outcomes.md). Neither request is ever resumed as part
+// of the session it is about.
+type SmallModel interface {
+	SmallModel() (model, effort string)
 }
 
 // Metered is the optional half of Provider for backends that can be asked for

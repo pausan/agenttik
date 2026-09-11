@@ -93,10 +93,10 @@ func (p *Provider) Efforts() []string {
 	return []string{"low", "medium", "high", "xhigh"}
 }
 
-// TitleModel is the cheapest model the account can use, which is all that
-// naming a session needs. Taking it from the live list keeps it from naming a
+// SmallModel is the cheapest model the account can use, which is all a
+// one-shot request needs. Taking it from the live list keeps it from naming a
 // model the CLI has since dropped.
-func (p *Provider) TitleModel() (model, effort string) {
+func (p *Provider) SmallModel() (model, effort string) {
 	_, model, effort = p.models()
 	return model, effort
 }

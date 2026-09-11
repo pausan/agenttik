@@ -15,8 +15,9 @@ CLI no longer has: `claude-sonnet-4.6`, `claude-sonnet-4.5`,
 `gemini-3.7-flash`, `gpt-5.6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra`,
 `kimi-k3`, `mai-code-1.1-flash`.
 
-`TitleModel` named `gpt-5.4-mini`, one of the ids that had gone, so every
-Copilot session title was requested against a model the CLI would refuse.
+`SmallModel` — then called `TitleModel` — named `gpt-5.4-mini`, one of the ids
+that had gone, so every Copilot session title was requested against a model the
+CLI would refuse.
 
 Three things now come from the CLI per model rather than from nothing:
 

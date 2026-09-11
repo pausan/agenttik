@@ -689,35 +689,38 @@ func (r *Runner) nameTask(sess *store.Session, prompt string) {
 	go r.refineTitle(sess.ID, sess.Provider, sess.AccountID, title, prompt)
 }
 
-// askTitle asks the provider's lightest model to name a prompt, and returns
-// "" if it will not or cannot. It is deliberately a new, read-only request in
-// /tmp: it gets the prompt but no session id, transcript, or project files, so
-// it cannot join the real conversation. A timeout or any provider failure
-// returns nothing, which leaves whatever placeholder was written standing.
+// askSmall puts one short question to the provider's lightest model and
+// returns what it said, "" if it will not or cannot answer.
 //
-// A task and a scheduled job both name themselves this way, so the request
-// lives here rather than in either.
-func (r *Runner) askTitle(providerName string, accountID int64, prompt string) string {
+// It is deliberately a new, read-only request in /tmp: it gets the question
+// but no session id, transcript, or project files, so it cannot join the real
+// conversation or touch the working tree. A timeout or any provider failure
+// returns nothing, and every caller treats that as "leave what is there".
+//
+// Everything agenttik asks about a task rather than for it comes through here
+// — the refined title, the outcome summary — so the isolation rules are
+// written once.
+func (r *Runner) askSmall(providerName string, accountID int64, question string, timeout time.Duration) string {
 	provider, ok := r.registry.Get(providerName)
 	if !ok {
 		return ""
 	}
-	// The same subscription as the task it names: a title is a small charge,
-	// but it belongs on the account that asked for the work.
+	// The same subscription as the task it is about: these are small charges,
+	// but they belong on the account that asked for the work.
 	home, err := r.accountHome(providerName, accountID)
 	if err != nil {
 		return ""
 	}
-	generator, ok := provider.(agent.TitleGenerator)
+	small, ok := provider.(agent.SmallModel)
 	if !ok {
 		return ""
 	}
-	model, effort := generator.TitleModel()
-	ctx, cancel := context.WithTimeout(context.Background(), titleTimeout)
+	model, effort := small.SmallModel()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	events, err := provider.Run(ctx, agent.TurnRequest{
 		WorkDir:     os.TempDir(),
-		Prompt:      titlePrompt(prompt),
+		Prompt:      question,
 		Model:       model,
 		Effort:      effort,
 		AccountHome: home,
@@ -733,7 +736,17 @@ func (r *Runner) askTitle(providerName string, accountID int64, prompt string) s
 			response.WriteString(event.Text)
 		}
 	}
-	return titleFromResponse(response.String())
+	return response.String()
+}
+
+// askTitle asks that model to name a prompt. Nothing back leaves whatever
+// placeholder was written standing.
+//
+// A task and a scheduled job both name themselves this way, so the request
+// lives here rather than in either.
+func (r *Runner) askTitle(providerName string, accountID int64, prompt string) string {
+	return titleFromResponse(
+		r.askSmall(providerName, accountID, titlePrompt(prompt), titleTimeout))
 }
 
 // refineTitle puts what askTitle returns in place of the first line the task

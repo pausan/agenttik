@@ -46,7 +46,7 @@ func (f *fakeProvider) Run(ctx context.Context, req agent.TurnRequest) (<-chan a
 	return ch, nil
 }
 
-func setup(t *testing.T, fp *fakeProvider) (*Runner, *store.Store, *store.Session) {
+func setup(t *testing.T, fp agent.Provider) (*Runner, *store.Store, *store.Session) {
 	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
 	if err != nil {

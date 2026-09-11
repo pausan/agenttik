@@ -252,6 +252,10 @@ func errorHandler(c *fiber.Ctx, err error) error {
 		code = fiber.StatusConflict
 	case errors.Is(err, runner.ErrForcePending):
 		code = fiber.StatusConflict
+	case errors.Is(err, runner.ErrUnknownAccount):
+		// Not a server fault: the task names a subscription that has been
+		// removed, and picking another one for it is the fix.
+		code = fiber.StatusBadRequest
 	case errors.Is(err, agent.ErrNotImplemented):
 		code = fiber.StatusNotImplemented
 	default:

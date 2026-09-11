@@ -236,9 +236,11 @@ func TestRemovedSubscriptionStopsItsTasksRatherThanMovingThem(t *testing.T) {
 	if kept.AccountID != created.ID {
 		t.Fatalf("task moved to account %d on its own", kept.AccountID)
 	}
-	if resp := do(t, s, "POST", "/api/sessions/"+session.ID+"/messages",
-		map[string]any{"prompt": "hi"}); resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
-		t.Errorf("a prompt ran on a subscription that no longer exists: %d", resp.StatusCode)
+	// A bad request rather than a server fault: picking another subscription
+	// for the task is the fix, and the message says as much.
+	resp := do(t, s, "POST", "/api/sessions/"+session.ID+"/messages", map[string]any{"prompt": "hi"})
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("a prompt on a removed subscription answered %d, want 400", resp.StatusCode)
 	}
 }
 

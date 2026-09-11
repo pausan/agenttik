@@ -180,13 +180,18 @@ export function accountOf(name, id) {
   return accountsOf(name).find((a) => a.id === (id || 0));
 }
 
-/* accountLabel is what a subscription is called beside a model. The
-   machine's own login on a provider with nothing else configured is not
-   worth naming: there is no second one to tell it apart from. */
+/* accountLabel is what a subscription is called beside a model. The machine's
+   own login on a provider with nothing else configured is not worth naming:
+   there is no second one to tell it apart from.
+
+   A task pointing at a subscription that has been removed is always named,
+   though, however few are left — that task will refuse to start, and the
+   label is where it says why. */
 export function accountLabel(name, id) {
   const accounts = accountsOf(name);
-  if (accounts.length < 2) return "";
-  return accountOf(name, id)?.alias || "removed subscription";
+  const account = accountOf(name, id);
+  if (!account) return id ? "removed subscription" : "";
+  return accounts.length < 2 ? "" : account.alias;
 }
 
 /* The subscription a new task on this provider starts on. */

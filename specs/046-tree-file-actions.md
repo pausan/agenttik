@@ -32,7 +32,9 @@ Open tabs are kept in step by hand, because a file tab's id carries its path:
 
 - A **renamed** file's tab follows it. The id, the path and the label are
   rewritten, and so is whatever pointed at the old id — the active tab, and the
-  project's last-tab memory. Unsaved edits survive the move.
+  project's last-tab memory. Unsaved edits survive the move. The text is the
+  same bytes it was, but a diff is against a path — the move is part of the new
+  one — so a tab left on Diff re-reads it.
 - A **deleted** file's tab closes: forced, because there is nothing left to
   save, and unremembered, because Ctrl+Shift+T could only fail on a file that is
   gone.

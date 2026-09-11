@@ -1946,6 +1946,12 @@ export async function renameEntry(path, name) {
     tab.id = `file:${id}:${tab.path}`;
     if (S.activeTab === was) S.activeTab = tab.id;
     if (S.lastTab[id] === was) S.lastTab[id] = tab.id;
+    // The text is the same bytes it was, but a diff is against a path: the
+    // move itself is part of the new one, so a tab on Diff re-reads it.
+    if (tab.mode === "diff") {
+      tab.diff = null;
+      loadFileTab(tab).catch(fail);
+    }
   }
   await refreshFiles();
   return moved.path;

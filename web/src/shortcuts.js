@@ -18,8 +18,8 @@ export const ACTIONS = [
 
   { id: "tab.prev", group: "Tabs", what: "Previous tab", keys: ["Ctrl+Shift+Tab"] },
   { id: "tab.next", group: "Tabs", what: "Next tab", keys: ["Ctrl+Tab"] },
-  { id: "task.prev", group: "Tasks", what: "Previous task in this project", keys: ["Ctrl+PageUp"] },
-  { id: "task.next", group: "Tasks", what: "Next task in this project", keys: ["Ctrl+PageDown"] },
+  { id: "task.prev", group: "Tasks", what: "Previous project or task in the sidebar", keys: ["Ctrl+PageUp"] },
+  { id: "task.next", group: "Tasks", what: "Next project or task in the sidebar", keys: ["Ctrl+PageDown"] },
   { id: "task.at", group: "Tasks", what: "Go straight to one of the first nine tasks", keys: ["Alt+1…9"], fixed: true },
   { id: "project.at", group: "Tabs", what: "Switch to one of the first eight projects, again to fold its tasks", keys: ["Alt+A…H"], fixed: true },
 

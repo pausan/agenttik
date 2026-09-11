@@ -9,7 +9,7 @@ import {
   hit,
   init,
   reopenClosedTab,
-  selectAdjacentTask,
+  selectAdjacentSidebarRow,
   selectAdjacentTab,
   saveActiveFile,
   selectProjectAt,
@@ -53,8 +53,8 @@ useErrors(useToast());
    is read from the physical code: on some layouts Alt and a digit produce a
    different character. */
 function onKey(e) {
-  if (hit(e, "task.prev")) return run(e, () => selectAdjacentTask(-1));
-  if (hit(e, "task.next")) return run(e, () => selectAdjacentTask(1));
+  if (hit(e, "task.prev")) return run(e, () => selectAdjacentSidebarRow(-1));
+  if (hit(e, "task.next")) return run(e, () => selectAdjacentSidebarRow(1));
   if (hit(e, "tab.prev")) return run(e, () => selectAdjacentTab(-1));
   if (hit(e, "tab.next")) return run(e, () => selectAdjacentTab(1));
   if (hit(e, "task.new")) return run(e, startCurrentTask);

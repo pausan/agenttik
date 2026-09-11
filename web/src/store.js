@@ -408,15 +408,25 @@ export async function selectTaskAt(n) {
   focusPrompt();
 }
 
-/* Ctrl+PageUp and Ctrl+PageDown walk this project's sessions, including those
-   after the first nine. The tab in front only supplies the starting session. */
-export function selectAdjacentTask(step) {
-  const sessions = S.projects.find((project) => project.id === S.activeProjectID)?.recent_sessions || [];
-  if (!sessions.length) return;
-  const active = S.owner?.kind === "session" ? S.owner.sessionID : 0;
-  const at = sessions.findIndex((session) => session.id === active);
-  const next = at < 0 ? (step > 0 ? 0 : sessions.length - 1) : (at + step + sessions.length) % sessions.length;
-  openTask(sessions[next].id);
+/* Ctrl+PageUp and Ctrl+PageDown walk every row of the sidebar, top to bottom —
+   each project and, under it, that project's tasks — wrapping at both ends
+   rather than staying inside the active project. A project row opens its
+   page; a task row opens the task. The tab in front only supplies where to
+   start. */
+export function selectAdjacentSidebarRow(step) {
+  const rows = S.projects.flatMap((project) => [
+    { kind: "project", id: project.id },
+    ...project.recent_sessions.map((session) => ({ kind: "session", id: session.id })),
+  ]);
+  if (!rows.length) return;
+  const owner = S.owner;
+  const isOwner = (row) =>
+    row.kind === owner?.kind && row.id === (row.kind === "project" ? owner.projectID : owner.sessionID);
+  const at = rows.findIndex(isOwner);
+  const next = at < 0 ? (step > 0 ? 0 : rows.length - 1) : (at + step + rows.length) % rows.length;
+  const row = rows[next];
+  if (row.kind === "project") openProject(row.id);
+  else openTask(row.id);
 }
 
 /* Ctrl+Tab and Ctrl+Shift+Tab walk every visible tab, wrapping at both ends. */

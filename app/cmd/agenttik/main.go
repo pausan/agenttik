@@ -23,6 +23,7 @@ import (
 	"github.com/pausan/agenttik/app/internal/agent/claudecode"
 	"github.com/pausan/agenttik/app/internal/agent/codex"
 	"github.com/pausan/agenttik/app/internal/agent/copilot"
+	"github.com/pausan/agenttik/app/internal/agent/fake"
 	"github.com/pausan/agenttik/app/internal/config"
 	"github.com/pausan/agenttik/app/internal/runner"
 	"github.com/pausan/agenttik/app/internal/server"
@@ -100,7 +101,14 @@ func run() error {
 	}
 
 	github := copilot.New()
-	registry := agent.NewRegistry(claudecode.New(), codex.New(), github)
+	providers := []agent.Provider{claudecode.New(), codex.New(), github}
+	// Registered only for the end-to-end suite, which sets this; a normal
+	// launch never does, so it never appears in a release. See
+	// app/internal/agent/fake.
+	if fake.Enabled() {
+		providers = append(providers, fake.New())
+	}
+	registry := agent.NewRegistry(providers...)
 
 	// Copilot reports its own model list, and asking costs a CLI start. Ask
 	// now so the UI's first request finds the answer already cached.

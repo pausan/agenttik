@@ -529,6 +529,17 @@ export function focusPrompt() {
   S.promptFocus += 1;
 }
 
+/* Picking a task from a list is a prelude to typing in it, so the cursor
+   lands in its prompt box rather than on the row that was clicked. The tick
+   waits for the bar to be there: arriving from a project page mounts it with
+   this very switch, and the watcher only sees requests made after it mounts.
+   See specs/025-blank-task-reuse.md for the same ordering when starting one. */
+export async function pickTask(id) {
+  await openTask(id);
+  await nextTick();
+  focusPrompt();
+}
+
 /* Selecting a tab selects its project with it. Which tab a project comes
    back on is switchProject's rule, not a remembered one. */
 export function selectTab(id) {
@@ -540,13 +551,11 @@ export function selectTab(id) {
 }
 
 /* Alt+1 … Alt+9 selects a session by its top-to-bottom sidebar position and
-   leaves the prompt ready for the next message. */
-export async function selectTaskAt(n) {
+   leaves the prompt ready for the next message, exactly as clicking it does. */
+export function selectTaskAt(n) {
   const session = S.projects.find((project) => project.id === S.activeProjectID)?.recent_sessions[n - 1];
   if (!session) return;
-  await openTask(session.id);
-  await nextTick();
-  focusPrompt();
+  return pickTask(session.id);
 }
 
 /* Which field on the tab in front carries the id of the row it stands for. */

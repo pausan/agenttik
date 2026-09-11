@@ -20,7 +20,7 @@ import {
   S,
   TASK_PAGE_SIZES,
   openSchedule,
-  openTask,
+  pickTask,
   removeTask,
   renameSchedule,
   renameTask,
@@ -312,7 +312,7 @@ async function doDelete() {
             :archive="row.archived || (row.task.status !== 'running' && row.task.queue_count === 0)"
             deletable
             @stop="stopTask(row.task.id)"
-            @select="openTask(row.task.id)"
+            @select="pickTask(row.task.id)"
             @open-job="openSchedule(row.task.schedule_id)"
             @toggle-archive="setTaskArchived(row.task, !row.archived)"
             @rename="renameTask(row.task, $event)"

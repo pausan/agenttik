@@ -8,7 +8,7 @@ import {
   openInSystem,
   openProject,
   openSchedule,
-  openTask,
+  pickTask,
   renameSchedule,
   renameTask,
   reorderProjects,
@@ -311,7 +311,7 @@ function onTaskDrop(e) {
               :stoppable="s.status === 'running' || s.queue_count > 0"
               :archive="s.status !== 'running' && s.queue_count === 0"
               @stop="stopTask(s.id)"
-              @select="openTask(s.id)"
+              @select="pickTask(s.id)"
               @open-job="openSchedule(s.schedule_id)"
               @toggle-archive="setTaskArchived(s, true)"
               @rename="renameTask(s, $event)"

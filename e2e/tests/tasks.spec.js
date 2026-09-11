@@ -233,6 +233,22 @@ test("the transcript follows the task, and the prompt bar goes away with it", as
   await expect(page.getByText("1 task", { exact: true })).toBeVisible();
 });
 
+test("clicking a task in the sidebar leaves the cursor in its prompt box", async ({ page }) => {
+  await addProject(page);
+  await openProject(page);
+  await newTask(page);
+
+  // From the project page: there is no prompt bar until the click mounts one,
+  // which is the case the focus request has to survive.
+  await openProject(page);
+  await sidebar(page).getByText("Untitled task").click();
+
+  const prompt = page.getByPlaceholder("Ask the agent…");
+  await expect(prompt).toBeFocused();
+  await page.keyboard.type("straight into the box");
+  await expect(prompt).toHaveValue("straight into the box");
+});
+
 test("Ctrl+W closes the active tab, falling back to the project when a task closes", async ({ page }) => {
   await addProject(page);
   await openProject(page);

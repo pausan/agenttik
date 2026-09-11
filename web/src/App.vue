@@ -5,6 +5,7 @@ import { useToast } from "@nuxt/ui/composables";
 import {
   S,
   closeTabOnly,
+  editLastQueued,
   hasInspector,
   hit,
   init,
@@ -67,6 +68,13 @@ function onKey(e) {
     // The editor handles its own save; this is the same chord with the caret
     // anywhere else on a file tab.
     if (S.tab?.kind === "file") run(e, saveActiveFile);
+    return;
+  }
+  if (hit(e, "prompt.editLast")) {
+    // The queue belongs to the conversation in front, so the chord reaches it
+    // from the prompt box and from the transcript alike — and is left alone
+    // over a file, where Ctrl+E is the editor's to answer.
+    if (S.detail && S.tab?.kind !== "file") run(e, editLastQueued);
     return;
   }
   if (hit(e, "tab.close")) {

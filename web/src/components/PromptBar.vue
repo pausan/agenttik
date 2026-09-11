@@ -295,10 +295,19 @@ function onPromptKey(e) {
   history.keydown(e);
 }
 
+/* The fourth hint is only true while something is waiting, so it arrives with
+   the queue rather than standing there naming a chord that does nothing. */
+const queuedCount = computed(
+  () => (S.detail?.queued?.length || 0) + (S.detail?.pendingQueued?.length || 0),
+);
+
 const hints = computed(() => [
   { chord: S.keys["prompt.send"][0], what: "to send" },
   { chord: S.keys["prompt.enqueue"][0], what: "to enqueue" },
   { chord: S.keys["prompt.newline"][0], what: "for a newline" },
+  ...(queuedCount.value
+    ? [{ chord: S.keys["prompt.editLast"][0], what: "to edit the last queued" }]
+    : []),
 ]);
 
 /* The button does what Enter does, so its label, icon and disabled state

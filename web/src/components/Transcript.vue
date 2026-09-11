@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
 import {
+  focusPrompt,
   forceQueued,
   openProjectPrompt,
   providerOf,
@@ -140,9 +141,13 @@ async function startEdit(q) {
   editBox.value?.[0]?.textareaRef?.focus();
 }
 
+/* Leaving the editor hands the caret back to the prompt box. The edit can be
+   opened from the keyboard now, and a flow that ends with the focus on
+   nothing is one that has to be finished with the mouse. */
 function cancelEdit() {
   editing.value = 0;
   editDraft.value = "";
+  focusPrompt();
 }
 
 function onEditKey(e) {
@@ -163,6 +168,18 @@ async function saveEdit(q) {
     saving.value = false;
   }
 }
+
+/* The last queued prompt is the one the chord opens: the prompt just
+   enqueued is where a typo is noticed. startEdit refuses a row the server has
+   not answered for yet, so a press during that round trip does nothing rather
+   than opening the row above it. See specs/012-task-queue.md. */
+watch(
+  () => S.queuedEdit,
+  () => {
+    const last = queued.value.at(-1);
+    if (last) startEdit(last);
+  },
+);
 
 function pickQueuedModel(q, value) {
   const [, provider, model] = value.split(":", 3);

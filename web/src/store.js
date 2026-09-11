@@ -94,6 +94,7 @@ export const S = reactive({
   diffView: "unified", // "unified" or "split", likewise
   closing: null, // a close waiting on what to do with unsaved edits
   promptFocus: 0,
+  queuedEdit: 0, // counter the transcript watches, to open its last queued prompt
   inspector: { panes: ["changed", "stats"], active: "changed" },
   changed: [],
   log: { branch: "", head: "", commits: [] },
@@ -390,7 +391,7 @@ export function persistTabOrder(id) {
 /* The prompt bar watches this counter. A counter, rather than a Boolean,
    makes each newly created session request focus even when one is already
    active. */
-function focusPrompt() {
+export function focusPrompt() {
   S.promptFocus += 1;
 }
 
@@ -2594,6 +2595,16 @@ export async function updateQueuedModel(q, provider, model, effort) {
 // queue, leaving its saved model choice untouched.
 export async function updateQueuedPrompt(q, prompt) {
   return patchQueued(q, { prompt });
+}
+
+/* The chord that opens that editor is pressed where the caret already is —
+   the prompt box, or the transcript above it — and neither owns the editor,
+   so the request travels as a counter the transcript watches, the same shape
+   as promptFocus. Counting rather than naming a row is what lets a second
+   press ask again for one it has already picked. */
+export function editLastQueued() {
+  if (!S.detail) return;
+  S.queuedEdit += 1;
 }
 
 // forceQueued runs a waiting prompt now instead of when the project's queue

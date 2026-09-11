@@ -34,6 +34,7 @@ export const ACTIONS = [
 
   { id: "prompt.send", group: "Prompt", what: "Send", keys: ["Ctrl+Enter"] },
   { id: "prompt.enqueue", group: "Prompt", what: "Enqueue", keys: ["Enter"] },
+  { id: "prompt.editLast", group: "Prompt", what: "Edit the last queued prompt", keys: ["Ctrl+E"] },
   { id: "prompt.newline", group: "Prompt", what: "New line", keys: ["Shift+Enter"], fixed: true },
 ];
 

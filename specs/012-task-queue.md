@@ -66,6 +66,21 @@ editing an already-sent prompt ([014](014-transcript-messages.md)), minus that
 editor's warnings about rewinding the agent or the disk — nothing has run yet,
 so there is nothing to undo.
 
+`Ctrl+E` opens the last of them without reaching for the pencil, from the
+prompt box or from the transcript above it: the prompt just enqueued is where
+a typo is noticed, and the box is where the caret already is. It is rebindable
+like any other chord ([015](015-settings-shortcuts.md)), and it is left alone
+over a file tab, where `Ctrl+E` belongs to the editor. A row the server has
+not answered for yet has no id to rewrite, so a press during that round trip
+does nothing rather than opening the row above it — the same reason its
+pencil is disabled ([024](024-instant-prompt-echo.md)). The prompt bar names
+the chord only while something is waiting, since that is when it does
+anything.
+
+Leaving that editor, saved or cancelled, puts the caret back in the prompt
+box. A keyboard round trip that ends with the focus on nothing is one that has
+to be finished with the mouse.
+
 Each queued prompt also records the provider, model and effort selected when
 it was enqueued. Its bubble shows the model and offers the same cross-provider
 model search plus an effort picker. Editing one item — its text or its model —

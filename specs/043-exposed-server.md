@@ -2,12 +2,13 @@
 
 Settings gained a sixth section, **Server**: whether this desktop window's
 server also answers a browser — this machine or another on the network — in
-addition to the window itself, and where.
+addition to the window itself, where, and whether it asks who is knocking.
 
-The window's own connection is untouched either way: it always talks to a
+The window's own connection is untouched by any of it: it always talks to a
 random loopback port through its own reverse proxy, exactly as before. Server
 is a second, independent listener proxying to that same backend, so turning
-it on, off, or pointing it elsewhere never interrupts the window.
+it on, off, pointing it elsewhere or putting a login on it never interrupts
+the window.
 
 Off by default. The host is one of three: **Everybody (0.0.0.0)**,
 **localhost (127.0.0.1)**, or **Other**, which reveals a field for a typed
@@ -19,16 +20,31 @@ model is.
 Not offered on a web launch (`--web`): the process is already the exposed
 server, on the address `--addr` gave it, so there is nothing here to turn on.
 `GET /api/server` answers `{"available": false}` there and the pane says so
-instead of drawing the controls.
-
-There is no login anywhere in agenttik. Settings says as much next to the
-switch, and again as a standing warning whenever the host is not loopback:
-picking Everybody or a LAN address means anyone who can reach that address
-and port has the same access this window does.
+instead of drawing the controls. A `--web` launch therefore has no login
+either — it is the one way to put agenttik on a network without one.
 
 Once it is up, the pane says what to open: `Listening on` and the address as
 a link, which hands that page to the machine's own browser, with an icon
 beside it that copies the same URL.
+
+## The lock
+
+A second switch, **Ask for a password and a code**, puts a login in front of
+that listener. It is off by default, and the pane carries a standing warning
+whenever the host is not loopback and the switch is off: anyone who can reach
+that address and port has the same access this window does.
+
+Turned on, a browser reaching the address gets a login form asking for a
+password and the six digits an authenticator app is showing. The window is
+never asked. It reaches the backend down its own loopback proxy, which the
+gate is not in front of, so a forgotten password is an inconvenience rather
+than a lock-out — Settings is still right there to set a new one.
+
+The authenticator seed is shown as selectable text to copy, as a QR to scan,
+and as a field to type into: a seed that already exists somewhere can be
+pasted in rather than paired afresh, and the button beside it rolls a random
+one for a seed that has been seen by the wrong person. Changing either the
+seed or the password signs every browser out.
 
 ## Choices
 
@@ -41,23 +57,40 @@ down to `FlushInterval = -1` so SSE still streams. It is a plain
 shuts every listener registered to one `*fasthttp.Server` down together, and
 the window's own listener must survive a browser listener being switched off.
 
+**The lock is a wrapper on that listener, not middleware on the app.**
+`Manager.Use` takes a `func(http.Handler) http.Handler` and puts it in front
+of the proxy. Fiber middleware would have had to tell a request that arrived
+through the exposed listener from one the window made, and the two are
+indistinguishable by the time they reach the shared backend — both are plain
+loopback requests. Wrapping the one listener needs no such marker, and cannot
+be bypassed by forging one: it is the only thing in front of that socket.
+
 **Starting replaces only after the new one is up.** `Manager.Start` binds the
 new address first and only shuts the previous `*http.Server` down once the
 new one is already serving. A bad host or a taken port therefore leaves
-whatever was working exactly as it was, both live and in `Status()` — see the
-validation run below for the case of a rejected port.
+whatever was working exactly as it was, both live and in `Status()`.
 
 **The saved setting is the source of truth; live status is a separate
-read.** `store.ServerConfig{Enabled, Host, Port}` is one row
-(`server_config`, id fixed at 1). `GetServerConfig` returns the zero value
-until ever saved — blank host, 0 port — rather than a migration hard-coding
-7717 a second time; `Server.withDefaults` fills those blanks with whatever
-`runDesktop` was given as the app's own default, from `config.Default()` or
-`--addr`. `GET /api/server` merges that saved-or-defaulted setting with
+read.** `store.ServerConfig` is one row (`server_config`, id fixed at 1).
+`GetServerConfig` returns the zero value until ever saved — blank host, 0
+port — rather than a migration hard-coding 7717 a second time;
+`Server.withDefaults` fills those blanks with whatever `runDesktop` was given
+as the app's own default, from `config.Default()` or `--addr`.
+`GET /api/server` merges that saved-or-defaulted setting with
 `netserver.Status()`, so a setting that fails to re-apply at startup — its
 port taken by something else since the last run — still reads as `enabled`
 with `listening: false` and the bind error, rather than silently reverting to
 off.
+
+**Two writers on one row, so neither can clear the other.** The address and
+the lock share `server_config` but are set at different moments for different
+reasons, so `SetServerConfig` and `SetServerAuth` each write only their own
+columns through an `ON CONFLICT DO UPDATE`. Moving the server to another port
+is not a reason to ask for the password again, and setting a password is not
+a reason to rebind. `PUT /api/server` reads the row and changes the address
+on it rather than building a fresh struct, for the same reason on the way
+out: answering with a partial one reported the lock as gone every time the
+port moved.
 
 **`PUT /api/server` applies before it saves.** Turning the server on with a
 fresh address and pointing a running one at a new address are the same
@@ -86,6 +119,75 @@ and the Everybody/localhost radio choices call `PUT` the instant they change,
 like General's Enter/Enqueue pair. Other is different: picking it only
 reveals the field, because a fresh "Other" and whatever well-known host was
 saved before are otherwise indistinguishable — it applies on blur, once a
-host has actually been typed, the same as the project path field. The port
-field validates its range client-side before ever calling `PUT`, so a typo
-never reaches the network layer at all.
+host has actually been typed. The port field validates its range client-side
+before ever calling `PUT`. The lock's switch is the one control that cannot
+apply on the spot in both directions: a password cannot be read back out of
+the server, so asking for one opens the fields and the first saved password
+is what arms it, while turning it off has nothing to collect and goes at once.
+
+## How the lock is built
+
+`app/internal/netauth` is the whole of it.
+
+**TOTP is RFC 6238 on the standard library.** HMAC-SHA1 over a 30-second
+counter, six digits, one step of drift accepted either way — no other digest
+or length is offered, because no widely used authenticator app offers one in
+a QR, so offering them here would only be a way to pair with nothing. The
+generator is checked against the RFC's own published vectors. `rsc.io/qr`
+draws the `otpauth://` URI; it is the only dependency the feature added.
+
+**A code is spent once.** The gate remembers the last counter it accepted and
+refuses anything at or below it. Six digits are good for a minute and a half
+either side of their own step, which is a long while for somebody who read
+them off a screen to type them in as well.
+
+**Passwords are bcrypt, and guessing is throttled.** bcrypt's default cost
+puts about a tenth of a second under every attempt on its own; five wrong
+ones from an address lock that address out for a quarter of an hour, counted
+from the connection's own remote address rather than a forwarding header,
+which would otherwise be a way to get somebody else locked out. Both halves
+of the login are checked even when the first already failed, so a wrong
+password and a wrong code cost the same and take the same time to say so.
+
+**Sessions live in memory only.** A login mints a random 32-byte token, kept
+in a map against a 12-hour idle deadline and handed over as an `HttpOnly`,
+`SameSite=Lax` cookie. There is no signing key on disk to steal, closing
+agenttik ends every browser session with it, and `Gate.Revoke` — which any
+change of password or seed calls — ends them all at once. `SameSite=Lax` is
+also what keeps another site from making the API do anything with that
+cookie, since no CSRF token is minted anywhere.
+
+**A half-set lock opens for nobody.** Enabled with no password, or no seed,
+refuses every login rather than letting everybody through. `PUT
+/api/server/auth` will not arm the switch without a password, and rolls a
+seed rather than making the user find one, so the state is not reachable
+through the UI — but an interrupted write or a hand-edited database is, and
+the gate is the wrong place to be optimistic.
+
+**A browser gets a page; everything else gets a status.** An unauthenticated
+navigation is answered with a self-contained login form and nothing else —
+not the UI bundle, not an asset, not a page title. Any request that is not a
+navigation, which is every fetch the UI makes and the SSE stream, gets a
+`401` with a JSON body instead, because handing those an HTML login page
+where they expect data only breaks them strangely. The UI treats any `401` as
+the lock, since agenttik's own API never sends one, and reloads the page into
+the form.
+
+**The form remembers where you were going, and only where.** A deep link
+asked for while signed out comes back in a hidden field and is redirected to
+after a good login. Anything that is not a path on this same server is
+dropped for `/`, so the field cannot be handed a target somewhere else.
+
+**Signing out is a URL, not a button.** `/__auth/logout` drops this browser's
+session and returns to the form. Nothing in the UI links to it: the pane that
+would hold the link is the one place the lock is administered from, and it is
+usually being read in the window, which has no session to end.
+
+## What this is not
+
+The listener speaks plain HTTP. The password and the code cross the network
+in the clear, and so does everything the app does afterwards. On a home or
+office LAN that is the same exposure the unlocked server already had, with a
+lock added in front of it; across the open internet it is not enough on its
+own, and the address wants a TLS-terminating proxy or a tunnel in front of
+it. Nothing in the pane sets one up.

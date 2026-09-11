@@ -15,6 +15,8 @@ Only a pushed tag matching `vMAJOR.MINOR.PATCH`, with an optional suffix of
 letters, dashes and further dots, creates a GitHub Release. The release job
 waits for all matrix builds to succeed, then attaches
 `agenttik_<tag>_<platform>_<architecture>` binaries, with `.exe` on Windows.
+That job only downloads those artifacts, so it has no checkout for `gh` to read
+a git remote from and names the repository in `GH_REPO` instead.
 An untagged push names its binaries after the short commit instead.
 
 Every build links in the version the binary reports, on top of whatever

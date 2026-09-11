@@ -27,6 +27,11 @@ var (
 	// not lost and nothing failed, so a caller that keeps its own record of
 	// the attempt leaves that record open. See 045-provider-outage-retry.md.
 	ErrProviderAway = errors.New("provider away; prompt requeued")
+	// ErrUnknownAccount says the subscription the task names is no longer
+	// configured. The turn stops rather than falling back to the machine's
+	// own login: running a work prompt on a personal allowance, quietly, is
+	// worse than not running it. See 050-subscription-accounts.md.
+	ErrUnknownAccount = errors.New("subscription no longer configured")
 )
 
 // Event is what the UI receives over SSE: a provider event tagged with the
@@ -100,6 +105,28 @@ const ProjectsTopic = "projects"
 // sidebar re-reads its list whole, as it does for the file watcher's event.
 const EventProjectsChanged agent.EventType = "projects_changed"
 
+// accountHome is the directory holding the login a task runs on: empty for
+// the machine's own CLI, which is what a task has unless it was given a
+// subscription of its own.
+func (r *Runner) accountHome(providerName string, accountID int64) (string, error) {
+	if accountID == store.SystemAccount {
+		return "", nil
+	}
+	account, err := r.store.GetAccount(accountID)
+	if errors.Is(err, store.ErrNotFound) {
+		return "", ErrUnknownAccount
+	}
+	if err != nil {
+		return "", err
+	}
+	if account.Provider != providerName {
+		// Only reachable through a hand-edited database: the API refuses to
+		// pair an account with another provider.
+		return "", fmt.Errorf("%w: %s is not a %s subscription", ErrUnknownAccount, account.Alias, providerName)
+	}
+	return account.Home, nil
+}
+
 // Running reports whether a turn is in flight for the session.
 func (r *Runner) Running(sessionID string) bool {
 	r.mu.Lock()
@@ -134,7 +161,15 @@ func (r *Runner) send(queued store.QueuedMessage) (*store.Turn, error) {
 	// Whatever the turn actually runs with is what a requeue must ask for
 	// again: a queued row's own choice was applied to the session before it
 	// got here, and a direct send has none of its own.
-	queued.Provider, queued.Model, queued.Effort = sess.Provider, sess.Model, sess.Effort
+	queued.Provider, queued.AccountID = sess.Provider, sess.AccountID
+	queued.Model, queued.Effort = sess.Model, sess.Effort
+
+	// Resolved before anything is written, so a task naming a subscription
+	// that has been removed fails saying so rather than half-starting.
+	home, err := r.accountHome(sess.Provider, sess.AccountID)
+	if err != nil {
+		return nil, err
+	}
 
 	// Asked before StartTurn writes one, so "has this conversation run yet"
 	// is still answerable. It decides both halves of the project prompt: a
@@ -195,6 +230,7 @@ func (r *Runner) send(queued store.QueuedMessage) (*store.Turn, error) {
 		Prompt:            withProjectPrompt(sess, hasRun, prompt),
 		Model:             sess.Model,
 		Effort:            sess.Effort,
+		AccountHome:       home,
 		SessionID:         sess.ID,
 		ProviderSessionID: sess.ProviderSessionID,
 		Permission:        agent.Permission(sess.Permission),
@@ -242,7 +278,7 @@ func (r *Runner) Enqueue(sessionID, prompt string) ([]store.QueuedMessage, error
 	if hasRun, err := r.store.HasTurns(sessionID); err == nil {
 		r.claimProjectPrompt(sess, hasRun)
 	}
-	if _, err := r.store.EnqueueMessage(sessionID, prompt, sess.Provider, sess.Model, sess.Effort); err != nil {
+	if _, err := r.store.EnqueueMessage(sessionID, prompt, sess.Provider, sess.AccountID, sess.Model, sess.Effort); err != nil {
 		return nil, err
 	}
 	// A queued prompt may wait behind another session for a while. Name its
@@ -324,8 +360,12 @@ func (r *Runner) sendQueued(queued *store.QueuedMessage) (*store.Turn, error) {
 	if err != nil {
 		return nil, err
 	}
-	if queued.Provider != sess.Provider || queued.Model != sess.Model || queued.Effort != sess.Effort {
-		if err := r.store.SetSessionModel(sess.ID, queued.Provider, queued.Model, queued.Effort, queued.Provider != sess.Provider); err != nil {
+	// A different subscription is as much a new thread as a different
+	// provider: the id the old one made cannot be resumed by the new one.
+	switched := queued.Provider != sess.Provider || queued.AccountID != sess.AccountID
+	if switched || queued.Model != sess.Model || queued.Effort != sess.Effort {
+		if err := r.store.SetSessionModel(sess.ID, queued.Provider, queued.AccountID,
+			queued.Model, queued.Effort, switched); err != nil {
 			return nil, err
 		}
 	}
@@ -619,7 +659,7 @@ func (r *Runner) nameTask(sess *store.Session, prompt string) {
 	sess.Title = title
 	// The session is handed on by value: it is published in the started event
 	// and kept by the turn, and this outlives both.
-	go r.refineTitle(sess.ID, sess.Provider, title, prompt)
+	go r.refineTitle(sess.ID, sess.Provider, sess.AccountID, title, prompt)
 }
 
 // askTitle asks the provider's lightest model to name a prompt, and returns
@@ -630,9 +670,15 @@ func (r *Runner) nameTask(sess *store.Session, prompt string) {
 //
 // A task and a scheduled job both name themselves this way, so the request
 // lives here rather than in either.
-func (r *Runner) askTitle(providerName, prompt string) string {
+func (r *Runner) askTitle(providerName string, accountID int64, prompt string) string {
 	provider, ok := r.registry.Get(providerName)
 	if !ok {
+		return ""
+	}
+	// The same subscription as the task it names: a title is a small charge,
+	// but it belongs on the account that asked for the work.
+	home, err := r.accountHome(providerName, accountID)
+	if err != nil {
 		return ""
 	}
 	generator, ok := provider.(agent.TitleGenerator)
@@ -643,12 +689,13 @@ func (r *Runner) askTitle(providerName, prompt string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), titleTimeout)
 	defer cancel()
 	events, err := provider.Run(ctx, agent.TurnRequest{
-		WorkDir:    os.TempDir(),
-		Prompt:     titlePrompt(prompt),
-		Model:      model,
-		Effort:     effort,
-		Permission: agent.PermissionPlan,
-		Isolated:   true,
+		WorkDir:     os.TempDir(),
+		Prompt:      titlePrompt(prompt),
+		Model:       model,
+		Effort:      effort,
+		AccountHome: home,
+		Permission:  agent.PermissionPlan,
+		Isolated:    true,
 	})
 	if err != nil {
 		return ""
@@ -664,8 +711,8 @@ func (r *Runner) askTitle(providerName, prompt string) string {
 
 // refineTitle puts what askTitle returns in place of the first line the task
 // was named with.
-func (r *Runner) refineTitle(sessionID, providerName, placeholder, prompt string) {
-	title := r.askTitle(providerName, prompt)
+func (r *Runner) refineTitle(sessionID, providerName string, accountID int64, placeholder, prompt string) {
+	title := r.askTitle(providerName, accountID, prompt)
 	if title == "" || title == placeholder {
 		return
 	}

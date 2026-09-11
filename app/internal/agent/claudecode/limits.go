@@ -111,12 +111,15 @@ func parseUsage(report string) []agent.RateLimit {
 // windows. The flags are the ones a title request uses — no project settings
 // or hooks, no tools, no session left behind — except that slash commands
 // stay on, since /usage is the whole request.
-func (p *Provider) SubscriptionLimits(ctx context.Context) ([]agent.RateLimit, error) {
+func (p *Provider) SubscriptionLimits(ctx context.Context, home string) ([]agent.RateLimit, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, Binary, "-p", "/usage", "--output-format", "json",
 		"--no-session-persistence", "--safe-mode", "--setting-sources", "user", "--tools", "")
+	// The allowance belongs to one subscription, so the ask carries the same
+	// account the turns do.
+	cmd.Env = agent.HomeEnv(HomeVar, home)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("read %s usage: %w", Binary, err)

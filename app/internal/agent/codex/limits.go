@@ -67,11 +67,14 @@ func publicRateLimit(limit appServerRateLimit) agent.RateLimit {
 // stdin stays open until the answer arrives: app-server fetches the figures
 // over the network and exits the moment its input closes, so a client that
 // writes and closes gets no response at all.
-func (p *Provider) SubscriptionLimits(ctx context.Context) ([]agent.RateLimit, error) {
+func (p *Provider) SubscriptionLimits(ctx context.Context, home string) ([]agent.RateLimit, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, Binary, "app-server")
+	// The allowance belongs to one subscription, so the ask carries the same
+	// account the turns do.
+	cmd.Env = agent.HomeEnv(HomeVar, home)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, fmt.Errorf("app-server stdin: %w", err)

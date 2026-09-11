@@ -218,6 +218,34 @@ ALTER TABLE projects ADD COLUMN prompt TEXT NOT NULL DEFAULT '';
 -- was injected. See 047-project-prompt.md.
 ALTER TABLE sessions ADD COLUMN project_prompt TEXT NOT NULL DEFAULT '';
 	`,
+	`
+-- A subscription one provider can run under: an alias to recognise it by and
+-- the directory its CLI keeps that login in. agenttik stores the directory,
+-- never what is inside it — the CLI signs its own calls, as it always has.
+--
+-- Account 0 is deliberately not a row here. It is the machine's own signed-in
+-- CLI, the one every task used before this table existed and still uses when
+-- nothing else is chosen, so an existing database needs no backfill and a
+-- fresh one needs no seed. See 050-subscription-accounts.md.
+CREATE TABLE provider_accounts (
+    id         INTEGER PRIMARY KEY,
+    provider   TEXT    NOT NULL,
+    alias      TEXT    NOT NULL,
+    home       TEXT    NOT NULL,            -- the CLI config dir, never a credential
+    is_default INTEGER NOT NULL DEFAULT 0,  -- what a new task starts on; none means account 0
+    created_at INTEGER NOT NULL
+);
+-- Two subscriptions of one provider cannot share a name, since the name is
+-- how they are told apart everywhere they are offered.
+CREATE UNIQUE INDEX idx_provider_accounts_alias ON provider_accounts(provider, alias);
+
+-- Which subscription ran, or is to run. 0 is the machine's own CLI. A task
+-- keeps it for the same reason it keeps the provider: an opaque thread id
+-- belongs to the account that made it, and the other account cannot resume it.
+ALTER TABLE sessions        ADD COLUMN account_id INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE schedules       ADD COLUMN account_id INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE queued_messages ADD COLUMN account_id INTEGER NOT NULL DEFAULT 0;
+	`,
 }
 
 func migrate(db *sql.DB) error {

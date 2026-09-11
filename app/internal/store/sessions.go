@@ -18,7 +18,7 @@ const firstPromptCol = `COALESCE(
 	(SELECT substr(q.prompt, 1, 600) FROM queued_messages q
 	  WHERE q.session_id = s.id ORDER BY q.id LIMIT 1), '')`
 
-const sessionCols = `s.id, s.project_id, s.title, s.provider, s.provider_session_id,
+const sessionCols = `s.id, s.project_id, s.title, s.provider, s.account_id, s.provider_session_id,
 	s.model, s.effort, s.permission, s.source, s.status,
 	s.created_at, s.updated_at, s.last_active_at, s.done_at, s.position,
 	(SELECT COUNT(*) FROM queued_messages q WHERE q.session_id = s.id),
@@ -26,7 +26,7 @@ const sessionCols = `s.id, s.project_id, s.title, s.provider, s.provider_session
 
 func scanSession(sc interface{ Scan(...any) error }) (*Session, error) {
 	var v Session
-	err := sc.Scan(&v.ID, &v.ProjectID, &v.Title, &v.Provider, &v.ProviderSessionID,
+	err := sc.Scan(&v.ID, &v.ProjectID, &v.Title, &v.Provider, &v.AccountID, &v.ProviderSessionID,
 		&v.Model, &v.Effort, &v.Permission, &v.Source, &v.Status,
 		&v.CreatedAt, &v.UpdatedAt, &v.LastActiveAt, &v.DoneAt, &v.Position,
 		&v.QueueCount, &v.ScheduleID, &v.ProjectPrompt, &v.ProjectName, &v.ProjectPath, &v.Prompt)
@@ -46,12 +46,12 @@ func (s *Store) CreateSession(v *Session) error {
 		v.Status = StatusIdle
 	}
 	_, err := s.db.Exec(
-		`INSERT INTO sessions (id, project_id, title, provider, provider_session_id,
+		`INSERT INTO sessions (id, project_id, title, provider, account_id, provider_session_id,
 		    model, effort, permission, source, status, created_at, updated_at, last_active_at,
 		    schedule_id, position)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
 		    (SELECT COALESCE(MAX(position), 0) + 1 FROM sessions WHERE project_id = ?))`,
-		v.ID, v.ProjectID, v.Title, v.Provider, v.ProviderSessionID,
+		v.ID, v.ProjectID, v.Title, v.Provider, v.AccountID, v.ProviderSessionID,
 		v.Model, v.Effort, v.Permission, v.Source, v.Status,
 		v.CreatedAt, v.UpdatedAt, v.LastActiveAt, v.ScheduleID, v.ProjectID)
 	if err != nil {
@@ -208,11 +208,11 @@ func (s *Store) SetSessionProjectPrompt(id, prompt string) error {
 	return nil
 }
 
-func (s *Store) SetSessionModel(id, provider, model, effort string, resetProviderSession bool) error {
-	query := `UPDATE sessions SET provider = ?, model = ?, effort = ?, updated_at = ? WHERE id = ?`
-	args := []any{provider, model, effort, nowMillis(), id}
+func (s *Store) SetSessionModel(id, provider string, accountID int64, model, effort string, resetProviderSession bool) error {
+	query := `UPDATE sessions SET provider = ?, account_id = ?, model = ?, effort = ?, updated_at = ? WHERE id = ?`
+	args := []any{provider, accountID, model, effort, nowMillis(), id}
 	if resetProviderSession {
-		query = `UPDATE sessions SET provider = ?, provider_session_id = '', model = ?, effort = ?, updated_at = ? WHERE id = ?`
+		query = `UPDATE sessions SET provider = ?, account_id = ?, provider_session_id = '', model = ?, effort = ?, updated_at = ? WHERE id = ?`
 	}
 	_, err := s.db.Exec(query, args...)
 	if err != nil {
@@ -265,7 +265,7 @@ func (s *Store) ReorderSessions(projectID int64, ids []string) error {
 
 // queuedCols is one column list for every read of the queue, so a row scans
 // the same way wherever it is read from.
-const queuedCols = `id, session_id, prompt, provider, model, effort, created_at,
+const queuedCols = `id, session_id, prompt, provider, account_id, model, effort, created_at,
 	retry_at, retry_count, retry_error`
 
 // queuedOrder is the order a session's queue runs in: when each prompt was
@@ -276,7 +276,7 @@ const queuedOrder = ` ORDER BY created_at, id`
 
 func scanQueued(row interface{ Scan(...any) error }) (*QueuedMessage, error) {
 	v := &QueuedMessage{}
-	err := row.Scan(&v.ID, &v.SessionID, &v.Prompt, &v.Provider, &v.Model, &v.Effort,
+	err := row.Scan(&v.ID, &v.SessionID, &v.Prompt, &v.Provider, &v.AccountID, &v.Model, &v.Effort,
 		&v.CreatedAt, &v.RetryAt, &v.RetryCount, &v.RetryError)
 	return v, err
 }
@@ -284,10 +284,10 @@ func scanQueued(row interface{ Scan(...any) error }) (*QueuedMessage, error) {
 // EnqueueMessage persists a prompt and its chosen provider settings until the
 // project runner selects it. Queue order inside one session is first in, first
 // out.
-func (s *Store) EnqueueMessage(sessionID, prompt, provider, model, effort string) (*QueuedMessage, error) {
-	v := &QueuedMessage{SessionID: sessionID, Prompt: prompt, Provider: provider, Model: model, Effort: effort, CreatedAt: nowMillis()}
-	res, err := s.db.Exec(`INSERT INTO queued_messages (session_id, prompt, provider, model, effort, created_at)
-		VALUES (?, ?, ?, ?, ?, ?)`, v.SessionID, v.Prompt, v.Provider, v.Model, v.Effort, v.CreatedAt)
+func (s *Store) EnqueueMessage(sessionID, prompt, provider string, accountID int64, model, effort string) (*QueuedMessage, error) {
+	v := &QueuedMessage{SessionID: sessionID, Prompt: prompt, Provider: provider, AccountID: accountID, Model: model, Effort: effort, CreatedAt: nowMillis()}
+	res, err := s.db.Exec(`INSERT INTO queued_messages (session_id, prompt, provider, account_id, model, effort, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`, v.SessionID, v.Prompt, v.Provider, v.AccountID, v.Model, v.Effort, v.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("enqueue message: %w", err)
 	}
@@ -306,9 +306,9 @@ func (s *Store) EnqueueMessage(sessionID, prompt, provider, model, effort string
 func (s *Store) RequeueMessage(v QueuedMessage, retryAt int64, failure string) (*QueuedMessage, error) {
 	v.RetryAt, v.RetryCount, v.RetryError = retryAt, v.RetryCount+1, failure
 	res, err := s.db.Exec(`INSERT INTO queued_messages
-		(session_id, prompt, provider, model, effort, created_at, retry_at, retry_count, retry_error)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		v.SessionID, v.Prompt, v.Provider, v.Model, v.Effort, v.CreatedAt,
+		(session_id, prompt, provider, account_id, model, effort, created_at, retry_at, retry_count, retry_error)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		v.SessionID, v.Prompt, v.Provider, v.AccountID, v.Model, v.Effort, v.CreatedAt,
 		v.RetryAt, v.RetryCount, v.RetryError)
 	if err != nil {
 		return nil, fmt.Errorf("requeue message: %w", err)
@@ -395,8 +395,9 @@ func (s *Store) RetryProjects(now int64) ([]int64, error) {
 // SetQueuedMessage changes one waiting prompt's text and model choice without
 // altering the session default. The runner applies the choice when it claims
 // the prompt.
-func (s *Store) SetQueuedMessage(id int64, prompt, provider, model, effort string) error {
-	res, err := s.db.Exec(`UPDATE queued_messages SET prompt = ?, provider = ?, model = ?, effort = ? WHERE id = ?`, prompt, provider, model, effort, id)
+func (s *Store) SetQueuedMessage(id int64, prompt, provider string, accountID int64, model, effort string) error {
+	res, err := s.db.Exec(`UPDATE queued_messages SET prompt = ?, provider = ?, account_id = ?, model = ?, effort = ? WHERE id = ?`,
+		prompt, provider, accountID, model, effort, id)
 	if err != nil {
 		return fmt.Errorf("set queued message: %w", err)
 	}

@@ -47,10 +47,16 @@ type SessionRef struct {
 }
 
 type Session struct {
-	ID                string `json:"id"`
-	ProjectID         int64  `json:"project_id"`
-	Title             string `json:"title"`
-	Provider          string `json:"provider"`
+	ID        string `json:"id"`
+	ProjectID int64  `json:"project_id"`
+	Title     string `json:"title"`
+	Provider  string `json:"provider"`
+
+	// AccountID is which subscription of that provider runs the turns, 0 for
+	// the machine's own signed-in CLI. It travels with the provider because
+	// the thread id below belongs to the account that opened it: the other
+	// account cannot resume it. See 050-subscription-accounts.md.
+	AccountID         int64  `json:"account_id"`
 	ProviderSessionID string `json:"provider_session_id"`
 	Model             string `json:"model"`
 	Effort            string `json:"effort"`
@@ -94,6 +100,7 @@ type QueuedMessage struct {
 	SessionID string `json:"session_id"`
 	Prompt    string `json:"prompt"`
 	Provider  string `json:"provider"`
+	AccountID int64  `json:"account_id"`
 	Model     string `json:"model"`
 	Effort    string `json:"effort"`
 	CreatedAt int64  `json:"created_at"`
@@ -117,6 +124,7 @@ type Schedule struct {
 	Title      string `json:"title"`
 	Prompt     string `json:"prompt"`
 	Provider   string `json:"provider"`
+	AccountID  int64  `json:"account_id"`
 	Model      string `json:"model"`
 	Effort     string `json:"effort"`
 	Permission string `json:"permission"`
@@ -241,6 +249,23 @@ type DailyMetric struct {
 	Date       string `json:"date"`
 	Sessions   int64  `json:"sessions"`
 	DurationMS int64  `json:"duration_ms"`
+}
+
+// Account is one subscription a provider can run under: an alias to
+// recognise it by, and the directory its CLI keeps that login in. Home is
+// never a credential — the CLI reads its own, as it always has. Id 0 is not
+// an Account: it is the machine's own signed-in CLI, named in the UI as the
+// system account. See 050-subscription-accounts.md.
+type Account struct {
+	ID       int64  `json:"id"`
+	Provider string `json:"provider"`
+	Alias    string `json:"alias"`
+	Home     string `json:"home"`
+
+	// IsDefault marks what a new task on this provider starts on. No flagged
+	// row for a provider means the CLI's own login.
+	IsDefault bool  `json:"is_default"`
+	CreatedAt int64 `json:"created_at"`
 }
 
 type Star struct {

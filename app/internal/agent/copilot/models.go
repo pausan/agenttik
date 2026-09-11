@@ -134,7 +134,7 @@ type modelChoice struct {
 }
 
 func fetchModels(ctx context.Context) (modelChoice, error) {
-	result, err := serverQuery(ctx, modelsTimeout, "models.list")
+	result, err := serverQuery(ctx, modelsTimeout, "models.list", "")
 	if err != nil {
 		return modelChoice{}, fmt.Errorf("list Copilot models: %w", err)
 	}

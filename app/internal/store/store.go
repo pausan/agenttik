@@ -5,6 +5,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"path/filepath"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -12,6 +13,10 @@ import (
 
 type Store struct {
 	db *sql.DB
+	// dir is the data directory the database sits in. Kept because it is also
+	// where app-managed directories belong — a subscription's CLI config dir,
+	// for one. See 050-subscription-accounts.md.
+	dir string
 }
 
 // Open opens (creating if needed) the database at path and migrates it.
@@ -28,10 +33,13 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	return &Store{db: db}, nil
+	return &Store{db: db, dir: filepath.Dir(path)}, nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }
+
+// Dir is the data directory holding the database.
+func (s *Store) Dir() string { return s.dir }
 
 // DB exposes the handle for tests.
 func (s *Store) DB() *sql.DB { return s.db }

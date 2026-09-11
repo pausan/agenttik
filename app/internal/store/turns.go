@@ -126,16 +126,21 @@ func (s *Store) SessionStats(sessionID string) (*Stats, error) {
 }
 
 // LatestRateLimits is the newest subscription allowance any session of the
-// provider recorded, with when it was recorded. Empty means no turn has ever
-// volunteered one, which is the normal state before the first turn of a run.
-func (s *Store) LatestRateLimits(provider string) (string, int64, error) {
+// provider recorded on that subscription, with when it was recorded. Empty
+// means no turn has ever volunteered one, which is the normal state before
+// the first turn of a run.
+//
+// Scoped to the account as well as the provider: two subscriptions of one
+// provider have two allowances, and showing a work account's bars against a
+// personal one would be worse than showing none.
+func (s *Store) LatestRateLimits(provider string, accountID int64) (string, int64, error) {
 	var body string
 	var at sql.NullInt64
 	err := s.db.QueryRow(
 		`SELECT t.rate_limits, COALESCE(t.ended_at, t.started_at)
 		 FROM turns t JOIN sessions s ON s.id = t.session_id
-		 WHERE s.provider = ? AND t.rate_limits <> ''
-		 ORDER BY t.id DESC LIMIT 1`, provider).Scan(&body, &at)
+		 WHERE s.provider = ? AND s.account_id = ? AND t.rate_limits <> ''
+		 ORDER BY t.id DESC LIMIT 1`, provider, accountID).Scan(&body, &at)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", 0, nil
 	}

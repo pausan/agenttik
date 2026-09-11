@@ -165,6 +165,9 @@ func start(req agent.TurnRequest) (*exec.Cmd, io.ReadCloser, *strings.Builder, e
 	for attempt := 0; attempt < 2; attempt++ {
 		cmd := exec.Command(Binary, buildArgs(req)...)
 		cmd.Dir = req.WorkDir
+		// Which subscription answers the turn. Nil for the machine's own
+		// login, which is exec's "inherit mine".
+		cmd.Env = agent.HomeEnv(HomeVar, req.AccountHome)
 		// The prompt goes in on stdin, never as an argv element.
 		cmd.Stdin = strings.NewReader(req.Prompt)
 		// Own process group so cancelling kills the CLI's children too.

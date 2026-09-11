@@ -53,8 +53,12 @@ func (s *Server) listSessions(c *fiber.Ctx) error {
 
 func (s *Server) createSession(c *fiber.Ctx) error {
 	var body struct {
-		ProjectID  int64  `json:"project_id"`
-		Provider   string `json:"provider"`
+		ProjectID int64  `json:"project_id"`
+		Provider  string `json:"provider"`
+		// AccountID is which subscription of that provider to run on. Absent
+		// is the provider's default, which is the CLI's own login until
+		// Settings says otherwise.
+		AccountID  *int64 `json:"account_id"`
 		Model      string `json:"model"`
 		Effort     string `json:"effort"`
 		Permission string `json:"permission"`
@@ -74,12 +78,17 @@ func (s *Server) createSession(c *fiber.Ctx) error {
 	if body.Model == "" {
 		body.Model = provider.Models()[0].ID
 	}
+	accountID, err := s.chooseAccount(provider.Name(), body.AccountID, store.SystemAccount, true)
+	if err != nil {
+		return err
+	}
 
 	sess := &store.Session{
 		ID:         uuid.NewString(),
 		ProjectID:  project.ID,
 		Title:      strings.TrimSpace(body.Title),
 		Provider:   provider.Name(),
+		AccountID:  accountID,
 		Model:      body.Model,
 		Effort:     body.Effort,
 		Permission: string(agent.Permission(body.Permission).Valid()),
@@ -142,15 +151,19 @@ func (s *Server) updateSession(c *fiber.Ctx) error {
 	}
 	var body struct {
 		Provider *string `json:"provider"`
-		Model    *string `json:"model"`
-		Effort   *string `json:"effort"`
-		Title    *string `json:"title"`
-		Done     *bool   `json:"done"`
+		// AccountID is which subscription of the provider runs the next turn.
+		// Absent keeps the one the task has, unless the provider changed, in
+		// which case that provider's default answers.
+		AccountID *int64  `json:"account_id"`
+		Model     *string `json:"model"`
+		Effort    *string `json:"effort"`
+		Title     *string `json:"title"`
+		Done      *bool   `json:"done"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return badRequest("invalid body: %v", err)
 	}
-	if body.Provider != nil || body.Model != nil || body.Effort != nil {
+	if body.Provider != nil || body.AccountID != nil || body.Model != nil || body.Effort != nil {
 		providerName, model, effort := sess.Provider, sess.Model, sess.Effort
 		if body.Provider != nil {
 			providerName = *body.Provider
@@ -178,7 +191,16 @@ func (s *Server) updateSession(c *fiber.Ctx) error {
 		if !knownModel {
 			return badRequest("unknown model %q for provider %q", model, providerName)
 		}
-		if err := s.store.SetSessionModel(id, providerName, model, effort, providerName != sess.Provider); err != nil {
+		accountID, err := s.chooseAccount(providerName, body.AccountID, sess.AccountID,
+			providerName != sess.Provider)
+		if err != nil {
+			return err
+		}
+		// A different subscription opens a new conversation for the same
+		// reason a different provider does: the thread id belongs to the
+		// account that made it, and the other account cannot resume it.
+		switched := providerName != sess.Provider || accountID != sess.AccountID
+		if err := s.store.SetSessionModel(id, providerName, accountID, model, effort, switched); err != nil {
 			return err
 		}
 	}
@@ -342,10 +364,11 @@ func (s *Server) updateQueuedMessage(c *fiber.Ctx) error {
 		return store.ErrNotFound
 	}
 	var body struct {
-		Prompt   string `json:"prompt"`
-		Provider string `json:"provider"`
-		Model    string `json:"model"`
-		Effort   string `json:"effort"`
+		Prompt    string `json:"prompt"`
+		Provider  string `json:"provider"`
+		AccountID *int64 `json:"account_id"`
+		Model     string `json:"model"`
+		Effort    string `json:"effort"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return badRequest("invalid body: %v", err)
@@ -371,11 +394,17 @@ func (s *Server) updateQueuedMessage(c *fiber.Ctx) error {
 	if !knownModel {
 		return badRequest("unknown model %q for provider %q", body.Model, body.Provider)
 	}
-	if err := s.store.SetQueuedMessage(queuedID, prompt, body.Provider, body.Model, body.Effort); err != nil {
+	accountID, err := s.chooseAccount(body.Provider, body.AccountID, queued.AccountID,
+		body.Provider != queued.Provider)
+	if err != nil {
+		return err
+	}
+	if err := s.store.SetQueuedMessage(queuedID, prompt, body.Provider, accountID, body.Model, body.Effort); err != nil {
 		return err
 	}
 	return c.JSON(&store.QueuedMessage{ID: queuedID, SessionID: queued.SessionID, Prompt: prompt,
-		Provider: body.Provider, Model: body.Model, Effort: body.Effort, CreatedAt: queued.CreatedAt})
+		Provider: body.Provider, AccountID: accountID, Model: body.Model, Effort: body.Effort,
+		CreatedAt: queued.CreatedAt})
 }
 
 // forceQueuedMessage runs the selected queued prompt now rather than when the

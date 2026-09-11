@@ -53,8 +53,8 @@ const quotaTimeout = 5 * time.Second
 // SubscriptionLimits asks the headless Copilot CLI for the signed-in
 // account's current quota. This is a read-only RPC and does not create a
 // session or send a model request; the CLI supplies the existing login.
-func (p *Provider) SubscriptionLimits(ctx context.Context) ([]agent.RateLimit, error) {
-	result, err := serverQuery(ctx, quotaTimeout, "account.getQuota")
+func (p *Provider) SubscriptionLimits(ctx context.Context, home string) ([]agent.RateLimit, error) {
+	result, err := serverQuery(ctx, quotaTimeout, "account.getQuota", home)
 	if err != nil {
 		return nil, fmt.Errorf("read subscription limits: %w", err)
 	}
@@ -69,12 +69,13 @@ func (p *Provider) SubscriptionLimits(ctx context.Context) ([]agent.RateLimit, e
 // sends one read-only request and returns its result. Starting the CLI is
 // most of the cost, so a caller that needs two answers is better served by
 // two constants than by two queries.
-func serverQuery(ctx context.Context, timeout time.Duration, method string) (json.RawMessage, error) {
+func serverQuery(ctx context.Context, timeout time.Duration, method, home string) (json.RawMessage, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, Binary, "--headless", "--no-auto-update",
-		"--log-level", "error", "--stdio")
+	args := append([]string{"--headless", "--no-auto-update",
+		"--log-level", "error", "--stdio"}, homeArgs(home)...)
+	cmd := exec.CommandContext(ctx, Binary, args...)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, fmt.Errorf("copilot server stdin: %w", err)

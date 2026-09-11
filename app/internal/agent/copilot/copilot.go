@@ -73,7 +73,9 @@ func buildArgs(req agent.TurnRequest) []string {
 		// servers. The prompt itself also tells the model not to use tools.
 		args = append(args, "--no-custom-instructions", "--disable-builtin-mcps")
 	}
-	return args
+	// Which subscription answers the turn. Nothing for the machine's own
+	// login, so a single-subscription machine runs the command it always ran.
+	return append(args, homeArgs(req.AccountHome)...)
 }
 
 func (p *Provider) Run(ctx context.Context, req agent.TurnRequest) (<-chan agent.Event, error) {

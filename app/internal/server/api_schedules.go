@@ -69,9 +69,12 @@ func checkRecurrence(every string, intervalMinutes, atMinute int64) error {
 // dialog only asks for the recurrence and the number of runs.
 func (s *Server) createSchedule(c *fiber.Ctx) error {
 	var body struct {
-		ProjectID       int64  `json:"project_id"`
-		Prompt          string `json:"prompt"`
-		Provider        string `json:"provider"`
+		ProjectID int64  `json:"project_id"`
+		Prompt    string `json:"prompt"`
+		Provider  string `json:"provider"`
+		// AccountID is which subscription the job's runs go on. Absent is the
+		// provider's default.
+		AccountID       *int64 `json:"account_id"`
 		Model           string `json:"model"`
 		Effort          string `json:"effort"`
 		Permission      string `json:"permission"`
@@ -114,11 +117,16 @@ func (s *Server) createSchedule(c *fiber.Ctx) error {
 	if title == "" {
 		title, named = scheduleTitle(prompt), false
 	}
+	accountID, err := s.chooseAccount(provider.Name(), body.AccountID, store.SystemAccount, true)
+	if err != nil {
+		return err
+	}
 	sched := &store.Schedule{
 		ProjectID:       project.ID,
 		Title:           title,
 		Prompt:          prompt,
 		Provider:        provider.Name(),
+		AccountID:       accountID,
 		Model:           body.Model,
 		Effort:          body.Effort,
 		Permission:      string(agent.Permission(body.Permission).Valid()),
@@ -181,10 +189,11 @@ func (s *Server) updateSchedule(c *fiber.Ctx) error {
 		// The prompt and the model are as changeable as the clock: a
 		// schedule worth keeping is rarely worth remaking over a typo or a
 		// model that turned out to be the wrong one.
-		Prompt   *string `json:"prompt"`
-		Provider *string `json:"provider"`
-		Model    string  `json:"model"`
-		Effort   string  `json:"effort"`
+		Prompt    *string `json:"prompt"`
+		Provider  *string `json:"provider"`
+		AccountID *int64  `json:"account_id"`
+		Model     string  `json:"model"`
+		Effort    string  `json:"effort"`
 
 		// The three recurrence fields move together, since they are one
 		// answer: every names the form, and the other two carry it.
@@ -232,7 +241,12 @@ func (s *Server) updateSchedule(c *fiber.Ctx) error {
 		if model == "" {
 			model = provider.Models()[0].ID
 		}
-		if err := s.store.SetScheduleModel(sched.ID, provider.Name(), model, body.Effort); err != nil {
+		accountID, err := s.chooseAccount(provider.Name(), body.AccountID, sched.AccountID,
+			provider.Name() != sched.Provider)
+		if err != nil {
+			return err
+		}
+		if err := s.store.SetScheduleModel(sched.ID, provider.Name(), accountID, model, body.Effort); err != nil {
 			return err
 		}
 	}

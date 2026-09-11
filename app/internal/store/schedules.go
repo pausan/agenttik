@@ -10,7 +10,7 @@ import (
 // Running is a subquery rather than a column: a run row is already written per
 // fire, so asking whether one is still open costs nothing extra and cannot
 // drift out of step with a column somebody forgot to clear.
-const scheduleCols = `s.id, s.project_id, s.title, s.prompt, s.provider, s.model, s.effort,
+const scheduleCols = `s.id, s.project_id, s.title, s.prompt, s.provider, s.account_id, s.model, s.effort,
 	s.permission, s.every, s.interval_minutes, s.at_minute, s.anchor_at, s.remaining,
 	s.paused, s.next_run_at, s.created_at, s.done_at, s.position,
 	EXISTS(SELECT 1 FROM schedule_runs r WHERE r.schedule_id = s.id AND r.status = '` + RunRunning + `'),
@@ -18,7 +18,7 @@ const scheduleCols = `s.id, s.project_id, s.title, s.prompt, s.provider, s.model
 
 func scanSchedule(sc interface{ Scan(...any) error }) (*Schedule, error) {
 	var v Schedule
-	err := sc.Scan(&v.ID, &v.ProjectID, &v.Title, &v.Prompt, &v.Provider, &v.Model, &v.Effort,
+	err := sc.Scan(&v.ID, &v.ProjectID, &v.Title, &v.Prompt, &v.Provider, &v.AccountID, &v.Model, &v.Effort,
 		&v.Permission, &v.Every, &v.IntervalMinutes, &v.AtMinute, &v.AnchorAt, &v.Remaining,
 		&v.Paused, &v.NextRunAt, &v.CreatedAt, &v.DoneAt, &v.Position,
 		&v.Running, &v.ProjectName, &v.ProjectPath)
@@ -36,12 +36,12 @@ func (s *Store) CreateSchedule(v *Schedule) error {
 		v.AnchorAt = v.CreatedAt
 	}
 	res, err := s.db.Exec(
-		`INSERT INTO schedules (project_id, title, prompt, provider, model, effort, permission,
+		`INSERT INTO schedules (project_id, title, prompt, provider, account_id, model, effort, permission,
 		    every, interval_minutes, at_minute, anchor_at, remaining, paused, next_run_at,
 		    created_at, position)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
 		    (SELECT COALESCE(MAX(position), 0) + 1 FROM schedules WHERE project_id = ?))`,
-		v.ProjectID, v.Title, v.Prompt, v.Provider, v.Model, v.Effort, v.Permission,
+		v.ProjectID, v.Title, v.Prompt, v.Provider, v.AccountID, v.Model, v.Effort, v.Permission,
 		v.Every, v.IntervalMinutes, v.AtMinute, v.AnchorAt, v.Remaining, v.Paused, v.NextRunAt,
 		v.CreatedAt, v.ProjectID)
 	if err != nil {
@@ -191,12 +191,12 @@ func (s *Store) SetSchedulePrompt(id int64, prompt string) error {
 	return nil
 }
 
-// SetScheduleModel changes what future runs are sent to. The three fields
-// move together because they are one answer: an effort belongs to a model,
-// and a model to a provider.
-func (s *Store) SetScheduleModel(id int64, provider, model, effort string) error {
-	res, err := s.db.Exec(`UPDATE schedules SET provider = ?, model = ?, effort = ? WHERE id = ?`,
-		provider, model, effort, id)
+// SetScheduleModel changes what future runs are sent to. The fields move
+// together because they are one answer: an effort belongs to a model, a model
+// to a provider, and the provider to the subscription that pays for it.
+func (s *Store) SetScheduleModel(id int64, provider string, accountID int64, model, effort string) error {
+	res, err := s.db.Exec(`UPDATE schedules SET provider = ?, account_id = ?, model = ?, effort = ? WHERE id = ?`,
+		provider, accountID, model, effort, id)
 	if err != nil {
 		return fmt.Errorf("set schedule model: %w", err)
 	}

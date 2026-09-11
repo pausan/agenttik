@@ -54,14 +54,22 @@ func (p *Provider) Available() error { return nil }
 
 // SubscriptionLimits answers a fixed, made-up allowance, so the prompt bar's
 // bars and the reset copy under them have something deterministic to show.
-func (p *Provider) SubscriptionLimits(ctx context.Context) ([]agent.RateLimit, error) {
+//
+// A named subscription reads differently from the machine's own login, so a
+// browser test can see that swapping subscription re-read the allowance
+// rather than relabelled the same one.
+func (p *Provider) SubscriptionLimits(ctx context.Context, home string) ([]agent.RateLimit, error) {
 	now := time.Now()
+	used := 42.0
+	if home != "" {
+		used = 77
+	}
 	return []agent.RateLimit{{
 		LimitID:   "fake",
 		LimitName: "Fake",
 		PlanType:  "Fake plan",
 		Primary: &agent.RateLimitWindow{
-			UsedPercent:        42,
+			UsedPercent:        used,
 			WindowDurationMins: 5 * 60,
 			ResetsAt:           now.Add(2 * time.Hour).Unix(),
 		},
@@ -165,6 +173,15 @@ func runScript(ctx context.Context, req agent.TurnRequest, events chan<- agent.E
 		case "error":
 			events <- agent.Event{Type: agent.EventError, Text: strings.TrimSpace(rest)}
 			return
+		case "account":
+			// What the runner resolved the task's subscription to, which is
+			// otherwise invisible from a browser. Empty is the machine's own
+			// login, and says so rather than printing nothing.
+			home := req.AccountHome
+			if home == "" {
+				home = "system"
+			}
+			reply = append(reply, "account="+home)
 		default:
 			reply = append(reply, line)
 		}

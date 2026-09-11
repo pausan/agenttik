@@ -52,6 +52,11 @@ type TurnRequest struct {
 	Model   string
 	Effort  string
 
+	// AccountHome is the directory holding the login this turn runs on, empty
+	// for the machine's own. The provider applies it the way its CLI expects;
+	// nothing here reads what is inside it. See 050-subscription-accounts.md.
+	AccountHome string
+
 	// Isolated marks a one-shot request that must not inherit or persist a
 	// provider conversation.
 	Isolated bool
@@ -194,8 +199,11 @@ type TitleGenerator interface {
 // the signed-in account's own subscription allowance without holding its
 // credentials. A provider that only volunteers one mid-turn does not implement
 // it — see the limits event.
+//
+// home names which login to ask about, empty for the machine's own: two
+// subscriptions of one provider have two allowances.
 type Metered interface {
-	SubscriptionLimits(ctx context.Context) ([]RateLimit, error)
+	SubscriptionLimits(ctx context.Context, home string) ([]RateLimit, error)
 }
 
 // Registry holds the providers this build supports, in display order.

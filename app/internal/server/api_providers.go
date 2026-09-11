@@ -6,6 +6,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/pausan/agenttik/app/internal/agent"
+	"github.com/pausan/agenttik/app/internal/store"
 )
 
 type providerInfo struct {
@@ -15,17 +16,32 @@ type providerInfo struct {
 	Efforts     []string      `json:"efforts"`
 	Available   bool          `json:"available"`
 	Reason      string        `json:"reason,omitempty"`
+
+	// Accounts are the subscriptions this provider can run under, the CLI's
+	// own login first and always present. MultiAccount says whether a second
+	// one can be added at all. See 050-subscription-accounts.md.
+	Accounts     []accountInfo `json:"accounts"`
+	MultiAccount bool          `json:"multi_account"`
 }
 
 func (s *Server) listProviders(c *fiber.Ctx) error {
+	// One read for every provider's rows, rather than one per provider: they
+	// are a handful of rows and this is on the app's first paint.
+	accounts, err := s.store.ListAccounts()
+	if err != nil {
+		return err
+	}
 	out := make([]providerInfo, 0, len(s.registry.All()))
 	for _, p := range s.registry.All() {
+		_, multi := p.(agent.MultiAccount)
 		info := providerInfo{
-			Name:        p.Name(),
-			DisplayName: p.DisplayName(),
-			Models:      p.Models(),
-			Efforts:     p.Efforts(),
-			Available:   true,
+			Name:         p.Name(),
+			DisplayName:  p.DisplayName(),
+			Models:       p.Models(),
+			Efforts:      p.Efforts(),
+			Available:    true,
+			Accounts:     s.providerAccounts(p, accounts),
+			MultiAccount: multi,
 		}
 		if err := p.Available(); err != nil {
 			info.Available, info.Reason = false, err.Error()
@@ -49,22 +65,39 @@ func (s *Server) listProviders(c *fiber.Ctx) error {
 // whenever the ask fails or comes back empty — an unreachable CLI, or a report
 // worded in a way the parser no longer recognises, then shows the last known
 // bars instead of none. A provider that does neither has no allowance bars.
+//
+// Both halves answer for one subscription: the account named by ?account is
+// the login the CLI is asked with, and the only one whose remembered
+// readings are served. Two subscriptions of a provider have two allowances,
+// and showing one against the other would be worse than showing none.
 func (s *Server) subscriptionLimits(c *fiber.Ctx) error {
 	name := c.Params("provider")
 	provider, ok := s.registry.Get(name)
 	if !ok {
 		return badRequest("unknown provider %q", name)
 	}
+	accountID := int64(c.QueryInt("account", int(store.SystemAccount)))
+	home := ""
+	if accountID != store.SystemAccount {
+		account, err := s.store.GetAccount(accountID)
+		if err != nil {
+			return err
+		}
+		if account.Provider != name {
+			return badRequest("subscription %q does not belong to %s", account.Alias, name)
+		}
+		home = account.Home
+	}
 	var asked []agent.RateLimit
 	var askErr error
 	if metered, ok := provider.(agent.Metered); ok {
-		asked, askErr = metered.SubscriptionLimits(c.UserContext())
+		asked, askErr = metered.SubscriptionLimits(c.UserContext(), home)
 		if askErr == nil && len(asked) > 0 {
 			return c.JSON(asked)
 		}
 	}
 
-	remembered, err := s.rememberedLimits(name)
+	remembered, err := s.rememberedLimits(name, accountID)
 	if err != nil {
 		return err
 	}
@@ -79,8 +112,8 @@ func (s *Server) subscriptionLimits(c *fiber.Ctx) error {
 
 // rememberedLimits is the newest allowance a provider volunteered during a
 // turn, stamped with when it was recorded.
-func (s *Server) rememberedLimits(name string) ([]agent.RateLimit, error) {
-	body, at, err := s.store.LatestRateLimits(name)
+func (s *Server) rememberedLimits(name string, accountID int64) ([]agent.RateLimit, error) {
+	body, at, err := s.store.LatestRateLimits(name, accountID)
 	if err != nil {
 		return nil, err
 	}

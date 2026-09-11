@@ -97,6 +97,12 @@ func (s *Server) routes() {
 
 	api.Get("/providers", s.listProviders)
 	api.Get("/providers/:provider/subscription-limits", s.subscriptionLimits)
+	api.Post("/providers/:provider/accounts", s.createAccount)
+	api.Put("/providers/:provider/account", s.setDefaultAccount)
+	api.Patch("/providers/:provider/accounts/:account", s.updateAccount)
+	api.Delete("/providers/:provider/accounts/:account", s.deleteAccount)
+	api.Get("/providers/:provider/accounts/:account/usage", s.accountUsage)
+	api.Post("/providers/:provider/accounts/:account/login", s.loginAccount)
 	api.Get("/fs", s.browseDir)
 	api.Post("/fs/dir", s.makeDir)
 	api.Post("/fs/clone", s.cloneRepo)

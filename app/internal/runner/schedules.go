@@ -71,6 +71,7 @@ func (r *Runner) fireSchedule(s *store.Schedule, now time.Time) {
 		ProjectID:  s.ProjectID,
 		Title:      s.Title,
 		Provider:   s.Provider,
+		AccountID:  s.AccountID,
 		Model:      s.Model,
 		Effort:     s.Effort,
 		Permission: s.Permission,
@@ -145,6 +146,7 @@ func (r *Runner) RunScheduleNow(scheduleID int64, enqueue bool) error {
 		ProjectID:  s.ProjectID,
 		Title:      s.Title,
 		Provider:   s.Provider,
+		AccountID:  s.AccountID,
 		Model:      s.Model,
 		Effort:     s.Effort,
 		Permission: s.Permission,
@@ -211,11 +213,11 @@ func (r *Runner) closeFailedForcedRun(sessionID string) {
 // was in flight keeps that name, and a job created with a title of its own is
 // never guessed at in the first place.
 func (r *Runner) NameSchedule(s *store.Schedule) {
-	go r.refineScheduleTitle(s.ID, s.ProjectID, s.Provider, s.Title, s.Prompt)
+	go r.refineScheduleTitle(s.ID, s.ProjectID, s.Provider, s.AccountID, s.Title, s.Prompt)
 }
 
-func (r *Runner) refineScheduleTitle(id, projectID int64, providerName, placeholder, prompt string) {
-	title := r.askTitle(providerName, prompt)
+func (r *Runner) refineScheduleTitle(id, projectID int64, providerName string, accountID int64, placeholder, prompt string) {
+	title := r.askTitle(providerName, accountID, prompt)
 	if title == "" || title == placeholder {
 		return
 	}

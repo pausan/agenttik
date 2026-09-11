@@ -33,12 +33,14 @@ stop being the default.
 | Codex | `CODEX_HOME` | `<dir>/auth.json` |
 | GitHub Copilot | `--config-dir` | the machine's vault, keyed per account; `<dir>/config.json` records which |
 
-Copilot is the odd one. Its token goes into the OS vault (keychain, keyring,
-credential manager) under the account it belongs to, and the config directory
-only records which account to open it with — so the directory still selects the
-subscription, and signing a second one in does not displace the first. When the
-vault cannot be reached the CLI falls back to a plaintext file under that same
-directory, which is its own behaviour, not something changed here.
+Copilot is the odd one, and the weakest of the three: its token goes into the
+OS vault (keychain, keyring, credential manager) under the account it belongs
+to, and the config directory only records which account to open it with. Given
+a directory with no such record it uses the vault's token anyway, so the
+directory alone is not a wall — see "Copilot's vault" below for what that
+costs and the guard that answers it. When the vault cannot be reached the CLI
+falls back to a plaintext file under that same directory, which is its own
+behaviour, not something changed here.
 
 `agent.MultiAccount` is the optional half of the provider contract for all
 this: `DefaultHome`, `AccountStatus`, `LoginCommand`. A provider that does not

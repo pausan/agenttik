@@ -33,7 +33,9 @@ numbered at all: a project's own page and the archive.
 address the first eight rows by position. Pressing the letter of the project
 already showing now folds its tasks and schedules away, and pressing it again
 brings them back, so the chord that reaches a project is also how it is shut —
-the chevron is no longer the only way. A different letter only switches, and
+the chevron is no longer the only way. A different letter only switches — onto
+that project's latest task, which is what the chord is for; the row itself is
+the way to the project page (see [008](008-project-workspaces.md)) — and
 leaves every project's fold state where it was, unless the General setting
 asks for one project unfolded at a time, which unfolds the one selected and
 folds the rest (see [017](017-general-settings.md)). Either way the fold state

@@ -88,7 +88,6 @@ export const S = reactive({
   // Whether selecting a project folds every other one away. From Settings,
   // and unlike the fold state above it is remembered.
   foldOthers: false,
-  lastTab: {}, // per project, the tab it was last left on
   fileMode: "edit", // "edit", "diff" or "preview", carried to the next file
   diffView: "unified", // "unified" or "split", likewise
   closing: null, // a close waiting on what to do with unsaved edits
@@ -392,16 +391,14 @@ function focusPrompt() {
   S.promptFocus += 1;
 }
 
-/* Selecting a tab selects its project with it, and the project remembers
-   where it was left so coming back lands on the same tab. */
+/* Selecting a tab selects its project with it. Which tab a project comes
+   back on is switchProject's rule, not a remembered one. */
 export function selectTab(id) {
   const tab = S.tabs.find((t) => t.id === id);
   if (!tab) return;
   S.activeTab = id;
   const projectID = projectOfTab(tab);
-  if (!projectID) return;
-  S.activeProjectID = projectID;
-  S.lastTab[projectID] = id;
+  if (projectID) S.activeProjectID = projectID;
 }
 
 /* Alt+1 … Alt+9 selects a session by its top-to-bottom sidebar position and
@@ -444,15 +441,22 @@ export function selectAdjacentTab(step) {
   selectTab(strip[at < 0 ? (step > 0 ? 0 : n - 1) : (at + step + n) % n].id);
 }
 
-/* switchProject is Alt+A … Alt+H and a click on a project row: the strip
-   becomes that project's, on the tab it was last left on. A project with
-   nothing open shows its own page rather than an empty centre. */
+/* switchProject is Alt+A … Alt+H: the strip becomes that project's, on the
+   work rather than on its page. The task it lands on is the last one opened
+   there — the session in the project's context slot, since opening another
+   replaces it — and otherwise the top of its task list, which is the one
+   Alt+1 reaches. Only a project with no tasks at all shows its own page,
+   where the first one is started from; a click on the project row is the way
+   back to that page. */
 export async function switchProject(id) {
   S.activeProjectID = id;
-  const mine = S.strip;
-  const last = mine.find((t) => t.id === S.lastTab[id]) || mine[0];
-  if (last) return selectTab(last.id);
+  const open = S.tabs.find((t) => t.kind === "session" && projectOfTab(t) === id);
+  if (open) return selectTab(open.id);
+  // Nothing is in front while the view is fetched: the strip is already this
+  // project's, and the tab that was showing belongs to the one left behind.
   S.activeTab = "";
+  const first = S.projects.find((p) => p.id === id)?.recent_sessions[0];
+  if (first) return openTask(first.id);
   await openProject(id);
 }
 
@@ -543,7 +547,6 @@ export async function closeTab(id, remember = true, force = false, cascade = tru
   // tabs that are not on screen.
   const at = S.tabs.filter((t) => projectOfTab(t) === projectID).findIndex((t) => t.id === id);
   S.tabs = S.tabs.filter((t) => t.id !== id && (!cascade || t.owner !== id));
-  if (S.lastTab[projectID] === id) delete S.lastTab[projectID];
   if (S.activeTab === id || !S.tabs.some((t) => t.id === S.activeTab)) {
     const left = S.tabs.filter((t) => projectOfTab(t) === projectID);
     const next = left[Math.min(at, left.length - 1)];
@@ -2042,7 +2045,6 @@ export async function renameEntry(path, name) {
     tab.label = tab.path.split("/").pop();
     tab.id = `file:${id}:${tab.path}`;
     if (S.activeTab === was) S.activeTab = tab.id;
-    if (S.lastTab[id] === was) S.lastTab[id] = tab.id;
     // The text is the same bytes it was, but a diff is against a path: the
     // move itself is part of the new one, so a tab on Diff re-reads it.
     if (tab.mode === "diff") {

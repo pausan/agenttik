@@ -16,7 +16,6 @@ import {
   setScheduleArchived,
   setSchedulePaused,
   setTaskArchived,
-  switchProject,
   stopTask,
   toggleProjectTasks,
 } from "../store";
@@ -115,14 +114,6 @@ const busy = (p) =>
 const activeSchedule = computed(() =>
   S.owner?.kind === "schedule" ? S.owner.scheduleID : 0,
 );
-
-/* Clicking a project selects it, which is what makes its tabs the ones on
-   screen. Clicking the one already selected opens its page, since that is
-   the only way back to it once conversations are open on top. */
-function chooseProject(p) {
-  if (S.activeProjectID === p.id) openProject(p.id);
-  else switchProject(p.id);
-}
 
 function beginDrag(e, value) {
   e.dataTransfer.effectAllowed = "move";
@@ -232,11 +223,15 @@ function onTaskDrop(e) {
                 class="size-3.5 block text-dimmed"
               />
             </button>
+            <!-- A click on the row opens the project's own page, selected or
+                 not: it is the overview, and the only way back to it once a
+                 conversation is open on top. Alt and the project's letter is
+                 the way to the work instead. -->
             <button
               type="button"
               class="min-w-0 flex-1 text-left"
               :title="projectKey(i) ? `${p.name}  (Alt+${projectKey(i)})` : p.name"
-              @click="chooseProject(p)"
+              @click="openProject(p.id)"
             >
               <span class="flex items-center gap-1.5">
                 <span

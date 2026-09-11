@@ -21,7 +21,7 @@ screen, **session** for the row, the route or the CLI flag.
 |-----|----------------|
 | [006](006-sidebar-ordering.md) | Sidebar ordering, archiving, and Tree placement |
 | [007](007-task-closing.md) | Closing, archiving, restoring, and deleting a task |
-| [008](008-project-workspaces.md) | Per-project tab strips, the context tab, file diffs |
+| [008](008-project-workspaces.md) | Per-project tab strips, the context tab, what a letter and a click open |
 | [021](021-stop-active-tasks.md) | Stopping an active or scheduled task from the sidebar |
 | [025](025-blank-task-reuse.md) | Starting a task lands on an untitled one wherever it is |
 | [030](030-project-tasks.md) | Every task of a project in one paged list, behind a focused filter |

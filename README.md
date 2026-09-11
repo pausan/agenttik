@@ -27,6 +27,9 @@ make run-web
 ```
 
 Open [localhost:7717](http://127.0.0.1:7717), add a project folder, and start a session.
+Or add one from the terminal with `agenttik --init` in the folder you want —
+`agenttik --init path/to/repo` names another — which works whether or not the
+app is already open, and shows up in an open window straight away.
 `--addr` and `--data-dir` change where it listens and where it keeps its
 database, `--web` skips the desktop window, and `--help` and `--version` say
 what this build is.

@@ -1953,12 +1953,15 @@ function subscriptionURL() {
   // The project in front is also the one whose folder the server watches for
   // us: only its files are on screen, so only its files are worth following.
   const shown = currentProjectID();
-  if (!sessions.length && !projects.length && !shown) return "";
   const params = new URLSearchParams();
   if (sessions.length) params.set("sessions", sessions.join(","));
   if (projects.length) params.set("projects", projects.join(","));
   if (shown) params.set("watch", shown);
-  return "/api/stream?" + params;
+  /* Opened even with nothing to name. Every stream also carries "a project was
+     added", and a window showing no project yet — a fresh install, waiting on
+     `agenttik --init` — is the one that most needs to hear it. */
+  const query = String(params);
+  return query ? "/api/stream?" + query : "/api/stream";
 }
 
 /* The stream also carries which project's folder the server should watch, so
@@ -2009,6 +2012,13 @@ function onEvent(msg) {
       refreshChanged();
       refreshTree();
     }
+    return;
+  }
+  // A project was added outside this window: by `agenttik --init` in a
+  // terminal, or by another tab. It names no project, so the sidebar re-reads
+  // its list whole, which resubscribes the stream to the new project too.
+  if (msg.event?.type === "projects_changed") {
+    refreshProjects().catch(() => {});
     return;
   }
   // A schedule fired, skipped a run, or spent one. It names no schedule: the

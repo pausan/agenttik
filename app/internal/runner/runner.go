@@ -90,6 +90,16 @@ func FilesTopic(projectID int64) string { return "files:" + strconv.FormatInt(pr
 // no path: the panes re-read their listing whole.
 const EventFilesChanged agent.EventType = "files_changed"
 
+// ProjectsTopic carries "the set of projects changed". Every stream listens to
+// it, project or no project, because what publishes there is a project added
+// from outside the window — the CLI's --init — and a window with nothing open
+// yet is exactly the one that would otherwise never hear about it.
+const ProjectsTopic = "projects"
+
+// EventProjectsChanged is what ProjectsTopic carries. It names no project: the
+// sidebar re-reads its list whole, as it does for the file watcher's event.
+const EventProjectsChanged agent.EventType = "projects_changed"
+
 // Running reports whether a turn is in flight for the session.
 func (r *Runner) Running(sessionID string) bool {
 	r.mu.Lock()

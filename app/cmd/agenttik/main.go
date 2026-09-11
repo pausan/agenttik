@@ -51,6 +51,10 @@ func run() error {
 	webOnly := flag.Bool("web", false, "serve the web UI only, no desktop window")
 	flag.StringVar(&cfg.Addr, "addr", cfg.Addr, "`host:port` to listen on")
 	flag.StringVar(&cfg.DataDir, "data-dir", cfg.DataDir, "`directory` holding agenttik.db")
+	// --init takes an optional folder, which flag has no kind for, so the
+	// folder is the operand after it: flag stops at the first one, leaving it
+	// in flag.Arg(0). `--init` alone means the folder the terminal is in.
+	initProject := flag.Bool("init", false, "add a `folder`, the current one by default, as a project and exit")
 	showHelp := flag.Bool("help", false, "show this help and exit")
 	showVersion := flag.Bool("version", false, "show the version and exit")
 	flag.Usage = usage
@@ -70,6 +74,10 @@ func run() error {
 
 	if err := cfg.EnsureDataDir(); err != nil {
 		return err
+	}
+
+	if *initProject {
+		return addProject(cfg, flag.Arg(0))
 	}
 
 	// One instance per data directory. A second one would share the SQLite

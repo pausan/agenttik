@@ -27,7 +27,9 @@ const heartbeat = 25 * time.Second
 // conversations would use them all up and stall the API. The UI reopens this
 // stream when a tab opens or closes.
 func (s *Server) streamAll(c *fiber.Ctx) error {
-	var topics []string
+	// Subscribed unconditionally: a project added elsewhere is news to every
+	// window, including one that has no project to name yet.
+	topics := []string{runner.ProjectsTopic}
 	for _, id := range splitList(c.Query("sessions")) {
 		topics = append(topics, id)
 	}

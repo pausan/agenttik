@@ -69,7 +69,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [037](037-cross-platform-releases.md) | Push builds and tagged Linux, macOS, and Windows releases |
 | [039](039-single-instance.md) | One app per data directory, and the window a second launch raises |
 | [043](043-exposed-server.md) | Serving the window's UI to a browser too, on a chosen host and port |
-| [044](044-command-line.md) | Long options, `--help`, and the version a release tag builds in |
+| [044](044-command-line.md) | Long options, `--init`, `--help`, and the version a release tag builds in |
 
 ## Providers
 

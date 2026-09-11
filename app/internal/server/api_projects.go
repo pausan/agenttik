@@ -7,6 +7,9 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
+
+	"github.com/pausan/agenttik/app/internal/agent"
+	"github.com/pausan/agenttik/app/internal/runner"
 )
 
 // listProjects serves the sidebar's active projects, or — with ?archived=true
@@ -45,6 +48,12 @@ func (s *Server) createProject(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
+	// Any open window redraws its sidebar. The one that sent this request
+	// refreshes anyway; the ones that did not — another browser tab, or the
+	// window behind a terminal running `agenttik --init` — only hear it here.
+	s.runner.Hub().Publish(runner.ProjectsTopic, runner.Event{
+		Event: agent.Event{Type: runner.EventProjectsChanged},
+	})
 	return c.Status(fiber.StatusCreated).JSON(p)
 }
 

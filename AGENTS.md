@@ -8,7 +8,7 @@
 3. **Surgical changes.** Touch only what is needed. Match existing style. Remove dead code.
 4. **Goal-driven.** Define a verifiable success criterion (a test, a measured number, a screenshot) and loop until it passes. Give a short plan for multi-step work.
 5. **Plain language.** Short sentences, common words, concrete statements.
-6. **Tests guard regressions.** ~~Create unit tests whenever possible and reasonable and run them regularly.~~ Since we are currently prototyping, don't create or run tests unless explicitly asked.
+6. **Tests guard regressions.** Create unit tests whenever possible and reasonable and run them regularly.
 7. **Performance matters.** Memory and CPU cycles are not free. Let's design
 with this in mind. Fast is a feature.
 8. **Document in `specs/`.** Technical details, current behaviour and status. Describe the design as it stands, not the ones it replaced — when behaviour changes, rewrite the spec rather than appending to it. Keep an index file, keep index short, keep files short and organized.

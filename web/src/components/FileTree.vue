@@ -10,16 +10,22 @@
    not. Those folders are the one exception to starting open: a dependency
    tree is thousands of files against a project's hundred, and it would bury
    both the pane and every filter typed into it. It stays one grey row
-   carrying the number of matches inside, and a click opens it. */
+   carrying the number of matches inside, and a click opens it.
+
+   The tree is also where files are made, renamed and deleted: a right click
+   offers the four, and F2 on the row under the cursor renames it. Each one
+   asks first — a name, or in the case of a delete a yes — in
+   TreeActionModal. */
 import { computed, ref, watch } from "vue";
 
 import { S, openFile } from "../store";
 import { buildTree, countFiles, filterTree } from "../tree";
 import { segments } from "../fuzzy";
+import TreeActionModal from "./TreeActionModal.vue";
 
 /* The flat listing only changes when the project does, so the tree is built
    once and every keystroke only filters it. */
-const full = computed(() => buildTree(S.tree, S.treeIgnored));
+const full = computed(() => buildTree(S.tree, S.treeIgnored, S.treeDirs));
 const shown = computed(() => filterTree(full.value, S.treeFilter));
 const matches = computed(() => countFiles(shown.value));
 
@@ -42,6 +48,62 @@ defineExpose({ focus: () => filter.value?.inputRef?.focus() });
 function toggle(path) {
   const seen = toggled.value;
   seen.has(path) ? seen.delete(path) : seen.add(path);
+}
+
+/* One menu for the whole pane, aimed by the event on its way to the trigger,
+   the way LogsPane answers its rows: a menu component per row would be one
+   per file in the project, and only the row under the pointer has anything to
+   offer. A right click that lands beside the rows aims at the project folder
+   itself, which is where a new file then goes and which has no name to rename
+   and nothing to delete. */
+const aimed = ref({ path: "", dir: true });
+
+function aim(e) {
+  const row = e.target.closest("[data-path]");
+  aimed.value = row ? { path: row.dataset.path, dir: row.dataset.dir === "true" } : { path: "", dir: true };
+}
+
+const action = ref(null);
+
+function ask(kind, node) {
+  const at = node ? { path: node.path, dir: node.dir } : aimed.value;
+  if (!at.path && kind !== "file" && kind !== "folder") return;
+  action.value = { kind, ...at };
+}
+
+const menu = computed(() => [
+  [
+    { label: "New file", icon: "i-lucide-file-plus", onSelect: () => ask("file") },
+    { label: "New folder", icon: "i-lucide-folder-plus", onSelect: () => ask("folder") },
+  ],
+  [
+    {
+      label: "Rename",
+      icon: "i-lucide-pencil",
+      kbds: ["F2"],
+      disabled: !aimed.value.path,
+      onSelect: () => ask("rename"),
+    },
+    {
+      label: "Delete",
+      icon: "i-lucide-trash-2",
+      color: "error",
+      disabled: !aimed.value.path,
+      onSelect: () => ask("delete"),
+    },
+  ],
+]);
+
+/* What was just made has to be visible, so the folders above it are opened —
+   a new file in a folder that had been collapsed is otherwise created into
+   thin air. The listing has already been re-read by the time this runs. */
+function reveal(path) {
+  let at = full.value;
+  for (const part of path.split("/").slice(0, -1)) {
+    at = at.children?.find((c) => c.name === part);
+    if (!at) return;
+    if (!isOpen(at)) toggle(at.path);
+  }
 }
 
 /* rows flattens the tree into the lines to draw, which keeps the template one
@@ -79,45 +141,59 @@ const rows = computed(() => {
       </template>
     </UInput>
 
-    <p v-if="!S.tree.length" class="px-3 py-5 text-center text-dimmed">
-      {{ S.owner ? "No files." : "Pick a project or task to browse its files." }}
-    </p>
-    <p v-else-if="!rows.length" class="px-3 py-5 text-center text-dimmed">
-      Nothing matches “{{ S.treeFilter }}”.
-    </p>
-    <div v-else class="min-h-0">
-      <div
-        v-for="row in rows"
-        :key="row.node.path"
-        class="flex items-center font-mono text-xs"
-        :style="{ paddingLeft: row.depth * 10 + 'px' }"
-      >
-        <button
-          type="button"
-          class="flex w-full min-w-0 select-none items-center gap-1 rounded-[var(--ui-radius)] px-1 py-0.5 text-left hover:bg-elevated hover:text-highlighted"
-          :class="row.node.ig ? 'text-dimmed' : ''"
-          :title="row.node.ig ? row.node.path + ' — ignored by git' : row.node.path"
-          :aria-expanded="row.node.dir ? row.open : undefined"
-          @click="row.node.dir ? toggle(row.node.path) : openFile(row.node.path)"
-          @dblclick="row.node.dir || openFile(row.node.path, true)"
-        >
-          <UIcon
-            v-if="row.node.dir"
-            :name="row.open ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
-            class="size-3 shrink-0 text-dimmed"
-          />
-          <span v-else class="w-3 shrink-0" aria-hidden="true" />
-          <span class="truncate" :class="row.node.dir && !row.node.ig ? 'text-muted' : ''">
-            <span
-              v-for="(seg, i) in segments(row.node.name, row.node.hits)"
-              :key="i"
-              :class="seg.hit ? 'font-semibold text-primary' : ''"
-              >{{ seg.text }}</span
+    <!-- The trigger is the pane itself, as-child so it adds no element: a
+         right click that misses every row still offers New file, and the
+         empty states are inside it for the same reason. -->
+    <UContextMenu :items="menu" :ui="{ content: 'w-44' }">
+      <div class="min-h-0 flex-1" @contextmenu="aim">
+        <p v-if="!S.tree.length && !S.treeDirs.length" class="px-3 py-5 text-center text-dimmed">
+          {{ S.owner ? "No files." : "Pick a project or task to browse its files." }}
+        </p>
+        <p v-else-if="!rows.length" class="px-3 py-5 text-center text-dimmed">
+          Nothing matches “{{ S.treeFilter }}”.
+        </p>
+        <div v-else class="min-h-0">
+          <div
+            v-for="row in rows"
+            :key="row.node.path"
+            class="flex items-center font-mono text-xs"
+            :data-path="row.node.path"
+            :data-dir="row.node.dir"
+            :style="{ paddingLeft: row.depth * 10 + 'px' }"
+          >
+            <button
+              type="button"
+              class="flex w-full min-w-0 select-none items-center gap-1 rounded-[var(--ui-radius)] px-1 py-0.5 text-left hover:bg-elevated hover:text-highlighted"
+              :class="row.node.ig ? 'text-dimmed' : ''"
+              :title="row.node.ig ? row.node.path + ' — ignored by git' : row.node.path"
+              :aria-expanded="row.node.dir ? row.open : undefined"
+              @click="row.node.dir ? toggle(row.node.path) : openFile(row.node.path)"
+              @dblclick="row.node.dir || openFile(row.node.path, true)"
+              @keydown.f2.prevent.stop="ask('rename', row.node)"
             >
-          </span>
-          <span v-if="row.inside" class="ml-auto shrink-0 pl-1 tabular-nums">{{ row.inside }}</span>
-        </button>
+              <UIcon
+                v-if="row.node.dir"
+                :name="row.open ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+                class="size-3 shrink-0 text-dimmed"
+              />
+              <span v-else class="w-3 shrink-0" aria-hidden="true" />
+              <span class="truncate" :class="row.node.dir && !row.node.ig ? 'text-muted' : ''">
+                <span
+                  v-for="(seg, i) in segments(row.node.name, row.node.hits)"
+                  :key="i"
+                  :class="seg.hit ? 'font-semibold text-primary' : ''"
+                  >{{ seg.text }}</span
+                >
+              </span>
+              <span v-if="row.inside" class="ml-auto shrink-0 pl-1 tabular-nums">
+                {{ row.inside }}
+              </span>
+            </button>
+          </div>
+        </div>
       </div>
-    </div>
+    </UContextMenu>
+
+    <TreeActionModal v-model:action="action" @done="reveal" />
   </div>
 </template>

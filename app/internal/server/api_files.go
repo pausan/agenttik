@@ -81,9 +81,14 @@ type fileEntry struct {
 // it ignores, kept apart rather than mixed. The pane needs to know which is
 // which — ignored files are drawn grey and their folders start shut — and the
 // order matters here too. See listFiles.
+//
+// Dirs carries the folders holding no listed file. A tree built from file
+// paths cannot imply those, and a folder just created from the Tree is
+// exactly one of them. See emptyDirs.
 type projectFiles struct {
 	Files   []string `json:"files"`
 	Ignored []string `json:"ignored"`
+	Dirs    []string `json:"dirs"`
 }
 
 func (s *Server) projectTree(c *fiber.Ctx) error {
@@ -95,7 +100,8 @@ func (s *Server) projectTree(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(projectFiles{Files: files, Ignored: ignored})
+	dirs := emptyDirs(root, files, ignored, maxTreeEntries-len(files)-len(ignored))
+	return c.JSON(projectFiles{Files: files, Ignored: ignored, Dirs: dirs})
 }
 
 // listFiles prefers git, which gives us .gitignore handling for free and is
@@ -130,7 +136,7 @@ func listFiles(root string) ([]string, []string, error) {
 		if relErr != nil {
 			return nil
 		}
-		paths = append(paths, rel)
+		paths = append(paths, filepath.ToSlash(rel))
 		if len(paths) >= maxTreeEntries {
 			return fs.SkipAll
 		}
@@ -157,6 +163,78 @@ func listIgnored(root string, max int) []string {
 		return []string{}
 	}
 	return trimTo(splitLines(out), max)
+}
+
+// emptyDirs names the folders no listed file lives in. The tree is built from
+// file paths, so a folder holding nothing would otherwise not appear at all —
+// and a folder just created from the Tree is exactly that until something is
+// written into it.
+//
+// The walk costs one read per folder the project actually has: it descends
+// only where the listing says there is something, so a dependency folder is
+// seen once at its own level and never entered. A folder whose contents are
+// all ignored is already in the tree through those files and is neither named
+// here nor walked, which is what keeps `node_modules` out of both.
+func emptyDirs(root string, files, ignored []string, max int) []string {
+	out := []string{}
+	if max <= 0 {
+		return out
+	}
+	files, ignored = sorted(files), sorted(ignored)
+
+	var walk func(dir, rel string)
+	walk = func(dir, rel string) {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return // unreadable is simply a folder we cannot report on
+		}
+		for _, e := range entries {
+			if len(out) >= max {
+				return
+			}
+			// A symlink is not an IsDir, which is deliberate: following one
+			// would leave the project and could loop.
+			if !e.IsDir() || skipDirs[e.Name()] {
+				continue
+			}
+			child := e.Name()
+			if rel != "" {
+				child = rel + "/" + e.Name()
+			}
+			holdsFiles := hasUnder(files, child)
+			if !holdsFiles {
+				if hasUnder(ignored, child) {
+					continue
+				}
+				out = append(out, child)
+			}
+			walk(filepath.Join(dir, e.Name()), child)
+		}
+	}
+	walk(root, "")
+	return out
+}
+
+// hasUnder reports whether any listed path lives inside dir. The lists are in
+// byte order, so this is a binary search rather than a set of every ancestor
+// of every path — the ignored half alone is 13,789 of them here.
+func hasUnder(list []string, dir string) bool {
+	prefix := dir + "/"
+	i := sort.SearchStrings(list, prefix)
+	return i < len(list) && strings.HasPrefix(list[i], prefix)
+}
+
+// sorted is what hasUnder needs and what it is nearly always already given:
+// git writes its listings in byte order and the hand-walked fallback sorts
+// its own. A path git had to quote is the exception, and one of those must
+// not quietly turn a dependency folder into an empty one.
+func sorted(list []string) []string {
+	if sort.StringsAreSorted(list) {
+		return list
+	}
+	out := append([]string(nil), list...)
+	sort.Strings(out)
+	return out
 }
 
 // withoutDeleted drops the tracked files that are no longer on disk. Git keeps

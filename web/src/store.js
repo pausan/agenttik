@@ -96,9 +96,11 @@ export const S = reactive({
   logOpen: "", // the commit whose file list is expanded
   logFiles: {}, // commit hash -> what it touched, fetched the first time it opens
   // Every path in the project, and the subset git ignores. The Tree draws
-  // both, the ignored ones grey.
+  // both, the ignored ones grey. treeDirs are the folders holding no file,
+  // which a listing of paths cannot imply on its own.
   tree: [],
   treeIgnored: [],
+  treeDirs: [],
   treeFilter: "",
   query: "", // sidebar session filter
   window: TASK_WINDOWS[0].value,
@@ -1886,7 +1888,8 @@ async function refreshTree() {
   const id = currentProjectID();
   if (!id) return clearTree();
   try {
-    const { files = [], ignored = [] } = (await api("GET", `/api/projects/${id}/tree`)) || {};
+    const { files = [], ignored = [], dirs = [] } =
+      (await api("GET", `/api/projects/${id}/tree`)) || {};
     // A slow request for the tab we just left must not replace the active
     // project's sidebar Tree.
     if (currentProjectID() !== id) return;
@@ -1895,6 +1898,7 @@ async function refreshTree() {
     // is read from.
     S.tree = ignored.length ? files.concat(ignored) : files;
     S.treeIgnored = ignored;
+    S.treeDirs = dirs;
   } catch {
     if (currentProjectID() === id) clearTree();
   }
@@ -1903,7 +1907,80 @@ async function refreshTree() {
 function clearTree() {
   S.tree = [];
   S.treeIgnored = [];
+  S.treeDirs = [];
 }
+
+/* --------------------------------------------------------- editing files */
+
+/* The Tree's own file operations. Each asks the server and then re-reads the
+   listing rather than patching it: the watcher would refresh a beat later
+   anyway, and doing it here is what puts the row on screen with the
+   keystroke. Changed is re-read with it, because a file made or deleted is a
+   change to the working tree like any other.
+
+   Open tabs are kept in step by hand. A renamed file's tab follows it — a
+   file tab's id carries its path, so the id moves too — and a deleted file's
+   tab is closed outright: force, because there is nothing left to save, and
+   without remembering it, because Ctrl+Shift+T could only fail on a file that
+   is gone. Tabs showing a file at a commit are left alone; history did not
+   move. */
+
+export async function createEntry(parent, name, dir = false) {
+  const id = currentProjectID();
+  const path = joinPath(parent, name);
+  if (!id || !path) return "";
+  const made = await api("POST", `/api/projects/${id}/entry`, { path, dir });
+  await refreshFiles();
+  return made.path;
+}
+
+export async function renameEntry(path, name) {
+  const id = currentProjectID();
+  const to = joinPath(parentPath(path), name);
+  if (!id || !to || to === path) return "";
+  const moved = await api("POST", `/api/projects/${id}/entry/rename`, { path, to });
+  for (const tab of fileTabsUnder(id, path)) {
+    const was = tab.id;
+    tab.path = moved.path + tab.path.slice(path.length);
+    tab.label = tab.path.split("/").pop();
+    tab.id = `file:${id}:${tab.path}`;
+    if (S.activeTab === was) S.activeTab = tab.id;
+    if (S.lastTab[id] === was) S.lastTab[id] = tab.id;
+  }
+  await refreshFiles();
+  return moved.path;
+}
+
+export async function deleteEntry(path) {
+  const id = currentProjectID();
+  if (!id || !path) return;
+  await api("DELETE", `/api/projects/${id}/entry?path=${encodeURIComponent(path)}`);
+  for (const tab of fileTabsUnder(id, path)) await closeTab(tab.id, false, true, false);
+  await refreshFiles();
+}
+
+function refreshFiles() {
+  return Promise.all([refreshTree(), refreshChanged()]);
+}
+
+/* A folder takes everything under it with it, so both the rename and the
+   delete ask for the whole subtree rather than the one path. */
+function fileTabsUnder(projectID, path) {
+  return S.tabs.filter(
+    (t) =>
+      t.kind === "file" &&
+      !t.commit &&
+      t.projectID === projectID &&
+      (t.path === path || t.path.startsWith(path + "/")),
+  );
+}
+
+const parentPath = (path) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "");
+
+/* A name may be a path of its own — "sub/thing.go" — which is how a file is
+   made in a folder that is not there yet, and how a rename moves one. The
+   server cleans and bounds it. */
+const joinPath = (parent, name) => [parent, name.trim()].filter(Boolean).join("/");
 
 /* The panel follows the tab in front: which panes it offers depends on the
    kind of view, and what they list depends on its project. Two tabs in the

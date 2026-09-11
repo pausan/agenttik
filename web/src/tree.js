@@ -16,26 +16,38 @@ import { fuzzy } from "./fuzzy.js";
    file manager shows — except that anything ignored sinks below everything
    that is not, so a folder reads as its own contents first and what was
    generated into it after. */
-export function buildTree(paths, ignored = []) {
+export function buildTree(paths, ignored = [], dirs = []) {
   const skip = ignored.length ? new Set(ignored) : null;
   const root = node("", "", true);
   for (const path of paths) {
-    const parts = path.split("/").filter(Boolean);
-    let at = root;
-    for (let i = 0; i < parts.length; i++) {
-      const dir = i < parts.length - 1;
-      const full = parts.slice(0, i + 1).join("/");
-      let next = at.index.get(parts[i]);
-      if (!next) {
-        next = node(parts[i], full, dir);
-        at.index.set(parts[i], next);
-        at.children.push(next);
-      }
-      at = next;
-    }
+    const at = ensure(root, path, false);
     if (skip?.has(path)) at.ig = true;
   }
+  // A folder holding nothing is the one thing a list of files cannot say, and
+  // a folder just made from the Tree is exactly that until a file is put in
+  // it. The server names those separately; here they are simply nodes with no
+  // children.
+  for (const dir of dirs) ensure(root, dir, true);
   return sortTree(root);
+}
+
+/* ensure walks a path, making the nodes it passes through, and hands back the
+   last one. Everything before the last segment is a folder; the last is what
+   the caller says it is. */
+function ensure(root, path, isDir) {
+  const parts = path.split("/").filter(Boolean);
+  let at = root;
+  for (let i = 0; i < parts.length; i++) {
+    const dir = isDir || i < parts.length - 1;
+    let next = at.index.get(parts[i]);
+    if (!next) {
+      next = node(parts[i], parts.slice(0, i + 1).join("/"), dir);
+      at.index.set(parts[i], next);
+      at.children.push(next);
+    }
+    at = next;
+  }
+  return at;
 }
 
 function node(name, path, dir) {
@@ -88,7 +100,15 @@ function walk(n, needle) {
     children.push(kept.node);
     for (const h of kept.pathHits) hits.add(h);
   }
-  if (!children.length && n.path) return null;
+  if (!children.length && n.path) {
+    // A folder that had children and kept none is out. An empty one has no
+    // file to match on its behalf, so it matches on its own path or not at
+    // all — otherwise a folder just created could not be filtered to.
+    if (n.children.length) return null;
+    const m = fuzzy(n.path, needle);
+    if (!m) return null;
+    return { node: { ...n, children, hits: own(n, m.hits) }, pathHits: m.hits || [] };
+  }
   const pathHits = [...hits].sort((a, b) => a - b);
   return { node: { ...n, children, hits: own(n, pathHits) }, pathHits };
 }

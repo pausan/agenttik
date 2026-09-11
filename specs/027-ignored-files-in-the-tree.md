@@ -7,7 +7,9 @@ the same fuzzy match over the whole path, the highlighting is the same, a click
 opens the same temporary tab, and the count beside the filter counts every
 match.
 
-`GET /api/projects/:id/tree` answers `{files, ignored}` instead of one array.
+`GET /api/projects/:id/tree` answers `{files, ignored, dirs}` instead of one
+array — `dirs` being the folders that hold no file at all, which a listing of
+paths cannot imply and which [046](046-tree-file-actions.md) explains.
 `files` is `git ls-files --cached --others --exclude-standard` as before;
 `ignored` is `git ls-files --others --ignored --exclude-standard`. They are kept
 apart for two reasons. The pane needs to know which is which, and the cap has
@@ -16,9 +18,9 @@ against **13,789** ignored ones, so a single capped list would be nothing but
 `node_modules` and every real file would fall off the end. `files` takes the cap
 first and `ignored` gets what is left of the 20,000.
 
-`buildTree(paths, ignored)` marks a node `ig`. A file is ignored when it is in
-the set; a folder is ignored when everything inside it is, which is the only
-definition available — git ignores files, not folders — and reads correctly:
+`buildTree(paths, ignored, dirs)` marks a node `ig`. A file is ignored when it
+is in the set; a folder is ignored when everything inside it is, which is the
+only definition available — git ignores files, not folders — and reads correctly:
 `web/dist` is *not* grey here, because `.gitignore` keeps `web/dist/.gitkeep`
 tracked, and the folder really does hold a tracked file. Sorting gained one key
 in front of the existing two: `ig`, then folders before files, then name. A

@@ -972,6 +972,15 @@ export function setSchedulePaused(schedule, paused) {
   return patchSchedule(schedule, { paused });
 }
 
+/* runScheduleNow forces one run right now, from the schedule's own Run menu
+   (specs/028-scheduled-jobs.md). It runs even if a previous fire is still
+   going and never spends the counter — both the server's doing, not this
+   call's — so there is nothing to reconcile here beyond the request itself:
+   the schedule_changed event that follows redraws the run it started. */
+export function runScheduleNow(schedule, enqueue) {
+  return api("POST", `/api/schedules/${schedule.id}/run`, { enqueue }).catch(fail);
+}
+
 /* How many runs are left is not a decision made once: -1 is forever, and the
    view can move it up or down whenever. */
 export function setScheduleRemaining(schedule, remaining) {

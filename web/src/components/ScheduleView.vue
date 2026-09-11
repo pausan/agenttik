@@ -9,9 +9,11 @@
 import { computed, ref, watch } from "vue";
 
 import {
+  enterDoes,
   EVERY,
   openTask,
   removeSchedule,
+  runScheduleNow,
   scheduleForm,
   scheduleLabel,
   setSchedulePaused,
@@ -24,6 +26,24 @@ const props = defineProps({ tab: { type: Object, required: true } });
 
 const schedule = computed(() => props.tab.data.schedule);
 const runs = computed(() => props.tab.data.runs);
+
+/* Run now: the same Send/Enqueue choice the prompt bar's Send menu offers,
+   minus Schedule — scheduling a schedule does not mean anything. It runs even
+   if a previous fire is still going and never spends the counter, both of
+   which are the server's doing (runner.RunScheduleNow); this menu only picks
+   Send or Enqueue and closes itself once one is chosen. */
+const runMenuOpen = ref(false);
+const runActions = computed(() => ({
+  send: { label: "Send", icon: "i-lucide-send", run: () => runScheduleNow(schedule.value, false) },
+  enqueue: { label: "Enqueue", icon: "i-lucide-clock", run: () => runScheduleNow(schedule.value, true) },
+}));
+const runPrimary = computed(() => runActions.value[enterDoes() === "enqueue" ? "enqueue" : "send"]);
+const runMenu = computed(() => [runActions.value.send, runActions.value.enqueue]);
+
+function runMenuAction(action) {
+  runMenuOpen.value = false;
+  action.run();
+}
 
 /* The fields are only bound to the schedule while they are not being typed
    in: a fire arriving mid-edit would otherwise take the caret with it. */
@@ -95,6 +115,27 @@ function runTime(run) {
           </div>
         </div>
         <div class="ml-auto flex shrink-0 items-center gap-2">
+          <UFieldGroup>
+            <UButton :icon="runPrimary.icon" :label="runPrimary.label" @click="runPrimary.run()" />
+            <UPopover v-model:open="runMenuOpen">
+              <UButton icon="i-lucide-chevron-down" aria-label="More run actions" />
+              <template #content>
+                <div class="p-1">
+                  <UButton
+                    v-for="action in runMenu"
+                    :key="action.label"
+                    color="neutral"
+                    variant="ghost"
+                    block
+                    class="justify-start"
+                    :label="action.label"
+                    :trailing-icon="action.icon"
+                    @click="runMenuAction(action)"
+                  />
+                </div>
+              </template>
+            </UPopover>
+          </UFieldGroup>
           <UButton
             :color="schedule.paused ? 'primary' : 'neutral'"
             :variant="schedule.paused ? 'solid' : 'outline'"

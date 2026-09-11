@@ -100,7 +100,8 @@ func (r *Runner) fireSchedule(s *store.Schedule, now time.Time) {
 //
 // It is the run row that decides, not the session: a scheduled session the
 // user later prompts by hand has no open run, so it spends nothing and is not
-// archived a second time.
+// archived a second time. A run started by RunScheduleNow spends nothing
+// either, forced-run marker set aside for exactly this moment.
 func (r *Runner) finishScheduledRun(sess *store.Session, turnStatus string) {
 	status := store.RunDone
 	if turnStatus != "ok" {
@@ -110,12 +111,93 @@ func (r *Runner) finishScheduledRun(sess *store.Session, turnStatus string) {
 	if err != nil || closed == 0 {
 		return
 	}
-	_ = r.store.SpendScheduleRun(sess.ScheduleID)
+	if !r.popForcedScheduleRun(sess.ID) {
+		_ = r.store.SpendScheduleRun(sess.ScheduleID)
+	}
 	// The run leaves the project views and stays in the Sessions list, which
 	// is what archiving already means. Otherwise forty runs bury the project
 	// they belong to; the schedule's own view is where they are kept.
 	_ = r.store.SetSessionDone(sess.ID, true)
 	r.publishSchedule(sess.ProjectID)
+}
+
+// RunScheduleNow starts one run outside the schedule's own clock: a manual
+// trigger from its view, not a tick of the ticker. Two rules a tick follows do
+// not apply here:
+//
+//   - It ignores the schedule being busy with a previous run rather than
+//     recording a skip. Each fire is its own session, so there is nothing for
+//     two to conflict over, and forcing one to run anyway is the whole point.
+//   - It never spends the counter. Asking for an extra run by hand is not one
+//     of the runs that were asked for, so the session it starts is marked
+//     here and finishScheduledRun lets it close for free.
+//
+// enqueue picks Send or Enqueue, the same choice the prompt bar offers: Send
+// starts beside whatever else the project is running, Enqueue waits for the
+// project to be free.
+func (r *Runner) RunScheduleNow(scheduleID int64, enqueue bool) error {
+	s, err := r.store.GetSchedule(scheduleID)
+	if err != nil {
+		return err
+	}
+	sess := &store.Session{
+		ID:         uuid.NewString(),
+		ProjectID:  s.ProjectID,
+		Title:      s.Title,
+		Provider:   s.Provider,
+		Model:      s.Model,
+		Effort:     s.Effort,
+		Permission: s.Permission,
+		ScheduleID: s.ID,
+	}
+	if err := r.store.CreateSession(sess); err != nil {
+		return err
+	}
+	if _, err := r.store.StartScheduleRun(s.ID, sess.ID); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	r.forcedScheduleRuns[sess.ID] = true
+	r.mu.Unlock()
+	defer r.publishSchedule(s.ProjectID)
+
+	if enqueue {
+		if _, err := r.Enqueue(sess.ID, s.Prompt); err != nil {
+			r.closeFailedForcedRun(sess.ID)
+			return err
+		}
+		return nil
+	}
+	// Same exception fireSchedule makes for Send: a provider away is not a
+	// failure, the prompt is already waiting for it and the run stays open
+	// for the retry to close.
+	if _, err := r.Send(sess.ID, s.Prompt); err != nil && !errors.Is(err, ErrProviderAway) {
+		r.closeFailedForcedRun(sess.ID)
+		return err
+	}
+	return nil
+}
+
+// popForcedScheduleRun reports whether sessionID was started by
+// RunScheduleNow and clears the marker either way, so it is read exactly
+// once, when its run closes.
+func (r *Runner) popForcedScheduleRun(sessionID string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	forced := r.forcedScheduleRuns[sessionID]
+	delete(r.forcedScheduleRuns, sessionID)
+	return forced
+}
+
+// closeFailedForcedRun closes a forced run that never got a turn started —
+// Send or Enqueue failed synchronously — so it does not sit "running"
+// forever. Nothing spends here either way: fireSchedule does not spend a
+// same-request failure, since no turn was ever attempted for it to spend on.
+func (r *Runner) closeFailedForcedRun(sessionID string) {
+	r.mu.Lock()
+	delete(r.forcedScheduleRuns, sessionID)
+	r.mu.Unlock()
+	_, _ = r.store.FinishScheduleRun(sessionID, store.RunError)
 }
 
 func (r *Runner) publishSchedule(projectID int64) {

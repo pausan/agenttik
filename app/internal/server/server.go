@@ -139,6 +139,7 @@ func (s *Server) routes() {
 	api.Get("/schedules/:id", s.getSchedule)
 	api.Patch("/schedules/:id", s.updateSchedule)
 	api.Delete("/schedules/:id", s.deleteSchedule)
+	api.Post("/schedules/:id/run", s.runScheduleNow)
 
 	// One stream for every open tab. See streamAll.
 	api.Get("/stream", s.streamAll)

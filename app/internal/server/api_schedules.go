@@ -254,6 +254,28 @@ func (s *Server) updateSchedule(c *fiber.Ctx) error {
 	return c.JSON(full)
 }
 
+// runScheduleNow forces one run outside the schedule's own clock. It runs
+// even if a previous fire of this schedule is still going, and never spends
+// the counter — see runner.RunScheduleNow. enqueue picks the same two words
+// the prompt bar offers: Send starts beside whatever else the project is
+// running, Enqueue waits for the project to be free.
+func (s *Server) runScheduleNow(c *fiber.Ctx) error {
+	var body struct {
+		Enqueue bool `json:"enqueue"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return badRequest("invalid body: %v", err)
+	}
+	id, err := scheduleID(c)
+	if err != nil {
+		return err
+	}
+	if err := s.runner.RunScheduleNow(id, body.Enqueue); err != nil {
+		return err
+	}
+	return c.SendStatus(fiber.StatusAccepted)
+}
+
 // deleteSchedule drops the schedule and its run history. The sessions it
 // spawned are ordinary sessions and are left alone.
 func (s *Server) deleteSchedule(c *fiber.Ctx) error {

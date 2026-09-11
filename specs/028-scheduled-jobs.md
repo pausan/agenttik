@@ -65,6 +65,10 @@ stops scheduling and stays where it is, so its history is still readable.
 
 A skip does not count. Nothing ran.
 
+Neither does a run forced from the schedule's own view
+([below](#running-one-now)): asking for it by hand is not the recurrence
+asking for it.
+
 ## Skipping
 
 If a run comes due while this schedule's previous run is still going, the run
@@ -86,6 +90,35 @@ nothing is collapsed after the fact — a schedule stuck behind one slow run
 never has more than one skip row to show for it. A run finishing and the
 schedule falling behind again starts the next skip, if there is one, as a
 fresh row.
+
+## Running one now
+
+A schedule's view carries a Run menu beside Pause/Resume and Delete: the same
+Send and Enqueue the prompt bar's own Send menu offers, minus Schedule — a
+schedule cannot itself be scheduled. Whichever is chosen fires the schedule
+outside its own clock, the way a tick does — a new session, a new
+`schedule_runs` row, the prompt as the schedule stands — except in the two
+ways forcing it implies:
+
+- **It ignores the schedule being busy.** A tick due while the previous run is
+  still going is skipped, not queued behind it ([above](#skipping)); a forced
+  run starts anyway, since each run is its own session and there is nothing
+  for two to conflict over. A schedule can show more than one run in flight at
+  once, the same as a project can.
+- **It never spends the counter**, win or lose. This is what makes the button
+  useful on a schedule that is paused or already at `0`: trying the prompt
+  once costs nothing on either count, so neither state is a reason to disable
+  it.
+
+`next_run_at` is untouched either way — a run forced in between two ticks does
+not move the next one, since nothing about the recurrence asked for it.
+
+Send and Enqueue mean what they mean in the prompt bar ([012](012-task-queue.md)):
+Send starts beside whatever else the project is running; Enqueue waits for the
+project to be free, and until then the run is visible on its own new task, the
+same dashed queued bubble any waiting prompt draws. Which one the split button
+runs directly follows the same Enter binding the prompt bar reads
+([017](017-general-settings.md)); the menu beside it offers the other by name.
 
 ## Pause, archive and the sidebar
 
@@ -113,7 +146,8 @@ page's Tasks tab, which is what archiving already means
 
 A schedule tab looks like a project page ([004](004-ui.md#tabs)) and is its own
 colour on the strip. Its header carries the recurrence in words, when the next
-run is due, Pause/Resume and Delete. Under it sit the prompt, the model, the
+run is due, a Run menu ([above](#running-one-now)), Pause/Resume and Delete.
+Under it sit the prompt, the model, the
 **Repeats** fields and the runs-left input; and under those every run it has
 spawned, newest first, each with its timestamp as `YYYY-MM-DD HH:mm:ss`. A
 spawned run is a task, so its row opens it. A skipped run is a row with no task
@@ -198,6 +232,7 @@ idle cost of the feature is a query every quarter minute.
 | GET | `/api/schedules/:id` | the schedule and its runs |
 | PATCH | `/api/schedules/:id` | `{title, remaining, paused, done, every, interval_minutes, at_minute}` — any subset |
 | DELETE | `/api/schedules/:id` | drops the schedule and its run history; the sessions it spawned stay |
+| POST | `/api/schedules/:id/run` | `{enqueue}` — force one run now; see [Running one now](#running-one-now) |
 
 The three recurrence fields move together on a PATCH, because they are one
 answer: `every` names the form and the other two carry it. They are read by

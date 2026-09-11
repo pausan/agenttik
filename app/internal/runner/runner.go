@@ -60,12 +60,17 @@ type Runner struct {
 	active map[string]activeTurn // session id -> turn in flight
 	sched  map[int64]*sync.Mutex // project id -> serializes queue dispatch
 	forced map[string]int64      // session id -> queued message to run next
+
+	// forcedScheduleRuns marks a session started by RunScheduleNow: its run
+	// spends no counter when it finishes, since asking for an extra run by
+	// hand is not one of the runs that were asked for. See schedules.go.
+	forcedScheduleRuns map[string]bool
 }
 
 func New(s *store.Store, reg *agent.Registry, hub *Hub) *Runner {
 	return &Runner{store: s, registry: reg, hub: hub,
 		active: make(map[string]activeTurn), sched: make(map[int64]*sync.Mutex),
-		forced: make(map[string]int64)}
+		forced: make(map[string]int64), forcedScheduleRuns: make(map[string]bool)}
 }
 
 func (r *Runner) Hub() *Hub { return r.hub }

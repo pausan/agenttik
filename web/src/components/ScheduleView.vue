@@ -10,9 +10,13 @@ import { computed, ref, watch } from "vue";
 
 import {
   S,
+  accountLabel,
+  effortsFor,
   enterDoes,
   EVERY,
+  modelPickerGroups,
   openTask,
+  parseModelChoice,
   providerOf,
   removeSchedule,
   runScheduleNow,
@@ -92,30 +96,24 @@ const provider = computed(() => providerOf(schedule.value.provider));
 const selectedModel = computed(() =>
   provider.value?.models.find((m) => m.id === schedule.value.model),
 );
-const modelLabel = computed(() => selectedModel.value?.label || schedule.value.model);
-const efforts = computed(() => selectedModel.value?.efforts || provider.value?.efforts || []);
+/* The subscription is named beside the model wherever the provider has more
+   than one: every run this job spawns spends that account's allowance. */
+const modelLabel = computed(() => {
+  const alias = accountLabel(schedule.value.provider, schedule.value.account_id);
+  const model = selectedModel.value?.label || schedule.value.model;
+  return alias ? `${model} · ${alias}` : model;
+});
+const efforts = computed(() => effortsFor(schedule.value.provider, schedule.value.model));
 
-const modelGroups = computed(() =>
-  S.providers.map((p) => ({
-    id: p.name,
-    label: p.display_name,
-    items: p.models.map((m) => ({
-      label: m.label,
-      description: `${p.display_name} · ${m.id}`,
-      value: `${p.name}:${m.id}`,
-      disabled: !p.available,
-    })),
-  })),
-);
+const modelGroups = computed(modelPickerGroups);
 
 function pickModel(value) {
   modelOpen.value = false;
-  const [providerName, modelID] = [value.slice(0, value.indexOf(":")), value.slice(value.indexOf(":") + 1)];
-  const next = providerOf(providerName);
-  const nextModel = next?.models.find((m) => m.id === modelID);
-  const nextEfforts = nextModel?.efforts || next?.efforts || [];
+  const { provider: providerName, accountID, model } = parseModelChoice(value);
+  const nextEfforts = effortsFor(providerName, model);
   const effort = schedule.value.effort || "";
-  setScheduleModel(schedule.value, providerName, modelID, nextEfforts.includes(effort) ? effort : "");
+  setScheduleModel(schedule.value, providerName, model,
+    nextEfforts.includes(effort) ? effort : "", accountID);
 }
 
 const effortItems = computed(() => [

@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from "vue";
 
-import { S, contextWindow } from "../store";
+import { S, accountLabel, contextWindow } from "../store";
 import { cost, duration, isoDate, nf, tokens } from "../api";
 
 /* The context row is the last prompt's size against the model's window, not a
@@ -35,6 +35,9 @@ const rows = computed(() => {
   const { session: s, stats } = S.detail;
   return [
     ["Provider", s.provider],
+    ...(accountLabel(s.provider, s.account_id)
+      ? [["Subscription", accountLabel(s.provider, s.account_id)]]
+      : []),
     ["Model", s.model],
     ["Effort", s.effort || "default"],
     ["Permission", s.permission],

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/pausan/agenttik/app/internal/agent"
 )
@@ -63,10 +64,19 @@ func (p *Provider) AccountStatus(home string) agent.AccountStatus {
 		return agent.AccountStatus{}
 	}
 	detail := file.LastLoggedInUser.Login
-	if host := file.LastLoggedInUser.Host; host != "" && host != "github.com" {
+	// The host is only worth naming when it is not github.com — an
+	// Enterprise server. The CLI writes it as a URL, so the scheme comes off
+	// before that comparison or every ordinary login reads as a custom one.
+	if host := trimHost(file.LastLoggedInUser.Host); host != "" && host != "github.com" {
 		detail += " @ " + host
 	}
 	return agent.AccountStatus{SignedIn: true, Detail: detail}
+}
+
+// trimHost reduces "https://github.com/" to "github.com".
+func trimHost(host string) string {
+	host = strings.TrimPrefix(strings.TrimPrefix(host, "https://"), "http://")
+	return strings.TrimSuffix(host, "/")
 }
 
 // LoginCommand signs one config directory in through the CLI's device flow.

@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, ref, watch } from "vue";
 
-import { S, contextWindow, enqueue, enterDoes, fail, hit, isStarred, providerOf, refreshSubscriptionLimits, send, setModel, stopTurn, toggleStar } from "../store";
+import { S, accountLabel, contextWindow, enqueue, enterDoes, fail, hit, isStarred, limitsKey, modelPickerGroups, parseModelChoice, providerOf, refreshSubscriptionLimits, send, setModel, stopTurn, toggleStar } from "../store";
 import ScheduleModal from "./ScheduleModal.vue";
 import { ago } from "../api";
 import Chord from "./Chord.vue";
@@ -47,6 +47,19 @@ const selectedEfforts = computed(() => effortsFor(selectedModel.value));
 const modelOf = (providerName, id) => providerOf(providerName)?.models.find((m) => m.id === id);
 const labelOf = (providerName, id) => modelOf(providerName, id)?.label || id;
 
+/* Which subscription the next prompt would go on, named beside the model
+   wherever the provider has more than one — otherwise there is nothing to
+   tell it apart from and the name is noise. A task pointing at a
+   subscription that has been removed says so here rather than looking
+   ordinary and failing on send. */
+const accountAlias = computed(() =>
+  accountLabel(S.detail?.session.provider, S.detail?.session.account_id),
+);
+const modelButtonLabel = computed(() => {
+  const model = labelOf(S.detail.session.provider, S.detail.session.model);
+  return accountAlias.value ? `${model} · ${accountAlias.value}` : model;
+});
+
 /* A favourite is a model and an effort together — an effort on its own is
    never starred — so starred combinations head the model picker as single
    entries that set both. The effort picker below stays free to change either
@@ -78,6 +91,10 @@ const onCombo = computed(() =>
   ),
 );
 
+/* One group per provider and subscription (050-subscription-accounts.md), so
+   a model and the account it would run on are picked in one go. A favourite
+   is a model and an effort only — never an account — so choosing one keeps
+   the subscription the task is already on. */
 const modelGroups = computed(() => [
   ...(combos.value.length
     ? [{
@@ -91,23 +108,19 @@ const modelGroups = computed(() => [
         })),
       }]
     : []),
-  ...S.providers.map((p) => ({
-    id: p.name,
-    label: p.display_name,
-    items: providerCollapsed(p.name)
-      ? [{
-          label: `Show ${p.models.length} models`,
-          description: p.display_name,
-          value: `expand:${p.name}`,
-          icon: "i-lucide-chevron-right",
-        }]
-      : p.models.map((m) => ({
-          label: m.label,
-          description: `${p.display_name} · ${m.id}`,
-          value: `model:${p.name}:${m.id}`,
-          disabled: !p.available,
-        })),
-  })),
+  ...modelPickerGroups().map((group) =>
+    providerCollapsed(group.id)
+      ? {
+          ...group,
+          items: [{
+            label: `Show ${group.items.length} models`,
+            description: group.label,
+            value: `expand:${group.id}`,
+            icon: "i-lucide-chevron-right",
+          }],
+        }
+      : group,
+  ),
 ]);
 
 const model = computed({
@@ -120,18 +133,20 @@ const model = computed({
             c.model === S.detail.session.model &&
             (c.effort || "") === effort.value,
         )
-      : `model:${S.detail.session.provider}:${S.detail.session.model}`,
+      : `model:${S.detail.session.provider}:${S.detail.session.account_id || 0}:${S.detail.session.model}`,
   set: (v) => {
     const [kind, rest] = [v.slice(0, v.indexOf(":")), v.slice(v.indexOf(":") + 1)];
     if (kind === "combo") {
+      // A favourite carries no subscription, so the task keeps the one it is
+      // on: that is the account whose allowance is on screen beside it.
       const c = combos.value[Number(rest)];
       setModel(c.provider, c.model, c.effort || "");
     } else {
-      const [providerName, modelID] = rest.split(":", 2);
+      const { provider: providerName, accountID, model: modelID } = parseModelChoice(v);
       const nextProvider = providerOf(providerName);
       const next = nextProvider?.models.find((m) => m.id === modelID);
       const nextEfforts = next?.efforts || nextProvider?.efforts || [];
-      setModel(providerName, modelID, nextEfforts.includes(effort.value) ? effort.value : "");
+      setModel(providerName, modelID, nextEfforts.includes(effort.value) ? effort.value : "", accountID);
     }
   },
 });
@@ -143,7 +158,9 @@ const effortItems = computed(() => [
 
 const effortValue = computed({
   get: () => effort.value || NONE,
-  set: (v) => setModel(S.detail.session.provider, S.detail.session.model, v === NONE ? "" : v),
+  set: (v) =>
+    setModel(S.detail.session.provider, S.detail.session.model, v === NONE ? "" : v,
+      S.detail.session.account_id || 0),
 });
 
 
@@ -175,7 +192,12 @@ const textTone = (percent) => (percent >= 90 ? "text-error" : percent >= 70 ? "t
 /* One bar per window the provider reports, across every bucket it sends:
    Codex packs its two windows into one bucket, Claude Code sends one bucket
    per window, and a plan can meter more than two. */
-const subscriptionLimits = computed(() => S.subscriptionLimits[S.detail?.session?.provider] || []);
+const subscriptionLimits = computed(
+  () =>
+    S.subscriptionLimits[
+      limitsKey(S.detail?.session?.provider, S.detail?.session?.account_id)
+    ] || [],
+);
 const subscriptionWindows = computed(() =>
   subscriptionLimits.value.flatMap((limit) =>
     [limit.primary, limit.secondary]
@@ -244,10 +266,11 @@ watch(
   [
     () => S.detail?.session?.id,
     () => S.detail?.session?.provider,
+    () => S.detail?.session?.account_id,
     () => S.detail?.session?.model,
   ],
-  ([, provider]) => {
-    if (provider) refreshSubscriptionLimits(provider).catch(() => {});
+  ([, provider, account]) => {
+    if (provider) refreshSubscriptionLimits(provider, account).catch(() => {});
   },
   { immediate: true },
 );
@@ -356,8 +379,8 @@ function runMenuAction(action) {
             variant="outline"
             size="sm"
             trailing-icon="i-lucide-chevron-down"
-            :label="labelOf(S.detail.session.provider, S.detail.session.model)"
-            title="Choose model"
+            :label="modelButtonLabel"
+            title="Choose model and subscription"
           />
           <template #content>
             <UCommandPalette
@@ -429,6 +452,9 @@ function runMenuAction(action) {
                 <p class="m-0 text-xs font-medium text-muted">
                   {{ planType ? planType + ' subscription' : 'Subscription allowance' }}
                 </p>
+                <!-- Which account these bars are the allowance of, drawn only
+                     when the provider has more than one to confuse it with. -->
+                <p v-if="accountAlias" class="m-0 text-[11px] text-dimmed">{{ accountAlias }}</p>
                 <ul class="mt-2 mb-0 list-none space-y-2.5 p-0">
                   <li v-for="(window, i) in subscriptionWindows" :key="window.label + i">
                     <div class="flex items-baseline justify-between gap-2 text-xs">

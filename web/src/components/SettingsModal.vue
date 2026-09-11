@@ -15,6 +15,7 @@ import ModelSettings from "./settings/ModelSettings.vue";
 import ProjectSettings from "./settings/ProjectSettings.vue";
 import ServerSettings from "./settings/ServerSettings.vue";
 import ShortcutSettings from "./settings/ShortcutSettings.vue";
+import SubscriptionSettings from "./settings/SubscriptionSettings.vue";
 
 const open = defineModel("open", { type: Boolean, default: false });
 const section = defineModel("section", { type: String, default: "general" });
@@ -24,12 +25,13 @@ const SECTIONS = [
   { id: "projects", label: "Projects", icon: "i-lucide-archive" },
   { id: "appearance", label: "Appearance", icon: "i-lucide-palette" },
   { id: "models", label: "Models", icon: "i-lucide-sparkles" },
+  { id: "subscriptions", label: "Subscriptions", icon: "i-lucide-id-card" },
   { id: "server", label: "Server", icon: "i-lucide-server" },
   { id: "shortcuts", label: "Shortcuts", icon: "i-lucide-keyboard" },
 ];
 
 const filter = ref("");
-const counts = reactive({ general: 0, projects: 0, appearance: 0, models: 0, server: 0, shortcuts: 0 });
+const counts = reactive({ general: 0, projects: 0, appearance: 0, models: 0, subscriptions: 0, server: 0, shortcuts: 0 });
 
 const shown = computed(() => (filter.value ? SECTIONS.filter((s) => counts[s.id]) : SECTIONS));
 
@@ -107,6 +109,11 @@ watch(open, async (on) => {
             v-show="section === 'models'"
             :filter="filter"
             @count="counts.models = $event"
+          />
+          <SubscriptionSettings
+            v-show="section === 'subscriptions'"
+            :filter="filter"
+            @count="counts.subscriptions = $event"
           />
           <ServerSettings
             v-show="section === 'server'"

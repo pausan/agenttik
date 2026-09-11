@@ -128,7 +128,7 @@ func nextSessionID() string {
 
 // runScript drives one real turn. The prompt is read line by line: a line
 // whose first non-blank character is "@" is a directive, and everything else
-// is the reply. Three directives exist:
+// is the reply. Four directives exist:
 //
 //	@wait <ms>      pause, cut short the moment Stop cancels the turn
 //	@tool <name> <input...>   a tool call and its canned result
@@ -136,6 +136,9 @@ func nextSessionID() string {
 //	                          outage phrase ("rate limit", "connection
 //	                          refused", ...) exercises the retry queue exactly
 //	                          as a real provider's outage would
+//	@account                  reply with the login directory this turn was
+//	                          given, which is the only way a browser test can
+//	                          see which subscription actually ran it
 //
 // Any line whose leading word is not one of these is treated as reply text,
 // not a directive — so a prompt can still contain a literal "@" without being
@@ -204,7 +207,7 @@ func runScript(ctx context.Context, req agent.TurnRequest, events chan<- agent.E
 	}}
 }
 
-// cutDirective reports whether line is one of the three known directives and
+// cutDirective reports whether line is one of the known directives and
 // splits it into its name and the rest of the line. A line that only looks
 // like a directive (an unrecognised word after "@") is not one: ok is false
 // and the caller keeps it as reply text.
@@ -215,7 +218,7 @@ func cutDirective(line string) (name, rest string, ok bool) {
 	}
 	name, rest, _ = strings.Cut(trimmed[1:], " ")
 	switch name {
-	case "wait", "tool", "error":
+	case "wait", "tool", "error", "account":
 		return name, rest, true
 	default:
 		return "", "", false

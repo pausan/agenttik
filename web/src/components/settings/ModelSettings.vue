@@ -40,9 +40,14 @@ async function star(provider, model, effort) {
       credentials.
     </p>
 
+    <!-- Named groups, because every Settings pane stays mounted: the
+         provider's name appears in the Subscriptions list too, so a locator
+         — or a screen reader — needs to know which list it is in. -->
     <section
       v-for="p in providers"
       :key="p.name"
+      role="group"
+      :aria-label="`${p.display_name} models`"
       class="not-first:mt-4 not-first:border-t not-first:border-default not-first:pt-3.5"
     >
       <div class="mb-0.5 flex items-center gap-2">

@@ -150,10 +150,22 @@ export async function newTask(page) {
 
 /* The model button opens a command palette; both it and the effort select
    beside it carry a stable title rather than a stable label, since the label
-   is whatever is currently chosen — see PromptBar.vue. */
+   is whatever is currently chosen — see PromptBar.vue. The title names the
+   subscription as well as the model, so it is matched by prefix. */
+export const modelButton = (page) => page.getByTitle(/^Choose model/);
+
 export async function pickModel(page, label = FAKE_MODEL) {
-  await page.getByTitle("Choose model").click();
+  await modelButton(page).click();
   await page.getByRole("option", { name: label }).click();
+}
+
+/* Settings opens from the sidebar and lands on the section asked for. */
+export async function openSettings(page, section = "General") {
+  await sidebar(page).getByRole("button", { name: "Settings" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  if (section !== "General") {
+    await page.getByRole("dialog").getByRole("button", { name: section, exact: true }).click();
+  }
 }
 
 /* The default binding is Ctrl+Enter to send, plain Enter to enqueue — see

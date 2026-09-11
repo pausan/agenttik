@@ -38,6 +38,29 @@ func TestAccountStatusNamesTheLogin(t *testing.T) {
 	if !status.SignedIn || status.Detail != "octocat" {
 		t.Errorf("status = %+v, want octocat signed in", status)
 	}
+	// The CLI writes the host as a URL, so github.com must not read as an
+	// Enterprise server every time.
+	for _, host := range []string{"github.com", "https://github.com", "https://github.com/"} {
+		dir := t.TempDir()
+		body := `{"lastLoggedInUser":{"host":"` + host + `","login":"octocat"}}`
+		if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(body), 0o600); err != nil {
+			t.Fatalf("write config: %v", err)
+		}
+		if detail := New().AccountStatus(dir).Detail; detail != "octocat" {
+			t.Errorf("host %q gave detail %q, want just the login", host, detail)
+		}
+	}
+	// An Enterprise host is worth naming, since the login means something
+	// different there.
+	enterprise := t.TempDir()
+	body = `{"lastLoggedInUser":{"host":"https://github.acme.test","login":"octocat"}}`
+	if err := os.WriteFile(filepath.Join(enterprise, "config.json"), []byte(body), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	if detail := New().AccountStatus(enterprise).Detail; detail != "octocat @ github.acme.test" {
+		t.Errorf("enterprise detail = %q", detail)
+	}
+
 	// A config file with no login recorded is a directory nothing has signed
 	// into yet.
 	empty := t.TempDir()

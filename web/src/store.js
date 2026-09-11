@@ -65,7 +65,7 @@ export const S = reactive({
   // Archived projects: read when Settings opens, which is the only place
   // they are shown. See specs/041-project-archiving.md.
   archivedProjects: [],
-  subscriptionLimits: {}, // provider -> its latest subscription allowance buckets
+  subscriptionLimits: {}, // "provider:account" -> its latest allowance buckets
   // Whether this desktop window's server is also exposed for a browser to
   // reach, read when Settings opens like the archived projects beside it.
   // available is false on a web launch, which already is the server. See
@@ -164,6 +164,124 @@ export function providerOf(name) {
   return S.providers.find((p) => p.name === name);
 }
 
+/* ---------------------------------------------------------- subscriptions */
+
+/* A provider can be signed in to more than one subscription — a company
+   account and a personal one — and every place that offers a model says
+   which subscription it would run on. The server always sends at least one
+   account, the machine's own CLI login, so nothing here has to special-case
+   a provider that has none. See specs/050-subscription-accounts.md. */
+
+export function accountsOf(name) {
+  return providerOf(name)?.accounts || [];
+}
+
+export function accountOf(name, id) {
+  return accountsOf(name).find((a) => a.id === (id || 0));
+}
+
+/* accountLabel is what a subscription is called beside a model. The
+   machine's own login on a provider with nothing else configured is not
+   worth naming: there is no second one to tell it apart from. */
+export function accountLabel(name, id) {
+  const accounts = accountsOf(name);
+  if (accounts.length < 2) return "";
+  return accountOf(name, id)?.alias || "removed subscription";
+}
+
+/* The subscription a new task on this provider starts on. */
+export function defaultAccountOf(name) {
+  return (accountsOf(name).find((a) => a.is_default) || { id: 0 }).id;
+}
+
+/* modelPickerGroups is the group list every model control draws — the prompt
+   bar's, a queued prompt's, a job's. One group per provider and
+   subscription, so which account a model would run on is visible where the
+   model is chosen, and searchable with it. A provider with a single
+   subscription keeps its plain name, which is every provider until a second
+   one is configured.
+
+   Values are `model:<provider>:<account>:<model>`, read back by
+   parseModelChoice, so all three controls speak one format. */
+export function modelPickerGroups() {
+  return S.providers.flatMap((p) => {
+    const accounts = p.accounts?.length ? p.accounts : [{ id: 0, alias: "" }];
+    const named = accounts.length > 1;
+    return accounts.map((account) => ({
+      id: `${p.name}:${account.id}`,
+      label: named ? `${p.display_name} · ${account.alias}` : p.display_name,
+      items: p.models.map((m) => ({
+        label: named ? `${m.label} · ${account.alias}` : m.label,
+        description: named
+          ? `${p.display_name} · ${account.alias} · ${m.id}`
+          : `${p.display_name} · ${m.id}`,
+        value: `model:${p.name}:${account.id}:${m.id}`,
+        disabled: !p.available,
+      })),
+    }));
+  });
+}
+
+/* parseModelChoice reads one picked entry back. The model id keeps whatever
+   is left, so an id with a colon in it survives the round trip. */
+export function parseModelChoice(value) {
+  const parts = String(value).split(":");
+  return {
+    provider: parts[1],
+    accountID: Number(parts[2]) || 0,
+    model: parts.slice(3).join(":"),
+  };
+}
+
+/* effortsFor is the levels one model accepts, falling back to the
+   provider-wide list for a model that names none. */
+export function effortsFor(provider, model) {
+  const p = providerOf(provider);
+  return p?.models.find((m) => m.id === model)?.efforts || p?.efforts || [];
+}
+
+/* addAccount, renameAccount and removeAccount are Settings' own; each
+   re-reads the providers afterwards because the account list lives on them
+   and the pickers read it from there. */
+export async function addAccount(provider, alias, home) {
+  await api("POST", `/api/providers/${encodeURIComponent(provider)}/accounts`, { alias, home });
+  await loadProviders();
+}
+
+export async function updateAccount(provider, id, patch) {
+  await api("PATCH", `/api/providers/${encodeURIComponent(provider)}/accounts/${id}`, patch);
+  await loadProviders();
+}
+
+export async function removeAccount(provider, id) {
+  await api("DELETE", `/api/providers/${encodeURIComponent(provider)}/accounts/${id}`);
+  await loadProviders();
+}
+
+export async function accountUsage(provider, id) {
+  return api("GET", `/api/providers/${encodeURIComponent(provider)}/accounts/${id}/usage`);
+}
+
+export async function setDefaultAccount(provider, id) {
+  await api("PUT", `/api/providers/${encodeURIComponent(provider)}/account`, { account_id: id });
+  await loadProviders();
+}
+
+/* signInAccount hands the CLI's own login to a terminal on the machine the
+   CLIs are installed on, and returns the command either way — a machine with
+   no terminal to open, or a browser reading this from another one, is told
+   what to run instead. The account list is re-read afterwards, so a login
+   that finished while the dialog was open shows as signed in. */
+export async function signInAccount(provider, id) {
+  const result = await api(
+    "POST",
+    `/api/providers/${encodeURIComponent(provider)}/accounts/${id}/login`,
+    {},
+  );
+  await loadProviders();
+  return result;
+}
+
 /* --------------------------------------------------------- server exposure */
 
 /* Read when Settings opens, like loadArchivedProjects: it does not change
@@ -209,18 +327,29 @@ export function contextWindow(session, stats) {
 // Asking costs a CLI process — Claude Code spends about two seconds on its
 // own /usage — so a burst of model changes shares the one read in flight
 // rather than spawning one each. Every window comes back on any of them.
+//
+// Keyed by provider and subscription both: two subscriptions of one provider
+// have two allowances, and a work account's bars shown against a personal one
+// would be worse than no bars at all.
 const limitReads = {};
-export function refreshSubscriptionLimits(provider) {
+export function limitsKey(provider, accountID) {
+  return `${provider}:${accountID || 0}`;
+}
+export function refreshSubscriptionLimits(provider, accountID) {
   if (!provider) return Promise.resolve();
-  if (limitReads[provider]) return limitReads[provider];
-  const read = api("GET", `/api/providers/${encodeURIComponent(provider)}/subscription-limits`)
+  const key = limitsKey(provider, accountID);
+  if (limitReads[key]) return limitReads[key];
+  const read = api(
+    "GET",
+    `/api/providers/${encodeURIComponent(provider)}/subscription-limits?account=${accountID || 0}`,
+  )
     .then((limits) => {
-      S.subscriptionLimits[provider] = limits;
+      S.subscriptionLimits[key] = limits;
     })
     .finally(() => {
-      delete limitReads[provider];
+      delete limitReads[key];
     });
-  limitReads[provider] = read;
+  limitReads[key] = read;
   return read;
 }
 export function isStarred(provider, model, effort) {
@@ -951,6 +1080,7 @@ export async function createSchedule(form) {
       project_id: s.project_id,
       prompt,
       provider: s.provider,
+      account_id: s.account_id,
       model: s.model,
       effort: s.effort || "",
       permission: s.permission,
@@ -1113,15 +1243,17 @@ export function setSchedulePrompt(schedule, prompt) {
 
 /* Nor the model. Provider, model and effort travel together, since an effort
    belongs to a model and a model to a provider. */
-export function setScheduleModel(schedule, provider, model, effort) {
+export function setScheduleModel(schedule, provider, model, effort, accountID) {
+  const account = accountID === undefined ? schedule.account_id || 0 : accountID;
   if (
     provider === schedule.provider &&
+    account === (schedule.account_id || 0) &&
     model === schedule.model &&
     effort === (schedule.effort || "")
   ) {
     return;
   }
-  return patchSchedule(schedule, { provider, model, effort });
+  return patchSchedule(schedule, { provider, account_id: account, model, effort });
 }
 
 /* Neither is the clock: a schedule can be moved from every 15 minutes to
@@ -1403,7 +1535,10 @@ export async function openTask(id, silent = false) {
   await Promise.all([refreshProjects(), refreshSessions()]).catch(fail);
 }
 
-export async function setModel(provider, model, effort) {
+/* accountID is which subscription of that provider answers the next prompt.
+   Left out, the server keeps the one the task has — or moves to the new
+   provider's default when the provider itself changed. */
+export async function setModel(provider, model, effort, accountID) {
   const tab = S.owner;
   if (tab?.kind !== "session") return;
   try {
@@ -1411,6 +1546,7 @@ export async function setModel(provider, model, effort) {
       provider,
       model,
       effort,
+      ...(accountID === undefined ? {} : { account_id: accountID }),
     });
     rememberUsed(tab.detail.session);
   } catch (e) {
@@ -2314,9 +2450,10 @@ function onSessionEvent(tab, msg) {
       // whole allowance, so the reading updates that bar by id and leaves the
       // other windows standing.
       if (ev.limits?.length) {
-        const known = S.subscriptionLimits[tab.detail.session.provider] || [];
+        const key = limitsKey(tab.detail.session.provider, tab.detail.session.account_id);
+        const known = S.subscriptionLimits[key] || [];
         const fresh = ev.limits.map((limit) => ({ ...limit, reported_at: Date.now() }));
-        S.subscriptionLimits[tab.detail.session.provider] = [
+        S.subscriptionLimits[key] = [
           ...known.map((limit) => fresh.find((f) => f.limit_id === limit.limit_id) || limit),
           ...fresh.filter((f) => !known.some((limit) => limit.limit_id === f.limit_id)),
         ];
@@ -2592,6 +2729,7 @@ async function patchQueued(q, fields) {
     const updated = await api("PATCH", "/api/sessions/" + tab.sessionID + "/queue/" + q.id, {
       prompt: q.prompt,
       provider: q.provider,
+      account_id: q.account_id || 0,
       model: q.model,
       effort: q.effort,
       ...fields,
@@ -2606,8 +2744,9 @@ async function patchQueued(q, fields) {
 // updateQueuedModel changes one waiting prompt's saved choice. The session
 // picker is left alone until that prompt starts, so other queued prompts keep
 // their own choices too.
-export async function updateQueuedModel(q, provider, model, effort) {
-  return patchQueued(q, { provider, model, effort });
+export async function updateQueuedModel(q, provider, model, effort, accountID) {
+  const account = accountID === undefined ? q.account_id || 0 : accountID;
+  return patchQueued(q, { provider, account_id: account, model, effort });
 }
 
 // updateQueuedPrompt rewrites the text of a prompt still waiting in the

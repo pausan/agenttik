@@ -3,6 +3,7 @@ import {
   addProject,
   expect,
   inspector,
+  modelButton,
   newTask,
   openProject,
   pickModel,
@@ -41,11 +42,13 @@ test("setup lists the providers and whether their CLI is installed", async ({ pa
   await page.getByRole("button", { name: "Settings" }).click();
   await page.getByRole("button", { name: "Models" }).click();
 
-  await expect(page.getByText("Claude Code", { exact: true })).toBeVisible();
-  await expect(page.getByText("Codex", { exact: true })).toBeVisible();
+  // Every pane of Settings stays mounted, and the Subscriptions one lists the
+  // same providers, so each is asked for as its own group in this list.
+  await expect(page.getByRole("group", { name: "Claude Code models" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Codex models" })).toBeVisible();
   // The fake provider spawns no CLI, so it is ready regardless of what is
   // installed on the machine running the suite.
-  await expect(page.getByText("Fake", { exact: true })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Fake models" })).toBeVisible();
   await expect(page.getByTitle(`Star ${FAKE_MODEL} · low`)).toBeVisible();
   await expect(page.getByText("ready")).not.toHaveCount(0);
 
@@ -65,7 +68,7 @@ test("a starred model and effort heads the picker and sets both at once", async 
   await openProject(page);
   await newTask(page);
 
-  await page.getByTitle("Choose model").click();
+  await modelButton(page).click();
   await expect(page.getByRole("option").first()).toContainText("★");
   await page.getByRole("option").first().click();
 

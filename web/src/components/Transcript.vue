@@ -2,9 +2,13 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
 import {
+  accountLabel,
+  effortsFor as effortsOf,
   focusPrompt,
   forceQueued,
+  modelPickerGroups,
   openProjectPrompt,
+  parseModelChoice,
   providerOf,
   S,
   updateQueuedModel,
@@ -64,21 +68,14 @@ const NONE = "__default";
 
 const modelOf = (provider, model) => providerOf(provider)?.models.find((candidate) => candidate.id === model);
 const labelOf = (provider, model) => modelOf(provider, model)?.label || model;
-const effortsFor = (q) => modelOf(q.provider, q.model)?.efforts || providerOf(q.provider)?.efforts || [];
+const effortsFor = (q) => effortsOf(q.provider, q.model);
 const effortItems = (q) => [
   { label: "default effort", value: NONE },
   ...effortsFor(q).map((effort) => ({ label: effort, value: effort })),
 ];
-const modelGroups = computed(() => S.providers.map((provider) => ({
-  id: provider.name,
-  label: provider.display_name,
-  items: provider.models.map((model) => ({
-    label: model.label,
-    description: model.id,
-    value: ["model", provider.name, model.id].join(":"),
-    disabled: !provider.available,
-  })),
-})));
+/* The same groups the prompt bar offers, subscriptions included: a waiting
+   prompt can be moved to another account as freely as to another model. */
+const modelGroups = computed(modelPickerGroups);
 
 /* A prompt waiting behind *another* session starts beside it and interrupts
    nothing, so it says "Send now". One waiting behind its own session's turn
@@ -115,11 +112,11 @@ function retryNote(q) {
   return `${why.length > 200 ? why.slice(0, 200) + "…" : why} — ${when}${tried}`;
 }
 
-async function setQueuedChoice(q, provider, model, effort) {
+async function setQueuedChoice(q, provider, model, effort, accountID) {
   if (q.pending) return;
   changing.value = q.id;
   try {
-    await updateQueuedModel(q, provider, model, effort);
+    await updateQueuedModel(q, provider, model, effort, accountID);
   } catch {
     /* updateQueuedModel has already shown the failure */
   } finally {
@@ -182,10 +179,16 @@ watch(
 );
 
 function pickQueuedModel(q, value) {
-  const [, provider, model] = value.split(":", 3);
-  const next = modelOf(provider, model);
-  const efforts = next?.efforts || providerOf(provider)?.efforts || [];
-  setQueuedChoice(q, provider, model, efforts.includes(q.effort) ? q.effort : "");
+  const { provider, accountID, model } = parseModelChoice(value);
+  const efforts = effortsOf(provider, model);
+  setQueuedChoice(q, provider, model, efforts.includes(q.effort) ? q.effort : "", accountID);
+}
+
+/* A queued prompt names its subscription beside its model wherever there is
+   more than one to confuse it with. */
+function queuedLabel(q) {
+  const alias = accountLabel(q.provider, q.account_id);
+  return labelOf(q.provider, q.model) + (alias ? ` · ${alias}` : "");
 }
 
 function pickQueuedEffort(q, effort) {
@@ -344,7 +347,7 @@ watch(
                 variant="ghost"
                 size="xs"
                 trailing-icon="i-lucide-chevron-down"
-                :label="labelOf(q.provider, q.model)"
+                :label="queuedLabel(q)"
                 :loading="changing === q.id"
                 :disabled="q.pending || forcing !== 0 || changing !== 0 || editing !== 0"
                 title="Change queued model"

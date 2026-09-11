@@ -20,6 +20,7 @@ import {
   S,
   TASK_PAGE_SIZES,
   openTask,
+  removeTask,
   renameTask,
   reorderTasks,
   setTaskArchived,
@@ -38,6 +39,7 @@ const renaming = ref(""); // the task whose title is being edited
 const filter = ref("");
 const filterField = ref(null);
 const page = ref(1);
+const deleting = ref(null); // the task awaiting its delete confirmation
 
 const lower = ref("tasks");
 const lowerTabs = [
@@ -162,6 +164,12 @@ function onDrop() {
   dragging.value = "";
   reorderTasks(props.tab, props.tab.data.sessions.map((s) => s.id));
 }
+
+async function doDelete() {
+  const task = deleting.value;
+  deleting.value = null;
+  if (task) await removeTask(task);
+}
 </script>
 
 <template>
@@ -236,11 +244,13 @@ function onDrop() {
             :archived="row.archived"
             :stoppable="row.task.status === 'running' || row.task.queue_count > 0"
             :archive="row.archived || (row.task.status !== 'running' && row.task.queue_count === 0)"
+            deletable
             @stop="stopTask(row.task.id)"
             @select="openTask(row.task.id)"
             @toggle-archive="setTaskArchived(row.task, !row.archived)"
             @rename="renameTask(row.task, $event)"
             @editing="renaming = $event ? row.task.id : ''"
+            @delete="deleting = row.task"
           />
         </div>
 
@@ -279,6 +289,21 @@ function onDrop() {
           </section>
         </div>
       </template>
+
+      <UModal :open="!!deleting" title="Delete task" @update:open="!$event && (deleting = null)">
+        <template #body>
+          <p class="text-muted">
+            Delete <span class="font-medium text-highlighted">{{ deleting?.title || "Untitled task" }}</span>?
+            Its transcript and history are deleted from agenttik. This cannot be undone.
+          </p>
+        </template>
+        <template #footer>
+          <div class="flex w-full justify-end gap-2">
+            <UButton color="neutral" variant="ghost" label="Cancel" @click="deleting = null" />
+            <UButton color="error" label="Delete" @click="doDelete" />
+          </div>
+        </template>
+      </UModal>
     </div>
   </div>
 </template>

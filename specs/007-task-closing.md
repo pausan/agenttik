@@ -1,4 +1,4 @@
-# Closing, archiving and restoring a task
+# Closing, archiving, restoring and deleting a task
 
 `Ctrl+N` and `Ctrl+T` start a task in the active tab's project.
 
@@ -18,3 +18,11 @@ Tasks tab ([030](030-project-tasks.md)) until it is restored.
 An untitled task with no transcript, turns, queued work or draft is **deleted**
 rather than archived, so glancing at a new task and closing it leaves nothing
 behind in the archive or the restore stack.
+
+**Deleting** on purpose works the same way, on any task: a trash icon on every
+row of the project page's Tasks tab, open or archived, behind a confirmation
+naming the task ([030](030-project-tasks.md)). There is no restore after —
+unlike archiving, its turns and messages are gone too — so its tab and any
+files opened from it close unsaved rather than asking a second time; the
+confirmation already given is the one gate. A running task is stopped first
+rather than left to finish into a session that no longer exists.

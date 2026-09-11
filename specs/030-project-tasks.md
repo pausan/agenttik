@@ -79,6 +79,18 @@ chose for the work in front of them; a history is ordered by the clock. They
 carry the restore icon rather than the archive one, so this is also where a
 task comes back: unarchiving turns the row black in place.
 
+## Deleting
+
+Every row, open or archived, also carries a trash icon beside the rename and
+archive ones. It asks first: a dialog names the task and warns that its
+history goes with it, and only its own **Delete** removes anything — closing
+the dialog or its **Cancel** leaves the row untouched.
+
+Confirming removes the task from this list, the sidebar and the tab strip at
+once. Unlike archiving there is no way back: `Ctrl+Shift+T` has nothing to
+restore, and a tab already open on the task closes with it — see
+[007](007-task-closing.md) for what closing unsaved on the way out means.
+
 ## Data
 
 `GET /api/sessions` takes `only_done=true` beside the existing

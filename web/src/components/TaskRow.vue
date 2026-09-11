@@ -24,11 +24,14 @@ const props = defineProps({
   active: Boolean,
   archived: Boolean,
   archive: Boolean,
+  // Only the project page's Tasks tab offers this — the sidebar row does
+  // not pass it, so nothing there grows a destructive button unasked.
+  deletable: Boolean,
   queued: { type: Number, default: 0 },
   stoppable: Boolean,
 });
 
-const emit = defineEmits(["select", "stop", "toggle-archive", "rename", "editing"]);
+const emit = defineEmits(["select", "stop", "toggle-archive", "delete", "rename", "editing"]);
 
 const editing = ref(false);
 const draft = ref("");
@@ -145,6 +148,16 @@ defineExpose({ edit });
         @click.stop="$emit('toggle-archive')"
       >
         <UIcon :name="archived ? 'i-lucide-archive-restore' : 'i-lucide-archive'" class="size-3.5 block" />
+      </button>
+      <button
+        v-if="deletable"
+        type="button"
+        class="mr-1 shrink-0 rounded p-1 text-dimmed hover:text-error"
+        title="Delete task"
+        aria-label="Delete task"
+        @click.stop="$emit('delete')"
+      >
+        <UIcon name="i-lucide-trash-2" class="size-3.5 block" />
       </button>
     </template>
   </div>

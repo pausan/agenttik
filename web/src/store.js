@@ -1330,6 +1330,24 @@ export function isArchived(session) {
   return !!session?.done_at;
 }
 
+/* removeTask permanently deletes a task and its history, once the Tasks tab's
+   own confirmation has been answered. Unlike archiving there is no restore,
+   so its tab and any files opened from it close unsaved rather than asking a
+   second time — the confirmation already given is the one gate, the same
+   rule a deleted project's tabs follow (detachProject). */
+export async function removeTask(session) {
+  try {
+    await api("DELETE", "/api/sessions/" + session.id);
+    delete S.drafts[session.id];
+    const tab = S.tabs.find((t) => t.kind === "session" && t.sessionID === session.id);
+    if (tab) closeTab(tab.id, false, true);
+    await Promise.all([refreshProjects(), refreshSessions()]);
+    reloadProjects();
+  } catch (e) {
+    fail(e);
+  }
+}
+
 /* reorderTasks records the order a project view was dragged into. The list
    is put in that order first, so the drop lands where it was let go rather
    than a request later; if the server refuses, the project is re-read, which

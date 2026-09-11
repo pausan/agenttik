@@ -206,6 +206,18 @@ ALTER TABLE queued_messages ADD COLUMN retry_error TEXT    NOT NULL DEFAULT '';
 -- rows — each already its own fire — backfill to 1 unchanged.
 ALTER TABLE schedule_runs ADD COLUMN count INTEGER NOT NULL DEFAULT 1;
 	`,
+	`
+-- Standing instructions for every conversation in a project: what the agent is
+-- told before the first thing it is asked. Empty injects nothing.
+ALTER TABLE projects ADD COLUMN prompt TEXT NOT NULL DEFAULT '';
+
+-- The copy of that prompt this conversation was opened with, taken when it
+-- accepted its first prompt. A copy rather than a lookup because the project's
+-- text changes: what a conversation was actually given is not rewritten by a
+-- later edit, and is what its transcript goes on showing. Empty means nothing
+-- was injected. See 047-project-prompt.md.
+ALTER TABLE sessions ADD COLUMN project_prompt TEXT NOT NULL DEFAULT '';
+	`,
 }
 
 func migrate(db *sql.DB) error {

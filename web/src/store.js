@@ -792,6 +792,34 @@ export async function updateProjectPath(p, path) {
   }
 }
 
+/* setProjectPrompt sets the standing prompt every conversation started in the
+   project opens with. Conversations already under way keep the copy they were
+   given, so this only reaches the next one — which is why nothing else needs
+   refreshing here beyond the lists that draw the project itself. An empty
+   prompt is a real value: it is how the injection is turned off. */
+export async function setProjectPrompt(p, prompt) {
+  prompt = prompt.trim();
+  if (prompt === (p.prompt || "")) return;
+  try {
+    const updated = await api("PATCH", "/api/projects/" + p.id, { prompt });
+    const tab = S.tabs.find((t) => t.kind === "project" && t.projectID === p.id);
+    if (tab) tab.data.project = updated;
+    await refreshProjects();
+  } catch (e) {
+    fail(e);
+  }
+}
+
+/* openProjectPrompt is where the transcript's injected-prompt chip goes: the
+   project page, open on the prompt that was injected rather than on its task
+   list. The pane is set on the tab because one ProjectView serves every
+   project and reopening an already-open page does not remount it. */
+export async function openProjectPrompt(projectID) {
+  await openProject(projectID);
+  const tab = S.tabs.find((t) => t.kind === "project" && t.projectID === projectID);
+  if (tab) tab.pane = "prompt";
+}
+
 /* ------------------------------------------------------------- schedules */
 
 /* A schedule is a prompt plus a clock: every time it comes due it starts a
@@ -2342,6 +2370,39 @@ export async function copyText(text) {
   }
 }
 
+/* claimProjectPrompt is the client half of the rule the runner applies: a
+   conversation accepting its first prompt — sent or queued — opens with the
+   project's standing prompt in front of it. The text is already here, so the
+   chip that says so goes up on the keypress with the bubble rather than a
+   round trip later. The server writes the same copy and sends it back on the
+   started event, which is what reconciles a disagreement.
+
+   Nothing said, nothing waiting to be said, and nothing run: the same three
+   disqualifications, in the terms the client has them. It reports whether it
+   claimed, so a refused prompt can take the chip back with its bubble. */
+function claimProjectPrompt(tab) {
+  const session = tab.detail.session;
+  if (
+    session.project_prompt ||
+    tab.detail.messages.length ||
+    tab.detail.turns.length ||
+    tab.detail.queued.length ||
+    (tab.detail.pendingQueued || []).length
+  ) {
+    return false;
+  }
+  const project = S.projects.find((p) => p.id === session.project_id);
+  if (!project?.prompt) return false;
+  session.project_prompt = project.prompt;
+  return true;
+}
+
+/* The other half of that: the prompt was refused, so the conversation has not
+   started after all and nothing was injected into it. */
+function releaseProjectPrompt(tab, claimed) {
+  if (claimed) tab.detail.session.project_prompt = "";
+}
+
 /* The prompt is on screen before the request leaves. Its text is already known
    here, so waiting on the round trip — the turn and message rows, then the CLI
    launch — to draw your own words is latency that buys nothing. Marking the
@@ -2361,6 +2422,7 @@ export async function send(prompt) {
   const wasRunning = tab.detail.running;
   tab.draft = "";
   endLive(tab);
+  const claimed = claimProjectPrompt(tab);
   const echo = push(tab, "user", prompt);
   tab.detail.running = true;
 
@@ -2372,6 +2434,7 @@ export async function send(prompt) {
   } catch (e) {
     const at = tab.detail.messages.indexOf(echo);
     if (at >= 0) tab.detail.messages.splice(at, 1);
+    releaseProjectPrompt(tab, claimed);
     // Whatever was typed while the request was in flight is the next prompt,
     // not this one.
     if (!tab.draft) tab.draft = typed;
@@ -2390,6 +2453,7 @@ export async function enqueue(prompt) {
   // Cleared before the request, as sending does: whatever is typed while it
   // is in flight is the next prompt, not this one.
   tab.draft = "";
+  const claimed = claimProjectPrompt(tab);
   // Keep optimistic queue rows separate from messages, so an assistant stream
   // can finish in order while the server is still accepting this prompt.
   const pendingQueued = tab.detail.pendingQueued || (tab.detail.pendingQueued = []);
@@ -2416,6 +2480,7 @@ export async function enqueue(prompt) {
   } catch (e) {
     const at = pendingQueued.indexOf(pending);
     if (at >= 0) pendingQueued.splice(at, 1);
+    releaseProjectPrompt(tab, claimed);
     // Text entered while this request was in flight belongs to the next
     // prompt, so only restore the submitted text when the box is still empty.
     if (!tab.draft) tab.draft = typed;

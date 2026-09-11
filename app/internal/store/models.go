@@ -16,6 +16,11 @@ type Project struct {
 	// nothing under it is touched. See 041-project-archiving.md.
 	ArchivedAt int64 `json:"archived_at"`
 
+	// Prompt is what every conversation started in this project is told
+	// before the first thing it is asked. Empty injects nothing. See
+	// 047-project-prompt.md.
+	Prompt string `json:"prompt"`
+
 	// Filled by ListProjects: titles of the project's open sessions. Always
 	// encoded, empty included, so the UI can iterate it without a guard.
 	RecentSessions []SessionRef `json:"recent_sessions"`
@@ -61,6 +66,13 @@ type Session struct {
 	// ScheduleID is the schedule that spawned this session, or 0 for one
 	// started by hand. See 028-scheduled-jobs.md.
 	ScheduleID int64 `json:"schedule_id"`
+
+	// ProjectPrompt is the copy of the project's prompt this conversation was
+	// opened with, taken when it accepted its first prompt and prepended to
+	// the first prompt the provider was given. It is kept rather than looked
+	// up so a later edit to the project does not rewrite what this
+	// conversation was actually told. Empty means nothing was injected.
+	ProjectPrompt string `json:"project_prompt,omitempty"`
 
 	// Denormalised for list views.
 	ProjectName string `json:"project_name,omitempty"`

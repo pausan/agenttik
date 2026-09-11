@@ -49,8 +49,8 @@ func (s *Store) GetProject(id int64) (*Project, error) {
 	// Both lists are always arrays, never null, so the UI iterates without a guard.
 	p.RecentSessions, p.Schedules = []SessionRef{}, []Schedule{}
 	err := s.db.QueryRow(
-		`SELECT id, name, path, created_at, position, archived_at FROM projects WHERE id = ?`, id).
-		Scan(&p.ID, &p.Name, &p.Path, &p.CreatedAt, &p.Position, &p.ArchivedAt)
+		`SELECT id, name, path, created_at, position, archived_at, prompt FROM projects WHERE id = ?`, id).
+		Scan(&p.ID, &p.Name, &p.Path, &p.CreatedAt, &p.Position, &p.ArchivedAt, &p.Prompt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -81,6 +81,21 @@ func (s *Store) SetProjectPath(id int64, path string) error {
 	}
 	if err != nil {
 		return fmt.Errorf("update project %d path: %w", id, err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SetProjectPrompt sets the standing prompt every conversation started in the
+// project is given before its first prompt. Conversations already under way
+// keep the copy they were opened with, so this only reaches the next one.
+// Empty turns the injection off. See 047-project-prompt.md.
+func (s *Store) SetProjectPrompt(id int64, prompt string) error {
+	res, err := s.db.Exec(`UPDATE projects SET prompt = ? WHERE id = ?`, prompt, id)
+	if err != nil {
+		return fmt.Errorf("update project %d prompt: %w", id, err)
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
@@ -121,7 +136,7 @@ func (s *Store) DeleteProject(id int64) error {
 // attached. Archived ones are ArchivedProjects' business.
 func (s *Store) ListProjects() ([]Project, error) {
 	rows, err := s.db.Query(
-		`SELECT id, name, path, created_at, position FROM projects
+		`SELECT id, name, path, created_at, position, prompt FROM projects
 		 WHERE archived_at = 0 ORDER BY position, name`)
 	if err != nil {
 		return nil, fmt.Errorf("list projects: %w", err)
@@ -131,7 +146,7 @@ func (s *Store) ListProjects() ([]Project, error) {
 	projects := []Project{}
 	for rows.Next() {
 		var p Project
-		if err := rows.Scan(&p.ID, &p.Name, &p.Path, &p.CreatedAt, &p.Position); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Path, &p.CreatedAt, &p.Position, &p.Prompt); err != nil {
 			return nil, fmt.Errorf("list projects: %w", err)
 		}
 		projects = append(projects, p)

@@ -43,6 +43,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [028](028-scheduled-jobs.md) | Repeating a prompt on a clock, and the tasks it spawns |
 | [033](033-prompt-model-picker.md) | Bounded, collapsible provider groups in the prompt model picker |
 | [045](045-provider-outage-retry.md) | A prompt whose provider was away waits, and starts itself when it answers |
+| [047](047-project-prompt.md) | The standing prompt a project puts in front of every conversation's first |
 
 ## Reading the transcript and the files
 

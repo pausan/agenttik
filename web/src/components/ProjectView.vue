@@ -23,6 +23,7 @@ import {
   removeTask,
   renameTask,
   reorderTasks,
+  setProjectPrompt,
   setTaskArchived,
   setTaskPageSize,
   startTask,
@@ -41,9 +42,17 @@ const filterField = ref(null);
 const page = ref(1);
 const deleting = ref(null); // the task awaiting its delete confirmation
 
-const lower = ref("tasks");
+/* Which pane is open lives on the tab, not here: one ProjectView serves every
+   project, so a pane kept locally would follow the reader into the next
+   project. It also lets the transcript's injected-prompt chip open this page
+   straight onto Prompt, whether or not the page was already built. */
+const lower = computed({
+  get: () => props.tab.pane || "tasks",
+  set: (pane) => (props.tab.pane = pane),
+});
 const lowerTabs = [
   { label: "Tasks", value: "tasks" },
+  { label: "Prompt", value: "prompt" },
   { label: "Stats", value: "stats" },
 ];
 
@@ -57,6 +66,25 @@ watch(lower, (which) => {
   if (which === "tasks") focusFilter();
 });
 
+/* The prompt every new task in this project opens with. It is bound to the
+   project only while it is not being typed in — a turn ending elsewhere
+   refreshes the page, and that must not take the caret with it — and commits
+   when it is left, as the schedule view's prompt does. Tasks already under way
+   keep the copy they were given; only the next one follows an edit. */
+const prompt = ref(props.tab.data.project.prompt || "");
+const editingPrompt = ref(false);
+watch(
+  () => props.tab.data.project,
+  (project) => {
+    if (!editingPrompt.value) prompt.value = project.prompt || "";
+  },
+);
+
+function commitPrompt() {
+  editingPrompt.value = false;
+  setProjectPrompt(props.tab.data.project, prompt.value);
+}
+
 /* One ProjectView serves every project — switching to another one hands it a
    new tab rather than mounting a second component — so what belongs to the
    page in front is put back by hand. A filter or a page number carried into
@@ -66,6 +94,8 @@ watch(
   () => {
     filter.value = "";
     page.value = 1;
+    editingPrompt.value = false;
+    prompt.value = props.tab.data.project.prompt || "";
     focusFilter();
   },
 );
@@ -264,6 +294,27 @@ async function doDelete() {
             size="sm"
           />
         </div>
+      </template>
+
+      <template v-else-if="lower === 'prompt'">
+        <p class="mb-2 text-sm text-muted">
+          Sent to the agent ahead of the first prompt of every task started here, so every
+          conversation in this project begins knowing it. Leave it empty to send nothing.
+        </p>
+        <UTextarea
+          v-model="prompt"
+          :rows="10"
+          autoresize
+          class="w-full"
+          placeholder="e.g. Read AGENTS.md before you start. Never push."
+          aria-label="Project prompt"
+          :ui="{ base: 'resize-y font-mono text-xs' }"
+          @focus="editingPrompt = true"
+          @blur="commitPrompt"
+        />
+        <p class="mt-2 text-xs text-dimmed">
+          Saved when you click away. Tasks already running keep the prompt they opened with.
+        </p>
       </template>
 
       <template v-else>

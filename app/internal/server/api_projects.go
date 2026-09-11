@@ -101,26 +101,31 @@ func (s *Server) reorderProjects(c *fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-// updateProject renames a project, repoints it at a new folder, archives or
-// restores it, or any combination. Each field is applied only when sent, so a
-// rename does not require the path and archiving requires neither.
+// updateProject renames a project, repoints it at a new folder, sets the
+// prompt its conversations open with, archives or restores it, or any
+// combination. Each field is applied only when sent, so a rename does not
+// require the path and archiving requires neither.
+//
+// The prompt is a pointer because an empty one means something: it is how the
+// injection is turned off, which a blank name or path never is.
 func (s *Server) updateProject(c *fiber.Ctx) error {
 	id, err := projectID(c)
 	if err != nil {
 		return err
 	}
 	var body struct {
-		Name     string `json:"name"`
-		Path     string `json:"path"`
-		Archived *bool  `json:"archived"`
+		Name     string  `json:"name"`
+		Path     string  `json:"path"`
+		Prompt   *string `json:"prompt"`
+		Archived *bool   `json:"archived"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return badRequest("invalid body: %v", err)
 	}
 	name := strings.TrimSpace(body.Name)
 	path := strings.TrimSpace(body.Path)
-	if name == "" && path == "" && body.Archived == nil {
-		return badRequest("name, path or archived is required")
+	if name == "" && path == "" && body.Prompt == nil && body.Archived == nil {
+		return badRequest("name, path, prompt or archived is required")
 	}
 	if name != "" {
 		if err := s.store.SetProjectName(id, name); err != nil {
@@ -133,6 +138,11 @@ func (s *Server) updateProject(c *fiber.Ctx) error {
 			return err
 		}
 		if err := s.store.SetProjectPath(id, abs); err != nil {
+			return err
+		}
+	}
+	if body.Prompt != nil {
+		if err := s.store.SetProjectPrompt(id, strings.TrimSpace(*body.Prompt)); err != nil {
 			return err
 		}
 	}

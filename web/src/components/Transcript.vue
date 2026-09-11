@@ -1,7 +1,14 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
-import { forceQueued, providerOf, S, updateQueuedModel, updateQueuedPrompt } from "../store";
+import {
+  forceQueued,
+  openProjectPrompt,
+  providerOf,
+  S,
+  updateQueuedModel,
+  updateQueuedPrompt,
+} from "../store";
 import Message from "./Message.vue";
 import ToolGroup from "./ToolGroup.vue";
 
@@ -214,6 +221,39 @@ watch(
       Pick a task, or a project to start one.
     </p>
     <div v-else class="mx-auto max-w-[860px] px-6 pt-5 pb-2">
+      <!-- The project's own prompt went in ahead of the first thing asked
+           here, so the conversation says so at the point it happened: what was
+           added, on hover, and the page it is set on, on click. It is drawn
+           from the copy the task holds, which is the text that actually went
+           in rather than whatever the project says now.
+           See specs/047-project-prompt.md. -->
+      <UTooltip
+        v-if="S.detail.session.project_prompt"
+        :delay-duration="300"
+        :content="{ side: 'bottom', align: 'start' }"
+        :ui="{ content: 'block h-auto max-w-[600px] py-1.5 text-left' }"
+      >
+        <button
+          type="button"
+          class="mb-4 flex items-center gap-1.5 text-[11px] text-dimmed hover:text-primary"
+          @click="openProjectPrompt(S.detail.session.project_id)"
+        >
+          <UIcon name="i-lucide-file-text" class="size-3.5 shrink-0" aria-hidden="true" />
+          <span class="underline decoration-dotted underline-offset-2">Project prompt added</span>
+        </button>
+        <!-- Five lines, as the task list's prompt tooltip shows: the clamp
+             puts the ellipsis on the last one it kept. -->
+        <template #content>
+          <div class="space-y-1">
+            <div class="font-medium text-highlighted">Sent before the first prompt below</div>
+            <div class="line-clamp-5 break-words whitespace-pre-wrap">
+              {{ S.detail.session.project_prompt }}
+            </div>
+            <div class="text-dimmed">Click to open the project's prompt.</div>
+          </div>
+        </template>
+      </UTooltip>
+
       <template v-for="row in rows" :key="row.at">
         <ToolGroup v-if="row.tools" :tools="row.tools" />
         <Message v-else :message="row.message" />

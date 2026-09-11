@@ -22,14 +22,14 @@ const sessionCols = `s.id, s.project_id, s.title, s.provider, s.provider_session
 	s.model, s.effort, s.permission, s.source, s.status,
 	s.created_at, s.updated_at, s.last_active_at, s.done_at, s.position,
 	(SELECT COUNT(*) FROM queued_messages q WHERE q.session_id = s.id),
-	s.schedule_id, p.name, p.path, ` + firstPromptCol
+	s.schedule_id, s.project_prompt, p.name, p.path, ` + firstPromptCol
 
 func scanSession(sc interface{ Scan(...any) error }) (*Session, error) {
 	var v Session
 	err := sc.Scan(&v.ID, &v.ProjectID, &v.Title, &v.Provider, &v.ProviderSessionID,
 		&v.Model, &v.Effort, &v.Permission, &v.Source, &v.Status,
 		&v.CreatedAt, &v.UpdatedAt, &v.LastActiveAt, &v.DoneAt, &v.Position,
-		&v.QueueCount, &v.ScheduleID, &v.ProjectName, &v.ProjectPath, &v.Prompt)
+		&v.QueueCount, &v.ScheduleID, &v.ProjectPrompt, &v.ProjectName, &v.ProjectPath, &v.Prompt)
 	if err != nil {
 		return nil, err
 	}
@@ -195,6 +195,19 @@ func (s *Store) RetitleSession(id, title, expect string) (bool, error) {
 // SetSessionModel records a mid-session model choice. Changing provider also
 // clears its opaque thread id: a Codex thread cannot be resumed by Claude,
 // and vice versa.
+// SetSessionProjectPrompt records the project prompt a conversation was opened
+// with, which is prepended to the first prompt its provider is given. Written
+// once, when the conversation accepts its first prompt: from then on it is
+// what this conversation was told, not what the project currently says.
+func (s *Store) SetSessionProjectPrompt(id, prompt string) error {
+	_, err := s.db.Exec(
+		`UPDATE sessions SET project_prompt = ? WHERE id = ?`, prompt, id)
+	if err != nil {
+		return fmt.Errorf("set project prompt on session %s: %w", id, err)
+	}
+	return nil
+}
+
 func (s *Store) SetSessionModel(id, provider, model, effort string, resetProviderSession bool) error {
 	query := `UPDATE sessions SET provider = ?, model = ?, effort = ?, updated_at = ? WHERE id = ?`
 	args := []any{provider, model, effort, nowMillis(), id}

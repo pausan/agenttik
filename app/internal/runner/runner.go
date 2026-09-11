@@ -136,6 +136,16 @@ func (r *Runner) send(queued store.QueuedMessage) (*store.Turn, error) {
 	// got here, and a direct send has none of its own.
 	queued.Provider, queued.Model, queued.Effort = sess.Provider, sess.Model, sess.Effort
 
+	// Asked before StartTurn writes one, so "has this conversation run yet"
+	// is still answerable. It decides both halves of the project prompt: a
+	// conversation that has not started claims one, and the first turn is the
+	// turn that carries it.
+	hasRun, err := r.store.HasTurns(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	r.claimProjectPrompt(sess, hasRun)
+
 	r.mu.Lock()
 	if _, busy := r.active[sessionID]; busy {
 		r.mu.Unlock()
@@ -182,7 +192,7 @@ func (r *Runner) send(queued store.QueuedMessage) (*store.Turn, error) {
 
 	events, err := provider.Run(ctx, agent.TurnRequest{
 		WorkDir:           sess.ProjectPath,
-		Prompt:            prompt,
+		Prompt:            withProjectPrompt(sess, hasRun, prompt),
 		Model:             sess.Model,
 		Effort:            sess.Effort,
 		SessionID:         sess.ID,
@@ -225,6 +235,12 @@ func (r *Runner) Enqueue(sessionID, prompt string) ([]store.QueuedMessage, error
 	sess, err := r.store.GetSession(sessionID)
 	if err != nil {
 		return nil, err
+	}
+	// Claimed here rather than when the prompt finally runs: a queued prompt
+	// is already the conversation's first, and what it will be given is worth
+	// saying while it waits.
+	if hasRun, err := r.store.HasTurns(sessionID); err == nil {
+		r.claimProjectPrompt(sess, hasRun)
 	}
 	if _, err := r.store.EnqueueMessage(sessionID, prompt, sess.Provider, sess.Model, sess.Effort); err != nil {
 		return nil, err
@@ -535,6 +551,45 @@ func toolSummary(t *agent.ToolEvent) string {
 		input = input[:max] + "…"
 	}
 	return t.Name + " " + input
+}
+
+// claimProjectPrompt takes the project's standing prompt for a conversation
+// that is accepting its first prompt, sent or queued. A copy is kept on the
+// session rather than read from the project each turn, so editing the project
+// does not rewrite what a conversation already under way was told, and the
+// transcript can go on showing the text that actually went in.
+//
+// Three things disqualify a claim, and all three mean the same thing — this is
+// not the start of the conversation: a copy is already held, something has
+// already been said or is waiting to be, or a turn has run. The last one is
+// what stops a rewritten transcript (editMessage empties the messages but
+// keeps the turns) from looking like a fresh conversation.
+//
+// A failure is not worth failing the prompt over: the turn runs without the
+// injection rather than not at all.
+func (r *Runner) claimProjectPrompt(sess *store.Session, hasRun bool) {
+	if hasRun || sess.ProjectPrompt != "" || sess.Prompt != "" {
+		return
+	}
+	project, err := r.store.GetProject(sess.ProjectID)
+	if err != nil || project.Prompt == "" {
+		return
+	}
+	if err := r.store.SetSessionProjectPrompt(sess.ID, project.Prompt); err != nil {
+		return
+	}
+	sess.ProjectPrompt = project.Prompt
+}
+
+// withProjectPrompt is what the provider is given, as against what the
+// transcript keeps. The project prompt goes in front of the first prompt of
+// the conversation and no other: every turn after it resumes the same provider
+// thread, which is still holding the first one.
+func withProjectPrompt(sess *store.Session, hasRun bool, prompt string) string {
+	if hasRun || sess.ProjectPrompt == "" {
+		return prompt
+	}
+	return sess.ProjectPrompt + "\n\n" + prompt
 }
 
 // titleFrom derives a session title from its first prompt.

@@ -20,6 +20,20 @@ func (s *Store) StartTurn(sessionID, model, effort string) (*Turn, error) {
 	return t, nil
 }
 
+// HasTurns reports whether the session has ever run a turn. It is what tells
+// a conversation's first prompt from the ones after it: a turn row outlives a
+// rewritten transcript, so the answer does not change when messages are
+// deleted. See 047-project-prompt.md.
+func (s *Store) HasTurns(sessionID string) (bool, error) {
+	var found int
+	err := s.db.QueryRow(
+		`SELECT EXISTS(SELECT 1 FROM turns WHERE session_id = ?)`, sessionID).Scan(&found)
+	if err != nil {
+		return false, fmt.Errorf("turns of session %s: %w", sessionID, err)
+	}
+	return found == 1, nil
+}
+
 // FinishTurn writes the provider's own token accounting and closes the turn.
 func (s *Store) FinishTurn(t *Turn) error {
 	_, err := s.db.Exec(

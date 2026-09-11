@@ -56,6 +56,10 @@ function commit() {
   setEditing(false);
   emit("rename", draft.value);
 }
+
+// Let a parent start the rename from outside the row, e.g. the F2 shortcut
+// aimed at whichever task is current.
+defineExpose({ edit });
 </script>
 
 <template>

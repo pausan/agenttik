@@ -43,9 +43,32 @@ function show(which) {
   nextTick(() => fileTree.value?.focus());
 }
 
+// One TaskRow per open task, so F2 can reach the row for whichever task is
+// current without a dialog of its own.
+const taskRows = new Map();
+function setTaskRow(id, el) {
+  if (el) taskRows.set(id, el);
+  else taskRows.delete(id);
+}
+
+/* F2 edits the current task's own row. It may be behind Tree, or folded away
+   under its project, so both are opened first — the same way a click would
+   have to. */
+async function editCurrentTask() {
+  const session = S.detail?.session;
+  if (!session) return;
+  const project = S.projects.find((p) => p.id === session.project_id);
+  if (!project) return;
+  show("projects");
+  if (folded(project)) toggleProjectTasks(project.id);
+  await nextTick();
+  taskRows.get(session.id)?.edit();
+}
+
 defineExpose({
   showProjects: () => show("projects"),
   showTree: () => show("tree"),
+  editCurrentTask,
 });
 
 
@@ -255,6 +278,7 @@ function onTaskDrop(e) {
             @dragend="onTaskDrop"
           >
             <TaskRow
+              :ref="(el) => setTaskRow(s.id, el)"
               :title="s.title"
               :prompt="s.prompt"
               :status="s.status"

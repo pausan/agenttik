@@ -1,4 +1,13 @@
-import { addProject, expect, inspector, openProject, sidebar, test } from "../fixtures.js";
+import {
+  addProject,
+  expect,
+  inspector,
+  newTask,
+  openProject,
+  pickModel,
+  sidebar,
+  test,
+} from "../fixtures.js";
 
 test.beforeEach(async ({ page }) => {
   await addProject(page);
@@ -27,38 +36,36 @@ test("clicking a file opens it as a closable tab beside the first one", async ({
   await expect(page.getByRole("heading", { name: "agenttik" })).toBeVisible();
 });
 
-test("changed lists what git reports as edited", async ({ page }) => {
-  await inspector(page).getByRole("tab", { name: "Stats" }).click();
-  await expect(inspector(page).getByText("Running now")).toBeVisible();
+test("a task's inspector adds Changed and Stats in place of Options", async ({ page }) => {
+  await newTask(page);
+
+  await expect(inspector(page).getByRole("tab", { name: "Changed" })).toBeVisible();
+  await expect(inspector(page).getByRole("tab", { name: "Stats" })).toBeVisible();
+  await expect(inspector(page).getByRole("tab", { name: "Options" })).toHaveCount(0);
 
   // A clean checkout has nothing changed, an edited one does; either is a
   // correct answer, so assert the pane rendered one of them.
-  await openProject(page);
-  await inspector(page).getByRole("tab", { name: "Options" }).click();
-  await expect(inspector(page).getByText("The folder on disk is untouched.")).toBeVisible();
+  const changed = inspector(page)
+    .getByText("No edited files.")
+    .or(inspector(page).locator("button.font-mono").first());
+  await expect(changed).toBeVisible();
 });
 
-test("project stats aggregate over every session", async ({ page }) => {
-  await inspector(page).getByRole("tab", { name: "Stats" }).click();
+test("the pane in use survives switching from a project to a task", async ({ page }) => {
+  // Commits is the one pane both a project and a task offer.
+  await inspector(page).getByRole("tab", { name: "Commits" }).click();
 
-  for (const row of ["Sessions", "Running now", "Turns", "Cost", "Agent time", "Last used"]) {
-    await expect(inspector(page).getByText(row, { exact: true })).toBeVisible();
-  }
-  await expect(inspector(page).getByText("$0.0000")).toBeVisible();
-});
+  await newTask(page);
+  await pickModel(page);
 
-test("the pane in use survives switching from a project to a session", async ({ page }) => {
-  await inspector(page).getByRole("tab", { name: "Stats" }).click();
-  await page.getByRole("button", { name: "New session" }).first().click();
-
-  // Options is gone, Changed has taken its place, and Stats is still the one open.
-  await expect(inspector(page).getByRole("tab", { name: "Changed" })).toBeVisible();
   await expect(inspector(page).getByRole("tab", { name: "Options" })).toHaveCount(0);
-  await expect(inspector(page).getByRole("tab", { name: "Stats" })).toHaveAttribute(
+  await expect(inspector(page).getByRole("tab", { name: "Commits" })).toHaveAttribute(
     "data-state",
     "active",
   );
-  await expect(inspector(page).getByText("Permission")).toBeVisible(); // a session row, not a project one
-  await expect(inspector(page).getByText("Last used", { exact: true })).toBeVisible();
-  await expect(inspector(page).locator("dd").filter({ hasText: /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/ })).toHaveCount(2);
+
+  // Its Stats are the task's, not the project's: Permission is a session row
+  // only Stats shows.
+  await inspector(page).getByRole("tab", { name: "Stats" }).click();
+  await expect(inspector(page).getByText("Permission")).toBeVisible();
 });

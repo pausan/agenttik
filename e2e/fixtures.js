@@ -1,12 +1,38 @@
 import { spawn } from "node:child_process";
-import { access, mkdtemp, rm } from "node:fs/promises";
+import { access, constants, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { expect, test as base } from "@playwright/test";
 
 const BIN = fileURLToPath(new URL("../bin/agenttik-web", import.meta.url));
+
+/* A machine that happens to have claude, codex or copilot installed makes the
+   app probe a real CLI at startup — sometimes for seconds, once each for
+   however many servers a parallel run has up at once — for a provider no test
+   here ever asks for. computeTestPath drops whatever directory on PATH holds
+   one of those three, so the server this suite spawns only ever finds the
+   fake provider ready, regardless of what the host otherwise has installed. */
+const REAL_PROVIDER_CLIS = ["claude", "codex", "copilot"];
+
+let testPathPromise;
+function testPath() {
+  if (!testPathPromise) testPathPromise = computeTestPath();
+  return testPathPromise;
+}
+
+async function computeTestPath() {
+  const dirs = (process.env.PATH || "").split(delimiter).filter(Boolean);
+  const hasRealCLI = await Promise.all(
+    dirs.map((dir) =>
+      Promise.all(REAL_PROVIDER_CLIS.map((bin) => access(join(dir, bin), constants.X_OK).then(() => true, () => false))).then(
+        (found) => found.some(Boolean),
+      ),
+    ),
+  );
+  return dirs.filter((_, i) => !hasRealCLI[i]).join(delimiter);
+}
 
 /* Every test gets its own server, on its own port, over its own database, so
    nothing one test adds is visible to another and they can run in parallel.
@@ -19,7 +45,13 @@ async function startServer() {
   }
 
   const dataDir = await mkdtemp(join(tmpdir(), "agenttik-e2e-"));
-  const proc = spawn(BIN, ["--web", "--addr", "127.0.0.1:0", "--data-dir", dataDir]);
+  // AGENTTIK_FAKE_PROVIDER registers the scriptable "Fake" provider (see
+  // app/internal/agent/fake) so a turn can be driven without a CLI on PATH or
+  // a real subscription. A normal launch never sets this, so it never shows
+  // up outside this suite.
+  const proc = spawn(BIN, ["--web", "--addr", "127.0.0.1:0", "--data-dir", dataDir], {
+    env: { ...process.env, AGENTTIK_FAKE_PROVIDER: "1", PATH: await testPath() },
+  });
   const stderr = [];
   proc.stderr.on("data", (b) => stderr.push(String(b)));
 
@@ -95,6 +127,42 @@ export async function addProject(page, path = REPO) {
 export async function openProject(page, path = REPO) {
   await sidebar(page).getByText(path).click();
   await expect(inspector(page).getByRole("tab", { name: "Options" })).toBeVisible();
+}
+
+/* The scriptable provider from app/internal/agent/fake, enabled above. Tests
+   pick it explicitly with pickModel rather than relying on whatever
+   sessionDefaults() would otherwise choose, so a turn never depends on which
+   real CLIs happen to be on the machine running the suite. */
+export const FAKE_MODEL = "Fake Quick";
+
+/* Providers load in the background right after the page opens — one of them
+   can be a real CLI slow to answer whether it is installed — and a click
+   that lands before that finishes finds none to start a task with and fails
+   outright. Retrying is simpler and more honest than guessing a fixed wait. */
+export async function newTask(page) {
+  const button = page.getByRole("button", { name: "New task" }).first();
+  const prompt = page.getByPlaceholder("Ask the agent…");
+  await expect(async () => {
+    await button.click();
+    await expect(prompt).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 15_000 });
+}
+
+/* The model button opens a command palette; both it and the effort select
+   beside it carry a stable title rather than a stable label, since the label
+   is whatever is currently chosen — see PromptBar.vue. */
+export async function pickModel(page, label = FAKE_MODEL) {
+  await page.getByTitle("Choose model").click();
+  await page.getByRole("option", { name: label }).click();
+}
+
+/* The default binding is Ctrl+Enter to send, plain Enter to enqueue — see
+   shortcuts.js — so this reaches for the chord rather than a button, which
+   only ever carries whichever of the two actions Enter currently performs. */
+export async function sendPrompt(page, text) {
+  const prompt = page.getByPlaceholder("Ask the agent…");
+  await prompt.fill(text);
+  await prompt.press("Control+Enter");
 }
 
 export { expect };

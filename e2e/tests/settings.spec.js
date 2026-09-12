@@ -97,3 +97,19 @@ test("web mode does not offer tray controls", async ({ page }) => {
   await openSettings(page);
   await expect(page.getByText("Desktop tray", { exact: true })).toHaveCount(0);
 });
+
+
+test("database path is read-only, copyable, and searchable with a formatted size", async ({ page, context, agenttik }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await openSettings(page);
+  const dialog = page.getByRole("dialog");
+  const path = dialog.getByLabel("Path on the Agenttik host");
+  await expect(path).toHaveValue(`${agenttik.dataDir}/agenttik.db`);
+  await expect(path).toHaveAttribute("readonly", "");
+  await expect(dialog.getByText(/^Database file size: \d+\.\d (B|KB|MB|GB)$/)).toBeVisible();
+  await dialog.getByRole("button", { name: "Copy database path" }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${agenttik.dataDir}/agenttik.db`);
+  await dialog.getByPlaceholder("Filter settings…").fill("database");
+  await expect(path).toBeVisible();
+  await expect(dialog.getByText("What the prompt box does", { exact: false })).toBeHidden();
+});

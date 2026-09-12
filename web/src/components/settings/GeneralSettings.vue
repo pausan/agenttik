@@ -1,8 +1,9 @@
 <script setup>
 import { computed, onMounted, ref, watchEffect } from "vue";
 
-import { PROMPT_CHORDS, S, enterDoes, fail, setEnterDoes, setFoldOthers } from "../../store";
+import { PROMPT_CHORDS, S, copyText, enterDoes, fail, setEnterDoes, setFoldOthers } from "../../store";
 import { fuzzyAny } from "../../fuzzy";
+import { fileSize } from "../../file-info.js";
 import { api } from "../../api";
 import Chord from "../Chord.vue";
 import { smartSearch, setSmartSearch } from "../../smart-search.js";
@@ -12,13 +13,22 @@ import SmartSearchProgress from "../SmartSearchProgress.vue";
 const props = defineProps({ filter: { type: String, default: "" } });
 const emit = defineEmits(["count"]);
 
+const database = ref(null);
+const copied = ref(false);
+async function copyDatabasePath() {
+  copied.value = await copyText(database.value.database_path);
+}
+const showDatabase = computed(() => fuzzyAny(["general", "database", "path", "size", "storage", "copy"], props.filter) !== null);
+
 const desktopCount = ref(0);
 const position = ref("top");
 const positionReady = ref(false);
 const savingPosition = ref(false);
 onMounted(async () => {
   try {
-    position.value = (await api("GET", "/api/general")).new_item_position;
+    const config = await api("GET", "/api/general");
+    position.value = config.new_item_position;
+    database.value = config;
     positionReady.value = true;
   } catch (e) {
     fail(e);
@@ -84,7 +94,7 @@ const searchRows = computed(() => fuzzyAny(["general", "project", "tasks", "smar
   { value: false, label: "Fuzzy Search (default)", description: "Match task titles as you type" },
   { value: true, label: "Smart Search", description: "Find related tasks by meaning, across languages" },
 ] : []);
-watchEffect(() => emit("count", desktopCount.value + promptRows.value.length + foldRows.value.length + positionRows.value.length + searchRows.value.length));
+watchEffect(() => emit("count", Number(showDatabase.value) + desktopCount.value + promptRows.value.length + foldRows.value.length + positionRows.value.length + searchRows.value.length));
 
 const chosen = computed({
   get: () => enterDoes(),
@@ -99,6 +109,18 @@ const folding = computed({
 
 <template>
   <DesktopSettings :filter="filter" @count="desktopCount = $event" />
+  <section v-if="showDatabase" class="mb-5">
+    <div class="mb-0.5 font-semibold text-highlighted">Database</div>
+    <template v-if="database">
+      <label for="database-path" class="text-xs text-dimmed">Path on the Agenttik host</label>
+      <div class="mt-1 flex items-center gap-2">
+        <UInput id="database-path" :model-value="database.database_path" readonly class="min-w-0 flex-1" :title="database.database_path" />
+        <UButton :icon="copied ? 'i-lucide-check' : 'i-lucide-copy'" color="neutral" variant="ghost" aria-label="Copy database path" @click="copyDatabasePath" />
+      </div>
+      <p class="mt-1 text-xs text-dimmed">Database file size: {{ fileSize(database.database_size) }}</p>
+    </template>
+    <p v-else class="text-xs text-dimmed">Database details unavailable.</p>
+  </section>
   <section v-if="promptRows.length">
     <div class="mb-0.5 font-semibold text-highlighted">Prompt</div>
     <p class="mb-2 text-xs text-dimmed">

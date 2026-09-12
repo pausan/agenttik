@@ -3,6 +3,8 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/pausan/agenttik/app/internal/store"
@@ -39,5 +41,32 @@ func TestGeneralConfigAPI(t *testing.T) {
 			}
 		}
 		resp.Body.Close()
+	}
+}
+
+func TestGeneralDatabaseInfo(t *testing.T) {
+	s, st := newTestServer(t)
+	path := filepath.Join(st.Dir(), "t.db")
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp := do(t, s, "GET", "/api/general", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	var got struct {
+		Path string `json:"database_path"`
+		Size int64  `json:"database_size"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Path != path || !filepath.IsAbs(got.Path) {
+		t.Fatalf("path = %q, want %q", got.Path, path)
+	}
+	if got.Size != info.Size() || got.Size <= 0 {
+		t.Fatalf("size = %d, want %d", got.Size, info.Size())
 	}
 }

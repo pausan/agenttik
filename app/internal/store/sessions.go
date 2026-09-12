@@ -22,7 +22,7 @@ const sessionCols = `s.id, s.project_id, s.title, s.provider, s.account_id, s.pr
 	s.model, s.effort, s.permission, s.source, s.status,
 	s.created_at, s.updated_at, s.last_active_at, s.done_at, s.position,
 	(SELECT COUNT(*) FROM queued_messages q WHERE q.session_id = s.id),
-	s.schedule_id, s.project_prompt, s.summary, p.name, p.path, ` + firstPromptCol
+	s.schedule_id, s.project_prompt, s.summary, p.name, p.path, p.kind, ` + firstPromptCol
 
 func scanSession(sc interface{ Scan(...any) error }) (*Session, error) {
 	var v Session
@@ -30,7 +30,7 @@ func scanSession(sc interface{ Scan(...any) error }) (*Session, error) {
 		&v.Model, &v.Effort, &v.Permission, &v.Source, &v.Status,
 		&v.CreatedAt, &v.UpdatedAt, &v.LastActiveAt, &v.DoneAt, &v.Position,
 		&v.QueueCount, &v.ScheduleID, &v.ProjectPrompt, &v.Summary,
-		&v.ProjectName, &v.ProjectPath, &v.Prompt)
+		&v.ProjectName, &v.ProjectPath, &v.ProjectKind, &v.Prompt)
 	if err != nil {
 		return nil, err
 	}

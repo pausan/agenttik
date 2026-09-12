@@ -100,6 +100,7 @@ func (s *Server) createSession(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
+	s.sessionChanged(sess.ID, full)
 	return c.Status(fiber.StatusCreated).JSON(full)
 }
 
@@ -227,6 +228,7 @@ func (s *Server) updateSession(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
+	s.sessionChanged(id, updated)
 	return c.JSON(updated)
 }
 
@@ -262,7 +264,15 @@ func (s *Server) deleteSession(c *fiber.Ctx) error {
 	if err := s.store.DeleteSession(id); err != nil {
 		return err
 	}
+	s.sessionChanged(id, nil)
 	return c.SendStatus(fiber.StatusNoContent)
+}
+
+func (s *Server) sessionChanged(id string, session *store.Session) {
+	s.runner.Hub().Publish(runner.ProjectsTopic, runner.Event{
+		SessionID: id, Session: session,
+		Event: agent.Event{Type: runner.EventSessionChanged},
+	})
 }
 
 func (s *Server) postMessage(c *fiber.Ctx) error {

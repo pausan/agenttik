@@ -1,7 +1,7 @@
 # The command line, and the version a tag builds in
 
 `agenttik` takes long options: `--addr`, `--data-dir`, `--init`, `--web`,
-`--help` and `--version`. Go's `flag` package treats `-addr` and `--addr` as
+`--api`, `--body`, `--help` and `--version`. Go's `flag` package treats `-addr` and `--addr` as
 the same option, so the single-dash form keeps working; only the double-dash
 one is documented. `--help` prints to stdout and exits 0, while an unknown
 option prints the same text to stderr and exits 2, which is `flag`'s own
@@ -52,6 +52,25 @@ and the folder is the operand after it — `flag` stops parsing at the first
 operand, leaving it in `flag.Arg(0)`. The help text still writes it
 `--init folder`, since that is the form to type. `--init=folder` is the one
 spelling that does not work, and `flag` rejects it as a bad boolean.
+
+## `--api`: controlling the running app
+
+`agenttik --data-dir DIRECTORY --api METHOD [--body JSON|-] /api/path` sends a
+request to the app using that data directory. All flags precede the path.
+Supported methods are GET, POST, PUT, PATCH and DELETE; the path may include
+query parameters and must start with `/api/`. `--body -` reads JSON from stdin,
+including embedded newlines. Bodies are validated and capped at 4 MiB.
+
+The client reads the address published in the lock file; it does not acquire
+the lock, open the database or launch an app. Discovery therefore needs only
+read access to the data directory. An absent address or a connection failure
+reports an error. The client uses loopback when the server published an
+all-interface listener, refuses redirects and has a 30-second timeout.
+
+Successful response bodies go unchanged to stdout; HTTP errors go to stderr
+with a nonzero exit status. A command that starts a turn returns when accepted,
+without waiting for the provider to finish. The orchestrator's built-in prompt
+documents the requests it uses ([054](054-orchestrator-project.md)).
 
 ## Where the version comes from
 

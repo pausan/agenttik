@@ -284,6 +284,21 @@ ALTER TABLE turns ADD COLUMN usage_breakdown             INTEGER NOT NULL DEFAUL
 -- main-context gauge.
 ALTER TABLE turns ADD COLUMN context_is_main INTEGER NOT NULL DEFAULT 0;
 	`,
+	`
+-- One optional app-wide project, independent of its name and folder.
+ALTER TABLE projects ADD COLUMN kind TEXT NOT NULL DEFAULT '';
+CREATE UNIQUE INDEX idx_projects_orchestrator ON projects(kind) WHERE kind = 'orchestrator';
+
+-- Saved options survive deleting the project and its task history. While
+-- the project exists its own fields are authoritative. No machine address
+-- or executable path belongs in these preferences.
+CREATE TABLE orchestrator_config (
+    id     INTEGER PRIMARY KEY CHECK (id = 1),
+    name   TEXT NOT NULL,
+    path   TEXT NOT NULL,
+    prompt TEXT NOT NULL
+);
+	`,
 }
 
 func migrate(db *sql.DB) error {

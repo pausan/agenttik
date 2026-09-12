@@ -4,6 +4,7 @@ type Project struct {
 	ID        int64  `json:"id"`
 	Name      string `json:"name"`
 	Path      string `json:"path"`
+	Kind      string `json:"kind"` // blank for ordinary projects, "orchestrator" for the app-wide one
 	CreatedAt int64  `json:"created_at"`
 
 	// Position is the order the Projects sidebar was dragged into. A newly
@@ -89,6 +90,7 @@ type Session struct {
 	// Denormalised for list views.
 	ProjectName string `json:"project_name,omitempty"`
 	ProjectPath string `json:"project_path,omitempty"`
+	ProjectKind string `json:"project_kind,omitempty"`
 
 	// Prompt is what the session was opened with, capped; the sidebar shows it
 	// when a row is hovered. See firstPromptCol.

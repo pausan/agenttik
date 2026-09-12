@@ -9,8 +9,6 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/pausan/agenttik/app/internal/agent"
-	"github.com/pausan/agenttik/app/internal/runner"
 	"github.com/pausan/agenttik/app/internal/store"
 )
 
@@ -58,9 +56,7 @@ func (s *Server) createProject(c *fiber.Ctx) error {
 	// Any open window redraws its sidebar. The one that sent this request
 	// refreshes anyway; the ones that did not — another browser tab, or the
 	// window behind a terminal running `agenttik --init` — only hear it here.
-	s.runner.Hub().Publish(runner.ProjectsTopic, runner.Event{
-		Event: agent.Event{Type: runner.EventProjectsChanged},
-	})
+	s.projectsChanged()
 	return c.Status(fiber.StatusCreated).JSON(p)
 }
 
@@ -98,6 +94,7 @@ func (s *Server) reorderProjects(c *fiber.Ctx) error {
 	if err := s.store.ReorderProjects(body.IDs); err != nil {
 		return err
 	}
+	s.projectsChanged()
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
@@ -127,6 +124,11 @@ func (s *Server) updateProject(c *fiber.Ctx) error {
 	if name == "" && path == "" && body.Prompt == nil && body.Archived == nil {
 		return badRequest("name, path, prompt or archived is required")
 	}
+	if body.Archived != nil && *body.Archived {
+		if err := s.canArchiveProject(id); err != nil {
+			return err
+		}
+	}
 	if name != "" {
 		if err := s.store.SetProjectName(id, name); err != nil {
 			return err
@@ -155,6 +157,7 @@ func (s *Server) updateProject(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
+	s.projectsChanged()
 	return c.JSON(p)
 }
 
@@ -163,9 +166,19 @@ func (s *Server) deleteProject(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
+	// Deleting a project follows task deletion: stop its processes and clear
+	// queues before removing their rows, so no work is left running unseen.
+	sessions, err := s.store.ListSessions(store.SessionFilter{ProjectID: id})
+	if err != nil {
+		return err
+	}
+	for _, session := range sessions {
+		s.runner.Stop(session.ID)
+	}
 	if err := s.store.DeleteProject(id); err != nil {
 		return err
 	}
+	s.projectsChanged()
 	return c.SendStatus(fiber.StatusNoContent)
 }
 

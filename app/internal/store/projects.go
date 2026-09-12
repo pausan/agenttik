@@ -49,8 +49,8 @@ func (s *Store) GetProject(id int64) (*Project, error) {
 	// Both lists are always arrays, never null, so the UI iterates without a guard.
 	p.RecentSessions, p.Schedules = []SessionRef{}, []Schedule{}
 	err := s.db.QueryRow(
-		`SELECT id, name, path, created_at, position, archived_at, prompt FROM projects WHERE id = ?`, id).
-		Scan(&p.ID, &p.Name, &p.Path, &p.CreatedAt, &p.Position, &p.ArchivedAt, &p.Prompt)
+		`SELECT id, name, path, created_at, position, archived_at, prompt, kind FROM projects WHERE id = ?`, id).
+		Scan(&p.ID, &p.Name, &p.Path, &p.CreatedAt, &p.Position, &p.ArchivedAt, &p.Prompt, &p.Kind)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -122,22 +122,35 @@ func (s *Store) SetProjectArchived(id int64, archived bool) error {
 }
 
 func (s *Store) DeleteProject(id int64) error {
-	res, err := s.db.Exec(`DELETE FROM projects WHERE id = ?`, id)
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	// Only preferences survive an orchestrator deletion. The usual cascade
+	// removes tasks and schedules; no project operation removes disk files.
+	_, err = tx.Exec(`INSERT INTO orchestrator_config (id, name, path, prompt)
+		SELECT 1, name, path, prompt FROM projects WHERE id = ? AND kind = 'orchestrator'
+		ON CONFLICT(id) DO UPDATE SET name = excluded.name, path = excluded.path, prompt = excluded.prompt`, id)
+	if err != nil {
+		return fmt.Errorf("save orchestrator options: %w", err)
+	}
+	res, err := tx.Exec(`DELETE FROM projects WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("delete project %d: %w", id, err)
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
-	return nil
+	return tx.Commit()
 }
 
 // ListProjects returns every active project with its open session titles
 // attached. Archived ones are ArchivedProjects' business.
 func (s *Store) ListProjects() ([]Project, error) {
 	rows, err := s.db.Query(
-		`SELECT id, name, path, created_at, position, prompt FROM projects
-		 WHERE archived_at = 0 ORDER BY position, name`)
+		`SELECT id, name, path, created_at, position, prompt, kind FROM projects
+		 WHERE archived_at = 0 ORDER BY (kind = 'orchestrator') DESC, position, name`)
 	if err != nil {
 		return nil, fmt.Errorf("list projects: %w", err)
 	}
@@ -146,7 +159,7 @@ func (s *Store) ListProjects() ([]Project, error) {
 	projects := []Project{}
 	for rows.Next() {
 		var p Project
-		if err := rows.Scan(&p.ID, &p.Name, &p.Path, &p.CreatedAt, &p.Position, &p.Prompt); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Path, &p.CreatedAt, &p.Position, &p.Prompt, &p.Kind); err != nil {
 			return nil, fmt.Errorf("list projects: %w", err)
 		}
 		projects = append(projects, p)
@@ -178,7 +191,7 @@ func (s *Store) ListProjects() ([]Project, error) {
 // ListProjects attaches are read.
 func (s *Store) ArchivedProjects() ([]Project, error) {
 	rows, err := s.db.Query(
-		`SELECT id, name, path, created_at, position, archived_at FROM projects
+		`SELECT id, name, path, created_at, position, archived_at, kind FROM projects
 		 WHERE archived_at <> 0 ORDER BY archived_at DESC`)
 	if err != nil {
 		return nil, fmt.Errorf("list archived projects: %w", err)
@@ -188,7 +201,7 @@ func (s *Store) ArchivedProjects() ([]Project, error) {
 	projects := []Project{}
 	for rows.Next() {
 		p := Project{RecentSessions: []SessionRef{}, Schedules: []Schedule{}}
-		if err := rows.Scan(&p.ID, &p.Name, &p.Path, &p.CreatedAt, &p.Position, &p.ArchivedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Path, &p.CreatedAt, &p.Position, &p.ArchivedAt, &p.Kind); err != nil {
 			return nil, fmt.Errorf("list archived projects: %w", err)
 		}
 		projects = append(projects, p)

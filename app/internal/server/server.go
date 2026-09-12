@@ -155,6 +155,9 @@ func (s *Server) routes() {
 	api.Post("/server/auth/totp", s.resetServerTOTP)
 	api.Get("/server/auth/totp.png", s.serverTOTPQR)
 	api.Get("/server/auth/code", s.serverTOTPCode)
+	api.Get("/orchestrator", s.getOrchestratorConfig)
+	api.Put("/orchestrator", s.putOrchestratorConfig)
+	api.Post("/orchestrator/prompt/reset", s.resetOrchestratorPrompt)
 
 	api.Get("/projects", s.listProjects)
 	api.Post("/projects", s.createProject)

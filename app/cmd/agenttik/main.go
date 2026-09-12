@@ -55,6 +55,8 @@ func run() error {
 	// folder is the operand after it: flag stops at the first one, leaving it
 	// in flag.Arg(0). `--init` alone means the folder the terminal is in.
 	initProject := flag.Bool("init", false, "add a `folder`, the current one by default, as a project and exit")
+	apiMethod := flag.String("api", "", "send `METHOD` to the running app; put /api/path after all options")
+	apiBody := flag.String("body", "", "JSON `body` for --api, or - to read it from stdin")
 	showHelp := flag.Bool("help", false, "show this help and exit")
 	showVersion := flag.Bool("version", false, "show the version and exit")
 	flag.Usage = usage
@@ -70,6 +72,15 @@ func run() error {
 	if *showVersion {
 		fmt.Println("agenttik", version)
 		return nil
+	}
+	if *apiMethod != "" {
+		if *initProject || flag.NArg() != 1 {
+			return errors.New("usage: agenttik --data-dir DIRECTORY --api METHOD [--body JSON|-] /api/path")
+		}
+		return callAPI(cfg, *apiMethod, flag.Arg(0), *apiBody, os.Stdin, os.Stdout)
+	}
+	if *apiBody != "" {
+		return errors.New("--body requires --api")
 	}
 
 	if err := cfg.EnsureDataDir(); err != nil {

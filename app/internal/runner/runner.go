@@ -8,12 +8,14 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/pausan/agenttik/app/internal/agent"
+	"github.com/pausan/agenttik/app/internal/orchestrator"
 	"github.com/pausan/agenttik/app/internal/store"
 )
 
@@ -112,6 +114,9 @@ const ProjectsTopic = "projects"
 // sidebar re-reads its list whole, as it does for the file watcher's event.
 const EventProjectsChanged agent.EventType = "projects_changed"
 
+// EventSessionChanged carries an API edit, or a deletion when Session is nil.
+const EventSessionChanged agent.EventType = "session_changed"
+
 // accountHome is the directory holding the login a task runs on: empty for
 // the machine's own CLI, which is what a task has unless it was given a
 // subscription of its own.
@@ -207,6 +212,18 @@ func (r *Runner) send(queued store.QueuedMessage) (*store.Turn, error) {
 		return nil, err
 	}
 	r.claimProjectPrompt(sess, hasRun)
+	providerPrompt := withProjectPrompt(sess, hasRun, prompt)
+	if sess.ProjectKind == "orchestrator" {
+		executable, err := os.Executable()
+		if err != nil {
+			return nil, err
+		}
+		dataDir, err := filepath.Abs(r.store.Dir())
+		if err != nil {
+			return nil, err
+		}
+		providerPrompt = orchestrator.Context(executable, dataDir, sess.ID, sess.ProjectID) + "\n\n" + providerPrompt
+	}
 
 	r.mu.Lock()
 	if _, busy := r.active[sessionID]; busy {
@@ -258,7 +275,7 @@ func (r *Runner) send(queued store.QueuedMessage) (*store.Turn, error) {
 
 	events, err := provider.Run(ctx, agent.TurnRequest{
 		WorkDir:           sess.ProjectPath,
-		Prompt:            withProjectPrompt(sess, hasRun, prompt),
+		Prompt:            providerPrompt,
 		Model:             sess.Model,
 		Effort:            sess.Effort,
 		AccountHome:       home,

@@ -316,7 +316,7 @@ test("the subscription allowance bars show the provider's reported usage", async
   await newTask(page);
   await pickModel(page);
 
-  await page.getByRole("button", { name: "Context and subscription usage" }).click();
+  await page.getByRole("button", { name: /Main context.*and subscription usage/ }).click();
   await expect(page.getByText("Fake plan subscription")).toBeVisible();
   await expect(page.getByText("42%")).toBeVisible();
   await expect(page.getByText("7%")).toBeVisible();

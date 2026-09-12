@@ -68,7 +68,7 @@ test("the pane in use survives switching from a project to a task", async ({ pag
 
   // The header popover belongs to the task, not its project: Permission is a
   // session row only task Stats shows.
-  await page.getByRole("button", { name: "Task stats" }).click();
+  await page.getByRole("button", { name: "Task stats", exact: true }).click();
   await expect(page.getByLabel("Task statistics").getByText("Permission")).toBeVisible();
 });
 

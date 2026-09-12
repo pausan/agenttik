@@ -41,7 +41,10 @@ RGBA browser rendering because simpler SVG rasterizers can discard the logo's
 filtered gradient marks and leave an apparently blank dark tile. The ICO
 contains 16, 24, 32, 48 and 64 px versions for Windows scaling.
 
-Linux uses the StatusNotifier/AppIndicator tray protocol and a dedicated X11
+Linux configures JavaScriptCore to use signal 34 before WebKit starts when the
+environment has not chosen a value, so its GC signal does not collide with
+Go's signal handler. An explicit value is applied through the same API. It
+uses the StatusNotifier/AppIndicator tray protocol and a dedicated X11
 connection for the global key grab, including Caps Lock/Num Lock variants.
 The event reader blocks while idle. Matching release/press timestamps filter
 X11's synthetic auto-repeat pairs. Closing the connection releases all grabs

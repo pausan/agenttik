@@ -338,6 +338,8 @@ func TestReorderSessionsDrivesProjectOrder(t *testing.T) {
 		must(t, s.CreateSession(&Session{ID: id, ProjectID: p.ID, Provider: "claude", Model: "opus"}))
 	}
 	must(t, s.CreateSession(&Session{ID: "z", ProjectID: other.ID, Provider: "claude", Model: "opus"}))
+	zBefore, err := s.GetSession("z")
+	must(t, err)
 
 	// "z" belongs to another project and must not be moved into this one.
 	must(t, s.ReorderSessions(p.ID, []string{"c", "a", "b", "z"}))
@@ -346,7 +348,7 @@ func TestReorderSessionsDrivesProjectOrder(t *testing.T) {
 	if len(got) != 3 || got[0].ID != "c" || got[1].ID != "a" || got[2].ID != "b" {
 		t.Fatalf("order = %+v, want c a b", ids(got))
 	}
-	if z, err := s.GetSession("z"); err != nil || z.Position != 0 {
+	if z, err := s.GetSession("z"); err != nil || z.Position != zBefore.Position || z.ProjectID != other.ID {
 		t.Errorf("session in another project was moved: %+v %v", z, err)
 	}
 

@@ -206,7 +206,7 @@ test("a second prompt queues behind a running turn and runs in order", async ({ 
 
   await page.getByPlaceholder("Ask the agent…").fill("second prompt");
   await page.getByRole("button", { name: "More prompt actions" }).click();
-  await page.getByRole("button", { name: /Enqueue/ }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Enqueue", exact: true }).click();
   await expect(page.getByText("Queued", { exact: true })).toBeVisible();
 
   // The first turn finishes, the scheduler starts the second one, and it

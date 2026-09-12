@@ -31,19 +31,8 @@ deciding which.
 every other task-related entry is grouped under `Tasks`. Settings draws those
 group names, so the dialog shows both words for the same thing.
 
-## Known failures, unchanged
+## Known gap
 
-- `TestDoneReachesProjectTopic` (`runner`) and
-  `TestReorderSessionsDrivesProjectOrder` (`store`) fail at `HEAD` and have for
-  several commits.
-- `tasks.spec.js`'s "a second prompt queues behind a running turn and runs in
-  order" fails at `HEAD` (cb5f2a0): `getByRole('button', { name: /Enqueue/ })`
-  now matches two elements, the primary submit button (whenever Enter is bound
-  to enqueue — the default, [015](015-settings-shortcuts.md)) and the Send
-  menu's own Enqueue entry, which the same commit made always render
-  regardless of which action is already primary. Reproduced against an
-  unmodified checkout, so it is not one this pass caused. The test needs a
-  locator scoped to the menu, e.g. the `dialog` role it already opens.
 - [036](036-copilot-model-list.md) documents a live gap: a Copilot model that
   takes no reasoning effort is still offered the provider-wide levels, because
   `agent.Model.Efforts` is `omitempty` and an empty list is indistinguishable

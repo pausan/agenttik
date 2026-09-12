@@ -283,13 +283,23 @@ func TestDoneReachesProjectTopic(t *testing.T) {
 	if _, err := r.Send(sess.ID, "hi"); err != nil {
 		t.Fatalf("send: %v", err)
 	}
-	select {
-	case ev := <-ch:
-		if ev.SessionID != sess.ID || ev.Event.Type != agent.EventDone || ev.Stats == nil {
-			t.Errorf("got %+v, want the session's done event with stats", ev)
+	timeout := time.After(2 * time.Second)
+	for {
+		select {
+		case ev, ok := <-ch:
+			if !ok {
+				t.Fatal("project topic closed before done")
+			}
+			if ev.Event.Type != agent.EventDone {
+				continue // The project also receives started and title events.
+			}
+			if ev.SessionID != sess.ID || ev.Stats == nil {
+				t.Errorf("got %+v, want the session's done event with stats", ev)
+			}
+			return
+		case <-timeout:
+			t.Fatal("no done event on the project topic")
 		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("no event on the project topic")
 	}
 }
 

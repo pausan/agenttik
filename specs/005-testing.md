@@ -16,6 +16,11 @@ Tests are written with the change they guard, where writing one is reasonable
 — see rule 6 in `AGENTS.md`. What exists guards the logic that is hard to
 eyeball and the flows that are tedious to click through by hand.
 
+Project-topic tests wait for the final `done` event with stats, allowing start
+and title events before it. Reordering tests compare another project's session
+position before and after the drag. Browser prompt-menu actions are scoped to
+their dialog because the primary submit button can have the same label.
+
 ## UI unit tests
 
 Only pure logic is worth unit testing here, and there are four pieces of it:

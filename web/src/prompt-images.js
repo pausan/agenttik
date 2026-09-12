@@ -32,7 +32,10 @@ export async function readClipboardImages(clipboard) {
 
 export async function uploadImage(file) {
   if (file.size > 4 * 1024 * 1024) throw new Error("Each pasted image must be 4 MiB or smaller.");
-  const res = await fetch("/api/attachments", { method: "POST", body: file });
+  // Linux WebKit can crash in Wails' URI-scheme handler when its request
+  // body is a Blob/File. Materialize the bounded image as bytes first.
+  const body = await file.arrayBuffer();
+  const res = await fetch("/api/attachments", { method: "POST", body, headers: { "Content-Type": file.type || "application/octet-stream" } });
   if (res.status === 401) {
     window.location.reload();
     throw new Error("Signed out");

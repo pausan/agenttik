@@ -11,8 +11,12 @@ image representation per clipboard item and does not read the clipboard for
 ordinary text paste.
 
 PNG, JPEG, GIF and WebP are accepted, up to 4 MiB each. The browser uploads
-each file as bytes to `POST /api/attachments`. The server checks the content
-signature and saves it as `attachments/<sha256>.<extension>` in the app data
+each file as bytes to `POST /api/attachments`.
+The upload materializes an `ArrayBuffer` after checking the size limit; it
+never passes a `Blob` or `File` as the fetch body, because Linux WebKit's
+native URI-scheme request body reader can crash on those bodies.
+The server checks the content signature and saves it as
+`attachments/<sha256>.<extension>` in the app data
 directory, outside project trees. Identical images share a file.
 `GET /api/attachments/:name` serves previews through the normal server access
 controls. Arbitrary filenames are refused.
@@ -28,3 +32,8 @@ and image support; images are not sent as native multimodal API content.
 Images are retained across restarts for queued work and saved conversations.
 Removing a draft attachment removes its reference, not the shared disk file.
 There is currently no automatic attachment cleanup.
+
+`make test-desktop-images` exercises Blob and File uploads through the real
+Linux Wails/WebKit request handler in an isolated process under Xvfb.
+The UI unit tests also check byte preservation and rejection before reading
+oversized images. Browser paste coverage lives in `e2e/tests/pasted-images.spec.js`.

@@ -1,6 +1,6 @@
 # Testing
 
-Three layers, each cheap enough to run often.
+Tests cover logic, browser flows and the native desktop transport.
 
 | Layer | Where | Command |
 |-------|-------|---------|
@@ -8,6 +8,7 @@ Three layers, each cheap enough to run often.
 | UI unit tests | `web/src/*.test.js` (node:test) | `make test` |
 | Startup budget | `e2e/tests/startup.spec.js` | `make test-startup` |
 | Browser tests | `e2e/tests/*.spec.js` (Playwright) | `make e2e` |
+| Linux desktop image uploads | `app/cmd/agenttik/desktop_images_linux_test.go` | `make test-desktop-images` |
 
 `make test` is the fast loop and runs the first two. `make e2e` builds the
 server and drives a real browser against it; it is the slower one, kept
@@ -15,6 +16,11 @@ separate so the fast loop stays fast. `make test-startup` requires the built
 web binary, installed e2e dependencies and Chromium; CI runs it separately
 with one worker and gates releases on the one-second requirement
 ([052](052-launch-budget.md)).
+
+`make test-desktop-images` needs the desktop build libraries and Xvfb. It runs
+the actual image upload module inside Wails/WebKit in a subprocess, checking
+that Blob and File images arrive intact without a native crash. It stays
+separate from the fast loop because it requires a native display stack.
 
 Tests are written with the change they guard, where writing one is reasonable
 — see rule 6 in `AGENTS.md`. What exists guards the logic that is hard to

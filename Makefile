@@ -61,6 +61,11 @@ test:
 	go test ./...
 	cd $(UI) && npm test
 
+## test-desktop-images: native Wails/WebKit image upload regression (needs Xvfb)
+.PHONY: test-desktop-images
+test-desktop-images:
+	xvfb-run -a go test -tags "$(DESKTOP_TAGS)" $(PKG) -run '^TestDesktopImageUpload$$' -count=1
+
 ## e2e: browser tests against a real server. The first run downloads a
 ## chromium into ~/.cache/ms-playwright.
 e2e: build-web

@@ -158,6 +158,61 @@ func TestSecondTurnResumes(t *testing.T) {
 	}
 }
 
+func TestPromptUnarchivesTask(t *testing.T) {
+	for _, queued := range []bool{false, true} {
+		name := "send"
+		if queued {
+			name = "queue"
+		}
+		t.Run(name, func(t *testing.T) {
+			fp := &fakeProvider{script: []agent.Event{{Type: agent.EventDone}}}
+			r, st, sess := setup(t, fp)
+			if err := st.SetSessionDone(sess.ID, true); err != nil {
+				t.Fatal(err)
+			}
+			if queued {
+				// Keep the prompt waiting to verify restoration happens on
+				// submission, even before the scheduler can start its turn.
+				r.active["other"] = activeTurn{projectID: sess.ProjectID}
+				waiting, err := r.Enqueue(sess.ID, "continue")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(waiting) != 1 {
+					t.Fatalf("queued prompts = %d, want 1", len(waiting))
+				}
+			} else {
+				ch, unsubscribe := r.Hub().Subscribe(sess.ID)
+				defer unsubscribe()
+				if _, err := r.Send(sess.ID, "continue"); err != nil {
+					t.Fatal(err)
+				}
+				waitFor(t, func() bool { return !r.Running(sess.ID) }, "turn to finish")
+				waitFor(t, func() bool {
+					select {
+					case event := <-ch:
+						if event.Event.Type == "started" {
+							if event.Session == nil || event.Session.DoneAt != 0 {
+								t.Fatalf("started event has archived session: %+v", event.Session)
+							}
+							return true
+						}
+					default:
+					}
+					return false
+				}, "started event")
+			}
+			updated, err := st.GetSession(sess.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if updated.DoneAt != 0 {
+				t.Fatalf("task is still archived: done_at = %d", updated.DoneAt)
+			}
+		})
+	}
+}
+
 func TestSecondPromptWhileRunningIsRejected(t *testing.T) {
 	fp := &fakeProvider{gate: make(chan struct{}),
 		script: []agent.Event{{Type: agent.EventText, Text: "working"}}}

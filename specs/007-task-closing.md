@@ -14,6 +14,9 @@ before reopening its tab.
 Archiving a task takes it out of the project's sidebar list and closes its tab
 and any files opened from it. It waits in the grey half of the project page's
 Tasks tab ([030](030-project-tasks.md)) until it is restored.
+Submitting a new prompt, either immediately or to the queue, automatically
+unarchives the task and returns it to the project's open task lists. Opening
+an archived task to read its transcript leaves it archived.
 
 An untitled task with no transcript, turns, queued work or draft is **deleted**
 rather than archived, so glancing at a new task and closing it leaves nothing

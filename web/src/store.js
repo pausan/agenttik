@@ -2825,9 +2825,11 @@ export async function send(prompt) {
 
   try {
     const turn = await api("POST", `/api/sessions/${tab.sessionID}/messages`, { prompt });
+    tab.detail.session.done_at = 0;
     startLocal(tab, "", turn);
     refreshSessions();
     refreshProjects();
+    reloadProjects();
   } catch (e) {
     const at = tab.detail.messages.indexOf(echo);
     if (at >= 0) tab.detail.messages.splice(at, 1);
@@ -2868,12 +2870,14 @@ export async function enqueue(prompt) {
   pendingQueued.push(pending);
   try {
     const result = await api("POST", `/api/sessions/${tab.sessionID}/queue`, { prompt });
+    tab.detail.session.done_at = 0;
     const at = pendingQueued.indexOf(pending);
     if (at >= 0) pendingQueued.splice(at, 1);
     tab.detail.queued = result.queued;
     tab.detail.session.queue_count = result.queue_count + pendingQueued.length;
     refreshSessions();
     refreshProjects();
+    reloadProjects();
   } catch (e) {
     const at = pendingQueued.indexOf(pending);
     if (at >= 0) pendingQueued.splice(at, 1);

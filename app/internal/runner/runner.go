@@ -241,6 +241,10 @@ func (r *Runner) send(queued store.QueuedMessage) (*store.Turn, error) {
 		release()
 		return nil, err
 	}
+	if err := r.unarchiveTask(sess); err != nil {
+		release()
+		return nil, err
+	}
 
 	// The prompt is persisted before any follow-up work, including naming the
 	// session. The client already knows the prompt and can show it on the
@@ -308,12 +312,27 @@ func (r *Runner) Enqueue(sessionID, prompt string) ([]store.QueuedMessage, error
 	if _, err := r.store.EnqueueMessage(sessionID, prompt, sess.Provider, sess.AccountID, sess.Model, sess.Effort); err != nil {
 		return nil, err
 	}
+	if err := r.unarchiveTask(sess); err != nil {
+		return nil, err
+	}
 	// A queued prompt may wait behind another session for a while. Name its
 	// session after the queue row exists, so the title is never ahead of the
 	// user's accepted prompt.
 	r.nameTask(sess, prompt)
 	r.schedule(sess.ProjectID, "")
 	return r.store.ListQueuedMessages(sessionID)
+}
+
+// Accepted prompts reopen their task before it runs or waits in the queue.
+func (r *Runner) unarchiveTask(sess *store.Session) error {
+	if sess.DoneAt == 0 {
+		return nil
+	}
+	if err := r.store.SetSessionDone(sess.ID, false); err != nil {
+		return err
+	}
+	sess.DoneAt = 0
+	return nil
 }
 
 // ForceQueued runs one of a session's waiting prompts now instead of when the

@@ -164,6 +164,7 @@ func (s *Server) routes() {
 	api.Get("/projects/:id/stats", s.projectStats)
 	api.Get("/projects/:id/metrics", s.projectMetrics)
 	api.Get("/projects/:id/tree", s.projectTree)
+	api.Get("/projects/:id/repositories", s.projectRepositories)
 	api.Get("/projects/:id/changes", s.projectChanges)
 	api.Get("/projects/:id/log", s.projectLog)
 	api.Get("/projects/:id/commit", s.projectCommit)

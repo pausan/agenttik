@@ -18,7 +18,6 @@ import {
   setSchedulePaused,
   setTaskArchived,
   stopTask,
-  switchProject,
   toggleProjectTasks,
 } from "../store";
 import { SEGMENTED } from "../ui";
@@ -36,23 +35,6 @@ const tabs = [
   { label: "Projects", value: "projects" },
   { label: "Tree", value: "tree" },
 ];
-
-/* A workspace is one managed repository. The full project rows stay below —
-   they are where projects are opened, folded and reordered — while this
-   compact picker makes switching direct once there is more than one. */
-const repositories = computed(() =>
-  S.projects.map((project) => ({
-    label: project.name,
-    description: project.path,
-    value: project.id,
-    icon: "i-lucide-git-branch",
-  })),
-);
-
-function selectRepository(id) {
-  id = Number(id);
-  if (id && id !== S.activeProjectID) switchProject(id);
-}
 
 /* Opening Tree focuses its filter, including when it is already in front. */
 function show(which) {
@@ -211,29 +193,12 @@ function onTaskDrop(e) {
 
 <template>
   <aside class="flex min-h-0 flex-col bg-muted">
-    <header class="mx-2.5 mt-3 shrink-0">
-      <h2 class="m-0 px-0.5 text-sm font-semibold tracking-tight text-highlighted">
-        Workspace
-      </h2>
-      <USelect
-        v-if="S.projects.length > 1"
-        :model-value="S.activeProjectID"
-        :items="repositories"
-        value-key="value"
-        size="sm"
-        class="mt-2 w-full"
-        aria-label="Git repository"
-        title="Switch Git repository"
-        @update:model-value="selectRepository"
-      />
-    </header>
-
     <UTabs
       :model-value="tab"
       :items="tabs"
       :content="false"
       size="sm"
-      class="mx-2.5 mt-2 mb-2 shrink-0"
+      class="mx-2.5 mt-3 mb-2 shrink-0"
       :ui="SEGMENTED"
       @update:model-value="show(String($event))"
     >

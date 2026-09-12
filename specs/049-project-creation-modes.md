@@ -57,25 +57,18 @@ twice.
 
 **No new schema, and no stored mode.** A project is still one row with one
 path. Multi-repo is a way of *filling* a folder, not a kind of project, so
-nothing downstream — the Tree, the Changed pane, `git` in the Commits pane,
-the working directory a turn runs in — has to learn about it. The clones are
-simply what the folder contains. A project made this way is indistinguishable
-from one made by cloning the repositories by hand and adding the folder,
-which is the point.
+the Tree and the agent's working directory use that base folder. The clones
+are simply what the folder contains. A project made this way is indistinguishable
+from one made by cloning the repositories by hand and adding the folder.
 
-**The git-backed panes read the project root, which a base folder is not.**
-`isGitRepo` looks for `.git` at the root, and a folder holding checkouts has
-none, so Commits and Changed both answer empty rather than erroring, and the
-Tree falls back to the hand-walk `listFiles` already keeps for a project that
-is not a repository. Two consequences worth knowing before choosing this mode:
-there is no one history or one working-tree status to show — each checkout has
-its own, and neither pane aggregates — and the hand-walk has no notion of
-`.gitignore`, so build outputs are listed and nothing comes back grey. Only
-`skipDirs` — `.git`, `node_modules`, `.venv`, `vendor`, `__pycache__` — is
-skipped, and the listing stops at 20,000 entries. None of this is new; it is
-what every non-repository project has always done. This mode just makes it the
-normal case rather than the odd one, and the agent itself is unaffected: it
-runs `git` in whichever checkout it is working in.
+**Git panes use the selected repository.** The Workspace header on the right
+selects among repositories inside the current project when there are multiple;
+a single repository is used automatically. Changed and Commits show that
+repository's status and history. See [053](053-workspace-repositories.md).
+The Tree still lists the whole project, using its non-repository fallback for
+a base folder. That fallback skips dependency folders and Git internals, but
+does not classify ignored files. The agent runs from the base folder and can
+run Git in whichever checkout it is working in.
 
 **The clone URL is an allowlist, not an escape.** git's transports include
 `ext::`, which runs a shell command the URL chooses. agenttik has no login and

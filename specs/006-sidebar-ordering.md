@@ -1,9 +1,13 @@
 # Sidebar ordering and the project tree
 
-The left strip is titled **Workspace** over `Projects | Tree`. With two or
-more managed repositories, a picker under the title switches the selected
-project by the same work-first rule as its `Alt` letter; with one repository
-it is omitted. The project rows remain the canonical list and drag order.
+The left strip contains `Projects | Tree`. Project rows are the canonical
+project selector and drag order; there is no project dropdown.
+
+The right strip is titled **Workspace**. A Git repository dropdown appears
+only when the current project contains more than one repository. It selects
+which repository Changed and Commits read, without switching projects or tasks.
+One repository is selected automatically and has no dropdown; zero repositories
+also have no dropdown. See [053](053-workspace-repositories.md).
 
 Tree always uses the project that owns the active tab — a task, a project page,
 or a file opened from either — and falls back to the selected project when

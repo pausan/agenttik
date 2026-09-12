@@ -1,7 +1,7 @@
 <script setup>
 import { computed, defineAsyncComponent } from "vue";
 
-import { S } from "../store";
+import { S, selectRepository } from "../store";
 import FileList from "./FileList.vue";
 import { SEGMENTED } from "../ui";
 
@@ -25,12 +25,24 @@ const active = computed({
 
 <template>
   <aside class="flex min-h-0 flex-col bg-muted">
+    <header class="mx-2.5 mt-3 shrink-0">
+      <h2 class="m-0 px-0.5 text-sm font-semibold tracking-tight text-highlighted">Workspace</h2>
+      <USelect
+        v-if="S.repositories.length > 1"
+        :model-value="S.repository"
+        :items="S.repositories.map((path) => ({ label: path === '.' ? 'Project root' : path, value: path }))"
+        size="sm"
+        class="mt-2 w-full"
+        aria-label="Git repository"
+        @update:model-value="selectRepository"
+      />
+    </header>
     <UTabs
       v-model="active"
       :items="items"
       :content="false"
       size="sm"
-      class="mx-2.5 mt-3 mb-2 shrink-0"
+      class="mx-2.5 mt-2 mb-2 shrink-0"
       :ui="SEGMENTED"
     />
     <div class="min-h-0 flex-1 p-2.5" :class="active === 'logs' ? 'flex flex-col overflow-hidden' : 'overflow-auto'">

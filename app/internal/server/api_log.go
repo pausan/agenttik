@@ -47,7 +47,7 @@ type projectLog struct {
 // not a repository, and one with no commits yet, both answer with an empty log
 // rather than an error: neither is a fault the pane can do anything about.
 func (s *Server) projectLog(c *fiber.Ctx) error {
-	root, err := s.projectRoot(c)
+	root, err := s.repositoryRoot(c)
 	if err != nil {
 		return err
 	}
@@ -164,6 +164,10 @@ func (s *Server) projectCommit(c *fiber.Ctx) error {
 			}
 		}
 	}
+	prefix := s.repositoryPrefix(c, root)
+	for i := range body.Files {
+		body.Files[i].Path = prefix + body.Files[i].Path
+	}
 	return c.JSON(body)
 }
 
@@ -174,7 +178,10 @@ func (s *Server) projectCommitDiff(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	rel := c.Query("path")
+	rel, err := s.repositoryFilePath(c, root)
+	if err != nil {
+		return err
+	}
 	if _, err := resolveInRoot(root, rel); err != nil {
 		return err
 	}
@@ -192,7 +199,7 @@ func (s *Server) projectCommitDiff(c *fiber.Ctx) error {
 // is the only client value handed to git as a revision, so it is matched
 // against hex rather than merely escaped.
 func (s *Server) commitTarget(c *fiber.Ctx) (string, string, error) {
-	root, err := s.projectRoot(c)
+	root, err := s.repositoryRoot(c)
 	if err != nil {
 		return "", "", err
 	}

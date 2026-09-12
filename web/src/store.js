@@ -99,6 +99,8 @@ export const S = reactive({
   taskStatsOpen: false,
   inspector: { panes: ["changed", "logs"], active: "changed" },
   changed: [],
+  repositories: [],
+  repository: "",
   log: { branch: "", head: "", commits: [] },
   logFilter: "",
   logOpen: "", // the commit whose file list is expanded
@@ -2196,19 +2198,51 @@ function setInspectorPanes(panes) {
 }
 
 export async function refreshInspector() {
+  await refreshRepositories();
   await Promise.all([refreshChanged(), refreshLog(), refreshTree()]);
+}
+
+async function refreshRepositories() {
+  const id = currentProjectID();
+  if (!id) return;
+  try {
+    const repos = await api("GET", `/api/projects/${id}/repositories`);
+    if (currentProjectID() !== id) return;
+    S.repositories = repos;
+    if (!repos.includes(S.repository)) {
+      S.repository = repos[0] || "";
+      S.logOpen = "";
+      S.logFiles = {};
+    }
+  } catch {
+    if (currentProjectID() === id) {
+      S.repositories = [];
+      S.repository = "";
+    }
+  }
+}
+
+export function selectRepository(repo) {
+  if (!S.repositories.includes(repo) || repo === S.repository) return;
+  S.repository = repo;
+  S.changed = [];
+  S.log = EMPTY_LOG();
+  S.logOpen = "";
+  S.logFiles = {};
+  Promise.all([refreshChanged(), refreshLog()]).catch(fail);
 }
 
 export async function refreshChanged() {
   const id = currentProjectID();
+  const repo = S.repository;
   if (!id) return (S.changed = []);
   try {
-    const changed = await api("GET", `/api/projects/${id}/changes`);
+    const changed = await api("GET", `/api/projects/${id}/changes?repo=${encodeURIComponent(repo)}`);
     // The watcher can fire this often, so a slow answer for the project we
     // just left must not replace the list of the one now in front.
-    if (currentProjectID() === id) S.changed = changed;
+    if (currentProjectID() === id && S.repository === repo) S.changed = changed;
   } catch {
-    if (currentProjectID() === id) S.changed = [];
+    if (currentProjectID() === id && S.repository === repo) S.changed = [];
   }
 }
 
@@ -2217,14 +2251,15 @@ export async function refreshChanged() {
    special-case here. */
 export async function refreshLog() {
   const id = currentProjectID();
+  const repo = S.repository;
   if (!id) return (S.log = EMPTY_LOG());
   try {
-    const log = await api("GET", `/api/projects/${id}/log`);
+    const log = await api("GET", `/api/projects/${id}/log?repo=${encodeURIComponent(repo)}`);
     // A slow request for the project we just left must not replace the log of
     // the one now in front.
-    if (currentProjectID() === id) S.log = log;
+    if (currentProjectID() === id && S.repository === repo) S.log = log;
   } catch {
-    if (currentProjectID() === id) S.log = EMPTY_LOG();
+    if (currentProjectID() === id && S.repository === repo) S.log = EMPTY_LOG();
   }
 }
 
@@ -2239,13 +2274,15 @@ export async function toggleCommit(hash) {
     return;
   }
   S.logOpen = hash;
+  const repo = S.repository;
   if (S.logFiles[hash]) return;
   const id = currentProjectID();
   if (!id) return;
   try {
-    const detail = await api("GET", `/api/projects/${id}/commit?hash=${hash}`);
-    S.logFiles[hash] = detail.files;
+    const detail = await api("GET", `/api/projects/${id}/commit?hash=${hash}&repo=${encodeURIComponent(repo)}`);
+    if (currentProjectID() === id && S.repository === repo) S.logFiles[hash] = detail.files;
   } catch (e) {
+    if (currentProjectID() !== id || S.repository !== repo) return;
     if (S.logOpen === hash) S.logOpen = "";
     fail(e);
   }
@@ -2392,6 +2429,10 @@ export function hasInspector() {
 watch(
   currentProjectID,
   () => {
+    S.repositories = [];
+    S.repository = "";
+    S.changed = [];
+    S.log = EMPTY_LOG();
     S.treeFilter = "";
     S.logFilter = "";
     S.logOpen = "";

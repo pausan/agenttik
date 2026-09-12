@@ -269,7 +269,7 @@ type changedFile struct {
 }
 
 func (s *Server) projectChanges(c *fiber.Ctx) error {
-	root, err := s.projectRoot(c)
+	root, err := s.repositoryRoot(c)
 	if err != nil {
 		return err
 	}
@@ -280,7 +280,12 @@ func (s *Server) projectChanges(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(parseStatus(out))
+	files := parseStatus(out)
+	prefix := s.repositoryPrefix(c, root)
+	for i := range files {
+		files[i].Path = prefix + files[i].Path
+	}
+	return c.JSON(files)
 }
 
 // parseStatus turns `git status --porcelain=v1` output into changed files.
@@ -312,11 +317,14 @@ type fileDiff struct {
 // compared with an empty file and reads as entirely new rather than as no
 // change at all.
 func (s *Server) projectDiff(c *fiber.Ctx) error {
-	root, err := s.projectRoot(c)
+	root, err := s.repositoryRoot(c)
 	if err != nil {
 		return err
 	}
-	rel := c.Query("path")
+	rel, err := s.repositoryFilePath(c, root)
+	if err != nil {
+		return err
+	}
 	if _, err := resolveInRoot(root, rel); err != nil {
 		return err
 	}
@@ -559,11 +567,14 @@ var rawRev = regexp.MustCompile(`^(HEAD|[0-9a-f]{4,40})\^?$`)
 // rather than read it: the preview, and the two sides of an image diff. rev
 // names a revision to read it from instead of the working tree.
 func (s *Server) projectRawImage(c *fiber.Ctx) error {
-	root, err := s.projectRoot(c)
+	root, err := s.repositoryRoot(c)
 	if err != nil {
 		return err
 	}
-	rel := c.Query("path")
+	rel, err := s.repositoryFilePath(c, root)
+	if err != nil {
+		return err
+	}
 	abs, err := resolveInRoot(root, rel)
 	if err != nil {
 		return err

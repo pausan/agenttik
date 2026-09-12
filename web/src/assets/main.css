@@ -34,6 +34,16 @@ button:not(:disabled) { cursor: pointer; }
 button[draggable="true"] { cursor: grab; }
 button[draggable="true"]:active { cursor: grabbing; }
 
+/* Keep native overlay scrollbars, including their fade-out, in the
+   scroller's stacking context beneath portalled menus and dialogs. */
+.overflow-auto,
+.overflow-x-auto,
+.overflow-y-auto,
+.markdown pre,
+.markdown table {
+  isolation: isolate;
+}
+
 
 /* A compact context gauge belongs beside the prompt controls. Its text stays
    legible without colour; clicking it opens the context and allowance panel. */

@@ -1,4 +1,4 @@
-# Links in a transcript
+# Links in transcripts and Markdown previews
 
 Web links in agent replies follow in the browser. On the desktop, the app
 opens them in the system browser because its embedded view cannot open a new
@@ -7,10 +7,12 @@ link**. In a browser deployment, a normal click keeps its usual new-tab
 behaviour and the menu's open action does the same.
 
 A file the agent names in its reply is clickable, and clicking it opens that
-file in a tab — the project's temporary tab, the same one a click in the Tree
-uses, so reading through what an agent changed leaves one tab behind rather
-than twenty. A reference that names a line (`web/src/store.js:801`) opens the
-editor scrolled to that line, with the line selected.
+file in a kept app tab. An already open file is selected and kept instead of
+creating a duplicate. Right-clicking a local link offers **Open in new tab**
+and **Open in system browser**. The latter uses the same system file opener
+as the Tree ([048](048-open-in-system-browser.md)). A reference that names a
+line (`web/src/store.js:801`) opens the editor scrolled to that line, with the
+line selected.
 
 Two forms are recognised, both of them what a coding agent actually writes:
 
@@ -25,21 +27,24 @@ became clickable.
 
 ## What is a path
 
-An extension is what separates a path from everything else a code span holds.
-Without that rule `S.detail`, `tab.temp` and `account/rateLimits/read` all
-read as files; with it, none of them do and `README.md` still does. The list
-is source, config and document types — the files an agent talks about.
+Code spans require a known source, config or document extension, so
+`S.detail`, `tab.temp` and `account/rateLimits/read` stay plain code.
+Explicit Markdown links also accept extensionless files such as `Makefile`,
+percent-encoded paths, and angle-bracket targets containing spaces.
+Document fragments are stripped; `:line` and `#Lline` retain line navigation.
 
-The path is passed to the project's file API as it stands, so a path outside
-the project is refused there rather than guessed at here. An absolute path
-inside the project is the exception: the project's own folder is trimmed off
-the front, because that is the same file said a longer way.
+Transcript paths resolve from the project root. Markdown preview paths resolve
+from the displayed file's folder, including `./` and `../`. Absolute paths
+inside the project have the project folder trimmed off. Both open actions
+use the same resolved path; the server rejects paths outside the project and
+reports missing files without opening a tab.
 
 `markdown.js` emits a `<button>`, not an `<a>`. The anchor would need an href
 that means "no navigation", and the transcript is not where navigation should
 be argued about; a button carries the path in a data attribute, is focusable
-and answers Enter for free. `Message.vue` listens once per bubble, so a reply
-naming forty files still costs one listener.
+and answers Enter for free. `MarkdownContent.vue` shares the rendering, click
+handler and context menu between message bubbles and file previews. A block
+naming forty files still costs one listener per event type.
 
 ## Finding the line
 
@@ -61,8 +66,8 @@ choice and not one a link should make for them.
 
 ## Limits
 
-- Only what is rendered as markdown, which is the agent's replies. Your own
-  prompts are shown as you typed them.
+- Only rendered Markdown: agent replies, thinking messages and file previews.
+  Your own prompts are shown as you typed them.
 - A bare path in prose is not linked, only one in a code span or a link. In
   980 lines of real transcripts there was not one bare path, and linking them
   would mean guessing at prose.

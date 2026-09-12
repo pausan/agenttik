@@ -1848,18 +1848,24 @@ export function openFile(path, pin = false) {
   return openFileIn(currentProjectID(), S.owner?.id || "", path, { pin });
 }
 
-/* openFileRef answers a file mentioned in a transcript: same temporary tab a
-   click in the Tree uses, scrolled to the line the reference named.
+/* Markdown links resolve from the document's folder, or from the project
+   root in a transcript. The API bounds paths and checks that files exist. */
+export function resolveFileRef(path, basePath = "") {
+  const root = S.projects.find((p) => p.id === currentProjectID())?.path || "";
+  if (root && path.startsWith(root + "/")) path = path.slice(root.length + 1);
+  else if (!path.startsWith("/") && basePath.includes("/")) path = basePath.slice(0, basePath.lastIndexOf("/") + 1) + path;
+  if (path.startsWith("/")) return path;
+  const parts = [];
+  for (const part of path.split("/")) {
+    if (!part || part === ".") continue;
+    if (part === ".." && parts.length && parts.at(-1) !== "..") parts.pop();
+    else parts.push(part);
+  }
+  return parts.join("/");
+}
 
-   The path is the agent's, so it may be absolute. The file API only takes
-   paths inside the project, so the project's own folder is trimmed off the
-   front; anything else is passed as it was and refused with a message that
-   says so, which beats guessing at what an outside path meant. */
-export function openFileRef(path, line = 0) {
-  const id = currentProjectID();
-  const root = S.projects.find((p) => p.id === id)?.path || "";
-  const rel = root && path.startsWith(root + "/") ? path.slice(root.length + 1) : path;
-  return openFileIn(id, S.owner?.id || "", rel, { line });
+export function openFileRef(path, line = 0, basePath = "") {
+  return openFileIn(currentProjectID(), S.owner?.id || "", resolveFileRef(path, basePath), { line, pin: true });
 }
 
 /* At most one temporary tab per project, because the strip is per project:

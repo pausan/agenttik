@@ -12,8 +12,8 @@
    id to rewrite. */
 import { computed, nextTick, ref } from "vue";
 
-import { S, copyText, editMessage, effortsFor as effortsOf, modelPickerGroups, openExternal, openFileRef, parseModelChoice, setModel } from "../store";
-import { markdown } from "../markdown";
+import { S, copyText, editMessage, effortsFor as effortsOf, modelPickerGroups, parseModelChoice, setModel } from "../store";
+import MarkdownContent from "./MarkdownContent.vue";
 
 const props = defineProps({ message: { type: Object, required: true } });
 
@@ -33,9 +33,6 @@ const BUBBLE = {
 };
 
 const rendered = computed(() => !!RENDERED[props.message.role]);
-/* markdown() emits a fixed set of tags over escaped text, which is what makes
-   v-html safe here: nothing an agent writes can reach the DOM as markup. */
-const html = computed(() => (rendered.value ? markdown(props.message.content) : ""));
 const classes = computed(() => [
   "wrap-anywhere",
   BUBBLE[props.message.role],
@@ -45,39 +42,6 @@ const classes = computed(() => [
 const editable = computed(
   () => props.message.role === "user" && !!props.message.id && !props.message.streaming,
 );
-
-/* A path the agent wrote is a button inside the rendered markdown, so one
-   listener on the bubble answers all of them however many there are. The
-   desktop webview cannot follow target=_blank, so its web links go through
-   the same system-browser bridge as Settings' server address. */
-function onClick(e) {
-  const link = e.target.closest("a[href]");
-  if (link && openExternal(link.href)) {
-    e.preventDefault();
-    return;
-  }
-  const hit = e.target.closest("button.file");
-  if (!hit) return;
-  openFileRef(hit.dataset.file, Number(hit.dataset.line) || 0);
-}
-
-/* An embedded desktop view has no browser context menu, so aim one shared
-   menu at the link under the pointer. In a normal browser the anchor still
-   follows itself; opening from this menu uses a new tab. */
-const aimedLink = ref("");
-function aimLink(e) {
-  aimedLink.value = e.target.closest("a[href]")?.href || "";
-}
-
-function openLink() {
-  if (!aimedLink.value) return;
-  if (!openExternal(aimedLink.value)) window.open(aimedLink.value, "_blank", "noopener,noreferrer");
-}
-
-const linkMenu = computed(() => [
-  { label: "Open in browser", icon: "i-lucide-external-link", disabled: !aimedLink.value, onSelect: openLink },
-  { label: "Copy link", icon: "i-lucide-copy", disabled: !aimedLink.value, onSelect: () => copyText(aimedLink.value) },
-]);
 
 const copied = ref(false);
 async function copy() {
@@ -207,9 +171,7 @@ function onKey(e) {
     </form>
 
     <template v-else>
-      <UContextMenu v-if="rendered" :items="linkMenu">
-        <div :class="classes" v-html="html" @click="onClick" @contextmenu="aimLink" />
-      </UContextMenu>
+      <MarkdownContent v-if="rendered" :class="classes" :text="message.content" />
       <div v-else :class="classes">{{ message.content }}</div>
     </template>
   </div>

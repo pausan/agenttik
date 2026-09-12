@@ -209,7 +209,7 @@ const INLINE = new RegExp(
     "(^|[^\\w*])\\*([^*\\n]+)\\*(?!\\w)", //         5,6  italic
     "(^|[^\\w_])_([^_\\n]+)_(?!\\w)", //             7,8  italic
     "~~([\\s\\S]+?)~~", //                           9    strikethrough
-    "!?\\[([^\\]]*)\\]\\(([^)\\s]*)[^)]*\\)", //     10,11 link or image
+    "!?\\[([^\\]]*)\\]\\((<[^>]*>|[^)\\s]*)[^)]*\\)", //     10,11 link or image
     "<(https?://[^>\\s]+)>", //                      12   autolink
     "(https?://[^\\s<>\\[\\]`]+)", //                13   bare url
   ].join("|"),
@@ -259,11 +259,11 @@ function inline(src) {
    an absolute path would otherwise become a link to our own origin. A scheme
    that could do something when clicked matches neither and stays as text. */
 function link(url, text) {
-  const href = url.trim();
+  const href = url.trim().replace(/^<(.*)>$/, "$1");
   if (/^(?:https?:|mailto:|#)/i.test(href) || /^\/api\/attachments\/[a-f0-9]{64}\.(png|jpg|gif|webp)$/.test(href)) {
     return `<a href="${esc(href)}" target="_blank" rel="noreferrer noopener">${text}</a>`;
   }
-  return fileLink(href, text) || text;
+  return fileLink(href, text, true) || text;
 }
 
 /* ------------------------------------------------------------ file links */
@@ -272,7 +272,7 @@ function link(url, text) {
    in a code span, far more often than a markdown link. Both open the file in
    a tab, which is the transcript's own business rather than the browser's —
    so this is a button carrying the path in a data attribute, not an anchor
-   that would navigate somewhere, and Message.vue answers the click.
+   that would navigate somewhere, and MarkdownContent.vue answers the click.
 
    An extension is what tells a path from the other things a code span holds:
    `S.detail` and `account/rateLimits/read` are not files. */
@@ -283,7 +283,14 @@ const FILE_EXT =
    or `#L801` the way a forge writes it. A trailing column is dropped. */
 const FILE_REF = /^(?:file:\/\/)?(\/?[\w.@~+-]+(?:\/[\w.@~+-]+)*)(?::(\d+)(?::\d+)?|#L?(\d+))?$/;
 
-function fileRef(target) {
+function fileRef(target, explicit) {
+  if (explicit) {
+    try { target = decodeURIComponent(target); } catch { return null; }
+    target = target.replace(/^file:\/\//i, "");
+    const m = /^(.*?)(?::(\d+)(?::\d+)?|#L?(\d+)|#[^#]*)?$/.exec(target);
+    if (!m || !m[1] || /[:?#\\\x00-\x1f]/.test(m[1]) || m[1].startsWith("//")) return null;
+    return { path: m[1], line: m[2] || m[3] || "" };
+  }
   const m = FILE_REF.exec(target.trim());
   if (!m || !FILE_EXT.test(m[1])) return null;
   return { path: m[1], line: m[2] || m[3] || "" };
@@ -291,8 +298,8 @@ function fileRef(target) {
 
 /* fileLink returns null when the target is not a path, so a caller that has
    something else — a code span, a link to nowhere — renders it as it was. */
-function fileLink(target, inner) {
-  const ref = fileRef(target);
+function fileLink(target, inner, explicit = false) {
+  const ref = fileRef(target, explicit);
   if (!ref) return null;
   const label = ref.line ? `${ref.path}:${ref.line}` : ref.path;
   const line = ref.line ? ` data-line="${ref.line}"` : "";

@@ -107,3 +107,19 @@ test("empty input renders nothing", () => {
   assert.equal(markdown(""), "");
   assert.equal(markdown(undefined), "");
 });
+
+test("explicit local links accept extensionless files, spaces and document fragments", () => {
+  for (const [target, path] of [
+    ["myfile.md", "myfile.md"],
+    ["Makefile", "Makefile"],
+    ["docs/my%20file.md", "docs/my file.md"],
+    ["<docs/my file.md>", "docs/my file.md"],
+    ["../README.md#overview", "../README.md"],
+  ]) {
+    assert.match(markdown(`[blah](${target})`), new RegExp(`data-file="${path.replaceAll(".", "\\.")}"`));
+  }
+  assert.match(markdown("[line](<docs/my file.md:12>)"), /data-line="12"/);
+  for (const target of ["javascript:alert", "data:text/plain,hello", "//example.com/a.md", "bad%00.md", "bad%ZZ.md"]) {
+    assert.equal(markdown(`[blah](${target})`), "<p>blah</p>");
+  }
+});

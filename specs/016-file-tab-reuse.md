@@ -6,6 +6,10 @@ project's *temporary* tab, and the next file clicked takes that tab over: same
 place in the strip, one tab. A double click opens the file
 to keep, and so does typing in it. Kept tabs are only closed by hand.
 
+Local links in transcripts and Markdown previews open kept tabs on a single
+click or through **Open in new tab**, so following a document link preserves
+the file being read. An already open destination is selected and kept.
+
 `temp` on the file tab is the whole state. `tempFileIn` finds the one a click
 reuses, and `swapTab` puts the new tab at the old one's index rather than
 closing and appending, so the strip's length and order hold still under the

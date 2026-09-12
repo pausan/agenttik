@@ -19,7 +19,7 @@
    raw endpoint. FontPreview registers a face only while it is displayed. */
 import { computed } from "vue";
 
-import { markdown } from "../markdown";
+import MarkdownContent from "./MarkdownContent.vue";
 import { isFont, isImage, rawURL } from "../store";
 import FontPreview from "./FontPreview.vue";
 import ImageFrame from "./ImageFrame.vue";
@@ -54,5 +54,5 @@ const svg = computed(() => "data:image/svg+xml;charset=utf-8," + encodeURICompon
 
   <FontPreview v-else-if="isFont(tab.path)" :src="rawURL(tab)" />
 
-  <div v-else class="markdown mx-auto max-w-3xl px-5 py-5" v-html="markdown(text)"></div>
+  <MarkdownContent v-else class="markdown mx-auto max-w-3xl px-5 py-5" :text="text" :base-path="tab.path" />
 </template>

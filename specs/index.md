@@ -62,7 +62,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [014](014-transcript-messages.md) | Copying messages, editing a prompt in place |
 | [016](016-file-tab-reuse.md) | The temporary file tab a click reuses |
 | [019](019-file-watching.md) | Tree and Changed following the disk as it moves |
-| [022](022-transcript-file-links.md) | Opening or copying web links, and opening reply paths at their lines |
+| [022](022-transcript-file-links.md) | Web link actions and local file tabs/system opening in transcripts and previews |
 | [023](023-tool-call-groups.md) | Collapsing a run of tool calls to its latest |
 | [026](026-image-preview.md) | Previewing an SVG or an image, and diffing two pictures |
 | [058](058-font-preview.md) | Font samples, custom text, size controls and glyph squares |

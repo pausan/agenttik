@@ -1,6 +1,7 @@
 # Opening a project or a file on the desktop
 
-A right click on a project row in the sidebar, and on any row of the Tree,
+A right click on a project row in the sidebar, on any row of the Tree,
+or on a local file link in a transcript or Markdown preview,
 offers **Open in system browser**: the folder or the file is handed to the
 machine agenttik runs on, which opens it the way a double click in a file
 manager would — a folder in the file browser, a file in whatever is registered

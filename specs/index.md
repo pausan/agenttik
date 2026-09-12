@@ -80,7 +80,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [018](018-readme-icon.md) | The project overview, and the one SVG the README, favicon and window share |
 | [029](029-desktop-proxy-logging.md) | Why the window logged broken pipes, and the abort it recovers instead |
 | [032](032-single-tab-close-shortcut.md) | Ctrl+W closes one active tab, including when held |
-| [037](037-cross-platform-releases.md) | Push builds and tagged Linux, macOS, and Windows releases |
+| [037](037-cross-platform-releases.md) | Cross-platform releases, stripping and UPX compression |
 | [039](039-single-instance.md) | One app per data directory, and the window a second launch raises |
 | [043](043-exposed-server.md) | Serving the window's UI to a browser too, on a chosen host and port, behind an optional password and code |
 | [044](044-command-line.md) | Long options, `--init`, `--help`, and the version a release tag builds in |

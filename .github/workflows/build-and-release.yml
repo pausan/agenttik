@@ -56,6 +56,8 @@ jobs:
     needs: release-tag
     name: ${{ matrix.platform }} ${{ matrix.goarch }}
     runs-on: ${{ matrix.runner }}
+    env:
+      UPX_VERSION: 5.1.1
     strategy:
       fail-fast: false
       matrix:
@@ -116,6 +118,27 @@ jobs:
           npm ci --prefix web
           npm run build --prefix web
 
+      - name: Install UPX on Linux
+        if: matrix.platform == 'linux'
+        env:
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          archive="upx-${UPX_VERSION}-${GOARCH}_linux"
+          curl --fail --location --retry 3 \
+            "https://github.com/upx/upx/releases/download/v${UPX_VERSION}/${archive}.tar.xz" \
+            -o "$RUNNER_TEMP/upx.tar.xz"
+          tar -xJf "$RUNNER_TEMP/upx.tar.xz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/$archive" >> "$GITHUB_PATH"
+
+      - name: Install UPX on Windows
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $archive = "upx-$env:UPX_VERSION-win64"
+          Invoke-WebRequest "https://github.com/upx/upx/releases/download/v$env:UPX_VERSION/$archive.zip" -OutFile "$env:RUNNER_TEMP/upx.zip"
+          Expand-Archive "$env:RUNNER_TEMP/upx.zip" -DestinationPath "$env:RUNNER_TEMP/upx"
+          "$env:RUNNER_TEMP/upx/$archive" >> $env:GITHUB_PATH
+
       - name: Build desktop binary
         shell: bash
         env:
@@ -128,7 +151,7 @@ jobs:
           mkdir -p dist
           # An untagged push has no version to report, so it says which commit
           # it is instead, in the file name and in the binary alike.
-          ldflags="-X main.version=${VERSION:-${GITHUB_SHA::12}}"
+          ldflags="-s -w -X main.version=${VERSION:-${GITHUB_SHA::12}}"
           if [[ -n "${{ matrix.ldflags }}" ]]; then
             ldflags="${{ matrix.ldflags }} $ldflags"
           fi
@@ -141,6 +164,23 @@ jobs:
             -ldflags "$ldflags" \
             -o "dist/agenttik_${TAG:-${GITHUB_SHA::12}}_${GOOS}_${GOARCH}${{ matrix.extension }}" \
             ./app/cmd/agenttik
+
+      # UPX does not support macOS arm64; that binary is stripped at link time.
+      - name: Compress and check executable
+        if: matrix.platform != 'darwin'
+        shell: bash
+        run: |
+          upx --best --lzma dist/agenttik_*
+          upx --test dist/agenttik_*
+
+      - name: Verify executable version
+        shell: bash
+        env:
+          VERSION: ${{ needs.release-tag.outputs.version }}
+        run: |
+          binary=(dist/agenttik_*)
+          actual_version=$("${binary[0]}" --version)
+          test "${actual_version//$'\r'/}" = "agenttik ${VERSION:-${GITHUB_SHA::12}}"
 
       - name: Upload release asset
         if: needs.release-tag.outputs.is_release == 'true'

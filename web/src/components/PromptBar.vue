@@ -171,6 +171,8 @@ const effortValue = computed({
 
 
 function pickModel(value) {
+  // A cleared palette selection does not change the task's model.
+  if (!value) return;
   if (value.startsWith("expand:")) {
     toggleProvider(value.slice("expand:".length));
     return;

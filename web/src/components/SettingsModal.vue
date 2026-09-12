@@ -8,10 +8,11 @@
    the filter changes. They are small enough that this costs nothing. */
 import { computed, reactive, ref, watch } from "vue";
 
-import { fail, loadArchivedProjects, loadProviders, loadServerConfig } from "../store";
+import { S, fail, loadArchivedProjects, loadOrchestratorConfig, loadProviders, loadServerConfig, openProject } from "../store";
 import AppearanceSettings from "./settings/AppearanceSettings.vue";
 import GeneralSettings from "./settings/GeneralSettings.vue";
 import ModelSettings from "./settings/ModelSettings.vue";
+import OrchestratorSettings from "./settings/OrchestratorSettings.vue";
 import ProjectSettings from "./settings/ProjectSettings.vue";
 import ServerSettings from "./settings/ServerSettings.vue";
 import ShortcutSettings from "./settings/ShortcutSettings.vue";
@@ -23,6 +24,7 @@ const section = defineModel("section", { type: String, default: "general" });
 const SECTIONS = [
   { id: "general", label: "General", icon: "i-lucide-settings" },
   { id: "projects", label: "Projects", icon: "i-lucide-archive" },
+  { id: "orchestrator", label: "Orchestrator", icon: "i-lucide-network" },
   { id: "appearance", label: "Appearance", icon: "i-lucide-palette" },
   { id: "models", label: "Models", icon: "i-lucide-sparkles" },
   { id: "subscriptions", label: "Subscriptions", icon: "i-lucide-id-card" },
@@ -31,7 +33,7 @@ const SECTIONS = [
 ];
 
 const filter = ref("");
-const counts = reactive({ general: 0, projects: 0, appearance: 0, models: 0, subscriptions: 0, server: 0, shortcuts: 0 });
+const counts = reactive({ general: 0, projects: 0, orchestrator: 0, appearance: 0, models: 0, subscriptions: 0, server: 0, shortcuts: 0 });
 
 const shown = computed(() => (filter.value ? SECTIONS.filter((s) => counts[s.id]) : SECTIONS));
 
@@ -50,12 +52,17 @@ watch(open, async (on) => {
   if (!on) return;
   filter.value = "";
   try {
-    await Promise.all([loadProviders(), loadArchivedProjects(), loadServerConfig()]);
+    await Promise.all([loadProviders(), loadArchivedProjects(), loadOrchestratorConfig(), loadServerConfig()]);
   } catch (e) {
     fail(e);
     open.value = false;
   }
 }, { immediate: true });
+
+async function showOrchestrator() {
+  open.value = false;
+  await openProject(S.orchestrator.project_id);
+}
 </script>
 
 <template>
@@ -100,6 +107,13 @@ watch(open, async (on) => {
             <ProjectSettings
               :filter="filter"
               @count="counts.projects = $event"
+            />
+          </div>
+          <div v-show="section === 'orchestrator'">
+            <OrchestratorSettings
+              :filter="filter"
+              @count="counts.orchestrator = $event"
+              @open-project="showOrchestrator"
             />
           </div>
           <div v-show="section === 'appearance'">

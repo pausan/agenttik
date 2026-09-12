@@ -33,10 +33,11 @@ A chord bound to two actions is not refused — it is labelled, on both rows,
 with the other action's name. Which one runs is whichever handler asks first,
 and that is not something to find out by accident.
 
-The dialog grew a rail to hold all this: **General**, **Projects**,
+The dialog grew a rail to hold all this: **General**, **Projects**, **Orchestrator**,
 **Appearance**, **Models**, **Subscriptions**, **Server**, **Shortcuts** —
 General is [017](017-general-settings.md), Projects lists what has been
-archived ([041](041-project-archiving.md)), Subscriptions is which account
+archived ([041](041-project-archiving.md)), Orchestrator enables the optional
+app-wide project and resets its instructions ([054](054-orchestrator-project.md)), Subscriptions is which account
 each provider runs on ([050](050-subscription-accounts.md)), and Server is
 [043](043-exposed-server.md) — with a filter above them. The filter fuzzy-matches every row in every section — a palette name, a
 model, a subscription, a shortcut and its keys — and each section reports how

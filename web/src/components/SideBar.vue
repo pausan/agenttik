@@ -138,12 +138,17 @@ const activeSchedule = computed(() =>
 );
 
 function onProjectStart(e, id) {
+  if (S.projects.find((p) => p.id === id)?.kind === "orchestrator") {
+    e.preventDefault();
+    return;
+  }
   draggingProject.value = id;
   beginDrag(e, id);
 }
 
 function onProjectOver(e, overID) {
   if (!draggingProject.value) return;
+  if (S.projects.find((p) => p.id === overID)?.kind === "orchestrator") return;
   e.preventDefault();
   if (draggingProject.value === overID) return;
   const from = S.projects.findIndex((p) => p.id === draggingProject.value);
@@ -224,9 +229,9 @@ function onTaskDrop(e) {
                click on one of those is not aimed at the project. -->
           <UContextMenu :items="projectMenu(p)" :ui="{ content: 'w-56' }">
             <div
-              draggable="true"
-              class="mb-0.5 flex cursor-grab items-start gap-1 rounded-[var(--ui-radius)] px-1.5 py-1 active:cursor-grabbing"
-              :class="S.activeProjectID === p.id ? 'bg-primary/10' : 'hover:bg-elevated'"
+              :draggable="p.kind !== 'orchestrator'"
+              class="mb-0.5 flex items-start gap-1 rounded-[var(--ui-radius)] px-1.5 py-1"
+              :class="[S.activeProjectID === p.id ? 'bg-primary/10' : 'hover:bg-elevated', p.kind === 'orchestrator' ? 'cursor-default' : 'cursor-grab active:cursor-grabbing']"
               @dragstart="onProjectStart($event, p.id)"
               @dragend="onProjectDrop"
             >
@@ -262,6 +267,13 @@ function onTaskDrop(e) {
                     class="min-w-0 flex-1 truncate font-semibold"
                     :class="S.activeProjectID === p.id ? 'text-primary' : 'text-highlighted'"
                   >{{ p.name }}</span>
+                  <UIcon
+                    v-if="p.kind === 'orchestrator'"
+                    name="i-lucide-pin"
+                    class="size-3 shrink-0 text-dimmed"
+                    title="Orchestrator · pinned first"
+                    aria-label="Orchestrator · pinned first"
+                  />
                   <StatusDot v-if="busy(p)" status="running" />
                 </span>
                 <span class="block truncate pl-4 text-xs text-dimmed">{{ p.path }}</span>

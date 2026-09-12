@@ -72,6 +72,7 @@ async function startServer() {
 
   return {
     url,
+    dataDir,
     async stop() {
       proc.kill();
       await rm(dataDir, { recursive: true, force: true });

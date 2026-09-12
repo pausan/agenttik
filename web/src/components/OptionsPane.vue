@@ -116,6 +116,9 @@ const busy = computed(() => {
 
     <p class="mt-3.5 mb-1.5 text-xs text-dimmed">
       Deleting removes its tasks and history from agenttik. The folder on disk is untouched.
+      <template v-if="S.project.project.kind === 'orchestrator'">
+        Settings › Orchestrator can re-enable it with its saved name, folder and prompt.
+      </template>
     </p>
     <UButton block color="error" variant="soft" label="Delete project" @click="confirming = true" />
 

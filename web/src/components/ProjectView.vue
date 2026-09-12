@@ -25,6 +25,7 @@ import {
   renameSchedule,
   renameTask,
   reorderTasks,
+  resetOrchestratorPrompt,
   scheduleLabel,
   setProjectPrompt,
   setScheduleArchived,
@@ -81,6 +82,8 @@ watch(lower, (which) => {
    keep the copy they were given; only the next one follows an edit. */
 const prompt = ref(props.tab.data.project.prompt || "");
 const editingPrompt = ref(false);
+const resettingPrompt = ref(false);
+let promptSave = Promise.resolve();
 watch(
   () => props.tab.data.project,
   (project) => {
@@ -90,7 +93,19 @@ watch(
 
 function commitPrompt() {
   editingPrompt.value = false;
-  setProjectPrompt(props.tab.data.project, prompt.value);
+  promptSave = setProjectPrompt(props.tab.data.project, prompt.value);
+}
+
+async function resetPrompt() {
+  resettingPrompt.value = true;
+  try {
+    // Clicking reset blurs the editor first. Let that save finish before
+    // resetting, so a slow save cannot overwrite the restored default.
+    await promptSave;
+    await resetOrchestratorPrompt();
+  } finally {
+    resettingPrompt.value = false;
+  }
 }
 
 /* One ProjectView serves every project — switching to another one hands it a
@@ -356,14 +371,27 @@ async function doDelete() {
       </template>
 
       <template v-else-if="lower === 'prompt'">
-        <p class="mb-2 text-sm text-muted">
-          Sent to the agent ahead of the first prompt of every task started here, so every
-          conversation in this project begins knowing it. Leave it empty to send nothing.
-        </p>
+        <div class="mb-2 flex items-start gap-3">
+          <p class="min-w-0 flex-1 text-sm text-muted">
+            Sent to the agent ahead of the first prompt of every task started here, so every
+            conversation in this project begins knowing it. Leave it empty to send nothing.
+          </p>
+          <UButton
+            v-if="tab.data.project.kind === 'orchestrator'"
+            class="shrink-0"
+            color="neutral"
+            variant="subtle"
+            icon="i-lucide-rotate-ccw"
+            label="Reset prompt to default"
+            :disabled="resettingPrompt"
+            @click="resetPrompt"
+          />
+        </div>
         <UTextarea
           v-model="prompt"
-          :rows="10"
-          autoresize
+          :disabled="resettingPrompt"
+          :rows="tab.data.project.kind === 'orchestrator' ? 18 : 10"
+          :autoresize="tab.data.project.kind !== 'orchestrator'"
           class="w-full"
           placeholder="e.g. Read AGENTS.md before you start. Never push."
           aria-label="Project prompt"

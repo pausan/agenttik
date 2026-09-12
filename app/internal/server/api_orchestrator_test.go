@@ -173,7 +173,7 @@ func TestControlAPICrossProjectTaskLifecycle(t *testing.T) {
 	if len(archivedProjects) != 1 || archivedProjects[0].ID != project.ID {
 		t.Fatalf("archived projects = %+v", archivedProjects)
 	}
-	// Creation and archive are published even when no browser caused them.
+	// Creation, stop and archive are published even when no browser caused them.
 	changes := 0
 	for len(events) > 0 {
 		event := <-events
@@ -181,7 +181,7 @@ func TestControlAPICrossProjectTaskLifecycle(t *testing.T) {
 			changes++
 		}
 	}
-	if changes != 2 {
-		t.Fatalf("task change events = %d, want 2", changes)
+	if changes != 3 {
+		t.Fatalf("task change events = %d, want 3", changes)
 	}
 }

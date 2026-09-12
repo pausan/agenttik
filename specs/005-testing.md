@@ -118,6 +118,14 @@ swapping and removing one with no CLI on PATH.
 
 ## What is not covered
 
+The subscription-allowance browser test still searches for the old
+`Context and subscription usage` button name. The current label includes
+main-context state; this failure also reproduces before the orchestrator
+change. The queue test uses a one-second fake turn and can miss the brief
+Queued label under parallel load; it passes in isolation. These limitations
+do not apply to the orchestrator tests, which hold work until explicitly
+stopped when checking a waiting task.
+
 A live turn against a real provider. Running one spends an actual subscription
 and needs the CLI installed, so nothing in the suite does that; the fake
 provider stands in for a turn's mechanics — streaming, tool calls, errors,

@@ -6,6 +6,19 @@ it independently of its editable name and folder. A partial unique index
 allows at most one. Active project lists always put it first, ahead of the
 user's ordinary project order.
 
+## Interface
+
+Settings › Orchestrator enables or disables the project, opens its ordinary
+project page, and resets its prompt. The settings filter matches the section.
+Its sidebar row has a pin, occupies the first project shortcut, and cannot be
+dragged or displaced by another project's drag. Its tasks remain reorderable.
+
+The project retains the usual tasks, jobs, stats, name, folder, prompt, file
+views and deletion controls. The Prompt tab also offers Reset prompt to
+default. Reset waits for a pending editor save so the save cannot overwrite
+the restored default. The enable switch is unavailable while its work is
+active or queued, matching the API's archive guard.
+
 ## Lifecycle and storage
 
 The first enable creates an empty `orchestrator/` folder inside the app's data
@@ -51,10 +64,18 @@ These commands reach the running app, so they use the same validation and
 runner as the UI. Provider permission modes remain unchanged. No exposed
 server configuration is needed.
 
-Project mutations publish `projects_changed`. Task creation, editing and
-deletion publish `session_changed`, including the task ID and current row
+Project mutations publish `projects_changed`. Task creation, editing, queue
+changes, stopping and deletion publish `session_changed`, including the task ID and current row
 (absent for a deletion). These reach all windows through the global projects
-topic. Turn and schedule activity continues to use existing events.
+topic. The UI refreshes lists and project options, removes views belonging to
+departed projects, and closes deleted task views. Turn and schedule activity
+continues to use existing events, including newly created jobs. Transcript
+refreshes preserve an assistant reply still streaming while updating its queue.
+After a subscription change the UI refreshes open transcripts to cover events
+missed in the gap; a network reconnect also refreshes the lists. Initial
+startup keeps its existing single set of reads. Older transcript reads cannot
+overwrite newer ones or a turn that started during the read. A reconnect also
+reconciles turns that started or stopped while the browser was disconnected.
 
 ## Settings API
 
@@ -74,3 +95,9 @@ per-turn context, cross-project task control and change events. The command
 client tests exercise JSON input, response and error forwarding, and discovery
 without database writes. Live model decisions require a signed-in provider
 and are not exercised by these tests.
+
+`e2e/tests/orchestrator.spec.js` exercises the settings, pinning through a drag
+and API reorder, prompt reset during a pending save, disable/delete/re-enable
+with task and file checks, and actual executable commands controlling another
+project through a fake provider while its browser view updates live, including
+reconciling a missed stop event when the stream signals a reconnect.

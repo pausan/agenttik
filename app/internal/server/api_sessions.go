@@ -275,6 +275,12 @@ func (s *Server) sessionChanged(id string, session *store.Session) {
 	})
 }
 
+func (s *Server) sessionQueueChanged(id string) {
+	if session, err := s.store.GetSession(id); err == nil {
+		s.sessionChanged(id, session)
+	}
+}
+
 func (s *Server) postMessage(c *fiber.Ctx) error {
 	var body struct {
 		Prompt string `json:"prompt"`
@@ -345,6 +351,7 @@ func (s *Server) editMessage(c *fiber.Ctx) error {
 		if err != nil {
 			return err
 		}
+		s.sessionQueueChanged(sessionID)
 		return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"queued": queued, "queue_count": len(queued)})
 	}
 	turn, err := s.runner.Send(sessionID, body.Prompt)
@@ -368,6 +375,7 @@ func (s *Server) enqueueMessage(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
+	s.sessionQueueChanged(c.Params("id"))
 	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"queued": queued, "queue_count": len(queued)})
 }
 
@@ -426,6 +434,7 @@ func (s *Server) updateQueuedMessage(c *fiber.Ctx) error {
 	if err := s.store.SetQueuedMessage(queuedID, prompt, body.Provider, accountID, body.Model, body.Effort); err != nil {
 		return err
 	}
+	s.sessionQueueChanged(queued.SessionID)
 	return c.JSON(&store.QueuedMessage{ID: queuedID, SessionID: queued.SessionID, Prompt: prompt,
 		Provider: body.Provider, AccountID: accountID, Model: body.Model, Effort: body.Effort,
 		CreatedAt: queued.CreatedAt})
@@ -454,5 +463,6 @@ func (s *Server) stopSession(c *fiber.Ctx) error {
 	if err := s.runner.Stop(c.Params("id")); err != nil {
 		return err
 	}
+	s.sessionQueueChanged(c.Params("id"))
 	return c.SendStatus(fiber.StatusNoContent)
 }

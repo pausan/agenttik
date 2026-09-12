@@ -24,6 +24,10 @@ browser drag and drop. The list moves below the pointer immediately and one
 request is sent on drop; if the server refuses it, the row goes back where it
 was.
 
+The optional orchestrator is always first and has no project drag handle.
+Other projects cannot be dragged ahead of it; its own tasks still reorder
+normally. The API enforces the same order. See [054](054-orchestrator-project.md).
+
 All draggable rows and tabs stay fully opaque. `web/src/drag.js` supplies a
 shared transparent drag preview, so the browser has no visible ghost to fade
 or animate back after release. The row stays at its current position

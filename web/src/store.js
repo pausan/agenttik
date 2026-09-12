@@ -65,6 +65,7 @@ export const S = reactive({
   // Archived projects: read when Settings opens, which is the only place
   // they are shown. See specs/041-project-archiving.md.
   archivedProjects: [],
+  orchestrator: null, // shared settings, loaded when Settings opens
   subscriptionLimits: {}, // "provider:account" -> its latest allowance buckets
   // Whether this desktop window's server is also exposed for a browser to
   // reach, read when Settings opens like the archived projects beside it.
@@ -838,11 +839,24 @@ export async function refreshProjects() {
       if (p.id !== S.activeProjectID && !known.has(p.id)) S.collapsedProjects.add(p.id);
     }
   }
+  // Changes can come from another window or the orchestrator. Remove views
+  // whose project was archived/deleted there, just as a local action does.
+  const visible = new Set(projects.map((p) => p.id));
+  let detached = false;
+  for (const p of S.projects) {
+    if (!visible.has(p.id)) detached = detachProject(p.id) || detached;
+  }
   S.projects = projects;
   for (const project of S.projects) {
+    const tab = S.tabs.find((t) => t.kind === "project" && t.projectID === project.id);
+    if (tab) {
+      tab.data.project = project;
+      tab.label = project.name;
+    }
     syncProjectSessionOrder(project.id, project.recent_sessions.map((session) => session.id));
   }
   resubscribe();
+  if (detached && !S.activeProjectID && projects.length) await switchProject(projects[0].id);
 }
 
 /* reorderProjects persists the sidebar order after it has already moved under
@@ -1009,6 +1023,31 @@ export async function setProjectArchived(p, archived) {
    that starts or ends. */
 export async function loadArchivedProjects() {
   S.archivedProjects = await api("GET", "/api/projects?archived=true");
+}
+
+export async function loadOrchestratorConfig() {
+  S.orchestrator = await api("GET", "/api/orchestrator");
+}
+
+export async function setOrchestratorEnabled(enabled) {
+  try {
+    S.orchestrator = await api("PUT", "/api/orchestrator", { enabled });
+    await Promise.all([refreshProjects(), refreshSessions(), loadArchivedProjects()]);
+    if (!S.activeProjectID && S.projects.length) {
+      await switchProject(enabled ? S.orchestrator.project_id : S.projects[0].id);
+    }
+  } catch (e) {
+    fail(e);
+  }
+}
+
+export async function resetOrchestratorPrompt() {
+  try {
+    S.orchestrator = await api("POST", "/api/orchestrator/prompt/reset");
+    await refreshProjects();
+  } catch (e) {
+    fail(e);
+  }
 }
 
 /* Every tab names its project: a file carries one of its own because the view
@@ -2097,10 +2136,11 @@ function restoreOpts(tab) {
 }
 
 let restoringTabs = false;
+let initialized = false;
 
 /* Debounced because an unsent prompt is saved with the tabs, and a keystroke
    is not worth a trip through JSON and localStorage. */
-const saveOpenTabs = debounce(() => {
+function writeOpenTabs() {
   if (restoringTabs) return;
   try {
     localStorage.setItem(
@@ -2117,7 +2157,8 @@ const saveOpenTabs = debounce(() => {
   } catch {
     /* private mode or a full quota just means tabs open fresh next time */
   }
-}, 300);
+}
+const saveOpenTabs = debounce(writeOpenTabs, 300);
 
 /* Restoring asks for every saved tab at once and rebuilds the strip from the
    answers, in the order the tabs were saved in. Their data is fetched anew,
@@ -2494,6 +2535,22 @@ function resubscribe() {
   if (!url) return;
   const es = new EventSource(url);
   stream = es;
+  const refreshOnOpen = initialized;
+  let opened = false;
+  es.onopen = () => {
+    // Opening a task changes the subscription. Commands can land in that
+    // gap, so refresh its transcript after subscribing. Opening a tab already
+    // refreshes the lists; only a network reconnect needs those again.
+    if (refreshOnOpen || opened) {
+      for (const tab of S.tabs) if (tab.kind === "session") syncMessages(tab, true);
+    }
+    if (opened) {
+      reloadLists();
+      reloadProjects();
+      if (S.orchestrator) loadOrchestratorConfig().catch(() => {});
+    }
+    opened = true;
+  };
   es.onmessage = (e) => {
     let msg;
     try {
@@ -2524,11 +2581,28 @@ function onEvent(msg) {
     }
     return;
   }
-  // A project was added outside this window: by `agenttik --init` in a
-  // terminal, or by another tab. It names no project, so the sidebar re-reads
-  // its list whole, which resubscribes the stream to the new project too.
+  // The CLI, orchestrator and other windows use the same project routes.
   if (msg.event?.type === "projects_changed") {
-    refreshProjects().catch(() => {});
+    refreshProjects().then(reloadProjects).catch(() => {});
+    refreshSessions().catch(() => {});
+    loadArchivedProjects().catch(() => {});
+    if (S.orchestrator) loadOrchestratorConfig().catch(() => {});
+    return;
+  }
+  if (msg.event?.type === "session_changed") {
+    const tab = S.tabs.find((t) => t.kind === "session" && t.sessionID === msg.session_id);
+    if (msg.session) {
+      if (tab) {
+        tab.detail.session = { ...tab.detail.session, ...msg.session };
+        tab.label = tabLabel(msg.session);
+        syncMessages(tab, true);
+      }
+    } else {
+      delete S.drafts[msg.session_id];
+      if (tab) closeTab(tab.id, false, true);
+    }
+    reloadLists();
+    reloadProjects();
     return;
   }
   // A schedule fired, skipped a run, or spent one. It names no schedule: the
@@ -2693,20 +2767,31 @@ function startLocal(tab, prompt, turn) {
 /* syncMessages replaces a tab's transcript with the stored one. Streamed
    messages are built locally and carry no ids; the stored rows do, which is
    what makes a prompt editable. */
-async function syncMessages(tab) {
+async function syncMessages(tab, preserveLive = false) {
+  const read = (tab.messagesRead || 0) + 1;
+  tab.messagesRead = read;
+  const lastTurn = tab.detail.turns.at(-1)?.id;
   try {
     const detail = await api("GET", "/api/sessions/" + tab.sessionID);
     // The tab can have been closed, or a new turn started, while we waited.
-    if (!S.tabs.some((open) => open.id === tab.id)) return;
-    tab.detail.messages = detail.messages;
-    tab.detail.turns = detail.turns;
+    if (read !== tab.messagesRead || lastTurn !== tab.detail.turns.at(-1)?.id ||
+        !S.tabs.some((open) => open.id === tab.id)) return;
     tab.detail.queued = detail.queued;
+    // Queue edits can arrive while an assistant reply is still streaming
+    // and not yet persisted. Preserve it only if the same turn is still
+    // running remotely; a reconnect may have missed its start or completion.
+    const keepLive = preserveLive && tab.detail.running && detail.running &&
+      lastTurn === detail.turns.at(-1)?.id;
     tab.detail.session.queue_count = detail.session.queue_count;
     // A turn that ended on a provider being away leaves its prompt queued and
     // the task waiting, so the status comes back with the queue that explains
     // it. See specs/045-provider-outage-retry.md.
     tab.detail.session.status = detail.session.status;
     tab.detail.running = detail.running;
+    if (keepLive) return;
+    tab.detail.messages = detail.messages;
+    tab.detail.turns = detail.turns;
+    if (!detail.running) tab.detail.stats = detail.stats;
   } catch {
     /* the transcript on screen is still the one the stream produced */
   }
@@ -3177,6 +3262,7 @@ export async function init() {
   // working copy in localStorage — so the browser's own warning is what
   // stands between unsaved edits and a reload.
   window.addEventListener("beforeunload", (e) => {
+    if (initialized) writeOpenTabs();
     if (S.tabs.some(isDirty)) e.preventDefault();
   });
   try {
@@ -3195,4 +3281,5 @@ export async function init() {
   } catch (e) {
     fail(e);
   }
+  initialized = true;
 }

@@ -149,6 +149,8 @@ func (s *Server) createSchedule(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
+	s.runner.Hub().Publish(runner.ProjectTopic(full.ProjectID), runner.Event{
+		ProjectID: full.ProjectID, Event: agent.Event{Type: runner.EventScheduleChanged}})
 	return c.Status(fiber.StatusCreated).JSON(scheduleDetail{Schedule: full, Runs: []store.ScheduleRun{}})
 }
 

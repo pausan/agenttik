@@ -10,6 +10,7 @@ and Windows x64.
 ## Main features
 
 - **Project workspaces:** organize sessions and file tabs; archive and restore conversations.
+- **Orchestrator:** enable a separate pinned project in Settings to inspect work and manage tasks across projects, with editable instructions and a reset to the built-in prompt.
 - **Live sessions:** stream replies, resume conversations, and queue prompts per project.
 - **Model controls:** choose models, effort, permissions, and favorite combinations.
 - **Code tools:** browse and edit files, preview Markdown/HTML, and inspect Git diffs and commits.

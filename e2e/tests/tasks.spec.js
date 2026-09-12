@@ -240,6 +240,7 @@ test("Stop keeps an unstarted task's text after reload without replacing its dra
   await page.reload();
   await expect(page.getByText("You", { exact: true })).toHaveCount(1);
   await expect(page.locator(".group.mb-4").getByText(prompt, { exact: true })).toBeVisible();
+  await expect(page.getByPlaceholder("Ask the agent…")).toHaveValue("An existing draft");
   await expect(page.getByLabel("Queued prompt")).toHaveCount(0);
 });
 

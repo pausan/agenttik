@@ -19,6 +19,7 @@ is untouched by either.
 
 Archive is refused while the project is busy — any task running or with a
 queued prompt, or a schedule mid-run. The button is disabled and says why.
+The API enforces this too, including requests made by the orchestrator.
 Archiving would take those rows out of the sidebar, and with them the only
 way to reach a turn and stop it; a running task's own archive icon follows the
 same rule.
@@ -54,10 +55,9 @@ serves the other list. It skips the per-project session titles and schedules
 `ListProjects` attaches: Settings shows a name, a folder and a date, so paying
 two queries per row for what nothing draws would be waste.
 
-**The archived list is read when Settings opens.** It cannot change while the
-dialog is shut, and `refreshProjects` runs on every turn that starts or ends —
-attaching a second query to it would spend a request per turn on a list nobody
-is looking at.
+**The archived list is read when Settings opens and on project changes.**
+The orchestrator and other windows can archive or restore a project, so
+`projects_changed` refreshes it too. Ordinary turn events do not re-read it.
 
 **The scheduler joins the flag.** `DueSchedules` already joins `projects` for
 the denormalised name and path, so `AND p.archived_at = 0` is free. Excluding
@@ -68,4 +68,5 @@ schedules resume, unpaused, the moment it is restored.
 **Detaching is shared with delete.** `detachProject` deselects the project and
 closes its tabs; `removeProject` and `setProjectArchived` both call it, since
 nothing in the strip can belong to a project that has left the sidebar either
-way.
+way. `refreshProjects` also detaches departed projects when the mutation came
+from a command or another window.

@@ -104,9 +104,9 @@ mechanism was verified on the machine this was built on, but no live turn has
 been run on a *second* real subscription — doing so needs a second paid
 account.
 
-`go build ./...`, `go vet ./...`, `make ui` and the 33 web unit tests all pass.
-Two Go tests and one Playwright test fail; see
-[review-notes.md](review-notes.md) and [005](005-testing.md).
+`go test ./...`, `go vet ./...`, the UI build and the 35 web unit tests pass.
+The browser suite has an outdated subscription-button locator and a queue
+test sensitive to timing under load; see [005](005-testing.md).
 
 Task outcomes ([051](051-task-outcomes.md)) are exercised against the fake
 provider — the archive writes the line, a restore drops an answer still in

@@ -2706,6 +2706,7 @@ async function syncMessages(tab) {
     // the task waiting, so the status comes back with the queue that explains
     // it. See specs/045-provider-outage-retry.md.
     tab.detail.session.status = detail.session.status;
+    tab.detail.running = detail.running;
   } catch {
     /* the transcript on screen is still the one the stream produced */
   }
@@ -2719,20 +2720,21 @@ async function syncMessages(tab) {
    can truncate its history, so it still remembers the exchange that left the
    transcript and reads the edit as "I meant this instead". And nothing on disk
    is reverted: the files are whatever the earlier turns left behind. */
-export async function editMessage(message, prompt) {
+export async function editMessage(message, prompt, enqueue = false) {
   const tab = S.owner;
   if (tab?.kind !== "session" || !message?.id) return false;
   prompt = prompt.trim();
   if (!prompt) return false;
   try {
-    const turn = await api(
+    await api(
       "POST",
       `/api/sessions/${tab.sessionID}/messages/${message.id}/edit`,
-      { prompt },
+      { prompt, enqueue },
     );
-    const at = tab.detail.messages.findIndex((m) => m.id === message.id);
-    if (at >= 0) tab.detail.messages.splice(at);
-    startLocal(tab, prompt, turn);
+    // Either action may already have started or finished a turn. Re-read the
+    // stored transcript and running state instead of erasing streamed events
+    // or marking a completed turn running again after the POST returns.
+    await syncMessages(tab);
     refreshSessions();
     refreshProjects();
     return true;

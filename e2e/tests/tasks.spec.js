@@ -243,6 +243,72 @@ test("Stop keeps an unstarted task's text after reload without replacing its dra
   await expect(page.getByLabel("Queued prompt")).toHaveCount(0);
 });
 
+test("an edited failed prompt can send immediately with a different model", async ({ page, agenttik }) => {
+  await addProject(page);
+  await openProject(page);
+  await newTask(page);
+  await pickModel(page);
+  await sendPrompt(page, "@wait 200\n@error broken");
+  await expect(page.getByText("idle", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Edit this prompt" }).click();
+  const editor = page.getByRole("form", { name: "Edit prompt" });
+  await editor.getByRole("textbox").fill("corrected prompt");
+  await editor.getByTitle("Change edited prompt model").click();
+  await page.getByRole("option", { name: "Fake Careful" }).click();
+  await expect(editor.getByTitle("Change edited prompt model")).toHaveText("fake-careful");
+  await editor.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(editor).toHaveCount(0);
+  await expect(page.getByText("idle", { exact: true })).toBeVisible();
+  const [session] = await (await page.request.get(`${agenttik.url}/api/sessions`)).json();
+  const detail = await (await page.request.get(`${agenttik.url}/api/sessions/${session.id}`)).json();
+  expect(detail.turns.at(-1).model).toBe("fake-careful");
+  expect(detail.queued).toHaveLength(0);
+  expect(detail.messages.some((m) => m.role === "user" && m.content === "corrected prompt")).toBe(true);
+});
+
+for (const state of ["failed", "stopped"]) {
+  test(`an edited ${state} prompt can change model and enqueue behind another task`, async ({ page, agenttik }) => {
+    await addProject(page);
+    await openProject(page);
+    await newTask(page);
+    await pickModel(page);
+    await sendPrompt(page, state === "failed" ? "@wait 200\n@error broken" : "@wait 20000");
+    if (state === "stopped") {
+      await page.getByRole("button", { name: "Stop", exact: true }).click();
+    }
+    await expect(page.getByText("idle", { exact: true })).toBeVisible();
+    const edit = page.getByRole("button", { name: "Edit this prompt" });
+    await expect(edit).toBeEnabled();
+
+    const [session] = await (await page.request.get(`${agenttik.url}/api/sessions`)).json();
+    const blocker = await (await page.request.post(`${agenttik.url}/api/sessions`, {
+      data: { project_id: session.project_id, provider: "fake", model: "fake-quick", title: "Queue blocker" },
+    })).json();
+    await page.request.post(`${agenttik.url}/api/sessions/${blocker.id}/messages`, { data: { prompt: "@wait 20000" } });
+
+    await edit.click();
+    const editor = page.getByRole("form", { name: "Edit prompt" });
+    await editor.getByRole("textbox").fill("corrected prompt");
+    await editor.getByTitle("Change edited prompt model").click();
+    await page.getByRole("option", { name: "Fake Careful" }).click();
+    await expect(editor.getByTitle("Change edited prompt model")).toHaveText("fake-careful");
+    await editor.getByRole("button", { name: "Enqueue", exact: true }).click();
+    await expect(editor).toHaveCount(0);
+    await expect(page.getByLabel("Queued prompt", { exact: true })).toContainText("corrected prompt");
+    const detail = await (await page.request.get(`${agenttik.url}/api/sessions/${session.id}`)).json();
+    expect(detail.queued).toHaveLength(1);
+    expect(detail.queued[0].model).toBe("fake-careful");
+    expect(detail.messages).toHaveLength(0);
+
+    await page.request.post(`${agenttik.url}/api/sessions/${blocker.id}/stop`);
+    await expect(page.getByLabel("Queued prompt", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("idle", { exact: true })).toBeVisible();
+    const finished = await (await page.request.get(`${agenttik.url}/api/sessions/${session.id}`)).json();
+    expect(finished.turns.at(-1).model).toBe("fake-careful");
+    expect(finished.messages.some((m) => m.role === "user" && m.content === "corrected prompt")).toBe(true);
+  });
+}
+
 test("the subscription allowance bars show the provider's reported usage", async ({ page }) => {
   await addProject(page);
   await openProject(page);

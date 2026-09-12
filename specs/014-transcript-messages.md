@@ -7,13 +7,20 @@ the click is visibly acknowledged.
 
 Your own prompts also get a pencil. It opens the prompt for editing in place —
 where it sits in the transcript, not in a dialogue over it — with Send,
-Cancel, and Escape to leave. Sending truncates the transcript at that message
-and sends the new text as an ordinary turn.
+Enqueue, a model and subscription picker, Cancel, and Escape to leave.
+The picker updates the task's model, just like the prompt bar. Sending
+truncates the transcript at that message and sends the new text as an ordinary
+turn. Enqueue truncates at the same point and queues the replacement with the
+selected model; it waits for other running tasks in the project. Both actions
+are available after a failed or stopped turn, once the task is no longer running.
 
 Editing is offered only for a `user` message that has been stored. A message
 still arriving over the stream is built locally and has no id to rewrite, so
 the transcript is re-read from the store when a turn ends — which is also what
 reconciles anything the stream and the store disagree about.
+After an edit is accepted, the transcript, queue and running state are read
+back together. A fast retry that finishes before the edit request returns
+therefore stays finished in the UI.
 
 A prompt that has not started yet is edited the same way but is not one of
 these messages — it is still in the queue; see
@@ -41,7 +48,7 @@ work that was done, and only the transcript is shorter.
 
 | Method | Path | Answers |
 |---|---|---|
-| POST | `/api/sessions/:id/messages/:message/edit` | `202` and the new turn |
+| POST | `/api/sessions/:id/messages/:message/edit` | `202` and the new turn, or `{queued, queue_count}` when `enqueue: true` |
 
 The message must belong to the session named in the path and must be a `user`
 message; an id alone says nothing about either. A session with a turn in

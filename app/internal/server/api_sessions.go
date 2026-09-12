@@ -302,7 +302,8 @@ func (s *Server) editMessage(c *fiber.Ctx) error {
 		return badRequest("invalid message id")
 	}
 	var body struct {
-		Prompt string `json:"prompt"`
+		Prompt  string `json:"prompt"`
+		Enqueue bool   `json:"enqueue"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return badRequest("invalid body: %v", err)
@@ -328,6 +329,13 @@ func (s *Server) editMessage(c *fiber.Ctx) error {
 	}
 	if err := s.store.DeleteMessagesFrom(sessionID, messageID); err != nil {
 		return err
+	}
+	if body.Enqueue {
+		queued, err := s.runner.Enqueue(sessionID, body.Prompt)
+		if err != nil {
+			return err
+		}
+		return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"queued": queued, "queue_count": len(queued)})
 	}
 	turn, err := s.runner.Send(sessionID, body.Prompt)
 	if err != nil {

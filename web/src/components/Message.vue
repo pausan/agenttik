@@ -12,7 +12,7 @@
    id to rewrite. */
 import { computed, nextTick, ref } from "vue";
 
-import { S, copyText, editMessage, openExternal, openFileRef } from "../store";
+import { S, copyText, editMessage, effortsFor as effortsOf, modelPickerGroups, openExternal, openFileRef, parseModelChoice, setModel } from "../store";
 import { markdown } from "../markdown";
 
 const props = defineProps({ message: { type: Object, required: true } });
@@ -89,6 +89,21 @@ async function copy() {
 const draft = ref(null); // non-null while editing
 const box = ref(null);
 const sending = ref(false);
+const choosing = ref(false);
+const modelOpen = ref(false);
+const modelGroups = computed(modelPickerGroups);
+
+async function pickModel(value) {
+  modelOpen.value = false;
+  const { provider, accountID, model } = parseModelChoice(value);
+  const effort = S.detail.session.effort;
+  choosing.value = true;
+  try {
+    await setModel(provider, model, effortsOf(provider, model).includes(effort) ? effort : "", accountID);
+  } finally {
+    choosing.value = false;
+  }
+}
 
 async function startEdit() {
   draft.value = props.message.content;
@@ -96,10 +111,10 @@ async function startEdit() {
   box.value?.textareaRef?.focus();
 }
 
-async function submit() {
-  if (sending.value) return;
+async function submit(enqueue = false) {
+  if (sending.value || choosing.value) return;
   sending.value = true;
-  const sent = await editMessage(props.message, draft.value);
+  const sent = await editMessage(props.message, draft.value, enqueue);
   sending.value = false;
   // On success this bubble is about to be replaced by the truncation, so the
   // editor is only closed when it is still here to close.
@@ -150,7 +165,7 @@ function onKey(e) {
 
     <!-- Editing replaces the bubble in place, so the prompt is rewritten
          where it sits rather than in a dialogue over the transcript. -->
-    <form v-if="draft !== null" class="w-full max-w-[85%] self-end" @submit.prevent="submit">
+    <form v-if="draft !== null" aria-label="Edit prompt" class="w-full max-w-[85%] self-end" @submit.prevent="submit()">
       <UTextarea
         ref="box"
         v-model="draft"
@@ -158,10 +173,24 @@ function onKey(e) {
         autoresize
         class="w-full"
         @keydown="onKey"
-        @keydown.enter.exact.prevent="submit"
+        @keydown.enter.exact.prevent="submit()"
       />
-      <div class="mt-1.5 flex items-center gap-2">
-        <UButton type="submit" size="xs" :loading="sending" :disabled="!draft.trim()" label="Send" />
+      <div class="mt-1.5 flex flex-wrap items-center gap-2">
+        <UPopover v-model:open="modelOpen">
+          <UButton type="button" size="xs" :label="S.detail.session.model" title="Change edited prompt model" :disabled="sending || choosing" />
+          <template #content>
+            <UCommandPalette
+              class="w-80"
+              :groups="modelGroups"
+              value-key="value"
+              placeholder="Search models…"
+              :ui="{ viewport: 'max-h-[min(28rem,60vh)]' }"
+              @update:model-value="pickModel"
+            />
+          </template>
+        </UPopover>
+        <UButton type="submit" size="xs" :loading="sending" :disabled="!draft.trim() || choosing" label="Send" />
+        <UButton type="button" size="xs" :disabled="!draft.trim() || sending || choosing" label="Enqueue" @click="submit(true)" />
         <UButton
           type="button"
           size="xs"

@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	_ "embed"
+	"fmt"
 	"log"
 	"runtime"
 	"sync"
@@ -44,8 +45,16 @@ func (w *window) startTray(config store.DesktopConfig) func() {
 		w.trayFailed(err)
 		return func() {}
 	}
-	stopKey, err := registerToggle(config.ToggleShortcut, w.toggle)
+	// Ctrl+Q is the one fixed global shortcut. Register it before the
+	// user-configured shortcut so a setting cannot take it away from quit.
+	stopQuit, err := registerToggle("Ctrl+Q", w.quit)
 	if err != nil {
+		w.trayFailed(fmt.Errorf("quit shortcut: %w", err))
+		return func() {}
+	}
+	stopToggle, err := registerToggle(config.ToggleShortcut, w.toggle)
+	if err != nil {
+		stopQuit()
 		w.trayFailed(err)
 		return func() {}
 	}
@@ -72,13 +81,7 @@ func (w *window) startTray(config store.DesktopConfig) func() {
 				case <-toggle.ClickedCh:
 					w.toggle()
 				case <-quit.ClickedCh:
-					w.mu.Lock()
-					w.quitting = true
-					ctx := w.ctx
-					w.mu.Unlock()
-					if ctx != nil {
-						wruntime.Quit(ctx)
-					}
+					w.quit()
 				case <-done:
 					return
 				}
@@ -88,11 +91,27 @@ func (w *window) startTray(config store.DesktopConfig) func() {
 	// Called on the main OS thread, before Wails takes over its native loop.
 	start()
 	return func() {
-		stopKey()
+		stopQuit()
+		stopToggle()
 		ready.Wait()
 		close(done)
 		end()
 	}
+}
+
+// quit marks the close as intentional before asking Wails to leave. That flag
+// is what makes OnBeforeClose bypass close-to-tray for both Ctrl+Q and the
+// tray menu.
+func (w *window) quit() {
+	w.mu.Lock()
+	if w.quitting || w.ctx == nil {
+		w.mu.Unlock()
+		return
+	}
+	w.quitting = true
+	ctx := w.ctx
+	w.mu.Unlock()
+	wruntime.Quit(ctx)
 }
 
 func (w *window) toggle() {

@@ -39,6 +39,7 @@ func TestDesktopConfigAPI(t *testing.T) {
 		{"A", http.StatusBadRequest},
 		{"Ctrl+Ctrl+A", http.StatusBadRequest},
 		{"Ctrl+F13", http.StatusBadRequest},
+		{"Ctrl+Q", http.StatusBadRequest},
 	} {
 		response = do(t, s, "PUT", "/api/desktop", store.DesktopConfig{CloseToTray: true, ToggleShortcut: step.chord})
 		response.Body.Close()

@@ -11,6 +11,9 @@ The tray menu provides **Show / Hide agenttik** and **Quit**. Quit bypasses
 close-to-tray and runs the normal shutdown. A second launch restores a hidden
 window through the existing foreground hook. Disabling Close to tray and
 restarting removes the tray and releases the shortcut; closing then exits.
+`Ctrl+Q` is a fixed quit shortcut: it exits the process from the focused window
+and, when the window is hidden in the tray, through the native global shortcut.
+It cannot be chosen as the show/hide shortcut.
 
 ## Storage and API
 
@@ -21,9 +24,10 @@ fields. Web mode reports unavailable and rejects writes. The UI hides the
 controls in web mode. Settings search includes the tray and shortcut fields.
 
 A shortcut contains one or more distinct `Ctrl`, `Alt`, `Shift` modifiers and
-a letter A–Z, digit 0–9, or F1–F12, separated by `+`. This desktop shortcut is
-stored separately from the browser shortcuts because it must be registered
-before the webview opens. Native registration checks availability on startup.
+a letter A–Z, digit 0–9, or F1–F12, separated by `+`; `Ctrl+Q` is reserved for
+quitting. This desktop shortcut is stored separately from the browser shortcuts
+because it must be registered before the webview opens. Native registration
+checks availability on startup.
 A missing tray host or failed registration leaves close-to-tray inactive and
 reports an error in Settings and the process log; closing still exits normally.
 
@@ -55,6 +59,6 @@ AGENTTIK_TEST_HOTKEY=1 xvfb-run -a go test -race -tags 'desktop production webki
 ```
 
 A live Linux smoke check verifies shortcut hide/show, close-to-tray,
-second-launch restore, and tray Quit. Linux desktop and Windows cross-builds
-are checked. macOS runtime behavior
+second-launch restore, Ctrl+Q from the tray, and tray Quit. Linux desktop and
+Windows cross-builds are checked. macOS runtime behavior
 requires verification on a Mac.

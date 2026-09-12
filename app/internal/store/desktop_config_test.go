@@ -33,7 +33,7 @@ func TestDesktopShortcut(t *testing.T) {
 			t.Errorf("%q: %v", chord, err)
 		}
 	}
-	for _, chord := range []string{"", "A", "Ctrl+", "Ctrl+a", "Ctrl+Ctrl+A", "Meta+A", "Ctrl+F0", "Ctrl+F13", "Ctrl+Shift", "Ctrl+A+B"} {
+	for _, chord := range []string{"", "A", "Ctrl+", "Ctrl+a", "Ctrl+Ctrl+A", "Meta+A", "Ctrl+F0", "Ctrl+F13", "Ctrl+Shift", "Ctrl+A+B", "Ctrl+Q"} {
 		if ValidateDesktopShortcut(chord) == nil {
 			t.Errorf("accepted %q", chord)
 		}

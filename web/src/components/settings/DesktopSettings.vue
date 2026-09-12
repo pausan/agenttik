@@ -48,7 +48,7 @@ async function save() {
       <UCheckbox v-model="enabled" label="Close to tray" :disabled="saving" @update:model-value="saved = false" />
       <label for="tray-shortcut" class="text-sm text-muted">Show / hide shortcut</label>
       <UInput id="tray-shortcut" v-model="shortcut" :disabled="saving" placeholder="Ctrl+Shift+A" @update:model-value="saved = false" />
-      <p class="text-xs text-dimmed">Use Ctrl, Alt or Shift with A–Z, 0–9 or F1–F12. Default: Ctrl+Shift+A.</p>
+      <p class="text-xs text-dimmed">Use Ctrl, Alt or Shift with A–Z, 0–9 or F1–F12. Ctrl+Q is reserved for quitting. Default: Ctrl+Shift+A.</p>
       <UButton type="submit" size="sm" :loading="saving">Save tray settings</UButton>
       <p class="text-xs" :class="saved ? 'text-success' : 'text-dimmed'">
         {{ saved ? "Saved. Restart agenttik to apply these settings." : "Changes take effect after restarting agenttik." }}

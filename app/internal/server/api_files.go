@@ -513,26 +513,30 @@ func splitLines(s string) []string {
 	return strings.Split(s, "\n")
 }
 
-// maxRawBytes bounds a preview. Images are read whole into memory to be sent,
+// maxRawBytes bounds a preview. Files are read whole into memory to be sent,
 // so this is the largest one the pane will show rather than a limit on what
 // the project may contain.
 const maxRawBytes = 16 << 20 // 16 MiB
 
-// rawTypes is every image the raw endpoint serves, and the content type each
+// rawTypes is every image and font the raw endpoint serves, and the content type each
 // is served as: an allowlist rather than a sniff, because these bytes come
 // back on the app's own origin. SVG is deliberately absent — it is markup and
 // can carry scripts, so its preview renders the text of the open tab instead
 // of a URL that could also be opened on its own.
 var rawTypes = map[string]string{
-	".png":  "image/png",
-	".jpg":  "image/jpeg",
-	".jpeg": "image/jpeg",
-	".gif":  "image/gif",
-	".webp": "image/webp",
-	".avif": "image/avif",
-	".bmp":  "image/bmp",
-	".ico":  "image/x-icon",
-	".apng": "image/apng",
+	".png":   "image/png",
+	".jpg":   "image/jpeg",
+	".jpeg":  "image/jpeg",
+	".gif":   "image/gif",
+	".webp":  "image/webp",
+	".avif":  "image/avif",
+	".bmp":   "image/bmp",
+	".ico":   "image/x-icon",
+	".apng":  "image/apng",
+	".ttf":   "font/ttf",
+	".otf":   "font/otf",
+	".woff":  "font/woff",
+	".woff2": "font/woff2",
 }
 
 // rawRev bounds what may reach git as a revision: a hex hash or HEAD, either
@@ -540,7 +544,7 @@ var rawTypes = map[string]string{
 // image diff.
 var rawRev = regexp.MustCompile(`^(HEAD|[0-9a-f]{4,40})\^?$`)
 
-// projectRawImage serves an image's bytes, for the views that render a file
+// projectRawImage serves image and font bytes, for the views that render a file
 // rather than read it: the preview, and the two sides of an image diff. rev
 // names a revision to read it from instead of the working tree.
 func (s *Server) projectRawImage(c *fiber.Ctx) error {
@@ -558,7 +562,7 @@ func (s *Server) projectRawImage(c *fiber.Ctx) error {
 	}
 	kind, ok := rawTypes[strings.ToLower(filepath.Ext(rel))]
 	if !ok {
-		return badRequest("%s is not an image agenttik renders", rel)
+		return badRequest("%s is not an image or font agenttik renders", rel)
 	}
 	data, err := rawImage(root, abs, rel, c.Query("rev"))
 	if err != nil {

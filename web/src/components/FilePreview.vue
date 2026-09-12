@@ -15,12 +15,13 @@
    why the file keeps its editor and this is a second view of it rather than a
    replacement.
 
-   A raster image has no text to follow, and is the one preview that reads
-   from disk instead of from the tab: the bytes come from the raw endpoint. */
+   Raster images and fonts have no text to follow: their bytes come from the
+   raw endpoint. FontPreview registers a face only while it is displayed. */
 import { computed } from "vue";
 
 import { markdown } from "../markdown";
-import { isImage, rawURL } from "../store";
+import { isFont, isImage, rawURL } from "../store";
+import FontPreview from "./FontPreview.vue";
 import ImageFrame from "./ImageFrame.vue";
 
 const props = defineProps({ tab: { type: Object, required: true } });
@@ -49,6 +50,8 @@ const svg = computed(() => "data:image/svg+xml;charset=utf-8," + encodeURICompon
     <ImageFrame v-if="isSVG" :src="svg" fit missing="This is not an SVG a browser can draw." />
     <ImageFrame v-else :src="rawURL(tab)" />
   </div>
+
+  <FontPreview v-else-if="isFont(tab.path)" :src="rawURL(tab)" />
 
   <div v-else class="markdown mx-auto max-w-3xl px-5 py-5" v-html="markdown(text)"></div>
 </template>

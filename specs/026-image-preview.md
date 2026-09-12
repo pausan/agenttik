@@ -39,7 +39,7 @@ request that could only fail.
 
 ## Choices
 
-**The endpoint serves images and refuses everything else.** `rawTypes` is an
+**The endpoint serves images and [fonts](058-font-preview.md).** `rawTypes` is an
 allowlist of extension to content type, so nothing is sniffed and no other file
 in a project can be fetched as same-origin bytes. **SVG is deliberately not in
 it**: it is markup that can carry scripts, and a URL serving it same-origin

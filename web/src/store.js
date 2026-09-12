@@ -1793,8 +1793,8 @@ export async function reorderSidebarTasks(project, ids) {
 
 /* ------------------------------------------------------------------ files */
 
-/* A file tab shows the file, its diff, or — for markdown, HTML, SVG and
-   images — what it renders as, and opens in whichever was read last: looking
+/* A file tab shows the file, its diff, or — for markdown, HTML, SVG, images
+   and fonts — what it renders as, and opens in whichever was read last: looking
    at one diff usually means the next changed file wants a diff too. Each view
    is fetched only when it is first asked for. An image has no text at all, so
    it carries neither the editor nor the text diff: its Diff is the two
@@ -1811,16 +1811,21 @@ const PREVIEWABLE = /\.(md|markdown|html?|svg)$/i;
    not among them: it is text, so it keeps its editor and its preview renders
    the tab rather than a URL. */
 const IMAGE = /\.(png|jpe?g|gif|webp|avif|bmp|ico|apng)$/i;
+const FONT = /\.(ttf|otf|woff2?)$/i;
 
 export function canPreview(path) {
   const name = String(path || "");
-  return PREVIEWABLE.test(name) || IMAGE.test(name);
+  return PREVIEWABLE.test(name) || IMAGE.test(name) || FONT.test(name);
 }
 
 /* An image has no text: nothing to edit, and a diff that is two pictures
    rather than two columns of lines. */
 export function isImage(path) {
   return IMAGE.test(String(path || ""));
+}
+
+export function isFont(path) {
+  return FONT.test(String(path || ""));
 }
 
 /* rawURL is where a file's bytes are, for the views that render it instead of
@@ -1881,7 +1886,7 @@ function selectOpenFile(tabID, pin, line = 0) {
    — without moving S.fileMode, which is the choice the user made and not one
    a link should make for them. A commit's file has only its diff. */
 async function gotoLine(tab, line) {
-  if (tab.commit || isImage(tab.path)) return;
+  if (tab.commit || isImage(tab.path) || isFont(tab.path)) return;
   if (tab.mode !== "edit") {
     tab.mode = "edit";
     try {
@@ -1899,7 +1904,7 @@ async function gotoLine(tab, line) {
    as nothing opens in the editor instead of on a blank pane — and an image,
    which has no editor at all, opens on its picture. */
 function openingMode(path, line) {
-  if (isImage(path)) return S.fileMode === "diff" ? "diff" : "preview";
+  if (isImage(path) || isFont(path)) return S.fileMode === "diff" ? "diff" : "preview";
   if (line || (S.fileMode === "preview" && !canPreview(path))) return "edit";
   return S.fileMode;
 }
@@ -1943,8 +1948,8 @@ async function loadFileTabIn(projectID, ownerID, path, opts = {}) {
     diff: null,
     edited: null,
     // What was not read whole must never be written back over its source, and
-    // an image is never read as text at all.
-    readOnly: !!commit || isImage(path),
+    // images and fonts are never read as text at all.
+    readOnly: !!commit || isImage(path) || isFont(path),
     saving: false,
     loadError: "",
   });
@@ -1992,8 +1997,8 @@ async function loadFileTab(tab) {
     return;
   }
   if (tab.content !== null) return;
-  if (isImage(tab.path)) {
-    // The bytes go straight to the <img> that draws them. Reading a megabyte
+  if (isImage(tab.path) || isFont(tab.path)) {
+    // The bytes go straight to the browser renderer. Reading a megabyte
     // of them into a string first would move it twice and display it never.
     tab.content = "";
     return;
@@ -2008,7 +2013,7 @@ async function loadFileTab(tab) {
    the tab back rather than leaving it on an empty pane. */
 export async function setFileMode(tab, mode) {
   if (tab?.kind !== "file" || tab.commit || tab.mode === mode || !FILE_MODES.includes(mode)) return;
-  if (mode === "edit" && isImage(tab.path)) return;
+  if (mode === "edit" && (isImage(tab.path) || isFont(tab.path))) return;
   const previous = tab.mode;
   tab.mode = mode;
   try {

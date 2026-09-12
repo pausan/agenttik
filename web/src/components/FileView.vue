@@ -13,7 +13,7 @@
    place. */
 import { computed } from "vue";
 
-import { canPreview, isDirty, isImage, saveFile, setFileMode } from "../store";
+import { canPreview, isDirty, isFont, isImage, saveFile, setFileMode } from "../store";
 import { langOf } from "../highlight";
 import { nf } from "../api";
 import { SEGMENTED } from "../ui";
@@ -25,14 +25,15 @@ import ImageDiff from "./ImageDiff.vue";
 const props = defineProps({ tab: { type: Object, required: true } });
 
 const image = computed(() => isImage(props.tab.path));
+const font = computed(() => isFont(props.tab.path));
 
 /* A file opened from a commit has one view. There is nothing to edit in a
    revision that has already been made, and its text is not what is on disk,
    so offering Edit or Preview would only show the wrong thing. */
 const modes = computed(() => {
   if (props.tab.commit) return [{ label: "Diff", value: "diff" }];
-  // An image has no text, so it has no Edit: what it renders as is the file.
-  const items = image.value ? [] : [{ label: "Edit", value: "edit" }];
+  // Images and fonts have no editable text.
+  const items = image.value || font.value ? [] : [{ label: "Edit", value: "edit" }];
   items.push({ label: "Diff", value: "diff" });
   if (canPreview(props.tab.path)) items.push({ label: "Preview", value: "preview" });
   return items;
@@ -66,7 +67,7 @@ const lines = computed(() => text.value.split("\n").length);
 /* One extra pass over a diff that has already been fetched, and only when it
    changes — cheaper than threading the count back out of the parse. */
 const stat = computed(() => {
-  if (props.tab.mode !== "diff" || !props.tab.diff || image.value) return null;
+  if (props.tab.mode !== "diff" || !props.tab.diff || image.value || font.value) return null;
   let add = 0;
   let del = 0;
   for (const line of props.tab.diff.split("\n")) {
@@ -136,9 +137,9 @@ const stat = computed(() => {
     <div
       class="flex shrink-0 items-center gap-3 border-t border-default px-5 py-1 text-xs text-dimmed"
     >
-      <span>{{ image ? "image" : langOf(tab.path) || "text" }}</span>
+      <span>{{ image ? "image" : font ? "font" : langOf(tab.path) || "text" }}</span>
       <span v-if="tab.commit" class="text-dimmed">committed</span>
-      <span v-else-if="image" class="text-dimmed">not editable</span>
+      <span v-else-if="image || font" class="text-dimmed">not editable</span>
       <span v-else-if="tab.readOnly" class="text-warning">read only</span>
       <span v-else-if="dirty" class="text-primary">unsaved</span>
       <span class="flex-1"></span>
@@ -146,7 +147,7 @@ const stat = computed(() => {
         <span class="text-success">+{{ nf.format(stat.add) }}</span>
         <span class="text-error">−{{ nf.format(stat.del) }}</span>
       </template>
-      <span v-else-if="!image">{{ nf.format(lines) }} {{ lines === 1 ? "line" : "lines" }}</span>
+      <span v-else-if="!image && !font">{{ nf.format(lines) }} {{ lines === 1 ? "line" : "lines" }}</span>
     </div>
   </div>
 </template>

@@ -13,7 +13,7 @@ func TestBuildArgs(t *testing.T) {
 		WorkDir: "/tmp/p", Model: "gpt-5-codex", Effort: "high",
 		Permission: agent.PermissionWorkspace}), " ")
 	for _, want := range []string{"exec", "--json", "--cd /tmp/p",
-		"--model gpt-5-codex", "model_reasoning_effort=high", "--sandbox workspace-write"} {
+		"--model gpt-5-codex", "model_reasoning_effort=high", "--dangerously-bypass-approvals-and-sandbox"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("args %q missing %q", got, want)
 		}
@@ -25,13 +25,18 @@ func TestBuildArgsResume(t *testing.T) {
 	if !strings.HasPrefix(got, "exec resume s1") {
 		t.Errorf("args %q should start with 'exec resume s1'", got)
 	}
+	if !strings.Contains(got, "--dangerously-bypass-approvals-and-sandbox") {
+		t.Errorf("resume should disable the sandbox by default: %q", got)
+	}
 }
 
 func TestSandboxMapping(t *testing.T) {
 	cases := map[agent.Permission]string{
 		agent.PermissionPlan:      "read-only",
-		agent.PermissionWorkspace: "workspace-write",
+		agent.PermissionWorkspace: "danger-full-access",
 		agent.PermissionFull:      "danger-full-access",
+		"":                        "danger-full-access",
+		agent.Permission("junk"):  "danger-full-access",
 	}
 	for perm, want := range cases {
 		if got := sandboxFlag(perm); got != want {
@@ -104,7 +109,16 @@ func TestAppServerResumeRequestSkipsHistory(t *testing.T) {
 		Permission: agent.PermissionWorkspace,
 	})
 	if method != "thread/resume" || params["threadId"] != "thread-1" ||
-		params["excludeTurns"] != true || params["sandbox"] != "workspace-write" {
+		params["excludeTurns"] != true || params["sandbox"] != "danger-full-access" ||
+		params["approvalPolicy"] != "never" {
+		t.Errorf("request = %s %+v", method, params)
+	}
+}
+
+func TestAppServerDefaultPermissions(t *testing.T) {
+	method, params := threadRequest(agent.TurnRequest{WorkDir: "/tmp/p"})
+	if method != "thread/start" || params["sandbox"] != "danger-full-access" ||
+		params["approvalPolicy"] != "never" {
 		t.Errorf("request = %s %+v", method, params)
 	}
 }

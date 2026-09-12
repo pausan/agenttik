@@ -62,10 +62,9 @@ func sandboxFlag(p agent.Permission) string {
 	switch p.Valid() {
 	case agent.PermissionPlan:
 		return "read-only"
-	case agent.PermissionFull:
-		return "danger-full-access"
 	default:
-		return "workspace-write"
+		// Codex runs without a sandbox by default for now, including workspace mode.
+		return "danger-full-access"
 	}
 }
 
@@ -81,7 +80,7 @@ func buildArgs(req agent.TurnRequest) []string {
 		if req.Effort != "" {
 			args = append(args, "-c", "model_reasoning_effort="+req.Effort)
 		}
-		if req.Permission.Valid() == agent.PermissionFull {
+		if sandboxFlag(req.Permission) == "danger-full-access" {
 			args = append(args, "--dangerously-bypass-approvals-and-sandbox")
 		}
 		// `codex exec resume` has no --cd or --sandbox flags. cmd.Dir supplies
@@ -100,7 +99,7 @@ func buildArgs(req agent.TurnRequest) []string {
 	if req.Effort != "" {
 		args = append(args, "-c", "model_reasoning_effort="+req.Effort)
 	}
-	if req.Permission.Valid() == agent.PermissionFull {
+	if sandboxFlag(req.Permission) == "danger-full-access" {
 		args = append(args, "--dangerously-bypass-approvals-and-sandbox")
 	} else {
 		args = append(args, "--sandbox", sandboxFlag(req.Permission))

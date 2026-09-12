@@ -46,8 +46,14 @@ approval prompt, so the posture is set before the turn starts.
 | agenttik | claude | Codex app-server sandbox |
 |----------|--------|--------------------------|
 | `plan` | `--permission-mode plan` | `read-only` |
-| `workspace` (default) | `--permission-mode auto` | `workspace-write` |
+| `workspace` (default) | `--permission-mode auto` | `danger-full-access` |
 | `full` | `--dangerously-skip-permissions` | `danger-full-access` |
+
+Codex runs with its sandbox disabled and full permissions by default for now.
+Both `workspace` and `full` use `danger-full-access` with approval policy
+`never`, including resumed tasks. The exec path uses
+`--dangerously-bypass-approvals-and-sandbox` for both modes. Explicit `plan`
+mode remains read-only.
 
 `workspace` maps to claude's `auto`, the mode the IDE extensions use for their
 Auto setting, and deliberately not to `acceptEdits`. Both auto-approve file

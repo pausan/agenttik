@@ -3,6 +3,12 @@ import assert from "node:assert/strict";
 
 import { markdown } from "./markdown.js";
 
+test("pasted image references open the stored image instead of the project editor", () => {
+  const url = `/api/attachments/${"a".repeat(64)}.png`;
+  assert.match(markdown(`![Attached image](${url})`), new RegExp(`<a href="${url}"`));
+  assert.doesNotMatch(markdown("![Attached image](/api/attachments/../../secret.png)"), /<a /);
+});
+
 test("inline emphasis, code and strikethrough", () => {
   assert.equal(markdown("**bold** and *thin* and `x=1` and ~~gone~~"),
     "<p><strong>bold</strong> and <em>thin</em> and <code>x=1</code> and <del>gone</del></p>");

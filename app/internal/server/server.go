@@ -135,6 +135,8 @@ func uiMissing(c *fiber.Ctx) error {
 
 func (s *Server) routes() {
 	api := s.app.Group("/api")
+	api.Post("/attachments", s.uploadAttachment)
+	api.Get("/attachments/:name", s.getAttachment)
 
 	api.Get("/providers", s.listProviders)
 	api.Get("/providers/:provider/subscription-limits", s.subscriptionLimits)

@@ -7,6 +7,7 @@ import Chord from "./Chord.vue";
 import ContextPane from "./ContextPane.vue";
 import { useTextHistory } from "../text-history";
 import { isMobile } from "../ui";
+import { clipboardImages, promptImages, promptText, uploadImage, withImages } from "../prompt-images";
 
 /* Everything below is reached by a click or a chord, never by the first
    paint, so its code is fetched from its own chunk the moment it is first
@@ -18,9 +19,9 @@ const ScheduleModal = defineAsyncComponent(() => import("./ScheduleModal.vue"));
 /* The unsent prompt belongs to the conversation, not to this bar: one bar
    serves every session, so text kept here would follow you between tabs. */
 const text = computed({
-  get: () => S.owner?.draft || "",
+  get: () => promptText(S.owner?.draft),
   set: (v) => {
-    if (S.owner) S.owner.draft = v;
+    if (S.owner) S.owner.draft = withImages(v, promptImages(S.owner.draft));
   },
 });
 const history = useTextHistory(text, (value) => (text.value = value));
@@ -28,6 +29,35 @@ const prompt = ref(null);
 const modelOpen = ref(false);
 const queueOpen = ref(false);
 const scheduling = ref(false);
+const images = computed(() => promptImages(S.owner?.draft));
+const uploading = computed(() => !!S.owner?.imageUploads);
+
+async function onPaste(e) {
+  const files = clipboardImages(e.clipboardData);
+  const owner = S.owner;
+  if (!files.length || !owner) return;
+  e.preventDefault();
+  const pastedText = e.clipboardData.getData("text/plain");
+  if (pastedText) {
+    const box = e.target;
+    text.value = text.value.slice(0, box.selectionStart) + pastedText + text.value.slice(box.selectionEnd);
+  }
+  owner.imageUploads = (owner.imageUploads || 0) + 1;
+  try {
+    for (const file of files) {
+      const image = await uploadImage(file);
+      owner.draft = withImages(promptText(owner.draft), [...promptImages(owner.draft), image]);
+    }
+  } catch (error) {
+    fail(error);
+  } finally {
+    owner.imageUploads -= 1;
+  }
+}
+
+function removeImage(index) {
+  S.owner.draft = withImages(text.value, images.value.filter((_, i) => i !== index));
+}
 
 /* New sessions can be made while another prompt bar is still mounted, so an
    explicit focus request is more reliable than the component's autofocus. */
@@ -300,7 +330,7 @@ async function star() {
 
 /* send clears the draft itself, and only when it really sends. */
 function submit() {
-  send(text.value);
+  if (!uploading.value) send(S.owner?.draft || "");
 }
 
 function onPromptInput(e) {
@@ -308,7 +338,7 @@ function onPromptInput(e) {
 }
 
 function enqueuePrompt() {
-  enqueue(text.value);
+  if (!uploading.value) enqueue(S.owner?.draft || "");
 }
 
 /* Send and enqueue are bindings, so the box answers whatever Settings says.
@@ -348,12 +378,12 @@ const hints = computed(() => [
    specs/028): Send, Enqueue and Schedule, always in that order, so it never
    reshuffles when Settings moves Enter between Send and Enqueue. */
 const actions = computed(() => ({
-  send: { label: "Send", icon: "i-lucide-send", run: submit, disabled: !!S.detail?.running },
-  enqueue: { label: "Enqueue", icon: "i-lucide-clock", run: enqueuePrompt, disabled: false },
+  send: { label: "Send", icon: "i-lucide-send", run: submit, disabled: !!S.detail?.running || uploading.value },
+  enqueue: { label: "Enqueue", icon: "i-lucide-clock", run: enqueuePrompt, disabled: uploading.value },
   /* Schedule keeps the prompt rather than sending it: the dialog asks how
      often and how many times, and every run after that is a session of its
      own. See specs/028-scheduled-jobs.md. */
-  schedule: { label: "Schedule…", icon: "i-lucide-repeat", run: () => (scheduling.value = true), disabled: !text.value.trim() },
+  schedule: { label: "Schedule…", icon: "i-lucide-repeat", run: () => (scheduling.value = true), disabled: !S.owner?.draft?.trim() || uploading.value },
 }));
 const primary = computed(() => actions.value[enterDoes() === "enqueue" ? "enqueue" : "send"]);
 const menu = computed(() => [actions.value.send, actions.value.enqueue, actions.value.schedule]);
@@ -380,7 +410,15 @@ function runMenuAction(action) {
         :ui="{ base: 'resize-y' }"
         @input="onPromptInput"
         @keydown="onPromptKey"
+        @paste="onPaste"
       />
+      <div v-if="images.length || uploading" class="flex flex-wrap gap-2 p-2" aria-label="Attached images">
+        <div v-for="(image, i) in images" :key="i" class="relative">
+          <a :href="image.url" target="_blank" rel="noopener"><img :src="image.url" :alt="`Attached image ${i + 1}`" class="h-20 w-24 rounded object-contain" /></a>
+          <UButton type="button" size="xs" color="neutral" icon="i-lucide-x" :aria-label="`Remove image ${i + 1}`" class="absolute top-0 right-0" @click="removeImage(i)" />
+        </div>
+        <span v-if="uploading" role="status" class="text-sm text-muted">Saving images…</span>
+      </div>
       <div class="prompt-controls flex items-center gap-1.5">
         <div class="prompt-model-controls contents">
           <UPopover v-model:open="modelOpen">

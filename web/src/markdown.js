@@ -260,7 +260,7 @@ function inline(src) {
    that could do something when clicked matches neither and stays as text. */
 function link(url, text) {
   const href = url.trim();
-  if (/^(?:https?:|mailto:|#)/i.test(href)) {
+  if (/^(?:https?:|mailto:|#)/i.test(href) || /^\/api\/attachments\/[a-f0-9]{64}\.(png|jpg|gif|webp)$/.test(href)) {
     return `<a href="${esc(href)}" target="_blank" rel="noreferrer noopener">${text}</a>`;
   }
   return fileLink(href, text) || text;

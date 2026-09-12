@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/pausan/agenttik/app/internal/agent"
+	"github.com/pausan/agenttik/app/internal/attachments"
 	"github.com/pausan/agenttik/app/internal/orchestrator"
 	"github.com/pausan/agenttik/app/internal/store"
 )
@@ -212,7 +213,7 @@ func (r *Runner) send(queued store.QueuedMessage) (*store.Turn, error) {
 		return nil, err
 	}
 	r.claimProjectPrompt(sess, hasRun)
-	providerPrompt := withProjectPrompt(sess, hasRun, prompt)
+	providerPrompt := withProjectPrompt(sess, hasRun, attachments.Resolve(prompt, r.store.Dir()))
 	if sess.ProjectKind == "orchestrator" {
 		executable, err := os.Executable()
 		if err != nil {

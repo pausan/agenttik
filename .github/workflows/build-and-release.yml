@@ -2,12 +2,32 @@ name: Build and release
 
 on:
   push:
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  startup-budget:
+    name: One-second UI startup budget
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: npm ci --prefix web
+      - run: npm run build --prefix web
+      - run: go build -o bin/agenttik-web ./app/cmd/agenttik
+      - run: npm ci --prefix e2e
+      - run: npx playwright install --with-deps chromium
+        working-directory: e2e
+      - run: make test-startup
+
   release-tag:
     runs-on: ubuntu-24.04
     outputs:
@@ -132,7 +152,7 @@ jobs:
           retention-days: 1
 
   release:
-    needs: [release-tag, build]
+    needs: [release-tag, build, startup-budget]
     if: needs.release-tag.outputs.is_release == 'true'
     runs-on: ubuntu-24.04
     permissions:

@@ -6,11 +6,15 @@ Three layers, each cheap enough to run often.
 |-------|-------|---------|
 | Go unit tests | `app/internal/**/*_test.go` | `make test` |
 | UI unit tests | `web/src/*.test.js` (node:test) | `make test` |
+| Startup budget | `e2e/tests/startup.spec.js` | `make test-startup` |
 | Browser tests | `e2e/tests/*.spec.js` (Playwright) | `make e2e` |
 
 `make test` is the fast loop and runs the first two. `make e2e` builds the
 server and drives a real browser against it; it is the slower one, kept
-separate so the fast loop stays fast.
+separate so the fast loop stays fast. `make test-startup` requires the built
+web binary, installed e2e dependencies and Chromium; CI runs it separately
+with one worker and gates releases on the one-second requirement
+([052](052-launch-budget.md)).
 
 Tests are written with the change they guard, where writing one is reasonable
 — see rule 6 in `AGENTS.md`. What exists guards the logic that is hard to

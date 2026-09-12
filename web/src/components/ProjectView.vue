@@ -127,6 +127,7 @@ watch(
 
 const statsRows = computed(() => {
   const stats = props.tab.data.stats;
+  if (!stats) return [];
   return [
     ["Tasks", nf.format(stats.sessions)],
     ["Running now", nf.format(stats.running)],
@@ -407,7 +408,8 @@ async function doDelete() {
       </template>
 
       <template v-else>
-        <dl class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <p v-if="!tab.data.stats" class="text-dimmed">Loading statistics…</p>
+        <dl v-else class="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div v-for="[label, value] in statsRows" :key="label" class="rounded border border-default px-3 py-2">
             <dt class="text-xs text-dimmed">{{ label }}</dt>
             <dd class="m-0 mt-1 truncate font-medium text-highlighted tabular-nums">{{ value }}</dd>

@@ -887,28 +887,36 @@ export async function openProject(id, silent = false) {
    showing so a restored strip can ask for all its tabs at once and still
    rebuild them in the order they were saved in — see restoreOpenTabs. */
 async function loadProjectTab(id, silent = false) {
-  let project, stats, metrics, sessions, archived, schedules;
+  let project, sessions;
   try {
-    [project, stats, metrics, sessions, archived, schedules] = await Promise.all([
+    [project, sessions] = await Promise.all([
       api("GET", "/api/projects/" + id),
-      api("GET", `/api/projects/${id}/stats`),
-      api("GET", `/api/projects/${id}/metrics`),
       projectSessions(id),
-      projectArchived(id),
-      projectSchedules(id),
     ]);
   } catch (e) {
     if (!silent) fail(e);
     return null;
   }
-  return () =>
-    setContextTab({
+  return () => {
+    const tab = reactive({
       id: "project:" + id,
       kind: "project",
       label: project.name,
       projectID: id,
-      data: { project, stats, metrics, sessions, archived, schedules },
+      data: { project, sessions, stats: null, metrics: [], archived: [], schedules: [] },
     });
+    setContextTab(tab);
+    // Each secondary answer can arrive independently. None holds open tasks
+    // behind history or statistics, including when the project is restored.
+    for (const [key, request] of [
+      ["stats", () => api("GET", `/api/projects/${id}/stats`)],
+      ["metrics", () => api("GET", `/api/projects/${id}/metrics`)],
+      ["archived", () => projectArchived(id)],
+      ["schedules", () => projectSchedules(id)],
+    ]) {
+      request().then((value) => { tab.data[key] = value; }).catch(fail);
+    }
+  };
 }
 
 /* The project page's own list is what is still open in the project, in the
@@ -1912,11 +1920,11 @@ async function openFileIn(projectID, ownerID, path, opts = {}) {
    the same way loadProjectTab does — nothing, when the file cannot be read or
    is already open and was only brought to the front. */
 async function loadFileTabIn(projectID, ownerID, path, opts = {}) {
-  const { silent = false, commit = "", pin = false, line = 0 } = opts;
+  const { silent = false, commit = "", pin = false, line = 0, defer = false } = opts;
   if (!projectID) return null;
   const tabID = commit ? `file:${projectID}:${commit}:${path}` : `file:${projectID}:${path}`;
   if (selectOpenFile(tabID, pin, line)) return null;
-  const tab = {
+  const tab = reactive({
     id: tabID,
     kind: "file",
     label: path.split("/").pop(),
@@ -1937,9 +1945,10 @@ async function loadFileTabIn(projectID, ownerID, path, opts = {}) {
     // an image is never read as text at all.
     readOnly: !!commit || isImage(path),
     saving: false,
-  };
+    loadError: "",
+  });
   try {
-    await loadFileTab(tab);
+    if (!defer) await loadFileTab(tab);
   } catch (e) {
     if (!silent) fail(e);
     return null;
@@ -1955,6 +1964,12 @@ async function loadFileTabIn(projectID, ownerID, path, opts = {}) {
     const previous = tab.temp ? tempFileIn(projectID) : null;
     if (previous) swapTab(previous.id, tab);
     else addTab(tab);
+    if (defer) {
+      loadFileTab(tab).catch((error) => {
+        tab.loadError = error.message;
+        tab.readOnly = true;
+      });
+    }
   };
 }
 
@@ -2132,7 +2147,7 @@ function savedTab(tab) {
    there was a temporary one have no flag, and a tab the user chose to keep is
    the safer reading of those. */
 function restoreOpts(tab) {
-  return { silent: true, commit: tab.commit || "", pin: !tab.temp };
+  return { silent: true, commit: tab.commit || "", pin: !tab.temp, defer: true };
 }
 
 let restoringTabs = false;
@@ -3268,11 +3283,9 @@ export async function init() {
   try {
     // What the first paint draws is the sidebar's projects, its task rows and
     // the strip that was left open, and those need exactly these two. The
-    // rest is fetched beside them but never waited for: a provider's answer
+    // rest starts after them and is never waited for: a provider's answer
     // can cost a CLI probe of a second or more, and the model it names is
     // worth showing late rather than holding an otherwise ready window on.
-    const behind = Promise.all([loadProviders(), refreshSchedules()]);
-    behind.catch(fail);
     await Promise.all([refreshProjects(), refreshSessions()]);
     await restoreOpenTabs();
     // A first launch has no tabs to say which project is selected, and the
@@ -3281,5 +3294,6 @@ export async function init() {
   } catch (e) {
     fail(e);
   }
+  Promise.all([loadProviders(), refreshSchedules()]).catch(fail);
   initialized = true;
 }

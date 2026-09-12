@@ -1,3 +1,6 @@
+import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
+
 import {
   REPO,
   addProject,
@@ -71,19 +74,27 @@ const DRAWN = [...PROJECTS, FILE, TITLE, "Agent"].map((one) => one.toLowerCase()
    clock, that all of DRAWN was on screen. The waiting is done inside the page
    — a frame at a time, rather than across the debugging protocol — so what is
    measured is the launch and not the polling. */
-async function drawnAt(page) {
+async function drawnAt(page, wanted = DRAWN) {
   await page.reload({ waitUntil: "commit" });
-  return page.evaluate(async (wanted) => {
-    await new Promise((done) => {
+  return page.evaluate(async ({ wanted, task }) => {
+    await new Promise((done, reject) => {
+      const timeout = setTimeout(() => reject(new Error("Startup content missing after 5s")), 5000);
       const tick = () => {
         const text = document.body.innerText.toLowerCase();
-        if (wanted.every((one) => text.includes(one))) done();
+        const taskReady = !task || (
+          document.querySelector('main [aria-label="Copy Agent message"]')?.getClientRects().length &&
+          document.querySelector('main textarea[placeholder="Ask the agent…"]')?.getClientRects().length
+        );
+        if (taskReady && wanted.every((one) => text.includes(one))) {
+          clearTimeout(timeout);
+          requestAnimationFrame(done);
+        }
         else requestAnimationFrame(tick);
       };
       tick();
     });
     return performance.now();
-  }, DRAWN);
+  }, { wanted: wanted.map((one) => one.toLowerCase()), task: wanted === DRAWN });
 }
 
 test("a launch draws its projects, its strip and the task in front inside the budget", async ({
@@ -120,4 +131,95 @@ test("a launch reads the two lists once, however many tabs it restores", async (
   // One read per restored tab: three tasks and the file beside the last.
   expect(times(/^\/api\/sessions\/[^/?]+$/)).toBe(3);
   expect(times(/^\/api\/projects\/\d+\/file\?/)).toBe(1);
+});
+
+// Disable the browser cache: a warm reload alone misses script transfer and
+// parsing costs on the first window opened after an update.
+async function coldCache(page) {
+  const client = await page.context().newCDPSession(page);
+  await client.send("Network.enable");
+  await client.send("Network.setCacheDisabled", { cacheDisabled: true });
+}
+
+async function holdSecondary(page) {
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (/\/(providers|stars|schedules|stats|metrics|file)$/.test(url.pathname) ||
+        url.searchParams.get("only_done") === "true") await gate;
+    await route.continue();
+  });
+  return release;
+}
+
+test("cold startup renders tasks while file contents and secondary data are blocked", async ({ page }) => {
+  await openAStrip(page);
+  await coldCache(page);
+  const release = await holdSecondary(page);
+  try {
+    const ms = await drawnAt(page);
+    console.log(`Cold task startup: ${Math.round(ms)}ms`);
+    expect(ms).toBeLessThan(BUDGET_MS);
+    await expect(page.getByLabel("Loading", { exact: true })).toBeHidden();
+    await page.getByRole("tab", { name: new RegExp(FILE) }).click();
+    await expect(page.locator("main").getByText("Loading…", { exact: true })).toBeVisible();
+  } finally {
+    release();
+  }
+  await expect(page.locator("main").getByText("Loading…", { exact: true })).toBeHidden();
+  await expect(page.locator("main")).toContainText("startServer");
+});
+
+test("cold startup renders a project and its open tasks before history and statistics", async ({ page }) => {
+  await openAStrip(page);
+  await openProject(page, PROJECTS.at(-1));
+  // beforeunload writes the current strip synchronously.
+  await coldCache(page);
+  const release = await holdSecondary(page);
+  try {
+    const ms = await drawnAt(page, [...PROJECTS, FILE, TITLE, "New task"]);
+    console.log(`Cold project startup: ${Math.round(ms)}ms`);
+    expect(ms).toBeLessThan(BUDGET_MS);
+    await expect(page.locator("main").getByText(TITLE, { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Loading", { exact: true })).toBeHidden();
+  } finally {
+    release();
+  }
+  await page.locator("main").getByRole("tab", { name: "Stats", exact: true }).click();
+  await expect(page.locator("main").getByText("Task input tokens", { exact: true })).toBeVisible();
+});
+
+test("cold startup loads 30 projects and 300 open tasks within one second", async ({ page, agenttik }) => {
+  const projects = [];
+  const titles = [];
+  for (let i = 0; i < 30; i++) {
+    const path = join(agenttik.dataDir, `project-${i}`);
+    await mkdir(path);
+    const response = await page.request.post(`${agenttik.url}/api/projects`, { data: { path } });
+    expect(response.ok()).toBeTruthy();
+    const project = await response.json();
+    projects.push(project);
+    for (let j = 0; j < 10; j++) {
+      const title = `Open task ${i}-${j}`;
+      titles.push(title);
+      const task = await page.request.post(`${agenttik.url}/api/sessions`, {
+        data: { project_id: project.id, provider: "fake", model: "fake-quick", title },
+      });
+      expect(task.ok()).toBeTruthy();
+    }
+  }
+  const tabs = projects.map((p) => ({ id: `project:${p.id}`, kind: "project", projectID: p.id }));
+  await page.addInitScript((tabs) => {
+    localStorage.setItem("agenttik.foldOthers", "0");
+    localStorage.setItem("agenttik.openTabs", JSON.stringify({
+      tabs, activeTab: tabs[0].id, activeProjectID: tabs[0].projectID,
+    }));
+  }, tabs);
+  await coldCache(page);
+  const ms = await drawnAt(page, [...projects.map((p) => p.path), ...titles]);
+  console.log(`Cold 30-project / 300-task startup: ${Math.round(ms)}ms`);
+  expect(ms).toBeLessThan(BUDGET_MS);
+  await expect(page.locator("main").getByText(titles[0], { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Loading", { exact: true })).toBeHidden();
 });

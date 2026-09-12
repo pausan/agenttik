@@ -19,7 +19,7 @@ VERSION := $(shell git rev-parse --short=12 HEAD 2>/dev/null || echo dev)
 endif
 VERSION_LDFLAGS := -X main.version=$(VERSION)
 
-.PHONY: all build build-web build-windows-amd64 build-macos-arm64 run run-web test e2e vet fmt clean deps hooks ui ui-dev
+.PHONY: all build build-web build-windows-amd64 build-macos-arm64 run run-web test test-startup e2e vet fmt clean deps hooks ui ui-dev
 
 all: build
 
@@ -65,6 +65,11 @@ test:
 ## chromium into ~/.cache/ms-playwright.
 e2e: build-web
 	cd $(E2E) && npm install --no-audit --no-fund && npx playwright install chromium && npx playwright test
+
+## test-startup: hard one-second browser budget against the built web binary.
+## Run after build-web and installing e2e dependencies plus Chromium.
+test-startup:
+	cd $(E2E) && npx playwright test tests/startup.spec.js --workers=1
 
 vet:
 	go vet ./...

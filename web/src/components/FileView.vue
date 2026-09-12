@@ -41,9 +41,9 @@ const modes = computed(() => {
 const dirty = computed(() => isDirty(props.tab));
 const text = computed(() => props.tab.edited ?? props.tab.content ?? "");
 
-/* The view being shown is null until it has been fetched, which is only ever
-   visible when the toggle is switched: opening a file waits for it. */
+/* Restored files show their tab immediately and fill in their contents later. */
 const body = computed(() => {
+  if (props.tab.loadError) return "error";
   const value = props.tab.mode === "diff" ? props.tab.diff : props.tab.content;
   if (value === null) return "loading";
   // The diff of an image is still fetched, for its one useful word: git says
@@ -122,7 +122,8 @@ const stat = computed(() => {
     </div>
 
     <div class="min-h-0 flex-1" :class="fills ? 'overflow-hidden' : 'overflow-auto'">
-      <p v-if="body === 'loading'" class="px-5 py-5 text-center text-dimmed">Loading…</p>
+      <p v-if="body === 'error'" role="alert" class="px-5 py-5 text-warning">{{ tab.loadError }}</p>
+      <p v-else-if="body === 'loading'" class="px-5 py-5 text-center text-dimmed">Loading…</p>
       <p v-else-if="body === 'empty'" class="px-5 py-5 text-center text-dimmed">
         No changes to this file.
       </p>

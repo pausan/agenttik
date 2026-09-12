@@ -164,7 +164,7 @@ const badge = computed(() => {
       />
 
       <div class="flex shrink-0 items-center gap-1.5">
-        <template v-if="S.project">
+        <template v-if="S.project?.stats">
           <UBadge
             :color="S.project.stats.running ? 'primary' : 'neutral'"
             variant="soft"

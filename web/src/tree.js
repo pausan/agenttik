@@ -12,7 +12,8 @@ import { fuzzy } from "./fuzzy.js";
    is marked `ig`: the pane greys those and keeps their folders shut, so
    generated files are visible without being in the way.
 
-   Every level is sorted by name, regardless of file type or ignore status. */
+   Folders come before files, and each group is sorted by name, regardless of
+   ignore status. */
 export function buildTree(paths, ignored = [], dirs = []) {
   const skip = ignored.length ? new Set(ignored) : null;
   const root = node("", "", true);
@@ -70,7 +71,7 @@ function sortTree(n) {
   if (!n.children) return n;
   for (const c of n.children) sortTree(c);
   n.ig = n.children.length > 0 && n.children.every((c) => c.ig);
-  n.children.sort((a, b) => a.name.localeCompare(b.name));
+  n.children.sort((a, b) => b.dir - a.dir || a.name.localeCompare(b.name));
   return n;
 }
 

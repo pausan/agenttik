@@ -17,18 +17,18 @@ function shape(n, depth = -1) {
   return here.concat((n.children || []).flatMap((c) => shape(c, depth + 1)));
 }
 
-test("all entries are sorted by name at every level", () => {
+test("folders come before files and both groups are sorted by name", () => {
   assert.deepEqual(shape(buildTree(PATHS)), [
     "app/",
     "  internal/",
     "    store/",
     "      store.go",
-    "README.md",
     "web/",
-    "  package.json",
     "  src/",
     "    api.js",
     "    store.js",
+    "  package.json",
+    "README.md",
   ]);
 });
 
@@ -72,7 +72,7 @@ test("a folder collects the letters every match under it used", () => {
   const tree = filterTree(buildTree(PATHS), "js");
   const web = tree.children[0];
   // Both web/src files and web/package.json match, through different letters.
-  assert.deepEqual(shape(tree), ["web/", "  package.json", "  src/", "    api.js", "    store.js"]);
+  assert.deepEqual(shape(tree), ["web/", "  src/", "    api.js", "    store.js", "  package.json"]);
   assert.equal(web.hits, null); // no letter of "js" lands in "web" itself
 });
 
@@ -87,7 +87,7 @@ test("a folder name on its own keeps everything under it", () => {
 });
 
 
-test("ignored files stay visible and sort with ordinary entries at every level", () => {
+test("ignored files stay visible and folders still come first", () => {
   const ignored = ["alpha.txt", "middle/b.txt", "middle/cache/item.txt"];
   const tree = buildTree(
     ["zebra.txt", "middle/z.txt", ...ignored, "middle/a.txt"],
@@ -95,13 +95,13 @@ test("ignored files stay visible and sort with ordinary entries at every level",
     ["beta"],
   );
   assert.deepEqual(shape(tree), [
-    "alpha.txt", "beta/", "middle/", "  a.txt", "  b.txt",
-    "  cache/", "    item.txt", "  z.txt", "zebra.txt",
+    "beta/", "middle/", "  cache/", "    item.txt", "  a.txt", "  b.txt",
+    "  z.txt", "alpha.txt", "zebra.txt",
   ]);
-  assert.equal(tree.children[0].ig, true);
-  const middle = tree.children[2];
+  const middle = tree.children[1];
   assert.equal(middle.ig, false);
-  assert.equal(middle.children[1].ig, true);
+  assert.equal(middle.children[0].ig, true);
+  assert.equal(middle.children[1].ig, false);
   assert.equal(middle.children[2].ig, true);
   const filtered = filterTree(tree, "midb.txt");
   assert.deepEqual(shape(filtered), ["middle/", "  b.txt"]);

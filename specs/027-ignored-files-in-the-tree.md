@@ -1,8 +1,9 @@
 # Ignored files in the Tree
 
-The Tree includes ignored files and draws them gray. Every directory sorts
-its immediate children alphabetically by name, mixing files and folders,
-regardless of ignore status. Sorting uses the browser's locale comparison.
+The Tree includes ignored files and draws them gray. Every directory puts its
+folders first and its files after them; each group is sorted alphabetically by
+name, regardless of ignore status. Sorting uses the browser's locale
+comparison.
 
 `GET /api/projects/:id/tree` returns `{files, ignored, dirs}`.
 Git supplies tracked and untracked files through

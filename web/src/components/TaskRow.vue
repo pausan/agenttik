@@ -75,7 +75,7 @@ defineExpose({ edit });
 
 <template>
   <div
-    class="mb-px flex items-center rounded-[var(--ui-radius)]"
+    class="task-row mb-px flex items-center rounded-[var(--ui-radius)]"
     :class="active ? 'bg-primary/10' : 'hover:bg-elevated'"
   >
     <UInput
@@ -98,7 +98,7 @@ defineExpose({ edit });
       >
         <button
           type="button"
-          class="min-w-0 flex-1 px-2 py-1 text-left"
+          class="task-select min-w-0 flex-1 px-2 py-1 text-left"
           @click="$emit('select')"
         >
           <!-- Grey says archived: on a list holding both, the colour is what
@@ -115,7 +115,7 @@ defineExpose({ edit });
             >
             <StatusDot :status="status" />
             <span v-if="queued" class="shrink-0" title="Queued prompt">🕒</span>
-            <span class="truncate">{{ title || "Untitled task" }}</span>
+            <span class="task-title truncate">{{ title || "Untitled task" }}</span>
           </span>
           <!-- The outcome reads in the same lighter voice the transcript
                gives thinking: it is the row's own note on itself, not part of

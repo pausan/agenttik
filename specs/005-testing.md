@@ -59,7 +59,7 @@ path that cannot resolve on purpose, to check the picker shrugs it off.
 Tests use the agenttik checkout itself as the project under test, so the tree,
 the git status and the folder picker all read something real.
 
-Six files, one per area: `folder-picker` (the fuzzy walk over real
+Tests are grouped by area: `folder-picker` (the fuzzy walk over real
 directories), `inspector` (which panes the right-hand strip offers a project
 versus a task, and that the one in use survives switching), `projects` (add,
 rename, delete, archive, the per-project task list, its filter, and the outcome
@@ -71,6 +71,10 @@ picker, the subscription a turn really ran on, and what removing one says —
 below that a live turn touches — see the fake provider below) and `schedules`
 (scheduling a prompt, and the archived job waiting on the project page until
 it is restored — [028](028-scheduled-jobs.md)).
+
+`mobile` covers touch navigation, task creation and sending, per-project
+drafts, drawers and focus, narrow prompt controls and popovers, and preserving
+the desktop panels across viewport changes — [055](055-mobile-layout.md).
 
 ## The fake provider
 
@@ -118,13 +122,10 @@ swapping and removing one with no CLI on PATH.
 
 ## What is not covered
 
-The subscription-allowance browser test still searches for the old
-`Context and subscription usage` button name. The current label includes
-main-context state; this failure also reproduces before the orchestrator
-change. The queue test uses a one-second fake turn and can miss the brief
-Queued label under parallel load; it passes in isolation. These limitations
-do not apply to the orchestrator tests, which hold work until explicitly
-stopped when checking a waiting task.
+The queue test uses a one-second fake turn and can miss the brief Queued
+label under parallel load. The orchestrator tests hold work until explicitly
+stopped when checking a waiting task. Phone tests emulate touch and viewport
+changes in Chromium; real software keyboards still need device testing.
 
 A live turn against a real provider. Running one spends an actual subscription
 and needs the CLI installed, so nothing in the suite does that; the fake

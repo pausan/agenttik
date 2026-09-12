@@ -13,6 +13,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [002](002-data-model.md) | SQLite schema, metrics, storage location |
 | [003](003-providers.md) | Provider interface, CLI invocation, event mapping |
 | [004](004-ui.md) | Layout, panels, shortcuts, HTTP API |
+| [055](055-mobile-layout.md) | Phone navigation, drawers, touch controls and viewport sizing |
 | [005](005-testing.md) | The three test layers and how they are isolated |
 | [052](052-launch-budget.md) | Restored-window launch budget, concurrent reads, and deferred UI work |
 
@@ -105,8 +106,8 @@ been run on a *second* real subscription — doing so needs a second paid
 account.
 
 `go test ./...`, `go vet ./...`, the UI build and the 35 web unit tests pass.
-The browser suite has an outdated subscription-button locator and a queue
-test sensitive to timing under load; see [005](005-testing.md).
+All 73 browser tests pass, including phone and desktop coverage. The queue
+test is sensitive to timing under load. See [005](005-testing.md).
 
 Task outcomes ([051](051-task-outcomes.md)) are exercised against the fake
 provider — the archive writes the line, a restore drops an answer still in

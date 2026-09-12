@@ -17,6 +17,7 @@ import ProjectSettings from "./settings/ProjectSettings.vue";
 import ServerSettings from "./settings/ServerSettings.vue";
 import ShortcutSettings from "./settings/ShortcutSettings.vue";
 import SubscriptionSettings from "./settings/SubscriptionSettings.vue";
+import { isMobile } from "../ui";
 
 const open = defineModel("open", { type: Boolean, default: false });
 const section = defineModel("section", { type: String, default: "general" });
@@ -66,18 +67,18 @@ async function showOrchestrator() {
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Settings" :ui="{ content: 'max-w-3xl' }">
+  <UModal v-model:open="open" title="Settings" :ui="{ content: 'max-w-3xl' }" :content="{ onOpenAutoFocus: (e) => { if (isMobile()) e.preventDefault(); } }">
     <template #body>
-      <div class="flex h-[58vh] min-h-0 gap-3">
-        <nav class="flex w-44 shrink-0 flex-col gap-2 border-r border-default pr-3">
+      <div class="settings-layout flex h-[58vh] min-h-0 gap-3">
+        <nav class="settings-nav flex w-44 shrink-0 flex-col gap-2 border-r border-default pr-3">
           <UInput
             v-model="filter"
             size="sm"
             icon="i-lucide-search"
             placeholder="Filter settings…"
-            autofocus
+            :autofocus="!isMobile()"
           />
-          <div class="min-h-0 flex-1 space-y-0.5 overflow-auto">
+          <div class="settings-sections min-h-0 flex-1 space-y-0.5 overflow-auto">
             <button
               v-for="s in shown"
               :key="s.id"
@@ -96,7 +97,7 @@ async function showOrchestrator() {
           </div>
         </nav>
 
-        <div class="min-h-0 flex-1 overflow-auto pr-1">
+        <div class="min-h-0 min-w-0 flex-1 overflow-auto pr-1">
           <div v-show="section === 'general'">
             <GeneralSettings
               :filter="filter"

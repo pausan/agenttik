@@ -20,14 +20,19 @@ import {
   stopTask,
   toggleProjectTasks,
 } from "../store";
-import { SEGMENTED } from "../ui";
+import { isMobile, SEGMENTED } from "../ui";
 import { beginDrag } from "../drag";
 import FileTree from "./FileTree.vue";
 import ScheduleRow from "./ScheduleRow.vue";
 import TaskRow from "./TaskRow.vue";
 import StatusDot from "./StatusDot.vue";
 
-defineEmits(["add-project", "setup", "shortcuts"]);
+const emit = defineEmits(["add-project", "setup", "shortcuts", "navigate"]);
+
+async function navigate(action, id) {
+  await action(id);
+  emit("navigate");
+}
 
 const tab = ref("projects");
 const fileTree = ref(null);
@@ -40,7 +45,7 @@ const tabs = [
 /* Opening Tree focuses its filter, including when it is already in front. */
 function show(which) {
   tab.value = which;
-  if (which === "projects") return;
+  if (which === "projects" || isMobile()) return;
   nextTick(() => fileTree.value?.focus());
 }
 
@@ -230,7 +235,7 @@ function onTaskDrop(e) {
           <UContextMenu :items="projectMenu(p)" :ui="{ content: 'w-56' }">
             <div
               :draggable="p.kind !== 'orchestrator'"
-              class="mb-0.5 flex items-start gap-1 rounded-[var(--ui-radius)] px-1.5 py-1"
+              class="sidebar-project mb-0.5 flex items-start gap-1 rounded-[var(--ui-radius)] px-1.5 py-1"
               :class="[S.activeProjectID === p.id ? 'bg-primary/10' : 'hover:bg-elevated', p.kind === 'orchestrator' ? 'cursor-default' : 'cursor-grab active:cursor-grabbing']"
               @dragstart="onProjectStart($event, p.id)"
               @dragend="onProjectDrop"
@@ -255,7 +260,7 @@ function onTaskDrop(e) {
                 type="button"
                 class="min-w-0 flex-1 text-left"
                 :title="projectKey(i) ? `${p.name}  (Alt+${projectKey(i)})` : p.name"
-                @click="openProject(p.id)"
+                @click="navigate(openProject, p.id)"
               >
                 <span class="flex items-center gap-1.5">
                   <span
@@ -286,7 +291,7 @@ function onTaskDrop(e) {
             :ref="(el) => setScheduleRow(sched.id, el)"
             :schedule="sched"
             :active="activeSchedule === sched.id"
-            @select="openSchedule(sched.id)"
+            @select="navigate(openSchedule, sched.id)"
             @toggle-paused="setSchedulePaused(sched, !sched.paused)"
             @toggle-archive="setScheduleArchived(sched, true)"
             @rename="renameSchedule(sched, $event)"
@@ -314,8 +319,8 @@ function onTaskDrop(e) {
               :stoppable="s.status === 'running' || s.queue_count > 0"
               :archive="s.status !== 'running' && s.queue_count === 0"
               @stop="stopTask(s.id)"
-              @select="pickTask(s.id)"
-              @open-job="openSchedule(s.schedule_id)"
+              @select="navigate(pickTask, s.id)"
+              @open-job="navigate(openSchedule, s.schedule_id)"
               @toggle-archive="setTaskArchived(s, true)"
               @rename="renameTask(s, $event)"
               @editing="renaming = $event ? s.id : ''"

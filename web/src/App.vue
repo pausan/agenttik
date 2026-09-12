@@ -1,5 +1,5 @@
 <script setup>
-import { defineAsyncComponent, onMounted, onUnmounted, ref } from "vue";
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useToast } from "@nuxt/ui/composables";
 
 import {
@@ -22,6 +22,7 @@ import SideBar from "./components/SideBar.vue";
 import MainPanel from "./components/MainPanel.vue";
 import InspectorPanel from "./components/InspectorPanel.vue";
 import Splitter from "./components/Splitter.vue";
+import { MOBILE_QUERY } from "./ui";
 
 /* Everything below is reached by a click or a chord, never by the first
    paint, so its code is fetched from its own chunk the moment it is first
@@ -42,6 +43,51 @@ const settings = ref(false);
 const settingsSection = ref("general");
 const goTo = ref(false);
 const sideBar = ref(null);
+const mobileSideBar = ref(null);
+const media = window.matchMedia(MOBILE_QUERY);
+const mobile = ref(media.matches);
+const projectsOpen = ref(false);
+const workspaceOpen = ref(false);
+const viewportHeight = ref();
+const activeProject = computed(() => S.projects.find((p) => p.id === S.activeProjectID));
+const drawerUI = {
+  content: "mobile-drawer w-[calc(100%-2rem)] max-w-sm",
+  header: "min-h-14 p-3",
+  body: "flex min-h-0 flex-col overflow-hidden p-0 sm:p-0",
+  close: "static ml-auto size-11 justify-center",
+};
+
+function closePanels() {
+  projectsOpen.value = false;
+  workspaceOpen.value = false;
+}
+
+// Visual viewport height also follows the software keyboard on Safari.
+function resizeViewport() {
+  const viewport = window.visualViewport;
+  viewportHeight.value = mobile.value && viewport?.scale === 1 ? `${viewport.height}px` : undefined;
+}
+
+function changeLayout() {
+  mobile.value = media.matches;
+  closePanels();
+  resizeViewport();
+}
+
+async function showSidebar(which) {
+  if (mobile.value) {
+    workspaceOpen.value = false;
+    projectsOpen.value = true;
+    await nextTick();
+  }
+  const panel = mobile.value ? mobileSideBar.value : sideBar.value;
+  if (which === "tree") panel?.showTree();
+  else if (which === "rename") panel?.editCurrent();
+  else panel?.showProjects();
+}
+
+// File selections from Tree or Changed also return to the main view.
+watch([() => S.activeTab, () => S.activeProjectID], closePanels);
 // init() populates the sidebar, the open tabs and everything in them; a slow
 // launch — a lot of restored tabs, a cold disk — would otherwise sit there
 // looking empty rather than working. Delayed so a launch under a second,
@@ -52,11 +98,13 @@ const bootSpinner = ref(false);
    button and the launcher's shortcut entry both land on Shortcuts, and
    everything else on General. */
 function openSettings(id) {
+  closePanels();
   settingsSection.value = id;
   settings.value = true;
 }
 
 function openAddProject() {
+  closePanels();
   addProjectLoaded.value = true;
   addProject.value = true;
 }
@@ -74,11 +122,11 @@ function onKey(e) {
   if (hit(e, "tab.prev")) return run(e, () => selectAdjacentTab(-1));
   if (hit(e, "tab.next")) return run(e, () => selectAdjacentTab(1));
   if (hit(e, "task.new")) return run(e, startCurrentTask);
-  if (hit(e, "task.rename")) return run(e, () => sideBar.value?.editCurrent());
+  if (hit(e, "task.rename")) return run(e, () => showSidebar("rename"));
   if (hit(e, "tab.reopen")) return run(e, reopenClosedTab);
   if (hit(e, "goto")) return run(e, () => (goTo.value = true));
-  if (hit(e, "panel.tree")) return run(e, () => sideBar.value?.showTree());
-  if (hit(e, "panel.projects")) return run(e, () => sideBar.value?.showProjects());
+  if (hit(e, "panel.tree")) return run(e, () => showSidebar("tree"));
+  if (hit(e, "panel.projects")) return run(e, () => showSidebar("projects"));
   if (hit(e, "file.save")) {
     // The editor handles its own save; this is the same chord with the caret
     // anywhere else on a file tab.
@@ -126,29 +174,84 @@ onMounted(() => {
     bootSpinner.value = false;
   });
   window.addEventListener("keydown", onKey);
+  media.addEventListener("change", changeLayout);
+  window.visualViewport?.addEventListener("resize", resizeViewport);
+  resizeViewport();
 });
-onUnmounted(() => window.removeEventListener("keydown", onKey));
+onUnmounted(() => {
+  window.removeEventListener("keydown", onKey);
+  media.removeEventListener("change", changeLayout);
+  window.visualViewport?.removeEventListener("resize", resizeViewport);
+});
 </script>
 
 <template>
   <UApp>
     <div
-      class="grid h-full bg-default text-default text-sm"
+      class="app-shell grid h-full bg-default text-default text-sm"
       :style="{
-        gridTemplateColumns: hasInspector()
+        '--mobile-height': viewportHeight,
+        gridTemplateRows: mobile ? 'auto minmax(0,1fr)' : undefined,
+        gridTemplateColumns: mobile ? 'minmax(0,1fr)' : hasInspector()
           ? `${S.layout.left}px 1px minmax(0,1fr) 1px ${S.layout.right}px`
           : `${S.layout.left}px 1px minmax(0,1fr)`,
       }"
     >
+      <header v-if="mobile" class="mobile-header flex min-w-0 items-center gap-2 border-b border-default bg-muted p-2">
+        <USlideover v-model:open="projectsOpen" side="left" title="Projects and tasks" :ui="drawerUI" :content="{ style: { height: viewportHeight } }">
+          <UButton
+            icon="i-lucide-menu"
+            color="neutral"
+            variant="ghost"
+            class="size-11 shrink-0 justify-center"
+            aria-label="Projects and tasks"
+          />
+          <template #body>
+            <SideBar
+              ref="mobileSideBar"
+              class="mobile-sidebar flex-1"
+              @navigate="closePanels"
+              @add-project="openAddProject"
+              @setup="openSettings('general')"
+              @shortcuts="openSettings('shortcuts')"
+            />
+          </template>
+        </USlideover>
+        <div class="min-w-0 flex-1">
+          <p class="text-[10px] text-dimmed">{{ activeProject ? 'Project' : 'Workspace' }}</p>
+          <p class="truncate font-semibold text-highlighted">{{ activeProject?.name || 'agenttik' }}</p>
+        </div>
+        <UButton
+          v-if="activeProject"
+          icon="i-lucide-plus"
+          label="New task"
+          class="min-h-11 shrink-0"
+          @click="startCurrentTask()"
+        />
+        <UButton v-else icon="i-lucide-folder-plus" label="Add project" class="min-h-11 shrink-0" @click="openAddProject" />
+        <USlideover v-if="activeProject && hasInspector()" v-model:open="workspaceOpen" title="Workspace" :ui="drawerUI" :content="{ style: { height: viewportHeight } }">
+          <UButton
+            icon="i-lucide-panels-top-left"
+            color="neutral"
+            variant="ghost"
+            class="size-11 shrink-0 justify-center"
+            aria-label="Workspace"
+          />
+          <template #body>
+            <InspectorPanel class="mobile-inspector flex-1" />
+          </template>
+        </USlideover>
+      </header>
       <SideBar
+        v-if="!mobile"
         ref="sideBar"
         @add-project="openAddProject"
         @setup="openSettings('general')"
         @shortcuts="openSettings('shortcuts')"
       />
-      <Splitter side="left" />
+      <Splitter v-if="!mobile" side="left" />
       <MainPanel />
-      <template v-if="hasInspector()">
+      <template v-if="!mobile && hasInspector()">
         <Splitter side="right" />
         <InspectorPanel />
       </template>
@@ -168,8 +271,8 @@ onUnmounted(() => window.removeEventListener("keydown", onKey));
     <GoToModal
       v-if="goTo"
       v-model:open="goTo"
-      @projects="sideBar?.showProjects()"
-      @tree="sideBar?.showTree()"
+      @projects="showSidebar('projects')"
+      @tree="showSidebar('tree')"
       @add-project="openAddProject"
       @settings="openSettings('general')"
       @shortcuts="openSettings('shortcuts')"

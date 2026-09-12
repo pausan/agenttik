@@ -6,6 +6,7 @@ import { ago } from "../api";
 import Chord from "./Chord.vue";
 import ContextPane from "./ContextPane.vue";
 import { useTextHistory } from "../text-history";
+import { isMobile } from "../ui";
 
 /* Everything below is reached by a click or a chord, never by the first
    paint, so its code is fetched from its own chunk the moment it is first
@@ -33,6 +34,7 @@ const scheduling = ref(false);
 watch(
   () => S.promptFocus,
   async () => {
+    if (isMobile()) return;
     await nextTick();
     prompt.value?.textareaRef?.focus();
   },
@@ -364,7 +366,7 @@ function runMenuAction(action) {
 </script>
 
 <template>
-  <form class="shrink-0 p-3" @submit.prevent="primary.run()">
+  <form class="prompt-bar shrink-0 p-3" @submit.prevent="primary.run()">
     <div
       class="mx-auto max-w-[860px] rounded-[var(--ui-radius-lg,10px)] bg-default p-2 shadow-xs inset-ring inset-ring-accented focus-within:inset-ring-2 focus-within:inset-ring-primary"
     >
@@ -379,168 +381,173 @@ function runMenuAction(action) {
         @input="onPromptInput"
         @keydown="onPromptKey"
       />
-      <div class="flex items-center gap-1.5">
-        <UPopover v-model:open="modelOpen">
-          <UButton
-            type="button"
-            color="neutral"
-            variant="outline"
-            size="sm"
-            trailing-icon="i-lucide-chevron-down"
-            :label="modelButtonLabel"
-            title="Choose model and subscription"
-          />
-          <template #content>
-            <UCommandPalette
-              class="w-80"
-              :groups="modelGroups"
-              value-key="value"
-              placeholder="Search models…"
-              v-model:search-term="modelSearch"
-              preserve-group-order
-              :ui="{ viewport: 'max-h-[min(28rem,60vh)]' }"
-              :fuse="{ fuseOptions: { keys: ['label', 'description'], threshold: 0.35, ignoreLocation: true }, resultLimit: 20 }"
-              @update:model-value="pickModel"
-            >
-              <template #group-label="{ group, label }">
-                <button
-                  v-if="group.id !== 'favourites'"
-                  type="button"
-                  class="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left font-semibold text-highlighted hover:bg-elevated"
-                  :aria-expanded="!providerCollapsed(group.id)"
-                  :aria-label="`${providerCollapsed(group.id) ? 'Expand' : 'Collapse'} ${label}`"
-                  @click.stop="toggleProvider(group.id)"
-                >
-                  <UIcon :name="providerCollapsed(group.id) ? 'i-lucide-chevron-right' : 'i-lucide-chevron-down'" class="size-3.5" />
-                  <span class="truncate">{{ label }}</span>
-                </button>
-                <span v-else class="block px-1 py-0.5 font-semibold text-highlighted">{{ label }}</span>
-              </template>
-            </UCommandPalette>
-          </template>
-        </UPopover>
-        <USelect v-model="effortValue" :items="effortItems" size="sm" title="Effort" />
-        <UButton
-          color="neutral"
-          variant="ghost"
-          size="sm"
-          :class="starred ? 'text-yellow-500' : ''"
-          :title="`${starred ? 'Unstar' : 'Star'} ${labelOf(S.detail.session.provider, S.detail.session.model)} · ${effort || 'default'}`"
-          :label="starred ? '★' : '☆'"
-          @click="star"
-        />
-        <span class="flex-1" />
-        <UPopover :content="{ side: 'top', sideOffset: 8 }">
-          <button
-            type="button"
-            class="usage-summary"
-            :aria-label="contextUsed && contextTotal ? `Main context ${contextPct}% and subscription usage` : 'Main context not reported and subscription usage'"
-            :title="contextUsed && contextTotal ? `Main context: ${contextPct}%` : 'Main context not reported'"
-          >
-            <span
-              class="context-ring"
-              :style="{ '--context-pct': contextPct + '%', '--context-tone': contextTone }"
-            >
-              <span class="context-ring-value">{{ contextUsed && contextTotal ? contextPct + '%' : '—' }}</span>
-            </span>
-            <span v-if="subscriptionWindows.length" class="subscription-limits">
-              <span v-for="(window, i) in subscriptionWindows" :key="window.label + i" class="subscription-limit-track">
-                <span
-                  class="subscription-limit-fill"
-                  :class="barTone(window.used_percent)"
-                  :style="{ width: Math.min(100, window.used_percent) + '%' }"
-                />
-              </span>
-            </span>
-          </button>
-          <template #content>
-            <div class="flex divide-x divide-default">
-              <ContextPane />
-              <!-- One window per row: its name and figure on a line, its bar
-                   under them, its reset under that. A name is a plan's to
-                   choose and can be long, so it truncates with the whole of
-                   it on the hover; putting the reset on its own line is what
-                   keeps the three from fighting over one. -->
-              <div v-if="subscriptionWindows.length" class="w-64 p-3">
-                <p class="m-0 text-xs font-medium text-muted">
-                  {{ planType ? planType + ' subscription' : 'Subscription allowance' }}
-                </p>
-                <!-- Which account these bars are the allowance of, drawn only
-                     when the provider has more than one to confuse it with. -->
-                <p v-if="accountAlias" class="m-0 text-[11px] text-dimmed">{{ accountAlias }}</p>
-                <ul class="mt-2 mb-0 list-none space-y-2.5 p-0">
-                  <li v-for="(window, i) in subscriptionWindows" :key="window.label + i">
-                    <div class="flex items-baseline justify-between gap-2 text-xs">
-                      <span class="truncate text-muted" :title="window.label">{{ window.label }}</span>
-                      <span class="shrink-0 font-medium tabular-nums" :class="textTone(window.used_percent)">
-                        {{ Math.round(window.used_percent) }}%
-                      </span>
-                    </div>
-                    <span class="mt-1 block h-1.5 overflow-hidden rounded-full bg-accented">
-                      <span
-                        class="block h-full rounded-full"
-                        :class="barTone(window.used_percent)"
-                        :style="{ width: Math.min(100, window.used_percent) + '%' }"
-                      />
-                    </span>
-                    <p class="mt-1 mb-0 text-[11px] text-dimmed tabular-nums">
-                      {{ window.resets_at
-                        ? 'resets ' + resetAt(window.resets_at) + (remaining(window.resets_at) ? ' · ' + remaining(window.resets_at) : '')
-                        : 'reset time not reported' }}
-                    </p>
-                  </li>
-                </ul>
-                <dl v-if="reachedType || reportedAgo" class="mt-3 mb-0 border-t border-default pt-1">
-                  <div v-if="reachedType" class="flex justify-between gap-2.5 py-0.5 text-xs">
-                    <dt class="shrink-0 text-muted">Status</dt>
-                    <dd class="m-0 truncate text-highlighted">{{ reachedType }}</dd>
-                  </div>
-                  <div v-if="reportedAgo" class="flex justify-between gap-2.5 py-0.5 text-xs">
-                    <dt class="shrink-0 text-muted">Reported</dt>
-                    <dd class="m-0 truncate text-highlighted tabular-nums">{{ reportedAgo }}</dd>
-                  </div>
-                </dl>
-              </div>
-            </div>
-          </template>
-        </UPopover>
-        <!-- No "running" label here: the header badge above the transcript
-             already carries the state, with its own dot. -->
-        <UButton
-          v-if="S.detail.running"
-          color="neutral"
-          variant="outline"
-          size="sm"
-          label="Stop"
-          @click="stopTurn"
-        />
-        <UFieldGroup size="sm">
-          <UButton type="submit" :disabled="primary.disabled" :label="primary.label" :trailing-icon="primary.icon" />
-          <UPopover v-model:open="queueOpen">
-            <UButton type="button" icon="i-lucide-chevron-down" aria-label="More prompt actions" />
+      <div class="prompt-controls flex items-center gap-1.5">
+        <div class="prompt-model-controls contents">
+          <UPopover v-model:open="modelOpen">
+            <UButton
+              type="button"
+              color="neutral"
+              variant="outline"
+              size="sm"
+              trailing-icon="i-lucide-chevron-down"
+              :label="modelButtonLabel"
+              class="prompt-model"
+              title="Choose model and subscription"
+            />
             <template #content>
-              <div class="p-1">
-                <UButton
-                  v-for="action in menu"
-                  :key="action.label"
-                  type="button"
-                  color="neutral"
-                  variant="ghost"
-                  block
-                  class="justify-start"
-                  :disabled="action.disabled"
-                  :label="action.label"
-                  :trailing-icon="action.icon"
-                  @click="runMenuAction(action)"
-                />
+              <UCommandPalette
+                class="w-80 max-w-[calc(100vw-2rem)]"
+                :groups="modelGroups"
+                value-key="value"
+                placeholder="Search models…"
+                v-model:search-term="modelSearch"
+                preserve-group-order
+                :ui="{ viewport: 'max-h-[min(28rem,60vh)]' }"
+                :fuse="{ fuseOptions: { keys: ['label', 'description'], threshold: 0.35, ignoreLocation: true }, resultLimit: 20 }"
+                @update:model-value="pickModel"
+              >
+                <template #group-label="{ group, label }">
+                  <button
+                    v-if="group.id !== 'favourites'"
+                    type="button"
+                    class="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left font-semibold text-highlighted hover:bg-elevated"
+                    :aria-expanded="!providerCollapsed(group.id)"
+                    :aria-label="`${providerCollapsed(group.id) ? 'Expand' : 'Collapse'} ${label}`"
+                    @click.stop="toggleProvider(group.id)"
+                  >
+                    <UIcon :name="providerCollapsed(group.id) ? 'i-lucide-chevron-right' : 'i-lucide-chevron-down'" class="size-3.5" />
+                    <span class="truncate">{{ label }}</span>
+                  </button>
+                  <span v-else class="block px-1 py-0.5 font-semibold text-highlighted">{{ label }}</span>
+                </template>
+              </UCommandPalette>
+            </template>
+          </UPopover>
+          <USelect v-model="effortValue" :items="effortItems" size="sm" title="Effort" />
+          <UButton
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            :class="starred ? 'text-yellow-500' : ''"
+            :title="`${starred ? 'Unstar' : 'Star'} ${labelOf(S.detail.session.provider, S.detail.session.model)} · ${effort || 'default'}`"
+            :label="starred ? '★' : '☆'"
+            @click="star"
+          />
+        </div>
+        <span class="flex-1 max-md:hidden" />
+        <div class="prompt-action-controls contents">
+          <UPopover :content="{ side: 'top', sideOffset: 8 }">
+            <button
+              type="button"
+              class="usage-summary"
+              :aria-label="contextUsed && contextTotal ? `Main context ${contextPct}% and subscription usage` : 'Main context not reported and subscription usage'"
+              :title="contextUsed && contextTotal ? `Main context: ${contextPct}%` : 'Main context not reported'"
+            >
+              <span
+                class="context-ring"
+                :style="{ '--context-pct': contextPct + '%', '--context-tone': contextTone }"
+              >
+                <span class="context-ring-value">{{ contextUsed && contextTotal ? contextPct + '%' : '—' }}</span>
+              </span>
+              <span v-if="subscriptionWindows.length" class="subscription-limits">
+                <span v-for="(window, i) in subscriptionWindows" :key="window.label + i" class="subscription-limit-track">
+                  <span
+                    class="subscription-limit-fill"
+                    :class="barTone(window.used_percent)"
+                    :style="{ width: Math.min(100, window.used_percent) + '%' }"
+                  />
+                </span>
+              </span>
+            </button>
+            <template #content>
+              <div class="usage-details flex divide-x divide-default">
+                <ContextPane />
+                <!-- One window per row: its name and figure on a line, its bar
+                     under them, its reset under that. A name is a plan's to
+                     choose and can be long, so it truncates with the whole of
+                     it on the hover; putting the reset on its own line is what
+                     keeps the three from fighting over one. -->
+                <div v-if="subscriptionWindows.length" class="w-64 p-3">
+                  <p class="m-0 text-xs font-medium text-muted">
+                    {{ planType ? planType + ' subscription' : 'Subscription allowance' }}
+                  </p>
+                  <!-- Which account these bars are the allowance of, drawn only
+                       when the provider has more than one to confuse it with. -->
+                  <p v-if="accountAlias" class="m-0 text-[11px] text-dimmed">{{ accountAlias }}</p>
+                  <ul class="mt-2 mb-0 list-none space-y-2.5 p-0">
+                    <li v-for="(window, i) in subscriptionWindows" :key="window.label + i">
+                      <div class="flex items-baseline justify-between gap-2 text-xs">
+                        <span class="truncate text-muted" :title="window.label">{{ window.label }}</span>
+                        <span class="shrink-0 font-medium tabular-nums" :class="textTone(window.used_percent)">
+                          {{ Math.round(window.used_percent) }}%
+                        </span>
+                      </div>
+                      <span class="mt-1 block h-1.5 overflow-hidden rounded-full bg-accented">
+                        <span
+                          class="block h-full rounded-full"
+                          :class="barTone(window.used_percent)"
+                          :style="{ width: Math.min(100, window.used_percent) + '%' }"
+                        />
+                      </span>
+                      <p class="mt-1 mb-0 text-[11px] text-dimmed tabular-nums">
+                        {{ window.resets_at
+                          ? 'resets ' + resetAt(window.resets_at) + (remaining(window.resets_at) ? ' · ' + remaining(window.resets_at) : '')
+                          : 'reset time not reported' }}
+                      </p>
+                    </li>
+                  </ul>
+                  <dl v-if="reachedType || reportedAgo" class="mt-3 mb-0 border-t border-default pt-1">
+                    <div v-if="reachedType" class="flex justify-between gap-2.5 py-0.5 text-xs">
+                      <dt class="shrink-0 text-muted">Status</dt>
+                      <dd class="m-0 truncate text-highlighted">{{ reachedType }}</dd>
+                    </div>
+                    <div v-if="reportedAgo" class="flex justify-between gap-2.5 py-0.5 text-xs">
+                      <dt class="shrink-0 text-muted">Reported</dt>
+                      <dd class="m-0 truncate text-highlighted tabular-nums">{{ reportedAgo }}</dd>
+                    </div>
+                  </dl>
+                </div>
               </div>
             </template>
           </UPopover>
-        </UFieldGroup>
+          <!-- No "running" label here: the header badge above the transcript
+               already carries the state, with its own dot. -->
+          <UButton
+            v-if="S.detail.running"
+            color="neutral"
+            variant="outline"
+            size="sm"
+            label="Stop"
+            @click="stopTurn"
+          />
+          <UFieldGroup size="sm">
+            <UButton type="submit" :disabled="primary.disabled" :label="primary.label" :trailing-icon="primary.icon" />
+            <UPopover v-model:open="queueOpen">
+              <UButton type="button" icon="i-lucide-chevron-down" aria-label="More prompt actions" />
+              <template #content>
+                <div class="p-1">
+                  <UButton
+                    v-for="action in menu"
+                    :key="action.label"
+                    type="button"
+                    color="neutral"
+                    variant="ghost"
+                    block
+                    class="justify-start"
+                    :disabled="action.disabled"
+                    :label="action.label"
+                    :trailing-icon="action.icon"
+                    @click="runMenuAction(action)"
+                  />
+                </div>
+              </template>
+            </UPopover>
+          </UFieldGroup>
+        </div>
       </div>
     </div>
     <ScheduleModal v-if="scheduling" v-model:open="scheduling" />
-    <p class="mx-auto mt-1.5 flex max-w-[860px] flex-wrap items-center gap-x-1.5 px-1 text-xs text-dimmed">
+    <p class="mx-auto mt-1.5 flex max-w-[860px] flex-wrap items-center gap-x-1.5 px-1 text-xs text-dimmed max-md:hidden">
       <template v-for="(hint, i) in hints" :key="hint.what">
         <span v-if="i">·</span>
         <Chord :chord="hint.chord" />

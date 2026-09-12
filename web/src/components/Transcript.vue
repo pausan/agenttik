@@ -289,7 +289,7 @@ watch(
     <p v-if="!S.detail" class="pt-[18vh] text-center text-dimmed">
       Pick a task, or a project to start one.
     </p>
-    <div v-else class="mx-auto max-w-[860px] px-6 pt-5 pb-2">
+    <div v-else class="mx-auto max-w-[860px] px-6 pt-5 pb-2 max-md:px-3 max-md:pt-3">
       <!-- The project's own prompt went in ahead of the first thing asked
            here, so the conversation says so at the point it happened: what was
            added, on hover, and the page it is set on, on click. It is drawn
@@ -379,7 +379,7 @@ watch(
           >
             {{ retryNote(q) }}
           </p>
-          <div class="mt-1 flex items-center gap-1">
+          <div class="queued-actions mt-1 flex items-center gap-1 max-md:flex-wrap max-md:justify-end">
             <UButton
               color="neutral"
               variant="ghost"
@@ -403,7 +403,7 @@ watch(
               />
               <template #content>
                 <UCommandPalette
-                  class="w-80"
+                  class="w-80 max-w-[calc(100vw-2rem)]"
                   :groups="modelGroups"
                   value-key="value"
                   placeholder="Search models…"

@@ -110,7 +110,7 @@ const badge = computed(() => {
 
 <template>
   <main class="flex min-h-0 min-w-0 flex-col">
-    <div class="flex shrink-0 items-center gap-2.5 border-b border-default pr-3">
+    <div class="main-tab-bar flex shrink-0 items-center gap-2.5 border-b border-default pr-3">
       <div role="tablist" class="flex min-w-0 flex-1 items-center overflow-x-auto">
         <div
           v-for="item in items"
@@ -138,11 +138,13 @@ const badge = computed(() => {
             ]"
             >{{ item.label }}</span
           >
-          <span
-            class="inline-flex size-4 cursor-pointer items-center justify-center rounded text-dimmed hover:bg-accented hover:text-highlighted"
+          <button
+            type="button"
+            class="tab-close inline-flex size-4 shrink-0 cursor-pointer items-center justify-center rounded text-dimmed hover:bg-accented hover:text-highlighted"
+            :aria-label="`Close ${item.name}`"
             title="Close"
             @click.stop="closeTab(item.id)"
-            >×</span
+            >×</button
           >
         </div>
       </div>
@@ -155,7 +157,7 @@ const badge = computed(() => {
         color="neutral"
         variant="ghost"
         size="xs"
-        class="shrink-0"
+        class="shrink-0 max-md:hidden"
         title="New task  (Ctrl+N)"
         aria-label="New task"
         @click="startCurrentTask()"
@@ -171,7 +173,7 @@ const badge = computed(() => {
             <StatusDot :status="S.project.stats.running ? 'running' : 'idle'" />
             {{ S.project.stats.running ? `${S.project.stats.running} running` : "idle" }}
           </UBadge>
-          <UBadge color="neutral" variant="soft" size="sm">
+          <UBadge color="neutral" variant="soft" size="sm" class="max-md:hidden">
             {{ S.project.stats.sessions }} {{ S.project.stats.sessions === 1 ? "task" : "tasks" }}
           </UBadge>
         </template>
@@ -180,8 +182,8 @@ const badge = computed(() => {
             <StatusDot :status="badge.status" />
             {{ badge.label }}
           </UBadge>
-          <UBadge color="neutral" variant="soft" size="sm">{{ S.detail.session.model }}</UBadge>
-          <UBadge color="neutral" variant="soft" size="sm">
+          <UBadge color="neutral" variant="soft" size="sm" class="max-md:hidden">{{ S.detail.session.model }}</UBadge>
+          <UBadge color="neutral" variant="soft" size="sm" class="max-md:hidden">
             {{ S.detail.session.effort || "default" }}
           </UBadge>
           <UPopover
@@ -197,7 +199,7 @@ const badge = computed(() => {
               aria-label="Task stats"
             />
             <template #content>
-              <div class="max-h-[min(32rem,80vh)] w-80 overflow-auto p-3">
+              <div class="max-h-[min(32rem,80dvh)] w-80 max-w-[calc(100vw-2rem)] overflow-auto p-3">
                 <h3 class="m-0 mb-2 text-sm font-semibold text-highlighted">Task stats</h3>
                 <StatsPane />
               </div>

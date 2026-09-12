@@ -38,6 +38,7 @@ import {
 import { ago, cost, duration, isoDate, isoLocal, nf, tokens, usageBreakdownRows } from "../api";
 import { fuzzyAny } from "../fuzzy";
 import { beginDrag } from "../drag";
+import { isMobile } from "../ui";
 import ScheduleRow from "./ScheduleRow.vue";
 import TaskRow from "./TaskRow.vue";
 
@@ -68,6 +69,7 @@ const lowerTabs = [
 /* Opening a project is asking which task, so the cursor starts in the filter
    — on the page itself and on every return to the tab. */
 function focusFilter() {
+  if (isMobile()) return;
   nextTick(() => filterField.value?.inputRef?.focus());
 }
 onMounted(focusFilter);
@@ -255,13 +257,13 @@ async function doDelete() {
 
 <template>
   <div class="min-h-0 flex-1 overflow-auto">
-    <div class="mx-auto max-w-[860px] px-6 py-5">
+    <div class="mx-auto max-w-[860px] px-6 py-5 max-md:px-3 max-md:py-3">
       <div class="mb-3.5 flex items-start gap-3 border-b border-default pb-3">
         <div class="min-w-0">
           <h2 class="m-0 text-[17px] tracking-tight text-highlighted">{{ tab.data.project.name }}</h2>
           <div class="truncate text-xs text-dimmed">{{ tab.data.project.path }}</div>
         </div>
-        <UButton class="ml-auto shrink-0" label="New task" @click="startTask(tab.data.project)" />
+        <UButton class="ml-auto shrink-0 max-md:hidden" label="New task" @click="startTask(tab.data.project)" />
       </div>
 
       <UTabs v-model="lower" :items="lowerTabs" :content="false" size="sm" class="mb-4" />
@@ -308,11 +310,11 @@ async function doDelete() {
           <UIcon
             v-if="!row.archived"
             name="i-lucide-grip-vertical"
-            class="size-3.5 shrink-0 text-dimmed"
+            class="size-3.5 shrink-0 text-dimmed max-md:hidden"
             :class="filtering ? 'opacity-30' : 'cursor-grab'"
             :title="filtering ? 'Clear the filter to reorder' : 'Drag to reorder'"
           />
-          <span v-else class="size-3.5 shrink-0" aria-hidden="true" />
+          <span v-else class="size-3.5 shrink-0 max-md:hidden" aria-hidden="true" />
           <TaskRow
             class="min-w-0 flex-1"
             :title="row.task.title"
@@ -337,7 +339,7 @@ async function doDelete() {
           />
         </div>
 
-        <div v-if="pages > 1" class="mt-3 flex items-center justify-between gap-3">
+        <div v-if="pages > 1" class="mt-3 flex items-center justify-between gap-3 max-md:flex-wrap">
           <span class="text-xs text-dimmed tabular-nums">{{ range }}</span>
           <UPagination
             v-model:page="page"

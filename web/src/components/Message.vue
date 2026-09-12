@@ -138,7 +138,7 @@ function onKey(e) {
       <!-- The actions stay in the layout and only appear on hover, so a
            bubble does not shift when the pointer reaches it. -->
       <span
-        class="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100"
+        class="message-actions flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 max-md:opacity-100"
       >
         <UButton
           :icon="copied ? 'i-lucide-check' : 'i-lucide-copy'"
@@ -180,7 +180,7 @@ function onKey(e) {
           <UButton type="button" size="xs" :label="S.detail.session.model" title="Change edited prompt model" :disabled="sending || choosing" />
           <template #content>
             <UCommandPalette
-              class="w-80"
+              class="w-80 max-w-[calc(100vw-2rem)]"
               :groups="modelGroups"
               value-key="value"
               placeholder="Search models…"

@@ -31,21 +31,28 @@ simply has no grey rows.
 
 ## The filter
 
-The same fuzzy matcher the folder picker and the Settings panes use
+By default, the same fuzzy matcher the folder picker and the Settings panes use
 (`fuzzyAny` in `web/src/fuzzy.js`), against the row's **title** alone — a row
 with no title matches "Untitled task". Prompts are deliberately left out: one
 is up to 600 characters, and a subsequence match against a string that long
 matches nearly anything typed. The prompt each row opened with is still one
 hover away — [038](038-task-naming.md) describes the same tooltip in the
-sidebar.
+sidebar. Settings → General can switch only project task search to
+**Smart Search**, which embeds titles, opening prompts and outcomes locally
+with Bekko a8m and ranks matching tasks by similarity. Download/index progress,
+caching and the relevance cutoff are described in [057](057-smart-search.md).
 
 It narrows both states at once, and the counter beside it reads
-`matches/total` over all of them. Matching does not reorder: open rows keep
+`matches/total` over all of them. Fuzzy matching does not reorder: open rows keep
 their position and archived rows stay newest-first, because a best-match row
 jumping to the top loses the order each list is kept in for a reason.
 
-Rows are dragged to reorder, and dragging is offered only while the filter is
-empty: the drop lands a row where the pointer is *in the whole open list*, and
+Both search modes also offer **Last 24h**, **Last week**, **Last month**, and
+**All times**. The filter uses last activity, with rolling 1-, 7-, and 30-day
+windows, and defaults to All times. Selecting a time window resets page 1.
+
+Rows are dragged to reorder, and dragging is offered only while the text filter is
+empty and All times is selected: the drop lands a row where the pointer is *in the whole open list*, and
 a hidden neighbour makes that meaningless. The grip greys out and says so
 while a filter is typed. A drag inside a page is still exact — the row moves
 against the full list by id, not by its position on screen — but a row cannot
@@ -76,11 +83,9 @@ smallest size, and the pager only once there is more than one page. A project
 with a handful of tasks is still just its tasks.
 
 Paging is a slice of a list already in the browser, so turning a page fetches
-nothing. That is bounded by what the project tab loaded: `/api/sessions`
-answers at most 200 rows per request, so a project with more than 200 archived
-tasks pages through the newest 200 of them. Going past that means paging on
-the server — an offset and a total count on the endpoint — which nothing yet
-needs.
+nothing. Project lists use the existing `limit=0` option on `/api/sessions`
+to include all tasks and archives, so search and time filters cover the entire
+project. Other callers keep their existing limits.
 
 Archived rows are never draggable. `sessions.position` is the order someone
 chose for the work in front of them; a history is ordered by the clock. They

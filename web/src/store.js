@@ -16,6 +16,7 @@ import { api } from "./api";
 import { debounce } from "./debounce";
 import { ACCENTS, DEFAULT_COLORS, NEUTRALS, applyColors } from "./theme";
 import { ACTIONS, matches } from "./shortcuts";
+import { initSmartSearch } from "./smart-search.js";
 
 /* Sidebar widths are the user's, so they are kept across reloads. */
 const LAYOUT_KEY = "agenttik.layout";
@@ -922,13 +923,13 @@ async function loadProjectTab(id, silent = false) {
 /* The project page's own list is what is still open in the project, in the
    order it was dragged into. */
 function projectSessions(id) {
-  return api("GET", `/api/sessions?window=all&project_id=${id}&include_done=false`);
+  return api("GET", `/api/sessions?window=all&project_id=${id}&include_done=false&limit=0`);
 }
 
 /* Archived ones are the second list under it, newest first, which is the
    order the server sends them in. */
 function projectArchived(id) {
-  return api("GET", `/api/sessions?window=all&project_id=${id}&only_done=true`);
+  return api("GET", `/api/sessions?window=all&project_id=${id}&only_done=true&limit=0`);
 }
 
 /* The project's scheduled jobs, both states in one request: the sidebar shows
@@ -3296,4 +3297,5 @@ export async function init() {
   }
   Promise.all([loadProviders(), refreshSchedules()]).catch(fail);
   initialized = true;
+  initSmartSearch();
 }

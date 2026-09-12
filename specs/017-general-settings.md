@@ -4,7 +4,10 @@ Settings grew a fourth section, **General**, and it is where the dialog now
 opens: the sidebar's Settings button and the launcher's Settings entry both
 land there, the keyboard button still lands on Shortcuts.
 
-It controls prompt submission, project folding, and where new tasks and projects are inserted.
+It controls prompt submission, project folding, where new tasks and projects
+are inserted, and project task search. **Fuzzy Search** is the default;
+**Smart Search** downloads Bekko a8m and indexes tasks locally, with download
+and indexing progress in this pane. See [057](057-smart-search.md).
 
 ## Enter sends, or Enter enqueues
 

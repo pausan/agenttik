@@ -5,6 +5,8 @@ import { PROMPT_CHORDS, S, enterDoes, fail, setEnterDoes, setFoldOthers } from "
 import { fuzzyAny } from "../../fuzzy";
 import { api } from "../../api";
 import Chord from "../Chord.vue";
+import { smartSearch, setSmartSearch } from "../../smart-search.js";
+import SmartSearchProgress from "../SmartSearchProgress.vue";
 
 const props = defineProps({ filter: { type: String, default: "" } });
 const emit = defineEmits(["count"]);
@@ -76,7 +78,11 @@ const foldRows = computed(() =>
     : [],
 );
 
-watchEffect(() => emit("count", promptRows.value.length + foldRows.value.length + positionRows.value.length));
+const searchRows = computed(() => fuzzyAny(["general", "project", "tasks", "smart", "fuzzy", "search", "Bekko"], props.filter) !== null ? [
+  { value: false, label: "Fuzzy Search (default)", description: "Match task titles as you type" },
+  { value: true, label: "Smart Search", description: "Find related tasks by meaning, across languages" },
+] : []);
+watchEffect(() => emit("count", promptRows.value.length + foldRows.value.length + positionRows.value.length + searchRows.value.length));
 
 const chosen = computed({
   get: () => enterDoes(),
@@ -141,5 +147,15 @@ const folding = computed({
       :ui="{ item: 'py-1' }"
       @update:model-value="setPosition"
     />
+  </section>
+  <section v-if="searchRows.length" class="mt-5">
+    <div class="mb-0.5 font-semibold text-highlighted">Project task search</div>
+    <p class="mb-2 text-xs text-dimmed">
+      Smart Search downloads Bekko a8m (about 150 MB with its tokenizer), then indexes all tasks.
+      Runs on this device and remembers the download. Only task search in project views changes;
+      all other searches stay fuzzy.
+    </p>
+    <URadioGroup :model-value="smartSearch.enabled" :items="searchRows" size="sm" @update:model-value="setSmartSearch" />
+    <SmartSearchProgress />
   </section>
 </template>

@@ -14,7 +14,7 @@
    drop. Archived rows are not dragged and are not ordered by anyone:
    `sessions.position` is the order someone chose for the work in front of
    them, and a history is ordered by the clock. */
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
 import {
   S,
@@ -36,7 +36,9 @@ import {
   stopTask,
 } from "../store";
 import { ago, cost, duration, isoDate, isoLocal, nf, tokens, usageBreakdownRows } from "../api";
-import { fuzzyAny } from "../fuzzy";
+import { TASK_TIME_FILTERS, filterTaskRows, taskText } from "../task-search.js";
+import { smartSearch, refreshSmartIndex, searchTasks } from "../smart-search.js";
+import SmartSearchProgress from "./SmartSearchProgress.vue";
 import { beginDrag } from "../drag";
 import { isMobile } from "../ui";
 import ScheduleRow from "./ScheduleRow.vue";
@@ -47,6 +49,15 @@ const props = defineProps({ tab: { type: Object, required: true } });
 const dragging = ref("");
 const renaming = ref(""); // the task whose title is being edited
 const filter = ref("");
+const timeFilter = ref("all");
+const scores = ref({});
+const searching = ref(false);
+const searchError = ref("");
+const now = ref(Date.now());
+const clock = setInterval(() => { now.value = Date.now(); }, 60000);
+let searchTimer;
+let searchSequence = 0;
+onUnmounted(() => { clearInterval(clock); clearTimeout(searchTimer); searchSequence++; });
 const filterField = ref(null);
 const page = ref(1);
 const deleting = ref(null); // the task awaiting its delete confirmation
@@ -118,6 +129,7 @@ watch(
   () => props.tab.data.project.id,
   () => {
     filter.value = "";
+    timeFilter.value = "all";
     page.value = 1;
     editingPrompt.value = false;
     prompt.value = props.tab.data.project.prompt || "";
@@ -149,26 +161,30 @@ const charts = computed(() => [
   { label: "Agent time", key: "duration_ms", max: maxDuration.value, color: "bg-sky-500/70" },
 ]);
 
-/* The filter reads titles, not prompts: a prompt is up to 600 characters and
-   a subsequence match against one of those matches nearly anything typed.
-   The prompt is still a hover away on every row.
-
-   Matches keep each list's own order rather than moving the best one to the
-   top — the question being asked of a task list is which one, and of a
-   history when, and a best-match row jumping the queue loses both. */
-const matching = (tasks) =>
-  tasks.filter((s) => fuzzyAny([s.title || "Untitled task"], filter.value) !== null);
-
-const open = computed(() => matching(props.tab.data.sessions));
-const archived = computed(() => matching(props.tab.data.archived || []));
-const total = computed(() => props.tab.data.sessions.length + (props.tab.data.archived?.length || 0));
-
-/* One array of rows, each saying which state it is in, so the two lists page
-   as one and the template stays a single loop. */
-const rows = computed(() => [
-  ...open.value.map((task) => ({ task, archived: false })),
-  ...archived.value.map((task) => ({ task, archived: true })),
-]);
+const tasks = computed(() => [...props.tab.data.sessions, ...(props.tab.data.archived || [])]);
+const total = computed(() => tasks.value.length);
+const signature = computed(() => JSON.stringify(tasks.value.map((task) => [task.id, taskText(task)])));
+watch(signature, () => { if (smartSearch.enabled) refreshSmartIndex(); });
+watch([filter, signature, () => smartSearch.enabled, () => smartSearch.version], () => {
+  const current = ++searchSequence;
+  clearTimeout(searchTimer);
+  scores.value = {};
+  searchError.value = "";
+  searching.value = smartSearch.enabled && !!filter.value.trim();
+  if (!searching.value) return;
+  searchTimer = setTimeout(async () => {
+    try {
+      const result = await searchTasks(filter.value.trim(), tasks.value.map((task) => task.id));
+      if (current === searchSequence) scores.value = result;
+    } catch (error) {
+      if (current === searchSequence) searchError.value = error.message;
+    } finally {
+      if (current === searchSequence) searching.value = false;
+    }
+  }, 250);
+}, { immediate: true });
+const rows = computed(() => filterTaskRows(tasks.value, filter.value, timeFilter.value,
+  smartSearch.enabled ? scores.value : null, now.value));
 const shown = computed(() => rows.value.length);
 
 /* The project's scheduled jobs, read the way its tasks are: what is still
@@ -214,14 +230,14 @@ const range = computed(() => {
 /* Narrowing the list, or making the pages bigger, is a new question: it is
    asked from the top. A list that shrinks under the page in front — a task
    archived off the last page — pulls it back to the last one there is. */
-watch([filter, size], () => (page.value = 1));
+watch([filter, size, timeFilter, () => smartSearch.enabled], () => (page.value = 1));
 watch(pages, (count) => {
   if (page.value > count) page.value = count;
 });
 
 /* Dragging moves a row within the whole open list, so it is only offered
    when the whole open list is on screen. */
-const filtering = computed(() => !!filter.value.trim());
+const filtering = computed(() => !!filter.value.trim() || timeFilter.value !== "all");
 
 const subtitle = (s) => `${s.model}${s.effort ? " · " + s.effort : ""} · ${ago(s.last_active_at)}`;
 
@@ -272,15 +288,17 @@ async function doDelete() {
       <!-- Every task of the project, a page at a time: what is open, then
            what it has archived. -->
       <template v-if="lower === 'tasks'">
-        <div class="mb-2 flex items-center gap-3">
+        <div class="mb-2 flex flex-wrap items-center gap-3">
           <UInput
             ref="filterField"
             v-model="filter"
             type="search"
             icon="i-lucide-search"
-            placeholder="Filter tasks"
+            :placeholder="smartSearch.enabled ? 'Smart Search tasks' : 'Filter tasks'"
+            :aria-label="smartSearch.enabled ? 'Smart Search tasks' : 'Fuzzy Search tasks'"
             class="min-w-0 flex-1"
           />
+          <USelect v-model="timeFilter" :items="TASK_TIME_FILTERS" size="sm" aria-label="Task time filter" title="Filter by last activity" />
           <USelect
             v-if="total > TASK_PAGE_SIZES[0]"
             v-model="size"
@@ -291,9 +309,12 @@ async function doDelete() {
           />
           <span class="shrink-0 text-xs text-dimmed tabular-nums">{{ shown }}/{{ total }}</span>
         </div>
+        <SmartSearchProgress />
+        <p v-if="searching" class="text-xs text-dimmed" role="status">Searching tasks…</p>
+        <p v-else-if="searchError" class="text-xs text-error" role="alert">{{ searchError }}</p>
 
         <p v-if="!total" class="px-3 py-5 text-center text-dimmed">No tasks in this project yet.</p>
-        <p v-else-if="!shown" class="px-3 py-4 text-center text-dimmed">No task matches that.</p>
+        <p v-else-if="!shown && !searching && !searchError" class="px-3 py-4 text-center text-dimmed">No task matches that.</p>
 
         <!-- An archived row is not dragged, and holds the grip column empty so
              both kinds line up. It carries the restore icon rather than the

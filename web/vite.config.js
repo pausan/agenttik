@@ -5,7 +5,8 @@ import vue from "@vitejs/plugin-vue";
 import ui from "@nuxt/ui/vite";
 
 // The UI is embedded in the Go binary, so it builds to web/dist and everything
-// it needs — icons, fonts, styles — is bundled. Nothing is fetched at runtime.
+// it needs — icons, fonts, styles — is bundled. Opt-in Smart Search downloads
+// its model separately; its inference runtime is bundled in a lazy worker.
 /* dist/ is generated, but `//go:embed all:dist` in embed.go needs the directory to hold
    at least one file even before the UI is built — so a placeholder is tracked.
    Vite empties the directory on every build, so put it back afterwards. */
@@ -19,6 +20,7 @@ function keepPlaceholder() {
 }
 
 export default defineConfig({
+  worker: { format: "es" },
   plugins: [
     vue(),
     // The defaults; Settings changes both at runtime through the same config.

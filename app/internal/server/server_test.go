@@ -272,6 +272,77 @@ func TestProjectListAlwaysCarriesRecentSessions(t *testing.T) {
 	}
 }
 
+func TestHiddenProjectAPIListsNamesAndRestoresOrder(t *testing.T) {
+	s, st := newTestServer(t)
+	a, _ := st.CreateProject("alpha", t.TempDir())
+	b, _ := st.CreateProject("beta", t.TempDir())
+	c, _ := st.CreateProject("charlie", t.TempDir())
+	d, _ := st.CreateProject("delta", t.TempDir())
+
+	resp := do(t, s, "POST", "/api/projects/order", map[string]any{
+		"ids": []int64{a.ID, b.ID, c.ID, d.ID},
+	})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("order status = %d, want 204", resp.StatusCode)
+	}
+
+	resp = do(t, s, "PATCH", "/api/projects/"+itoa(c.ID), map[string]bool{"hidden": true})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("hide status = %d, want 200", resp.StatusCode)
+	}
+	resp.Body.Close()
+
+	visible := decode[[]store.Project](t, do(t, s, "GET", "/api/projects", nil))
+	if got := serverProjectIDs(visible); !sameProjectIDs(got, []int64{a.ID, b.ID, d.ID}) {
+		t.Fatalf("visible projects = %v, want alpha beta delta", got)
+	}
+	hidden := decode[[]store.HiddenProject](t, do(t, s, "GET", "/api/projects?hidden=true", nil))
+	if len(hidden) != 1 || hidden[0] != (store.HiddenProject{ID: c.ID, Name: "charlie"}) {
+		t.Fatalf("hidden projects = %+v, want id/name for charlie", hidden)
+	}
+	if hidden[0].Name == "" {
+		t.Fatal("hidden project response did not include a name")
+	}
+
+	resp = do(t, s, "POST", "/api/projects/order", map[string]any{
+		"ids": []int64{d.ID, a.ID, b.ID},
+	})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("reorder while hidden status = %d, want 204", resp.StatusCode)
+	}
+	resp = do(t, s, "PATCH", "/api/projects/"+itoa(c.ID), map[string]bool{"hidden": false})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("restore status = %d, want 200", resp.StatusCode)
+	}
+	visible = decode[[]store.Project](t, do(t, s, "GET", "/api/projects", nil))
+	if got := serverProjectIDs(visible); !sameProjectIDs(got, []int64{d.ID, a.ID, c.ID, b.ID}) {
+		t.Fatalf("visible after restore = %v, want delta alpha charlie beta", got)
+	}
+}
+
+func serverProjectIDs(projects []store.Project) []int64 {
+	ids := make([]int64, len(projects))
+	for i, project := range projects {
+		ids[i] = project.ID
+	}
+	return ids
+}
+
+func sameProjectIDs(got, want []int64) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // The folder picker browses outside any project, so these check the listing
 // shape rather than containment.
 func TestBrowseListsDirectoriesOnly(t *testing.T) {

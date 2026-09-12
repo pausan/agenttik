@@ -17,6 +17,16 @@ type Project struct {
 	// nothing under it is touched. See 041-project-archiving.md.
 	ArchivedAt int64 `json:"archived_at"`
 
+	// HiddenAt is 0 while the project is visible and the time it was hidden
+	// otherwise. Hidden projects stay active and are restored from the
+	// sidebar's hidden-projects menu.
+	HiddenAt int64 `json:"hidden_at"`
+
+	// HiddenPosition is the visible row the project occupied when it was
+	// hidden. It is storage-only; restoring uses it after other projects have
+	// possibly been reordered.
+	HiddenPosition int64 `json:"-"`
+
 	// Prompt is what every conversation started in this project is told
 	// before the first thing it is asked. Empty injects nothing. See
 	// 047-project-prompt.md.
@@ -29,6 +39,14 @@ type Project struct {
 	// Schedules are the project's open schedules, drawn above its sessions in
 	// the sidebar. Same rule: always encoded, empty included.
 	Schedules []Schedule `json:"schedules"`
+}
+
+// HiddenProject is the intentionally small row returned to the sidebar's
+// hidden-projects menu. The menu only needs an id to restore and a name to
+// display.
+type HiddenProject struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
 }
 
 type SessionRef struct {

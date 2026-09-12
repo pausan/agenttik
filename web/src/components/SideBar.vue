@@ -17,12 +17,14 @@ import {
   setScheduleArchived,
   setSchedulePaused,
   setTaskArchived,
+  setProjectHidden,
   stopTask,
   toggleProjectTasks,
 } from "../store";
 import { isMobile, SEGMENTED } from "../ui";
 import { beginDrag } from "../drag";
 import FileTree from "./FileTree.vue";
+import HiddenProjectsMenu from "./HiddenProjectsMenu.vue";
 import ScheduleRow from "./ScheduleRow.vue";
 import TaskRow from "./TaskRow.vue";
 import StatusDot from "./StatusDot.vue";
@@ -285,6 +287,17 @@ function onTaskDrop(e) {
                 </span>
                 <span class="block truncate pl-4 text-xs text-dimmed">{{ p.path }}</span>
               </button>
+              <UButton
+                type="button"
+                size="xs"
+                color="neutral"
+                variant="ghost"
+                icon="i-lucide-eye-off"
+                class="mt-0.5 shrink-0"
+                :title="`Hide ${p.name}`"
+                aria-label="Hide project"
+                @click.stop="setProjectHidden(p, true)"
+              />
             </div>
           </UContextMenu>
           <ScheduleRow
@@ -349,6 +362,7 @@ function onTaskDrop(e) {
         aria-label="Add project"
         @click="$emit('add-project')"
       />
+      <HiddenProjectsMenu />
       <UButton
         block
         color="neutral"

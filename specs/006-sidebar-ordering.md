@@ -48,6 +48,24 @@ Existing rows keep their order. See [017](017-general-settings.md).
 `GET /api/projects/:id` carries every open task row, not a subset, so a sidebar
 drop always sends the complete order.
 
+## Hiding
+
+Each visible project row has an **eye-off** button on the right, opposite its
+title. Clicking it hides the project from the sidebar and the Go To list. This
+is a visibility change only: tasks, history, schedules and the project folder
+remain intact, and a running task is not stopped.
+
+The sidebar footer's **Hidden projects** button opens a compact autocomplete
+menu. It shows only hidden project names. Typing uses the same fuzzy
+subsequence matching as the other local pickers; selecting a name restores its
+visibility.
+
+The project keeps the visible row number it had when hidden. Reordering the
+remaining visible projects does not overwrite that saved target. Restoring
+inserts the project at that row, clamped to the current list, then writes dense
+positions for the visible list. The pinned orchestrator remains first. Hidden
+projects are stored separately from archived projects and are not deleted.
+
 ## Archiving
 
 A task row's archive icon takes it out of the project's sidebar list. Nothing

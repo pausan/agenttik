@@ -312,6 +312,13 @@ INSERT INTO general_config (id) VALUES (1);
     toggle_shortcut TEXT NOT NULL DEFAULT 'Ctrl+Shift+A'
 );
 INSERT INTO desktop_config (id) VALUES (1);`,
+	`
+-- Hiding is a reversible visibility choice, not project archiving. Keep the
+-- row index from the visible sidebar so restoring can put it back where it
+-- was even after the remaining projects have been reordered.
+ALTER TABLE projects ADD COLUMN hidden_at      INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE projects ADD COLUMN hidden_position INTEGER NOT NULL DEFAULT 0;
+`,
 }
 
 func migrate(db *sql.DB) error {

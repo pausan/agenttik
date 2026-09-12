@@ -15,13 +15,17 @@ All timestamps are **unix milliseconds**, so turn timings need no second table.
 ## Tables
 
 - **projects** — `id, name, path (unique), created_at, position, archived_at,
-  prompt, kind`. A project is a name and a folder. Nothing is copied; the folder is
+  hidden_at, hidden_position, prompt, kind`. A project is a name and a folder. Nothing is copied; the folder is
   used as the agent's working directory. `position` is the order the Projects
   sidebar was dragged into; 0 means a newly added project, which sorts above a
   manually ordered list. `archived_at` is 0 while the project is active and the
   time it was put away otherwise; an archived project leaves every list but
   Settings and its schedules stop firing, while everything under it is kept. See
-  [041](041-project-archiving.md). `prompt` is the standing instructions every
+  [041](041-project-archiving.md). `hidden_at` is 0 while the project is visible;
+  otherwise it records when the project was hidden. `hidden_position` is the
+  visible sidebar row captured at hide time, so restore can put the project back
+  at that row after the visible projects have been reordered. Hidden projects
+  remain active and their schedules keep running. `prompt` is the standing instructions every
   conversation started in the project opens with, empty for none; see
   [047](047-project-prompt.md).
 - **orchestrator_config** — singleton `id=1, name, path, prompt`. Holds the

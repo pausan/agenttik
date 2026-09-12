@@ -66,6 +66,10 @@ export const S = reactive({
   // Archived projects: read when Settings opens, which is the only place
   // they are shown. See specs/041-project-archiving.md.
   archivedProjects: [],
+  // Hidden projects: loaded when the sidebar's restore menu opens, or when a
+  // project change arrives after that menu has been used. See specs/061.
+  hiddenProjects: [],
+  hiddenProjectsLoaded: false,
   orchestrator: null, // shared settings, loaded when Settings opens
   subscriptionLimits: {}, // "provider:account" -> its latest allowance buckets
   // Whether this desktop window's server is also exposed for a browser to
@@ -841,7 +845,8 @@ export async function refreshProjects() {
     }
   }
   // Changes can come from another window or the orchestrator. Remove views
-  // whose project was archived/deleted there, just as a local action does.
+  // whose project was hidden, archived or deleted there, just as a local
+  // action does.
   const visible = new Set(projects.map((p) => p.id));
   let detached = false;
   for (const p of S.projects) {
@@ -898,6 +903,10 @@ async function loadProjectTab(id, silent = false) {
     if (!silent) fail(e);
     return null;
   }
+  // A stale open-tab record can outlive a project being hidden in another
+  // window. Hidden projects are reachable through the restore menu, not by
+  // reopening that old tab behind the sidebar.
+  if (project.hidden_at) return null;
   return () => {
     const tab = reactive({
       id: "project:" + id,
@@ -994,10 +1003,10 @@ export async function removeProject(p) {
 
 /* detachProject takes a project off the screen, and says whether it was the
    selected one. Nothing in the strip can belong to a project that has left
-   the sidebar, deleted or archived. Deselecting comes first, so an emptied
-   workspace does not try to reopen its page. Files close unsaved on purpose:
-   a deleted project has nowhere to save to, and an archived one is being put
-   away. */
+   the sidebar, hidden, deleted or archived. Deselecting comes first, so an
+   emptied workspace does not try to reopen its page. Files close unsaved on
+   purpose: a project being taken out of the sidebar has no visible place to
+   keep them. */
 function detachProject(id) {
   const wasShowing = S.activeProjectID === id;
   if (wasShowing) S.activeProjectID = null;
@@ -1032,6 +1041,31 @@ export async function setProjectArchived(p, archived) {
    that starts or ends. */
 export async function loadArchivedProjects() {
   S.archivedProjects = await api("GET", "/api/projects?archived=true");
+}
+
+/* The hidden list is small and only exists for the sidebar menu, so it is
+   fetched on demand instead of delaying the first paint. Once it has been
+   opened, project-change events keep it current for this window. */
+export async function loadHiddenProjects() {
+  S.hiddenProjects = await api("GET", "/api/projects?hidden=true");
+  S.hiddenProjectsLoaded = true;
+}
+
+/* setProjectHidden changes visibility without touching the project's tasks,
+   history or saved order. Hiding the selected project hands the screen to the
+   first visible project; restoring only changes selection when there is no
+   project in front. */
+export async function setProjectHidden(p, hidden) {
+  try {
+    await api("PATCH", "/api/projects/" + p.id, { hidden });
+    const wasShowing = hidden && detachProject(p.id);
+    await Promise.all([refreshProjects(), refreshSessions(), loadHiddenProjects()]);
+    if ((wasShowing || !S.activeProjectID) && S.projects.length) {
+      await switchProject(hidden ? S.projects[0].id : p.id);
+    }
+  } catch (e) {
+    fail(e);
+  }
 }
 
 export async function loadOrchestratorConfig() {
@@ -2613,6 +2647,7 @@ function onEvent(msg) {
     refreshProjects().then(reloadProjects).catch(() => {});
     refreshSessions().catch(() => {});
     loadArchivedProjects().catch(() => {});
+    if (S.hiddenProjectsLoaded) loadHiddenProjects().catch(() => {});
     if (S.orchestrator) loadOrchestratorConfig().catch(() => {});
     return;
   }

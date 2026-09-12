@@ -68,6 +68,67 @@ func TestReorderProjectsDrivesSidebarOrder(t *testing.T) {
 	}
 }
 
+func TestHiddenProjectRestoresItsVisiblePositionAfterReorder(t *testing.T) {
+	s := testStore(t)
+	a, _ := s.CreateProject("alpha", "/tmp/alpha")
+	b, _ := s.CreateProject("beta", "/tmp/beta")
+	c, _ := s.CreateProject("charlie", "/tmp/charlie")
+	d, _ := s.CreateProject("delta", "/tmp/delta")
+
+	must(t, s.ReorderProjects([]int64{a.ID, b.ID, c.ID, d.ID}))
+	must(t, s.SetProjectHidden(c.ID, true))
+	visible, err := s.ListProjects()
+	must(t, err)
+	if got := projectIDs(visible); !sameIDs(got, []int64{a.ID, b.ID, d.ID}) {
+		t.Fatalf("visible after hide = %v, want alpha beta delta", got)
+	}
+	hidden, err := s.HiddenProjects()
+	must(t, err)
+	if len(hidden) != 1 || hidden[0].ID != c.ID || hidden[0].Name != "charlie" {
+		t.Fatalf("hidden projects = %+v, want charlie only", hidden)
+	}
+
+	// Reordering the projects that remain visible must not overwrite the
+	// hidden row's saved target position.
+	must(t, s.ReorderProjects([]int64{d.ID, a.ID, b.ID}))
+	must(t, s.SetProjectHidden(c.ID, false))
+	visible, err = s.ListProjects()
+	must(t, err)
+	if got := projectIDs(visible); !sameIDs(got, []int64{d.ID, a.ID, c.ID, b.ID}) {
+		t.Fatalf("visible after restore = %v, want delta alpha charlie beta", got)
+	}
+	hidden, err = s.HiddenProjects()
+	must(t, err)
+	if len(hidden) != 0 {
+		t.Fatalf("hidden projects after restore = %+v, want empty", hidden)
+	}
+	got, err := s.GetProject(c.ID)
+	must(t, err)
+	if got.HiddenAt != 0 || got.HiddenPosition != 0 {
+		t.Errorf("restored project hidden state = at %d position %d, want zeroes", got.HiddenAt, got.HiddenPosition)
+	}
+}
+
+func projectIDs(projects []Project) []int64 {
+	ids := make([]int64, len(projects))
+	for i, project := range projects {
+		ids[i] = project.ID
+	}
+	return ids
+}
+
+func sameIDs(got, want []int64) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func TestListSessionsFilters(t *testing.T) {
 	s := testStore(t)
 	p1, _ := s.CreateProject("alpha", "/tmp/alpha")

@@ -32,6 +32,45 @@ test("multiple projects do not show a repository selector", async ({ page }) => 
   await expect(sidebar(page).getByRole("heading", { name: "Workspace" })).toHaveCount(0);
 });
 
+test("a project can be hidden and fuzzy-restored from the hidden menu", async ({ page }) => {
+  await addProject(page, REPO + "/app");
+  await addProject(page, REPO + "/web");
+  await addProject(page, REPO + "/e2e");
+
+  const row = sidebar(page).locator(".sidebar-project").filter({ hasText: REPO + "/web" });
+  const title = row.locator("button").nth(1);
+  const hide = row.getByRole("button", { name: "Hide project" });
+  const titleBox = await title.boundingBox();
+  const hideBox = await hide.boundingBox();
+  expect(hideBox.x).toBeGreaterThan(titleBox.x);
+  await hide.click();
+  await expect(sidebar(page).getByText(REPO + "/web", { exact: true })).toHaveCount(0);
+
+  await sidebar(page).getByRole("button", { name: "Hidden projects" }).click();
+  const search = page.getByPlaceholder("Find hidden projects…");
+  await expect(search).toBeVisible();
+  await expect(page.getByRole("option", { name: "web", exact: true })).toBeVisible();
+  // The restore menu contains names only, not project paths.
+  await expect(page.getByText(REPO + "/web", { exact: true })).toHaveCount(0);
+
+  await search.fill("wb");
+  const match = page.getByRole("option", { name: "web", exact: true });
+  await expect(match).toBeVisible();
+  await match.click();
+
+  await expect(search).toBeHidden();
+  await expect(sidebar(page).getByText(REPO + "/web", { exact: true })).toBeVisible();
+  const rows = sidebar(page).locator(".sidebar-project");
+  await expect(rows.nth(0)).toContainText(REPO + "/e2e");
+  await expect(rows.nth(1)).toContainText(REPO + "/web");
+  await expect(rows.nth(2)).toContainText(REPO + "/app");
+  await page.reload();
+  const reloadedRows = sidebar(page).locator(".sidebar-project");
+  await expect(reloadedRows.nth(0)).toContainText(REPO + "/e2e");
+  await expect(reloadedRows.nth(1)).toContainText(REPO + "/web");
+  await expect(reloadedRows.nth(2)).toContainText(REPO + "/app");
+});
+
 test("opening a project puts its panes on the right and Tree on the left", async ({ page }) => {
   await addProject(page);
   await openProject(page);

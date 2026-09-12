@@ -12,9 +12,16 @@ import (
 	"github.com/pausan/agenttik/app/internal/store"
 )
 
-// listProjects serves the sidebar's active projects, or — with ?archived=true
-// — the put-away ones Settings restores from.
+// listProjects serves the sidebar's visible projects, or — with
+// ?archived=true / ?hidden=true — one of the two put-away lists.
 func (s *Server) listProjects(c *fiber.Ctx) error {
+	if c.QueryBool("hidden", false) {
+		projects, err := s.store.HiddenProjects()
+		if err != nil {
+			return err
+		}
+		return c.JSON(projects)
+	}
 	list := s.store.ListProjects
 	if c.QueryBool("archived", false) {
 		list = s.store.ArchivedProjects
@@ -99,9 +106,9 @@ func (s *Server) reorderProjects(c *fiber.Ctx) error {
 }
 
 // updateProject renames a project, repoints it at a new folder, sets the
-// prompt its conversations open with, archives or restores it, or any
-// combination. Each field is applied only when sent, so a rename does not
-// require the path and archiving requires neither.
+// prompt its conversations open with, hides or restores it, archives or
+// restores it, or any combination. Each field is applied only when sent, so a
+// rename does not require the path and visibility changes require neither.
 //
 // The prompt is a pointer because an empty one means something: it is how the
 // injection is turned off, which a blank name or path never is.
@@ -115,14 +122,15 @@ func (s *Server) updateProject(c *fiber.Ctx) error {
 		Path     string  `json:"path"`
 		Prompt   *string `json:"prompt"`
 		Archived *bool   `json:"archived"`
+		Hidden   *bool   `json:"hidden"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return badRequest("invalid body: %v", err)
 	}
 	name := strings.TrimSpace(body.Name)
 	path := strings.TrimSpace(body.Path)
-	if name == "" && path == "" && body.Prompt == nil && body.Archived == nil {
-		return badRequest("name, path, prompt or archived is required")
+	if name == "" && path == "" && body.Prompt == nil && body.Archived == nil && body.Hidden == nil {
+		return badRequest("name, path, prompt, archived or hidden is required")
 	}
 	if body.Archived != nil && *body.Archived {
 		if err := s.canArchiveProject(id); err != nil {
@@ -150,6 +158,11 @@ func (s *Server) updateProject(c *fiber.Ctx) error {
 	}
 	if body.Archived != nil {
 		if err := s.store.SetProjectArchived(id, *body.Archived); err != nil {
+			return err
+		}
+	}
+	if body.Hidden != nil {
+		if err := s.store.SetProjectHidden(id, *body.Hidden); err != nil {
 			return err
 		}
 	}

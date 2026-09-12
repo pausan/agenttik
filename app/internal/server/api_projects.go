@@ -166,6 +166,9 @@ func (s *Server) deleteProject(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
+	if _, err := s.store.GetProject(id); err != nil {
+		return err
+	}
 	// Deleting a project follows task deletion: stop its processes and clear
 	// queues before removing their rows, so no work is left running unseen.
 	sessions, err := s.store.ListSessions(store.SessionFilter{ProjectID: id})

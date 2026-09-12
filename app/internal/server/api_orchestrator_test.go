@@ -137,6 +137,14 @@ func TestControlAPICrossProjectTaskLifecycle(t *testing.T) {
 	if !detail.Running || detail.Session.ProjectID != project.ID || detail.Session.Status != store.StatusRunning {
 		t.Fatalf("running detail = %+v", detail)
 	}
+	// ProjectID=0 means every project to the list query. A missing deletion
+	// must be rejected before looking up processes to stop.
+	for _, id := range []int{0, -1, 99999} {
+		resp := do(t, s, "DELETE", fmt.Sprintf("/api/projects/%d", id), nil)
+		if resp.StatusCode != http.StatusNotFound || !r.Running(task.ID) {
+			t.Fatalf("delete missing project %d: status=%d, task running=%v", id, resp.StatusCode, r.Running(task.ID))
+		}
+	}
 	projects := decode[[]store.Project](t, do(t, s, "GET", "/api/projects", nil))
 	if len(projects) != 1 || len(projects[0].RecentSessions) != 1 || projects[0].RecentSessions[0].Status != store.StatusRunning {
 		t.Fatalf("live projects = %+v", projects)

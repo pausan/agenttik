@@ -11,10 +11,9 @@ import { SEGMENTED } from "../ui";
    the binary beside the main one, so this is still a read off the local
    server and never a network call. */
 const LogsPane = defineAsyncComponent(() => import("./LogsPane.vue"));
-const StatsPane = defineAsyncComponent(() => import("./StatsPane.vue"));
 const OptionsPane = defineAsyncComponent(() => import("./OptionsPane.vue"));
 
-const LABELS = { changed: "Changed", options: "Options", logs: "Commits", stats: "Stats" };
+const LABELS = { changed: "Changed", options: "Options", logs: "Commits" };
 
 const items = computed(() => S.inspector.panes.map((p) => ({ label: LABELS[p], value: p })));
 
@@ -35,8 +34,7 @@ const active = computed({
       :ui="SEGMENTED"
     />
     <div class="min-h-0 flex-1 p-2.5" :class="active === 'logs' ? 'flex flex-col overflow-hidden' : 'overflow-auto'">
-      <StatsPane v-if="active === 'stats'" />
-      <LogsPane v-else-if="active === 'logs'" />
+      <LogsPane v-if="active === 'logs'" />
       <OptionsPane v-else-if="active === 'options'" />
       <FileList v-else-if="active === 'changed'" :files="S.changed" empty="No edited files." />
     </div>

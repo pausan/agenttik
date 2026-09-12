@@ -12,6 +12,7 @@ import {
 } from "../fixtures.js";
 
 test("opens with nothing selected", async ({ page }) => {
+  await expect(sidebar(page).getByRole("heading", { name: "Workspace" })).toBeVisible();
   await expect(page.getByText("No projects yet.")).toBeVisible();
   await expect(page.getByText("Pick a task, or a project to start one.")).toBeVisible();
 });
@@ -20,6 +21,20 @@ test("a project appears in the sidebar with its folder underneath", async ({ pag
   await addProject(page);
   await expect(sidebar(page).getByText("agenttik", { exact: true })).toHaveCount(1);
   await expect(sidebar(page).getByText(REPO)).toBeVisible();
+  await expect(sidebar(page).getByRole("combobox", { name: "Git repository" })).toHaveCount(0);
+});
+
+test("multiple repositories can be selected from the workspace header", async ({ page }) => {
+  await addProject(page);
+  await addProject(page, REPO + "/web");
+
+  const picker = sidebar(page).getByRole("combobox", { name: "Git repository" });
+  await expect(picker).toBeVisible();
+  await picker.click();
+  await page.getByRole("option", { name: /web/ }).click();
+
+  await expect(page.getByRole("tab", { name: "web" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "web" })).toBeVisible();
 });
 
 test("opening a project puts its panes on the right and Tree on the left", async ({ page }) => {

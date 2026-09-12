@@ -4,7 +4,7 @@
    The strip is the active project's tabs only. Each kind has its own colour,
    tabs can be dragged within their kind. Session shortcuts use the sidebar
    order, so file tabs never consume an Alt number. */
-import { computed, defineAsyncComponent, ref } from "vue";
+import { computed, defineAsyncComponent, ref, watch } from "vue";
 
 import {
   S,
@@ -26,6 +26,7 @@ import StatusDot from "./StatusDot.vue";
 const ProjectView = defineAsyncComponent(() => import("./ProjectView.vue"));
 const ScheduleView = defineAsyncComponent(() => import("./ScheduleView.vue"));
 const FileView = defineAsyncComponent(() => import("./FileView.vue"));
+const StatsPane = defineAsyncComponent(() => import("./StatsPane.vue"));
 
 /* A session title can be a whole sentence, and a job names itself exactly as
    a task does, so both are cut to keep the strip readable with a dozen of them
@@ -87,6 +88,14 @@ function onEnd() {
 
 const current = computed(() => S.tab);
 const running = computed(() => !!S.detail?.running);
+
+/* Stats belongs to the task in front. Leaving that task closes its popover so
+   it cannot reopen unexpectedly on a later conversation. The shared flag
+   also lets Go to anywhere open the same control. */
+watch(
+  () => S.detail?.session.id || "",
+  () => (S.taskStatsOpen = false),
+);
 
 /* The badge says what the task is doing. "waiting" is its own state rather
    than a quiet idle: the task has a prompt it cannot run because the provider
@@ -178,6 +187,25 @@ const badge = computed(() => {
           <UBadge color="neutral" variant="soft" size="sm">
             {{ S.detail.session.effort || "default" }}
           </UBadge>
+          <UPopover
+            v-model:open="S.taskStatsOpen"
+            :content="{ side: 'bottom', align: 'end', sideOffset: 8 }"
+          >
+            <UButton
+              icon="i-lucide-chart-pie"
+              color="neutral"
+              variant="ghost"
+              size="xs"
+              title="Task stats"
+              aria-label="Task stats"
+            />
+            <template #content>
+              <div class="max-h-[min(32rem,80vh)] w-80 overflow-auto p-3">
+                <h3 class="m-0 mb-2 text-sm font-semibold text-highlighted">Task stats</h3>
+                <StatsPane />
+              </div>
+            </template>
+          </UPopover>
         </template>
       </div>
     </div>

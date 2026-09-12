@@ -12,30 +12,14 @@ function context(session, stats) {
   return tokens(stats.context_tokens) + (total ? " / " + tokens(total) : "");
 }
 
-/* Tasks in a project run concurrently, so agent time is summed across
-   them and can exceed the wall clock. */
 const rows = computed(() => {
-  if (S.project) {
-    const { project, stats } = S.project;
-    return [
-      ["Folder", project.path],
-      ["Tasks", nf.format(stats.sessions)],
-      ["Running now", nf.format(stats.running)],
-      ["Turns", nf.format(stats.turns)],
-      ["Task input tokens", tokens(stats.input_tokens)],
-      ["Task output tokens", tokens(stats.output_tokens)],
-      ...usageBreakdownRows(stats),
-      ["Cache read", tokens(stats.cache_read_tokens)],
-      ["Cache write", tokens(stats.cache_write_tokens)],
-      ["Cost", cost(stats.cost_usd)],
-      ["Agent time", duration(stats.duration_ms)],
-      ["Last used", isoDate(stats.last_active_at)],
-      ["Added", isoDate(project.created_at)],
-    ];
-  }
   if (!S.detail) return [];
   const { session: s, stats } = S.detail;
+  const lastMessage = S.detail.messages.at(-1)?.created_at || 0;
   return [
+    ["Agent time", duration(stats.duration_ms)],
+    ["Started", isoDate(s.created_at)],
+    ["Last message", isoDate(lastMessage)],
     ["Provider", s.provider],
     ...(accountLabel(s.provider, s.account_id)
       ? [["Subscription", accountLabel(s.provider, s.account_id)]]
@@ -53,15 +37,12 @@ const rows = computed(() => {
     ["Cache read", tokens(stats.cache_read_tokens)],
     ["Cache write", tokens(stats.cache_write_tokens)],
     ["Cost", cost(stats.cost_usd)],
-    ["Agent time", duration(stats.duration_ms)],
-    ["Started", isoDate(s.created_at)],
-    ["Last used", isoDate(s.last_active_at)],
   ];
 });
 </script>
 
 <template>
-  <dl class="m-0">
+  <dl class="m-0" aria-label="Task statistics">
     <div
       v-for="[k, v] in rows"
       :key="k"

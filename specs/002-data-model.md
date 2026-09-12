@@ -97,7 +97,7 @@ Token counts come from the provider's own accounting, not an estimate:
 - Duration is `ended_at - started_at` per turn, which gives both per-turn and
   per-session wall time by summation.
 
-Task stats shown in the right panel are aggregates over `turns`: turn count,
+Task stats shown from the centre header are aggregates over `turns`: turn count,
 summed tokens by kind, summed cost, total agent time.
 
 `context_tokens` is the one number that is **not** summed. It is the size of

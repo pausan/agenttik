@@ -96,7 +96,8 @@ export const S = reactive({
   closing: null, // a close waiting on what to do with unsaved edits
   promptFocus: 0,
   queuedEdit: 0, // counter the transcript watches, to open its last queued prompt
-  inspector: { panes: ["changed", "stats"], active: "changed" },
+  taskStatsOpen: false,
+  inspector: { panes: ["changed", "logs"], active: "changed" },
   changed: [],
   log: { branch: "", head: "", commits: [] },
   logFilter: "",
@@ -2378,14 +2379,12 @@ export function openInSystem(path = "", projectID = currentProjectID()) {
 watch(
   () => S.owner?.kind || "",
   (kind) =>
-    setInspectorPanes(
-      kind === "project" ? ["options", "logs"] : ["changed", "logs", "stats"],
-    ),
+    setInspectorPanes(kind === "project" ? ["options", "logs"] : ["changed", "logs"]),
   { immediate: true },
 );
 
-/* A schedule tab has no right-hand panel at all: Changed describes a working
-   tree and Stats a conversation, and a schedule is neither. */
+/* A schedule tab has no right-hand panel at all: Changed and Commits describe
+   a working tree, while a schedule is only a clock and its runs. */
 export function hasInspector() {
   return S.owner?.kind !== "schedule";
 }
@@ -2600,7 +2599,7 @@ function onSessionEvent(tab, msg) {
 /* push hands back the bubble it added, so a caller that put one up before the
    server agreed can take that exact one out again. */
 function push(tab, role, content) {
-  const message = { role, content };
+  const message = { role, content, created_at: Date.now() };
   tab.detail.messages.push(message);
   return message;
 }
@@ -2614,7 +2613,7 @@ function appendLive(tab, role, text) {
     return;
   }
   endLive(tab);
-  tab.detail.messages.push({ role, content: text, streaming: true });
+  tab.detail.messages.push({ role, content: text, created_at: Date.now(), streaming: true });
 }
 
 function endLive(tab) {

@@ -1,9 +1,9 @@
 # Project logs
 
-The right-hand panel carries a **Commits** pane beside Changed and Stats — the
-history of the branch the project is on, for the project page and for every
-task in it. The branch name and the short head hash sit above a filter box;
-under it, one row per commit.
+The right-hand panel carries a **Commits** pane beside Changed for a task and
+beside Options for a project — the history of the branch the project is on.
+The branch name and the short head hash sit above a filter box; under it, one
+row per commit.
 
 A row is the commit subject, and under it, in grey, what identifies it:
 

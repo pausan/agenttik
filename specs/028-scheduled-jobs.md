@@ -257,14 +257,14 @@ so switching form in the view offers what the dialog would have offered, a
 quarter of an hour or 09:00, rather than an interval of nothing or midnight
 nobody asked for.
 
-Those times are **local**, where the Stats panel's are UTC. The layout is the
-same; the zone is not, and deliberately: a schedule is read off the clock on
-the wall, so "every day at 09:00" listing its runs at 07:00 would read as
-simply wrong. `isoLocal` sits beside `isoDate` in `api.js` for that.
+Those times are **local**, where task and project Stats timestamps are UTC.
+The layout is the same; the zone is not, and deliberately: a schedule is read
+off the clock on the wall, so "every day at 09:00" listing its runs at 07:00
+would read as simply wrong. `isoLocal` sits beside `isoDate` in `api.js`
+for that.
 
-A schedule tab has no right-hand panel. Changed and Stats describe a
-task; a schedule has neither, and its page already carries everything
-it knows.
+A schedule tab has no right-hand panel. Changed and Commits describe work in
+the repository; the schedule page already carries everything its clock knows.
 
 ## Data
 

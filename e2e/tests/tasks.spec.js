@@ -2,7 +2,6 @@ import {
   FAKE_MODEL,
   addProject,
   expect,
-  inspector,
   modelButton,
   newTask,
   openProject,
@@ -87,8 +86,8 @@ test("changing the model updates the badge and the stats", async ({ page }) => {
 
   await pickModel(page, "Fake Careful");
   await expect(page.getByText("fake-careful", { exact: true })).toBeVisible();
-  await inspector(page).getByRole("tab", { name: "Stats" }).click();
-  await expect(inspector(page).getByText("fake-careful", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Task stats" }).click();
+  await expect(page.getByLabel("Task statistics").getByText("fake-careful", { exact: true })).toBeVisible();
 });
 
 test("sending a prompt streams a reply and updates the stats", async ({ page }) => {
@@ -101,9 +100,14 @@ test("sending a prompt streams a reply and updates the stats", async ({ page }) 
   await expect(page.getByText("Agent", { exact: true })).toBeVisible();
   await expect(page.getByText("idle")).toBeVisible();
 
-  await inspector(page).getByRole("tab", { name: "Stats" }).click();
-  await expect(inspector(page).getByText("$0.0042")).toBeVisible();
-  await expect(inspector(page).getByText("fake-quick", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Task stats" }).click();
+  const stats = page.getByLabel("Task statistics");
+  await expect(stats.getByText("$0.0042")).toBeVisible();
+  await expect(stats.getByText("fake-quick", { exact: true })).toBeVisible();
+  await expect(stats.locator("dt").nth(0)).toHaveText("Agent time");
+  await expect(stats.locator("dt").nth(1)).toHaveText("Started");
+  await expect(stats.locator("dt").nth(2)).toHaveText("Last message");
+  await expect(stats.locator("dd").nth(2)).not.toHaveText("never");
 });
 
 test("a task's title is refined shortly after its first prompt", async ({ page }) => {

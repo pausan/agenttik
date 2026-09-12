@@ -36,12 +36,14 @@ test("clicking a file opens it as a closable tab beside the first one", async ({
   await expect(page.getByRole("heading", { name: "agenttik" })).toBeVisible();
 });
 
-test("a task's inspector adds Changed and Stats in place of Options", async ({ page }) => {
+test("a task's inspector keeps workspace panes and puts Stats in its header", async ({ page }) => {
   await newTask(page);
 
   await expect(inspector(page).getByRole("tab", { name: "Changed" })).toBeVisible();
-  await expect(inspector(page).getByRole("tab", { name: "Stats" })).toBeVisible();
+  await expect(inspector(page).getByRole("tab", { name: "Commits" })).toBeVisible();
+  await expect(inspector(page).getByRole("tab", { name: "Stats" })).toHaveCount(0);
   await expect(inspector(page).getByRole("tab", { name: "Options" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Task stats" })).toBeVisible();
 
   // A clean checkout has nothing changed, an edited one does; either is a
   // correct answer, so assert the pane rendered one of them.
@@ -64,8 +66,18 @@ test("the pane in use survives switching from a project to a task", async ({ pag
     "active",
   );
 
-  // Its Stats are the task's, not the project's: Permission is a session row
-  // only Stats shows.
-  await inspector(page).getByRole("tab", { name: "Stats" }).click();
-  await expect(inspector(page).getByText("Permission")).toBeVisible();
+  // The header popover belongs to the task, not its project: Permission is a
+  // session row only task Stats shows.
+  await page.getByRole("button", { name: "Task stats" }).click();
+  await expect(page.getByLabel("Task statistics").getByText("Permission")).toBeVisible();
+});
+
+test("Go to anywhere opens the task Stats popover", async ({ page }) => {
+  await newTask(page);
+
+  await page.keyboard.press("Control+p");
+  const goTo = page.getByRole("dialog", { name: "Go to anywhere" });
+  await goTo.getByText("Task stats", { exact: true }).click();
+
+  await expect(page.getByLabel("Task statistics")).toBeVisible();
 });

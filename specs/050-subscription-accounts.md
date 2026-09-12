@@ -200,8 +200,8 @@ signing out of this one can never touch the account the machine already had.
 - **Favourites carry no subscription.** A star is a model and an effort
   ([009](009-model-picker.md)); picking one keeps the task on the account it is
   already on, which is the account whose allowance is on screen beside it.
-- **Stats** names the subscription under the provider, when there is more than
-  one to name.
+- **Task Stats** names the subscription under the provider, when there is more
+  than one to name.
 
 ## Tested by
 

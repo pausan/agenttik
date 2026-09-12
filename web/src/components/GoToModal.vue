@@ -45,9 +45,9 @@ const navigation = computed(() => [
   {
     label: "Task stats",
     description: "Current task",
-    icon: "i-lucide-chart-no-axes-combined",
+    icon: "i-lucide-chart-pie",
     disabled: !S.detail,
-    onSelect: () => choose(() => (S.inspector.active = "stats")),
+    onSelect: () => choose(() => (S.taskStatsOpen = true)),
   },
 ]);
 

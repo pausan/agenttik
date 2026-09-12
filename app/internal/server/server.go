@@ -125,6 +125,7 @@ func (s *Server) routes() {
 	api.Get("/fs", s.browseDir)
 	api.Post("/fs/dir", s.makeDir)
 	api.Post("/fs/clone", s.cloneRepo)
+	api.Post("/fs/remote", s.checkRemote)
 	api.Post("/foreground", s.raiseWindow)
 	api.Get("/server", s.getServerConfig)
 	api.Put("/server", s.putServerConfig)

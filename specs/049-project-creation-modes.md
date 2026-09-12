@@ -34,25 +34,12 @@ Because this is `FolderPicker`, the Options pane's repoint button
 
 ## Cloning
 
-Each repository is cloned as it is named, not when the project is added. A
-clone takes as long as it takes, and its failures — a typo, a private
-repository, no network — are worth seeing one at a time while the dialog is
-still open and the base folder can still be changed.
+Each repository has its own input row. Pasting whitespace-separated URLs into a row creates one row per URL. A non-empty row checks its remote after a short pause by asking git for its refs, not history. A spinner, tick, or cross appears at the input's right edge. A valid final row creates an empty next row automatically. Empty rows are ignored, and a row can be deleted.
 
-Enter in the Repository field, or the Clone button, appends a row and starts
-`POST /api/fs/clone` with `{path, url}`. The row shows the URL and a spinner
-while it runs, then the folder git made and a tick, or a cross and git's own
-last line. Clones run alongside each other, so a large repository never holds
-up the next one; **Add** is disabled while any is still going. A failed row
-carries an `×` that drops it from the list — a successful one does not, since
-the clone is on disk inside the folder the project is about to point at, and
-forgetting it here would only make the list lie. A successful clone re-lists
-the folder browser above, so the new checkout appears there as the folder it
-now is.
+GitHub and GitLab web links become their SSH remotes; ordinary HTTPS, git, and SSH remotes remain accepted. Add project stays disabled while a check is running or any non-empty row is invalid. It starts sequential clones for the checked rows and reports progress. A failed clone becomes a broken row and prevents adding the project until it is fixed or deleted. The dialog can be minimized during this work; its compact progress button restores it without interrupting the queue.
 
-Add refuses in this mode until at least one clone has succeeded: with none,
-the mode is Folder with extra steps, so it says so rather than silently
-behaving like it.
+At least one validated repository is required. Empty inputs do not count, so
+the mode cannot accidentally add a base folder with no repositories.
 
 The destination is git's own rule — the last path segment without a trailing
 `.git` — under the base folder. A name already taken is refused before git

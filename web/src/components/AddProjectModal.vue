@@ -1,96 +1,117 @@
 <script setup>
 import { computed, nextTick, reactive, ref, watch } from "vue";
-
 import { api } from "../api";
 import { addProject } from "../store";
 import { SEGMENTED } from "../ui";
 import FolderPicker from "./FolderPicker.vue";
 
-/* A project is one folder either way. **Folder** takes one that is already
-   there. **Git repos** takes a folder to hold several checkouts and clones
-   them into it, so the agent sees every repository under the one working
-   directory. Nothing about the project itself differs afterwards, which is
-   why neither mode is stored: the clones are just what the folder contains. */
-
 const open = defineModel("open", { type: Boolean, default: false });
-
-const MODES = [
-  { label: "Folder", value: "folder" },
-  { label: "Git repos", value: "repos" },
-];
-
+const MODES = [{ label: "Folder", value: "folder" }, { label: "Git repos", value: "repos" }];
 const mode = ref("folder");
 const path = ref("");
 const name = ref("");
 const error = ref("");
 const picker = ref(null);
-
-const url = ref("");
-const urlField = ref(null);
-const repos = ref([]); // one row per clone asked for, in the order asked
-
+const minimized = ref(false);
+const repos = ref([]);
 const cloning = computed(() => repos.value.some((r) => r.state === "cloning"));
-const cloned = computed(() => repos.value.filter((r) => r.state === "cloned").length);
+const checking = computed(() => repos.value.some((r) => r.state === "checking"));
+const broken = computed(() => repos.value.some((r) => r.state === "invalid" || r.state === "failed"));
+const ready = computed(() => repos.value.some((r) => r.state === "valid" || r.state === "cloned"));
+const current = computed(() => repos.value.findIndex((r) => r.state === "cloning"));
+const total = computed(() => repos.value.filter((r) => r.state !== "empty").length);
+const canAdd = computed(() => !path.value.trim() || cloning.value ? false :
+  mode.value === "folder" || ready.value && !checking.value && !broken.value);
 
-watch(open, async (on) => {
-  if (!on) return;
+function addRepo() {
+  repos.value.push(reactive({ url: "", state: "empty", error: "", timer: null }));
+}
+
+function reset() {
+  for (const row of repos.value) clearTimeout(row.timer);
   mode.value = "folder";
   path.value = "";
   name.value = "";
-  url.value = "";
   error.value = "";
   repos.value = [];
+  addRepo();
+}
+
+watch(open, async (on) => {
+  if (!on) return;
+  if (minimized.value) {
+    minimized.value = false;
+    return;
+  }
+  reset();
   await nextTick();
   picker.value?.open();
 });
-
-/* A rejected folder — one already added, or one that is not a directory —
-   leaves the dialog open on the field that has to change, so the reason
-   belongs beside that field rather than in a toast behind the dialog. Moving
-   anywhere in the picker clears it: the message was about the old folder. */
 watch(path, () => (error.value = ""));
 
-/* Cloning happens as each repository is named, not when the project is added:
-   a clone takes as long as it takes, and its failures — a typo, a private
-   repository, no network — are worth seeing one at a time while the dialog is
-   still open. Clones run alongside each other; each row carries its own
-   outcome, so a slow one never holds up the next. */
-async function clone() {
-  const at = path.value.trim();
-  const remote = url.value.trim();
-  if (!remote) return;
-  if (!at) {
-    error.value = "Pick the folder to clone into first.";
+// A check only asks git for remote refs, never repository history. Debouncing
+// stops a request from starting for every character typed into a row.
+function scheduleCheck(row) {
+  clearTimeout(row.timer);
+  const remote = row.url.trim();
+  row.error = "";
+  if (!remote) {
+    row.state = "empty";
     return;
   }
-  const row = reactive({ url: remote, at, name: "", state: "cloning", error: "" });
-  repos.value.push(row);
-  url.value = "";
+  row.state = "checking";
+  row.timer = setTimeout(() => check(row, remote), 350);
+}
+
+async function check(row, remote) {
   try {
-    const dir = await api("POST", "/api/fs/clone", { path: at, url: remote });
-    row.name = dir.name;
-    row.state = "cloned";
-    // The browser above is listing the folder this landed in, and was drawn
-    // before it existed. Re-list it so the clone shows up as the folder it is.
-    if (path.value.trim() === at) picker.value?.open();
+    await api("POST", "/api/fs/remote", { url: remote });
+    if (row.url.trim() !== remote) return;
+    row.state = "valid";
+    if (repos.value.at(-1) === row) addRepo();
   } catch (e) {
-    row.state = "failed";
+    if (row.url.trim() !== remote) return;
+    row.state = "invalid";
     row.error = e?.message || String(e);
   }
 }
 
-// Only a failed row is dropped. A clone that worked is on disk and inside the
-// folder the project is about to point at, so forgetting it here would not
-// take it away — it would only make the list lie.
+function paste(row, event) {
+  const remotes = event.clipboardData?.getData("text").trim().split(/\s+/).filter(Boolean) || [];
+  if (remotes.length < 2) return;
+  event.preventDefault();
+  const index = repos.value.indexOf(row);
+  const rows = remotes.map((url) => reactive({ url, state: "empty", error: "", timer: null }));
+  repos.value.splice(index, 1, ...rows);
+  nextTick(() => rows.forEach(scheduleCheck));
+}
+
 function forget(row) {
+  clearTimeout(row.timer);
   repos.value = repos.value.filter((r) => r !== row);
+  if (!repos.value.some((r) => r.state === "empty")) addRepo();
 }
 
 async function add() {
-  if (!path.value.trim() || cloning.value) return;
-  if (mode.value === "repos" && !cloned.value) {
-    error.value = "Clone at least one repository, or add the folder on its own.";
-    return;
+  if (!canAdd.value) return;
+  if (mode.value === "repos") {
+    for (const row of repos.value) {
+      if (row.state !== "valid") continue;
+      row.state = "cloning";
+      try {
+        const dir = await api("POST", "/api/fs/clone", { path: path.value.trim(), url: row.url.trim() });
+        row.name = dir.name;
+        row.state = "cloned";
+        picker.value?.open();
+      } catch (e) {
+        row.state = "failed";
+        row.error = e?.message || String(e);
+      }
+    }
+    if (broken.value) {
+      error.value = "Fix or remove every failed repository before adding the project.";
+      return;
+    }
   }
   try {
     await addProject(path.value.trim(), name.value.trim());
@@ -100,114 +121,94 @@ async function add() {
   }
 }
 
-// In Git repos mode the folder picker's Enter belongs to the repository field
-// below it, which is where the next thing to say is; adding the project is
-// the button's job once the clones are in.
+function minimize() {
+  minimized.value = true;
+  open.value = false;
+}
+
+function updateOpen(next) {
+  if (!next && cloning.value) return minimize();
+  open.value = next;
+}
+
 function submit() {
   if (mode.value !== "repos") return add();
-  nextTick(() => urlField.value?.inputRef?.focus());
 }
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Add project" :ui="{ content: 'max-w-lg' }">
+  <UModal
+    :open="open"
+    title="Add project"
+    :close="cloning ? { icon: 'i-lucide-minus', title: 'Minimize cloning', 'aria-label': 'Minimize cloning' } : true"
+    :ui="{ content: 'max-w-lg' }"
+    @update:open="updateOpen"
+  >
     <template #body>
-      <UTabs
-        v-model="mode"
-        :items="MODES"
-        :content="false"
-        size="sm"
-        class="mb-3"
-        :ui="SEGMENTED"
-      />
-
-      <FolderPicker
-        ref="picker"
-        v-model="path"
-        :label="mode === 'repos' ? 'Base folder' : 'Folder'"
-        @submit="submit"
-      />
+      <UTabs v-model="mode" :items="MODES" :content="false" size="sm" class="mb-3" :ui="SEGMENTED" />
+      <FolderPicker ref="picker" v-model="path" :label="mode === 'repos' ? 'Base folder' : 'Folder'" @submit="submit" />
 
       <template v-if="mode === 'repos'">
-        <label class="block text-xs font-medium text-muted">
-          Repository
-          <div class="mt-1 flex gap-2">
+        <div class="space-y-2">
+          <label v-for="(row, i) in repos" :key="row" class="block text-xs font-medium text-muted">
+            <span v-if="i === 0">Git repositories</span>
             <UInput
-              ref="urlField"
-              v-model="url"
-              class="w-full font-normal"
-              placeholder="https://github.com/org/repo.git"
+              v-model="row.url"
+              class="mt-1 w-full font-normal"
+              placeholder="https://github.com/org/repo or git@github.com:org/repo.git"
               autocomplete="off"
-              @keydown.enter.prevent="clone"
-            />
+              :disabled="cloning || row.state === 'cloned'"
+              @input="scheduleCheck(row)"
+              @paste="paste(row, $event)"
+            >
+              <template #trailing>
+                <UIcon v-if="row.state === 'checking'" name="i-lucide-loader-circle" class="animate-spin text-dimmed" />
+                <UIcon v-else-if="row.state === 'valid' || row.state === 'cloned'" name="i-lucide-check" class="text-success" />
+                <UIcon v-else-if="row.state === 'invalid' || row.state === 'failed'" name="i-lucide-x" class="text-error" />
+              </template>
+            </UInput>
+            <p v-if="row.error" class="mt-1 text-error">{{ row.error }}</p>
             <UButton
+              v-if="row.state !== 'cloned'"
               color="neutral"
-              variant="subtle"
-              label="Clone"
-              :disabled="!url.trim()"
-              @click="clone"
+              variant="ghost"
+              size="xs"
+              icon="i-lucide-trash-2"
+              class="mt-1"
+              :disabled="cloning"
+              :aria-label="'Delete ' + (row.url || 'repository')"
+              @click="forget(row)"
             />
-          </div>
-        </label>
-
-        <ul v-if="repos.length" class="mt-2 max-h-28 space-y-1 overflow-auto text-xs">
-          <li v-for="(r, i) in repos" :key="i">
-            <div class="flex items-center gap-1.5">
-              <UIcon
-                v-if="r.state === 'cloning'"
-                name="i-lucide-loader-circle"
-                class="shrink-0 animate-spin text-dimmed"
-              />
-              <UIcon
-                v-else-if="r.state === 'cloned'"
-                name="i-lucide-check"
-                class="shrink-0 text-success"
-              />
-              <UIcon v-else name="i-lucide-x" class="shrink-0 text-error" />
-
-              <span
-                class="truncate"
-                :class="r.state === 'cloned' ? 'text-highlighted' : 'text-muted'"
-              >{{ r.state === "cloned" ? r.name : r.url }}</span>
-              <UButton
-                v-if="r.state === 'failed'"
-                color="neutral"
-                variant="ghost"
-                size="xs"
-                icon="i-lucide-x"
-                class="ml-auto shrink-0"
-                :aria-label="`Forget ${r.url}`"
-                @click="forget(r)"
-              />
-            </div>
-            <p v-if="r.state === 'failed'" class="pl-5 text-error">{{ r.error }}</p>
-          </li>
-        </ul>
-        <p v-else class="mt-2 text-xs text-dimmed">
-          Each repository is cloned into the base folder as you add it.
+          </label>
+        </div>
+        <p class="mt-2 text-xs text-dimmed">
+          GitHub and GitLab web links use SSH automatically. Paste several URLs to add rows.
+        </p>
+        <p v-if="cloning" class="mt-2 text-xs text-muted">
+          Cloning {{ current + 1 }} of {{ total }} repositories
         </p>
       </template>
 
       <label class="mt-3 block text-xs font-medium text-muted">
         Name
-        <UInput
-          v-model="name"
-          class="mt-1 w-full font-normal"
-          placeholder="defaults to the folder name"
-        />
+        <UInput v-model="name" class="mt-1 w-full font-normal" placeholder="defaults to the folder name" />
       </label>
       <p v-if="error" class="mt-3 text-xs text-error">{{ error }}</p>
     </template>
     <template #footer>
       <div class="flex w-full justify-end gap-2">
-        <UButton color="neutral" variant="ghost" label="Cancel" @click="open = false" />
-        <UButton
-          label="Add"
-          :disabled="cloning"
-          :title="cloning ? 'Wait for the clones to finish.' : ''"
-          @click="add"
-        />
+        <UButton color="neutral" variant="ghost" :label="cloning ? 'Minimize' : 'Cancel'" @click="cloning ? minimize() : (open = false)" />
+        <UButton label="Add project" :disabled="!canAdd" :title="checking ? 'Wait for repository checks to finish.' : broken ? 'Fix or remove every failed repository.' : ''" @click="add" />
       </div>
     </template>
   </UModal>
+
+  <UButton
+    v-if="minimized && cloning"
+    color="neutral"
+    class="fixed bottom-4 right-4 z-50 shadow-lg"
+    icon="i-lucide-loader-circle"
+    :label="'Cloning ' + (current + 1) + ' of ' + total"
+    @click="open = true"
+  />
 </template>

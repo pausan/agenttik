@@ -3,6 +3,8 @@ package server
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -178,6 +180,7 @@ func (s *Server) makeDir(c *fiber.Ctx) error {
 // calls the panes make: this one talks to a remote, over a repository that
 // may be large.
 const cloneTimeout = 10 * time.Minute
+const remoteCheckTimeout = 15 * time.Second
 
 // remoteURL is what may be cloned: a scheme from the allowlist, or git's
 // scp-like `user@host:path`, with an optional `user@` or `token@` in front of
@@ -192,6 +195,31 @@ const cloneTimeout = 10 * time.Minute
 var remoteURL = regexp.MustCompile(
 	`^(?:(?:https?|ssh|git)://(?:[^/@\s]+@)?[\w][\w.-]*(?::\d+)?/\S+` +
 		`|[\w][\w.-]*@[\w][\w.-]*:\S+)$`)
+
+// checkRemote verifies that git can reach a remote without transferring its
+// history. It is used while the URL is being entered, before cloning begins.
+func (s *Server) checkRemote(c *fiber.Ctx) error {
+	var body struct {
+		URL string `json:"url"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return badRequest("invalid body: %v", err)
+	}
+	remote, err := cloneRemote(body.URL)
+	if err != nil {
+		return badRequest("%v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), remoteCheckTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "ls-remote", "--quiet", "--", remote)
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_ASKPASS=", "SSH_ASKPASS=")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return badRequest("cannot find repository: %s", gitFailure(stderr.String()))
+	}
+	return c.JSON(fiber.Map{"url": remote})
+}
 
 // cloneRepo clones a repository into a folder the user has picked, and
 // answers with the folder it landed in. It is what the Add project dialog's
@@ -209,13 +237,13 @@ func (s *Server) cloneRepo(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	url := strings.TrimSpace(body.URL)
-	if !remoteURL.MatchString(url) {
-		return badRequest("%s is not an https, ssh or git remote", url)
+	remote, err := cloneRemote(body.URL)
+	if err != nil {
+		return badRequest("%v", err)
 	}
-	name := repoName(url)
+	name := repoName(remote)
 	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\`) {
-		return badRequest("cannot tell which folder %s would clone into", url)
+		return badRequest("cannot tell which folder %s would clone into", remote)
 	}
 	dir := filepath.Join(base, name)
 	if _, err := os.Lstat(dir); err == nil {
@@ -224,7 +252,7 @@ func (s *Server) cloneRepo(c *fiber.Ctx) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), cloneTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", "clone", "--", url, dir)
+	cmd := exec.CommandContext(ctx, "git", "clone", "--", remote, dir)
 	cmd.Dir = base
 	// A repository that wants credentials would otherwise sit waiting on a
 	// terminal this process does not have, until the timeout. Failing at once
@@ -242,6 +270,52 @@ func (s *Server) cloneRepo(c *fiber.Ctx) error {
 		return badRequest("cannot clone: %s", gitFailure(stderr.String()))
 	}
 	return c.JSON(dirRef{Name: name, Path: dir})
+}
+
+// cloneRemote accepts ordinary git remotes and turns supported GitHub and
+// GitLab web pages into their SSH clone remotes.
+func cloneRemote(raw string) (string, error) {
+	remote := strings.TrimSpace(raw)
+	u, err := url.Parse(remote)
+	if err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Port() == "" {
+		host := strings.ToLower(u.Hostname())
+		path := strings.Trim(u.Path, "/")
+		if path != "" && !strings.HasSuffix(path, ".git") {
+			parts := strings.Split(path, "/")
+			switch host {
+			case "github.com", "www.github.com":
+				if len(parts) == 2 || len(parts) > 2 && githubProjectPage(parts[2]) {
+					return "git@github.com:" + strings.Join(parts[:2], "/") + ".git", nil
+				}
+				return "", fmt.Errorf("%s is not a GitHub repository page", remote)
+			case "gitlab.com", "www.gitlab.com":
+				for i, part := range parts {
+					if part == "-" {
+						parts = parts[:i]
+						break
+					}
+				}
+				if len(parts) >= 2 {
+					return "git@gitlab.com:" + strings.Join(parts, "/") + ".git", nil
+				}
+				return "", fmt.Errorf("%s is not a GitLab repository page", remote)
+			}
+		}
+	}
+	if !remoteURL.MatchString(remote) {
+		return "", fmt.Errorf("%s is not an https, ssh or git remote", remote)
+	}
+	return remote, nil
+}
+
+func githubProjectPage(page string) bool {
+	switch page {
+	case "actions", "activity", "blob", "branches", "commits", "compare", "graphs",
+		"issues", "milestones", "network", "packages", "projects", "pull", "pulls",
+		"releases", "security", "settings", "stargazers", "tags", "tree", "watchers", "wiki":
+		return true
+	}
+	return false
 }
 
 // repoName is the folder a URL clones into: git's own rule, the last path

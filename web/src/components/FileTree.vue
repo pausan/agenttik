@@ -6,8 +6,9 @@
    keystroke against the whole path, so "wesst" finds web/src/store.js, and
    the letters that matched are highlighted wherever they fall along it.
 
-   What git ignores is in the tree too, drawn grey and sorted alphabetically with
-   everything else. Those folders are the one exception to starting open: a dependency
+   What git ignores is in the tree too, drawn grey and sorted with everything
+   else. Folders come first, then files, and each group is alphabetical. Those
+   folders are the one exception to starting open: a dependency
    tree is thousands of files against a project's hundred, and it would bury
    both the pane and every filter typed into it. It stays one grey row
    carrying the number of matches inside, and a click opens it.
@@ -17,7 +18,7 @@
    asks first — a name, or in the case of a delete a yes — in
    TreeActionModal. The same menu opens the row on the desktop itself, which
    asks nothing at all. */
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 
 import { S, openFile, openInSystem } from "../store";
 import { buildTree, countFiles, filterTree } from "../tree";
@@ -44,11 +45,22 @@ const isOpen = (n) => toggled.value.has(n.path) === !!n.ig;
 /* Opening the pane is asking to search it, so the sidebar puts the cursor
    here. */
 const filter = ref(null);
-defineExpose({ focus: () => filter.value?.inputRef?.focus() });
+const selected = ref("");
+const rowRefs = new Map();
+
+function setRowRef(path, el) {
+  if (el) rowRefs.set(path, el);
+  else rowRefs.delete(path);
+}
 
 function toggle(path) {
   const seen = toggled.value;
   seen.has(path) ? seen.delete(path) : seen.add(path);
+}
+
+function open(path, pin = false) {
+  selected.value = path;
+  return openFile(path, pin);
 }
 
 /* One menu for the whole pane, aimed by the event on its way to the trigger,
@@ -116,6 +128,31 @@ function reveal(path) {
   }
 }
 
+async function select(path) {
+  if (!path) return;
+  selected.value = path;
+  S.treeFilter = "";
+  await nextTick();
+  reveal(path);
+  await nextTick();
+  rowRefs.get(path)?.scrollIntoView({ block: "nearest" });
+}
+
+/* A request can arrive while the Tree listing is still being fetched. Repeat
+   the reveal when that listing lands so the selected row becomes visible then
+   too. */
+watch([full, selected], async () => {
+  if (!selected.value) return;
+  reveal(selected.value);
+  await nextTick();
+  rowRefs.get(selected.value)?.scrollIntoView({ block: "nearest" });
+}, { flush: "post" });
+
+defineExpose({
+  focus: () => filter.value?.inputRef?.focus(),
+  show: select,
+});
+
 /* rows flattens the tree into the lines to draw, which keeps the template one
    loop instead of a recursive component. */
 const rows = computed(() => {
@@ -166,6 +203,7 @@ const rows = computed(() => {
           <div
             v-for="row in rows"
             :key="row.node.path"
+            :ref="(el) => setRowRef(row.node.path, el)"
             class="flex items-center font-mono text-xs"
             :data-path="row.node.path"
             :data-dir="row.node.dir"
@@ -174,11 +212,16 @@ const rows = computed(() => {
             <button
               type="button"
               class="flex w-full min-w-0 select-none items-center gap-1 rounded-[var(--ui-radius)] px-1 py-0.5 text-left hover:bg-elevated hover:text-highlighted"
-              :class="row.node.ig ? 'text-dimmed' : ''"
+              :class="selected === row.node.path
+                ? 'bg-primary/10 text-highlighted'
+                : row.node.ig
+                  ? 'text-dimmed hover:bg-elevated hover:text-highlighted'
+                  : 'hover:bg-elevated hover:text-highlighted'"
               :title="row.node.ig ? row.node.path + ' — ignored by git' : row.node.path"
               :aria-expanded="row.node.dir ? row.open : undefined"
-              @click="row.node.dir ? toggle(row.node.path) : openFile(row.node.path)"
-              @dblclick="row.node.dir || openFile(row.node.path, true)"
+              :aria-current="selected === row.node.path ? 'true' : undefined"
+              @click="row.node.dir ? toggle(row.node.path) : open(row.node.path)"
+              @dblclick="row.node.dir || open(row.node.path, true)"
               @keydown.f2.prevent.stop="ask('rename', row.node)"
             >
               <UIcon

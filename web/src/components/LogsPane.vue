@@ -15,6 +15,8 @@ import { computed, ref } from "vue";
 import { S, copyText, openCommitFile, toggleCommit } from "../store";
 import { fuzzy, segments } from "../fuzzy";
 
+const emit = defineEmits(["show-in-tree"]);
+
 /* Each commit is matched once against one string. Building it per keystroke
    is cheaper than three matches per row, and it lets "pau context" find a
    commit by author and subject at the same time. */
@@ -50,15 +52,26 @@ const filesOf = (hash) => S.logFiles[hash] || null;
    under the pointer has anything to offer. A right click that lands beside
    the rows aims at nothing, and the item greys out rather than copying
    whatever was aimed at last. */
-const aimed = ref("");
-const aim = (e) => (aimed.value = e.target.closest("[data-hash]")?.dataset.hash || "");
+const aimed = ref({ hash: "", path: "" });
+function aim(e) {
+  aimed.value = {
+    hash: e.target.closest("[data-hash]")?.dataset.hash || "",
+    path: e.target.closest("[data-path]")?.dataset.path || "",
+  };
+}
 
 const menu = computed(() => [
   {
     label: "Copy hash",
     icon: "i-lucide-copy",
-    disabled: !aimed.value,
-    onSelect: () => copyText(aimed.value),
+    disabled: !aimed.value.hash,
+    onSelect: () => copyText(aimed.value.hash),
+  },
+  {
+    label: "Show in tree",
+    icon: "i-lucide-folder-tree",
+    disabled: !aimed.value.path,
+    onSelect: () => emit("show-in-tree", aimed.value.path),
   },
 ]);
 </script>
@@ -126,6 +139,7 @@ const menu = computed(() => [
               type="button"
               class="flex w-full select-none items-center gap-1.5 rounded-[var(--ui-radius)] px-1.5 py-0.5 text-left font-mono text-xs hover:bg-elevated hover:text-highlighted"
               :title="file.path"
+              :data-path="file.path"
               @click="openCommitFile(commit.hash, file.path)"
               @dblclick="openCommitFile(commit.hash, file.path, true)"
             >

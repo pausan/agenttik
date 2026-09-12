@@ -32,12 +32,17 @@ Clicking a row expands the files that commit touched, each with its status
 letter and its own `+`/`−` counts. Clicking a file opens it as a tab, showing
 that commit's diff.
 
-Right-clicking a row offers **Copy hash**, and so does right-clicking one of
-its expanded files — that file belongs to that commit. One menu serves the
-whole list rather than one per row, which would be 500 of them for a full
-log: the row under the pointer is read off the event on its way to the
-trigger, and a click that reaches no row leaves the item greyed rather than
-copying whatever was aimed at last.
+Right-clicking a file in Changed or in an expanded commit offers **Show in
+tree**. That switches the left sidebar to Tree, clears any Tree filter, opens
+the folders above the file, selects and scrolls to its row, and opens the
+working-tree file in the editor.
+
+Right-clicking a commit row offers **Copy hash**. Right-clicking one of its
+expanded files offers both **Copy hash** and **Show in tree** — that file
+belongs to the commit. One menu serves the whole list rather than one per row,
+which would be 500 of them for a full log: the row under the pointer is read
+off the event on its way to the trigger, and a click that reaches no row leaves
+the items greyed rather than copying or showing whatever was aimed at last.
 
 ## Commit file tabs
 

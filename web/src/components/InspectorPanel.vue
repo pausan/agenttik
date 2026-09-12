@@ -5,6 +5,8 @@ import { S, selectRepository } from "../store";
 import FileList from "./FileList.vue";
 import { SEGMENTED } from "../ui";
 
+const emit = defineEmits(["show-in-tree"]);
+
 /* Everything below is reached by a click or a chord, never by the first
    paint, so its code is fetched from its own chunk the moment it is first
    needed instead of being parsed on the way in. The chunks are built into
@@ -46,9 +48,14 @@ const active = computed({
       :ui="SEGMENTED"
     />
     <div class="min-h-0 flex-1 p-2.5" :class="active === 'logs' ? 'flex flex-col overflow-hidden' : 'overflow-auto'">
-      <LogsPane v-if="active === 'logs'" />
+      <LogsPane v-if="active === 'logs'" @show-in-tree="emit('show-in-tree', $event)" />
       <OptionsPane v-else-if="active === 'options'" />
-      <FileList v-else-if="active === 'changed'" :files="S.changed" empty="No edited files." />
+      <FileList
+        v-else-if="active === 'changed'"
+        :files="S.changed"
+        empty="No edited files."
+        @show-in-tree="emit('show-in-tree', $event)"
+      />
     </div>
   </aside>
 </template>

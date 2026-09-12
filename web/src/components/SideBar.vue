@@ -43,10 +43,12 @@ const tabs = [
 ];
 
 /* Opening Tree focuses its filter, including when it is already in front. */
-function show(which) {
+async function show(which, path = "") {
   tab.value = which;
-  if (which === "projects" || isMobile()) return;
-  nextTick(() => fileTree.value?.focus());
+  if (which === "projects") return;
+  await nextTick();
+  if (path) return fileTree.value?.show(path);
+  if (!isMobile()) fileTree.value?.focus();
 }
 
 // One TaskRow per open task and one ScheduleRow per job, so F2 can reach the
@@ -82,7 +84,7 @@ async function editCurrent() {
 
 defineExpose({
   showProjects: () => show("projects"),
-  showTree: () => show("tree"),
+  showTree: (path = "") => show("tree", path),
   editCurrent,
 });
 

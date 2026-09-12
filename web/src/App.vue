@@ -9,6 +9,7 @@ import {
   hasInspector,
   hit,
   init,
+  openFile,
   reopenClosedTab,
   selectAdjacentSidebarRow,
   selectAdjacentTab,
@@ -74,16 +75,23 @@ function changeLayout() {
   resizeViewport();
 }
 
-async function showSidebar(which) {
+async function showSidebar(which, path = "") {
   if (mobile.value) {
     workspaceOpen.value = false;
     projectsOpen.value = true;
     await nextTick();
   }
   const panel = mobile.value ? mobileSideBar.value : sideBar.value;
-  if (which === "tree") panel?.showTree();
+  if (which === "tree") await panel?.showTree(path);
   else if (which === "rename") panel?.editCurrent();
   else panel?.showProjects();
+}
+
+/* A file action in the right workspace can land on the left Tree even when it
+   is hidden. Reveal the row before opening its working-tree tab in the centre. */
+async function showFileInTree(path) {
+  await showSidebar("tree", path);
+  return openFile(path);
 }
 
 // File selections from Tree or Changed also return to the main view.
@@ -248,7 +256,7 @@ onUnmounted(() => {
             aria-label="Workspace"
           />
           <template #body>
-            <InspectorPanel class="mobile-inspector flex-1" />
+            <InspectorPanel class="mobile-inspector flex-1" @show-in-tree="showFileInTree" />
           </template>
         </USlideover>
       </header>
@@ -263,7 +271,7 @@ onUnmounted(() => {
       <MainPanel />
       <template v-if="!mobile && hasInspector()">
         <Splitter side="right" />
-        <InspectorPanel />
+        <InspectorPanel @show-in-tree="showFileInTree" />
       </template>
     </div>
 

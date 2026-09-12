@@ -171,8 +171,8 @@ func TestTreeListsFiles(t *testing.T) {
 	p, _ := st.CreateProject("alpha", dir)
 
 	got := decode[projectFiles](t, do(t, s, "GET", "/api/projects/"+itoa(p.ID)+"/tree", nil))
-	if len(got.Files) != 1 || got.Files[0] != "a.txt" {
-		t.Errorf("tree = %v, want [a.txt] with node_modules skipped", got.Files)
+	if len(got.Files) != 2 || got.Files[0] != "a.txt" || got.Files[1] != "node_modules/x/y.js" {
+		t.Errorf("tree = %v, want [a.txt node_modules/x/y.js]", got.Files)
 	}
 	// Nothing is ignored outside a repository: there is no .gitignore to read.
 	if len(got.Ignored) != 0 {

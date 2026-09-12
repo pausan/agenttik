@@ -19,12 +19,11 @@ import (
 )
 
 const (
-	maxTreeEntries = 20000
-	maxFileBytes   = 2 << 20 // 2 MiB
-	gitTimeout     = 5 * time.Second
+	maxFileBytes = 2 << 20 // 2 MiB
+	gitTimeout   = 5 * time.Second
 )
 
-// skipDirs are never walked when the project is not a git repository.
+// skipDirs are excluded from repository discovery and filesystem watching.
 var skipDirs = map[string]bool{
 	".git": true, "node_modules": true, ".venv": true,
 	"vendor": true, "__pycache__": true,
@@ -100,34 +99,33 @@ func (s *Server) projectTree(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	dirs := emptyDirs(root, files, ignored, maxTreeEntries-len(files)-len(ignored))
+	dirs := emptyDirs(root, files, ignored)
 	return c.JSON(projectFiles{Files: files, Ignored: ignored, Dirs: dirs})
 }
 
 // listFiles prefers git, which gives us .gitignore handling for free and is
 // far faster than walking a large working tree.
 //
-// The cap is spent on the project's own files first and the ignored ones get
-// what is left: a dependency folder is thousands of entries — 13,789 against
-// 140 in agenttik's own repository — and must never push a real file out of
-// the listing. Walking by hand has no notion of ignoring, so there the
-// dependency folders are skipped as they always were and nothing comes back
-// grey.
+// Listings are complete: ignored dependencies must not hide later paths.
+// Outside git, walk all folders except repository metadata.
 func listFiles(root string) ([]string, []string, error) {
 	if isGitRepo(root) {
 		out, err := runGit(root, "ls-files", "--cached", "--others", "--exclude-standard")
 		if err == nil {
-			files := trimTo(withoutDeleted(root, splitLines(out)), maxTreeEntries)
-			return files, listIgnored(root, maxTreeEntries-len(files)), nil
+			files := withoutDeleted(root, splitLines(out))
+			if files == nil {
+				files = []string{}
+			}
+			return files, listIgnored(root), nil
 		}
 	}
-	var paths []string
+	paths := []string{}
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil // unreadable entries are skipped, not fatal
 		}
 		if d.IsDir() {
-			if path != root && skipDirs[d.Name()] {
+			if path != root && d.Name() == ".git" {
 				return filepath.SkipDir
 			}
 			return nil
@@ -137,32 +135,27 @@ func listFiles(root string) ([]string, []string, error) {
 			return nil
 		}
 		paths = append(paths, filepath.ToSlash(rel))
-		if len(paths) >= maxTreeEntries {
-			return fs.SkipAll
-		}
 		return nil
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("walk project: %w", err)
 	}
 	sort.Strings(paths)
-	return trimTo(paths, maxTreeEntries), []string{}, nil
+	return paths, []string{}, nil
 }
 
-// listIgnored is what .gitignore covers. It lists the files inside an ignored
-// folder rather than the folder itself, which is what makes it the long half
-// of the answer and why it carries a bound of its own.
-func listIgnored(root string, max int) []string {
-	if max <= 0 {
-		return []string{}
-	}
+// listIgnored lists every file covered by git ignore rules.
+func listIgnored(root string) []string {
 	// --ignored only means anything alongside --exclude-standard: without it
 	// git has no set of patterns to call something ignored against.
 	out, err := runGit(root, "ls-files", "--others", "--ignored", "--exclude-standard")
 	if err != nil {
 		return []string{}
 	}
-	return trimTo(splitLines(out), max)
+	if out == "" {
+		return []string{}
+	}
+	return splitLines(out)
 }
 
 // emptyDirs names the folders no listed file lives in. The tree is built from
@@ -175,11 +168,8 @@ func listIgnored(root string, max int) []string {
 // seen once at its own level and never entered. A folder whose contents are
 // all ignored is already in the tree through those files and is neither named
 // here nor walked, which is what keeps `node_modules` out of both.
-func emptyDirs(root string, files, ignored []string, max int) []string {
+func emptyDirs(root string, files, ignored []string) []string {
 	out := []string{}
-	if max <= 0 {
-		return out
-	}
 	files, ignored = sorted(files), sorted(ignored)
 
 	var walk func(dir, rel string)
@@ -189,12 +179,9 @@ func emptyDirs(root string, files, ignored []string, max int) []string {
 			return // unreadable is simply a folder we cannot report on
 		}
 		for _, e := range entries {
-			if len(out) >= max {
-				return
-			}
 			// A symlink is not an IsDir, which is deliberate: following one
 			// would leave the project and could loop.
-			if !e.IsDir() || skipDirs[e.Name()] {
+			if !e.IsDir() || e.Name() == ".git" {
 				continue
 			}
 			child := e.Name()
@@ -524,16 +511,6 @@ func splitLines(s string) []string {
 		return nil
 	}
 	return strings.Split(s, "\n")
-}
-
-func trimTo(items []string, max int) []string {
-	if len(items) > max {
-		return items[:max]
-	}
-	if items == nil {
-		return []string{}
-	}
-	return items
 }
 
 // maxRawBytes bounds a preview. Images are read whole into memory to be sent,

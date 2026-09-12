@@ -2361,7 +2361,7 @@ async function refreshTree() {
     // A slow request for the tab we just left must not replace the active
     // project's sidebar Tree.
     if (currentProjectID() !== id) return;
-    // The two lists arrive apart so the ignored half can be capped on its own;
+    // The two lists arrive apart to identify ignored files;
     // the pane wants one listing, and `tree` being empty is what "No files."
     // is read from.
     S.tree = ignored.length ? files.concat(ignored) : files;

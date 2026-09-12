@@ -6,8 +6,8 @@
    keystroke against the whole path, so "wesst" finds web/src/store.js, and
    the letters that matched are highlighted wherever they fall along it.
 
-   What git ignores is in the tree too, drawn grey and sorted below what is
-   not. Those folders are the one exception to starting open: a dependency
+   What git ignores is in the tree too, drawn grey and sorted alphabetically with
+   everything else. Those folders are the one exception to starting open: a dependency
    tree is thousands of files against a project's hundred, and it would bury
    both the pane and every filter typed into it. It stays one grey row
    carrying the number of matches inside, and a click opens it.

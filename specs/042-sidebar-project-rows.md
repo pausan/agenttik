@@ -1,16 +1,12 @@
-# A project added lands last, and its letter folds it
+# Project insertion and folding
 
 How the Projects sidebar draws its list of projects, rather than what is in
 them.
 
-**A project added lands at the end.** `projects.position` defaulted to 0 and
-the list is ordered by position then name, so every new project sorted above
-the ones already dragged into place and then jumped around alphabetically
-among the other new ones — a project added twice a day kept taking the top row
-and, with it, `Alt+A`. `CreateProject` now takes `MAX(position) + 1` in the
-insert itself, the way sessions and schedules already do. Archived projects
-count towards the maximum, so restoring one cannot collide with the number of
-a project added while it was away.
+**A project added lands at the configured end.** General defaults to top.
+`CreateProject` chooses `MIN(position) - 1` for top or `MAX(position) + 1`
+for bottom in the insert itself. Archived projects count toward both bounds.
+The orchestrator remains pinned first. See [017](017-general-settings.md).
 
 **A hairline separates one project from the next.** Blocks sit `py-1` apart
 with a one-pixel rule between them, nine pixels of space in all: enough to

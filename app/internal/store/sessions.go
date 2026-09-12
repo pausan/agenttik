@@ -51,7 +51,9 @@ func (s *Store) CreateSession(v *Session) error {
 		    model, effort, permission, source, status, created_at, updated_at, last_active_at,
 		    schedule_id, position)
 		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
-		    (SELECT COALESCE(MAX(position), 0) + 1 FROM sessions WHERE project_id = ?))`,
+		    (SELECT CASE (SELECT new_item_position FROM general_config WHERE id = 1)
+		      WHEN 'bottom' THEN COALESCE(MAX(position), 0) + 1
+		      ELSE COALESCE(MIN(position), 0) - 1 END FROM sessions WHERE project_id = ?))`,
 		v.ID, v.ProjectID, v.Title, v.Provider, v.AccountID, v.ProviderSessionID,
 		v.Model, v.Effort, v.Permission, v.Source, v.Status,
 		v.CreatedAt, v.UpdatedAt, v.LastActiveAt, v.ScheduleID, v.ProjectID)

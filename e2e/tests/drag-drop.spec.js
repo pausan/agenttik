@@ -56,19 +56,19 @@ test("sidebar projects drop immediately and keep their order after reload", asyn
   await addProject(page, REPO + "/app");
   await addProject(page, REPO + "/web");
   const rows = sidebar(page).locator('[draggable="true"]');
-  const moved = rows.filter({ hasText: REPO + "/app" });
+  const moved = rows.filter({ hasText: REPO + "/web" });
   const orders = [];
   page.on("request", (r) => {
     if (r.method() === "POST" && r.url().endsWith("/api/projects/order")) orders.push(r);
   });
   const saved = page.waitForResponse((r) => r.request().method() === "POST" && r.url().endsWith("/api/projects/order"));
 
-  await dragAndRelease(page, moved, rows.filter({ hasText: REPO + "/web" }));
+  await dragAndRelease(page, moved, rows.filter({ hasText: REPO + "/app" }));
   expect((await saved).ok()).toBe(true);
   expect(orders).toHaveLength(1);
-  await expect(rows.nth(1)).toContainText(REPO + "/app");
+  await expect(rows.nth(1)).toContainText(REPO + "/web");
   await page.reload();
-  await expect(rows.nth(1)).toContainText(REPO + "/app");
+  await expect(rows.nth(1)).toContainText(REPO + "/web");
 });
 
 for (const location of ["sidebar", "project page"]) {
@@ -91,13 +91,13 @@ for (const location of ["sidebar", "project page"]) {
     });
     const saved = page.waitForResponse((r) => isOrder(r.request()));
 
-    await dragAndRelease(page, rows.filter({ hasText: "first drag task" }), rows.filter({ hasText: "second drag task" }));
+    await dragAndRelease(page, rows.filter({ hasText: "second drag task" }), rows.filter({ hasText: "first drag task" }));
     expect((await saved).ok()).toBe(true);
     expect(orders).toHaveLength(1);
-    await expect(rows.nth(1)).toContainText("first drag task");
+    await expect(rows.nth(1)).toContainText("second drag task");
     await page.reload();
     await openProject(page);
-    await expect(rows.nth(1)).toContainText("first drag task");
+    await expect(rows.nth(1)).toContainText("second drag task");
   });
 }
 

@@ -31,7 +31,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [038](038-task-naming.md) | What a task is called, on screen and on the wire |
 | [040](040-editable-project-path.md) | Repointing a project at a moved folder, by typing or by browsing |
 | [041](041-project-archiving.md) | Putting a project away without deleting it, and the Settings list it waits in |
-| [042](042-sidebar-project-rows.md) | A project added lands last, the rule between projects, and the letter that folds one |
+| [042](042-sidebar-project-rows.md) | Project insertion, the rule between projects, and the letter that folds one |
 | [054](054-orchestrator-project.md) | Optional pinned orchestrator, saved instructions and live cross-project control |
 | [053](053-workspace-repositories.md) | Right Workspace header and repository selection within the current project |
 | [049](049-project-creation-modes.md) | Adding a project on a folder, or on a base folder of repositories cloned into it |
@@ -72,7 +72,7 @@ screen, **session** for the row, the route or the CLI flag.
 | Doc | What it covers |
 |-----|----------------|
 | [015](015-settings-shortcuts.md) | Settings sections, the filter, editable chords |
-| [017](017-general-settings.md) | The General section: which key sends, and what selecting a project folds |
+| [017](017-general-settings.md) | General: prompt keys, project folding, and new item insertion |
 | [018](018-readme-icon.md) | The project overview, and the one SVG the README, favicon and window share |
 | [029](029-desktop-proxy-logging.md) | Why the window logged broken pipes, and the abort it recovers instead |
 | [032](032-single-tab-close-shortcut.md) | Ctrl+W closes one active tab, including when held |

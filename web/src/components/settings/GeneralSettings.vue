@@ -1,20 +1,43 @@
 <script setup>
-/* General is what is neither a colour, a model nor a chord. For now that is
-   two questions: does the plain Enter send the prompt or queue it, and does
-   selecting a project in the sidebar fold the other projects away?
+import { computed, onMounted, ref, watchEffect } from "vue";
 
-   Picking an Enter writes both bindings rather than setting a flag beside
-   them, so this pane and Shortcuts are the same fact shown twice — see
-   store.js. A binding moved off the pair in Shortcuts leaves neither option
-   ticked, which is the honest answer, and says where it went. */
-import { computed, watchEffect } from "vue";
-
-import { PROMPT_CHORDS, S, enterDoes, setEnterDoes, setFoldOthers } from "../../store";
+import { PROMPT_CHORDS, S, enterDoes, fail, setEnterDoes, setFoldOthers } from "../../store";
 import { fuzzyAny } from "../../fuzzy";
+import { api } from "../../api";
 import Chord from "../Chord.vue";
 
 const props = defineProps({ filter: { type: String, default: "" } });
 const emit = defineEmits(["count"]);
+
+const position = ref("top");
+const positionReady = ref(false);
+const savingPosition = ref(false);
+onMounted(async () => {
+  try {
+    position.value = (await api("GET", "/api/general")).new_item_position;
+    positionReady.value = true;
+  } catch (e) {
+    fail(e);
+  }
+});
+async function setPosition(value) {
+  savingPosition.value = true;
+  try {
+    position.value = (await api("PUT", "/api/general", { new_item_position: value })).new_item_position;
+  } catch (e) {
+    fail(e);
+  } finally {
+    savingPosition.value = false;
+  }
+}
+const positionRows = computed(() =>
+  fuzzyAny(["general", "new", "tasks", "projects", "order", "top", "bottom", "insert"], props.filter) !== null
+    ? [
+        { value: "top", label: "At the top (default)", description: "New tasks and projects appear first" },
+        { value: "bottom", label: "At the bottom", description: "New tasks and projects appear last" },
+      ]
+    : [],
+);
 
 const CHOICES = [
   { value: "send", plain: "Send", modified: "Enqueue" },
@@ -53,7 +76,7 @@ const foldRows = computed(() =>
     : [],
 );
 
-watchEffect(() => emit("count", promptRows.value.length + foldRows.value.length));
+watchEffect(() => emit("count", promptRows.value.length + foldRows.value.length + positionRows.value.length));
 
 const chosen = computed({
   get: () => enterDoes(),
@@ -104,5 +127,19 @@ const folding = computed({
     </p>
 
     <URadioGroup v-model="folding" :items="foldRows" size="sm" :ui="{ item: 'py-1' }" />
+  </section>
+  <section v-if="positionRows.length" :class="(promptRows.length || foldRows.length) && 'mt-5'">
+    <div class="mb-0.5 font-semibold text-highlighted">New tasks and projects</div>
+    <p class="mb-2 text-xs text-dimmed">
+      Where new items are added. Existing items keep their order. Applies to all windows.
+    </p>
+    <URadioGroup
+      :model-value="position"
+      :items="positionRows"
+      :disabled="!positionReady || savingPosition"
+      size="sm"
+      :ui="{ item: 'py-1' }"
+      @update:model-value="setPosition"
+    />
   </section>
 </template>

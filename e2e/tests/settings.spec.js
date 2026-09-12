@@ -54,3 +54,19 @@ test("authentication enables before a password and the current code refreshes", 
   await expect(toggle).not.toBeChecked();
   await expect(dialog.getByLabel("Current code")).toBeHidden();
 });
+
+test("new item position defaults to top and remembers bottom", async ({ page }) => {
+  await openSettings(page);
+  const dialog = page.getByRole("dialog");
+  const top = dialog.getByRole("radio", { name: "At the top (default)", exact: true });
+  const bottom = dialog.getByRole("radio", { name: "At the bottom", exact: true });
+  await expect(top).toBeChecked();
+  await expect(bottom).toBeEnabled();
+  await bottom.click();
+  await expect(bottom).toBeChecked();
+  await page.reload();
+  await openSettings(page);
+  await expect(bottom).toBeChecked();
+  await top.click();
+  await expect(top).toBeChecked();
+});

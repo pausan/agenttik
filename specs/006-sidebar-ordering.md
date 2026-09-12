@@ -41,9 +41,9 @@ moved row, full opacity, one order request, and the order after a reload.
 
 Project order lives in `projects.position` and task order in
 `sessions.position`, which serves the sidebar and the project page alike.
-Positions are written `1..n`, and a row created afterwards takes the next
-number, so new work lands at the end of an order someone arranged rather than
-on top of it — see [042](042-sidebar-project-rows.md) for projects.
+Drags write positions `1..n`. New rows take a position before the minimum
+by default, or after the maximum when General's insertion setting is bottom.
+Existing rows keep their order. See [017](017-general-settings.md).
 
 `GET /api/projects/:id` carries every open task row, not a subset, so a sidebar
 drop always sends the complete order.

@@ -1,11 +1,10 @@
-# General settings: which key submits, and what a selection folds
+# General settings
 
 Settings grew a fourth section, **General**, and it is where the dialog now
 opens: the sidebar's Settings button and the launcher's Settings entry both
 land there, the keyboard button still lands on Shortcuts.
 
-It holds two questions: does the plain Enter send the prompt or queue it, and
-does selecting a project fold the other projects away?
+It controls prompt submission, project folding, and where new tasks and projects are inserted.
 
 ## Enter sends, or Enter enqueues
 
@@ -75,6 +74,22 @@ in Appearance, because the sidebar it changes is visible behind the dialog.
 Both panes count their rows for the rail's filter like the other three, so
 `enqueue` narrows to General 2 and Shortcuts 1, and `fold` to General 2.
 
-Pane visibility is applied to a wrapper in the settings dialog, so both
+Pane visibility is applied to a wrapper in the settings dialog, so all
 General sections disappear when another sidebar section is selected. Panes
 stay mounted to keep filter match counts current.
+
+## New tasks and projects
+
+New tasks and projects are inserted at the top by default. General offers
+**At the top (default)** and **At the bottom**. The choice applies to future
+inserts; existing items retain their saved order, including manual drags.
+The orchestrator project remains pinned above ordinary projects.
+
+The choice lives in SQLite's singleton `general_config` row, exposed through
+`GET /api/general` and `PUT /api/general` as `new_item_position` (`top` or
+`bottom`). It survives restarts and applies to all windows and creation paths,
+including scheduled tasks. Each insert selects `MIN(position) - 1` for top
+or `MAX(position) + 1` for bottom in the same SQL statement. Task positions
+are scoped to their project; archived items count toward both bounds.
+Sidebar and project task lists share these positions. Schedule rows and
+archive history keep their own ordering.

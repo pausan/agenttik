@@ -299,6 +299,13 @@ CREATE TABLE orchestrator_config (
     prompt TEXT NOT NULL
 );
 	`,
+	`
+CREATE TABLE general_config (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    new_item_position TEXT NOT NULL DEFAULT 'top' CHECK (new_item_position IN ('top', 'bottom'))
+);
+INSERT INTO general_config (id) VALUES (1);
+	`,
 }
 
 func migrate(db *sql.DB) error {

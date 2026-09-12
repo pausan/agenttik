@@ -92,8 +92,9 @@ screen, **session** for the row, the route or the CLI flag.
 Claude Code and GitHub Copilot are exercised end to end: they stream into the
 transcript, record per-turn token metrics, report their context window and
 subscription allowance, and resume across turns. Codex is implemented against
-the current CLI JSONL contract and its app-server allowance query answers live,
-but no live subscription turn has ever been run through it.
+the current CLI and generated app-server contracts, including root/child token
+accounting, and its app-server allowance query answers live, but no live
+subscription turn has ever been run through it.
 
 Multiple subscriptions per provider ([050](050-subscription-accounts.md)) are
 exercised end to end against the fake provider, and each real CLI's directory

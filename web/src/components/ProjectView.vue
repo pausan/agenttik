@@ -34,7 +34,7 @@ import {
   startTask,
   stopTask,
 } from "../store";
-import { ago, cost, duration, isoDate, isoLocal, nf, tokens } from "../api";
+import { ago, cost, duration, isoDate, isoLocal, nf, tokens, usageBreakdownRows } from "../api";
 import { fuzzyAny } from "../fuzzy";
 import ScheduleRow from "./ScheduleRow.vue";
 import TaskRow from "./TaskRow.vue";
@@ -113,8 +113,9 @@ const statsRows = computed(() => {
     ["Tasks", nf.format(stats.sessions)],
     ["Running now", nf.format(stats.running)],
     ["Turns", nf.format(stats.turns)],
-    ["Input tokens", tokens(stats.input_tokens)],
-    ["Output tokens", tokens(stats.output_tokens)],
+    ["Task input tokens", tokens(stats.input_tokens)],
+    ["Task output tokens", tokens(stats.output_tokens)],
+    ...usageBreakdownRows(stats),
     ["Cost", cost(stats.cost_usd)],
     ["Agent time", duration(stats.duration_ms)],
     ["Last used", isoDate(stats.last_active_at)],

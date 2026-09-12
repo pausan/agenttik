@@ -43,11 +43,11 @@ Cancelling the context kills the process group, which is how "stop" works.
 Chosen per task; default `workspace`. A web UI cannot answer an interactive
 approval prompt, so the posture is set before the turn starts.
 
-| agenttik | claude | codex |
-|----------|--------|-------|
-| `plan` | `--permission-mode plan` | `--sandbox read-only` |
-| `workspace` (default) | `--permission-mode auto` | `--sandbox workspace-write` |
-| `full` | `--dangerously-skip-permissions` | `--dangerously-bypass-approvals-and-sandbox` |
+| agenttik | claude | Codex app-server sandbox |
+|----------|--------|--------------------------|
+| `plan` | `--permission-mode plan` | `read-only` |
+| `workspace` (default) | `--permission-mode auto` | `workspace-write` |
+| `full` | `--dangerously-skip-permissions` | `danger-full-access` |
 
 `workspace` maps to claude's `auto`, the mode the IDE extensions use for their
 Auto setting, and deliberately not to `acceptEdits`. Both auto-approve file
@@ -84,20 +84,28 @@ Events consumed from stdout JSONL:
 | `...{"delta":{"type":"thinking_delta"}}` | `thinking` |
 | `{"type":"assistant","message":{"content":[{"type":"tool_use",...}]}}` | `tool_use` |
 | `{"type":"user","message":{"content":[{"type":"tool_result",...}]}}` | `tool_result` |
-| `{"type":"result",...}` | `usage` + `done` |
+| `{"type":"result",...}` | `done` with task totals |
 
 Models are aliases (`fable`, `opus`, `sonnet`, `haiku`) so they track the latest
 release without a code change. Efforts: `low`, `medium`, `high`, `xhigh`, `max`.
 
+An assistant line without `parent_tool_use_id` belongs to the root agent: its
+message usage updates the main context and the main-agent partition. A line
+with that id belongs to a child agent, so its usage goes into the subagent
+partition and its independent context never moves the root gauge. The result
+line remains authoritative for whole-task totals; any difference between that
+total and the message partitions is unattributed.
+
 ## Codex
 
 Codex runs through the locally authenticated CLI, so agenttik never reads or
-handles the account credentials. The invocation is:
+handles the account credentials. Normal task turns use its stdio app-server:
 
 ```
-codex exec --json --model <model> -c model_reasoning_effort=<effort> \
-           --sandbox <mode> --cd <workdir>
-codex exec resume <session-id> --json ...
+codex app-server --stdio
+initialize
+thread/start | thread/resume
+turn/start
 ```
 
 The picker offers GPT-6 Astra, GPT-5.6 Sol, GPT-5.6 Terra, and GPT-5.6 Luna,
@@ -106,28 +114,39 @@ each with its documented context window and reasoning levels. Astra offers
 efforts are returned with the model record, so the UI never offers an effort
 that the chosen model does not support.
 
-The prompt is sent on stdin. `resume` uses the session's original sandbox
-policy; the CLI does not accept a new `--sandbox` flag for that subcommand.
-The process working directory remains the project's directory. The CLI's JSONL
-stream maps as follows:
+The prompt is a text input on `turn/start`. Start and resume both receive the
+selected model, project directory, sandbox mode, and a noninteractive approval
+policy; `thread/resume` excludes historical turns from its response. The
+thread id returned by start or resume is the provider session id.
 
-| Line | Mapped to |
-|------|-----------|
-| `{"type":"thread.started","thread_id":...}` | `session_started` |
-| `{"type":"item.started","item":{"type":"command_execution",...}}` | `tool_use` |
-| `{"type":"item.completed","item":{"type":"agent_message","text":...}}` | `text` |
-| `{"type":"item.completed","item":{"type":"reasoning",...}}` | `thinking` |
-| completed command, MCP, or web-search item | `tool_result` |
-| `{"type":"turn.completed","usage":...}` | `usage` + `done` |
-| `turn.failed` or `error` | `error` |
+The app-server's JSONL stream maps as follows:
 
-`input_tokens` includes the cached portion reported separately as
-`cached_input_tokens`; the former is used as the current context size.
+| Notification | Mapped to |
+|--------------|-----------|
+| thread response / `thread/started` | provider session and child thread identity |
+| `item/agentMessage/delta` | root `text` |
+| `item/reasoning/summaryTextDelta` | root `thinking` |
+| root `item/started` tool items | `tool_use` |
+| root `item/completed` tool items | `tool_result` |
+| `thread/tokenUsage/updated` | root context plus root/child task usage |
+| root `turn/completed` | `done`, and `error` when failed |
 
-Implemented against Codex CLI 0.147.0's command syntax and the official JSONL
-event contract. A live subscription turn has never been run, because it would
-spend real account usage; everything below a turn — the argument building, the
-event mapping and the app-server allowance query — has been.
+Token usage is tracked by thread. `last.inputTokens` from the root thread is
+the current main context; task totals are the current-turn deltas of root and
+child `total` counters. Cached input remains a separately reported subset.
+When a persisted root or child is resumed, its existing total is removed from
+the delta. A distinct child thread seen through collaboration items,
+`thread/started`, or usage counts once as a subagent.
+
+Agenttik's own title and outcome requests remain isolated
+`codex exec --json --ephemeral` calls. Its `turn.completed.usage` is an
+aggregate, not a last-prompt measurement, and therefore never feeds the
+context gauge.
+
+Implemented against Codex CLI 0.153.4's generated app-server schema and the
+official JSONL contracts. A live subscription turn has never been run, because
+it would spend real account usage; request construction, usage tracking, event
+mapping and the app-server allowance query are covered without one.
 
 ## GitHub Copilot
 

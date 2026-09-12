@@ -15,8 +15,42 @@ stored on the turn and preferred by the gauge, so a model alias run in its 1M
 variant reads correctly instead of pinning the ring at 100%. The static
 per-model figure is only what to show before the first turn finishes.
 
+The figure inside the ring is **main context**: the input-token size of the
+root agent's latest model request, cached input included. It is not the input
+total for a turn. One task can make many root requests and many child-agent
+requests, so a task-wide count can legitimately be several times one context
+window without any request overflowing it. The button's accessible label and
+hover both name the figure and its percentage; the panel repeats the count,
+window, and percentage in full.
+
+Codex normal turns run through app-server. Its
+`thread/tokenUsage/updated` notification carries both `total` and `last` for
+one thread plus that thread's `modelContextWindow`. Only the root thread's
+`last.inputTokens` moves the ring. Deltas of the root thread's `total` become
+main-agent task usage, and deltas from child thread ids become subagent usage.
+A resumed thread is based at its pre-turn total, so earlier turns do not leak
+into the current one. The aggregate on `codex exec --json`'s
+`turn.completed` event does not contain a last-request field; it is retained
+for isolated title and outcome requests and is never used as context.
+Context values saved before this distinction are left intact on their turn
+records but are not shown by the main gauge; the next confirmed root request
+sets `context_is_main` and replaces the display. Until then the ring shows an
+unknown dash, not a misleading 0%.
+
+Claude Code identifies child messages with `parent_tool_use_id`. Usage from a
+message without one moves the main ring and is accumulated as main-agent
+usage; usage from a message with one is accumulated under subagents and never
+moves the ring.
+
+The panel and both Stats views keep the provider's task totals authoritative,
+then show the attributed portion as `Main agent` and `Subagents (N)`. A
+difference is shown as `Unattributed`: that covers providers without agent
+identity, old turns created before the partition was stored, and any provider
+total not represented by its per-message breakdown. Scoped rows stay hidden
+when no turn in the aggregate has such a breakdown.
+
 A turn routinely runs more than one model — auto mode classifies with a small
-one, a subagent can use another again — so the breakdown is read against the
+one, a subagent can use another again — so Claude's window breakdown is read against the
 alias the session asked for rather than by taking the largest window in it. A
 haiku turn that also touched Sonnet reports both 200k and 1M, and measuring
 23.6k of context against the wrong one of those is the difference between 12%

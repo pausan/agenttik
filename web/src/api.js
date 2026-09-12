@@ -32,6 +32,38 @@ export function tokens(n) {
   return nf.format(n || 0);
 }
 
+// Providers that expose agent identity partition their task totals. Older
+// turns and providers without that signal remain in "Unattributed" instead
+// of being presented as main-agent work.
+export function usageBreakdownRows(stats) {
+  if (!stats?.usage_breakdown_turns) return [];
+  const value = (input, output) => `${tokens(input)} in · ${tokens(output)} out`;
+  const rows = [
+    ["Main agent", value(stats.main_input_tokens, stats.main_output_tokens)],
+  ];
+  const subagentInput = stats.subagent_input_tokens || 0;
+  const subagentOutput = stats.subagent_output_tokens || 0;
+  const subagentCount = stats.subagent_count || 0;
+  if (subagentCount || subagentInput || subagentOutput) {
+    rows.push([
+      subagentCount ? `Subagents (${nf.format(subagentCount)})` : "Subagents",
+      value(subagentInput, subagentOutput),
+    ]);
+  }
+  const unattributedInput = Math.max(
+    0,
+    (stats.input_tokens || 0) - (stats.main_input_tokens || 0) - subagentInput,
+  );
+  const unattributedOutput = Math.max(
+    0,
+    (stats.output_tokens || 0) - (stats.main_output_tokens || 0) - subagentOutput,
+  );
+  if (unattributedInput || unattributedOutput) {
+    rows.push(["Unattributed", value(unattributedInput, unattributedOutput)]);
+  }
+  return rows;
+}
+
 export function duration(ms) {
   if (!ms) return "0s";
   const s = Math.round(ms / 1000);

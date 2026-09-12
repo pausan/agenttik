@@ -2,11 +2,12 @@
 import { computed } from "vue";
 
 import { S, accountLabel, contextWindow } from "../store";
-import { cost, duration, isoDate, nf, tokens } from "../api";
+import { cost, duration, isoDate, nf, tokens, usageBreakdownRows } from "../api";
 
-/* The context row is the last prompt's size against the model's window, not a
-   sum — see ContextPane.vue, which shows the same number as a gauge. */
+/* The context row is the main agent's latest prompt against its model window,
+   not a task sum — see ContextPane.vue, which shows the same number as a gauge. */
 function context(session, stats) {
+  if (!stats.context_tokens) return "not reported";
   const total = contextWindow(session, stats);
   return tokens(stats.context_tokens) + (total ? " / " + tokens(total) : "");
 }
@@ -21,8 +22,9 @@ const rows = computed(() => {
       ["Tasks", nf.format(stats.sessions)],
       ["Running now", nf.format(stats.running)],
       ["Turns", nf.format(stats.turns)],
-      ["Input tokens", tokens(stats.input_tokens)],
-      ["Output tokens", tokens(stats.output_tokens)],
+      ["Task input tokens", tokens(stats.input_tokens)],
+      ["Task output tokens", tokens(stats.output_tokens)],
+      ...usageBreakdownRows(stats),
       ["Cache read", tokens(stats.cache_read_tokens)],
       ["Cache write", tokens(stats.cache_write_tokens)],
       ["Cost", cost(stats.cost_usd)],
@@ -44,9 +46,10 @@ const rows = computed(() => {
     ["Project", s.project_name],
     ["Folder", s.project_path],
     ["Turns", nf.format(stats.turns)],
-    ["Context", context(s, stats)],
-    ["Input tokens", tokens(stats.input_tokens)],
-    ["Output tokens", tokens(stats.output_tokens)],
+    ["Main context", context(s, stats)],
+    ["Task input tokens", tokens(stats.input_tokens)],
+    ["Task output tokens", tokens(stats.output_tokens)],
+    ...usageBreakdownRows(stats),
     ["Cache read", tokens(stats.cache_read_tokens)],
     ["Cache write", tokens(stats.cache_write_tokens)],
     ["Cost", cost(stats.cost_usd)],

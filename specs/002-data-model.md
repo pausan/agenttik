@@ -101,14 +101,25 @@ Task stats shown in the right panel are aggregates over `turns`: turn count,
 summed tokens by kind, summed cost, total agent time.
 
 `context_tokens` is the one number that is **not** summed. It is the size of
-the last prompt the CLI actually sent — cached blocks included — which is what
-the model is holding right now. A turn with twenty tool calls sends twenty
-prompts, so a sum would read many times the window. Claude Code reports its own
-usage on every assistant message; the provider turns the largest part of that
-(`input + cache_read + cache_creation`) into a mid-turn `usage` event, the
-runner keeps the last one, and `SessionStats` reads it back from the newest turn
-that has one. The window it is measured against comes from the provider's model
-list (`agent.Model.ContextWindow`), not from the database.
+the main agent's last prompt — cached blocks included — which is what that
+model is holding right now. A turn with twenty model calls sends twenty
+prompts, and child agents have independent contexts, so a task-wide sum can be
+many times the root window. Providers emit the root value mid-turn, the runner
+keeps the last one, and `SessionStats` reads it from the newest turn that has
+one. `context_window` is the provider's matching root window when available;
+the selected model's `agent.Model.ContextWindow` is only the fallback.
+`context_is_main` is set with a newly provider-confirmed root prompt. Older
+context values are preserved on their turns but excluded from the gauge,
+because they predate agent identity and cannot safely be relabelled.
+
+The aggregate token columns remain the provider's authoritative whole-task
+totals. Ten later columns partition the part a provider can attribute:
+`main_*_tokens`, `subagent_*_tokens`, `subagent_count`, and
+`usage_breakdown` (plus the context verification flag above). The breakdown
+boolean distinguishes a known zero from an old or
+unscoped turn. Session and project stats sum each partition and expose how many
+turns supplied one; the UI derives `unattributed = total - main - subagent`
+rather than pretending every historical or opaque token came from the root.
 
 Project stats are the same aggregate over every task in the project, plus the
 task count, how many are running, and the last activity. Tasks in a project run

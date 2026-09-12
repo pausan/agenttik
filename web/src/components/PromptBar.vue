@@ -429,12 +429,17 @@ function runMenuAction(action) {
         />
         <span class="flex-1" />
         <UPopover :content="{ side: 'top', sideOffset: 8 }">
-          <button type="button" class="usage-summary" aria-label="Context and subscription usage">
+          <button
+            type="button"
+            class="usage-summary"
+            :aria-label="contextUsed && contextTotal ? `Main context ${contextPct}% and subscription usage` : 'Main context not reported and subscription usage'"
+            :title="contextUsed && contextTotal ? `Main context: ${contextPct}%` : 'Main context not reported'"
+          >
             <span
               class="context-ring"
               :style="{ '--context-pct': contextPct + '%', '--context-tone': contextTone }"
             >
-              <span class="context-ring-value">{{ contextTotal ? contextPct + '%' : '—' }}</span>
+              <span class="context-ring-value">{{ contextUsed && contextTotal ? contextPct + '%' : '—' }}</span>
             </span>
             <span v-if="subscriptionWindows.length" class="subscription-limits">
               <span v-for="(window, i) in subscriptionWindows" :key="window.label + i" class="subscription-limit-track">

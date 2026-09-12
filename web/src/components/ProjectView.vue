@@ -36,6 +36,7 @@ import {
 } from "../store";
 import { ago, cost, duration, isoDate, isoLocal, nf, tokens, usageBreakdownRows } from "../api";
 import { fuzzyAny } from "../fuzzy";
+import { beginDrag } from "../drag";
 import ScheduleRow from "./ScheduleRow.vue";
 import TaskRow from "./TaskRow.vue";
 
@@ -208,16 +209,15 @@ const subtitle = (s) => `${s.model}${s.effort ? " · " + s.effort : ""} · ${ago
 
 function onStart(e, id) {
   dragging.value = id;
-  e.dataTransfer.effectAllowed = "move";
-  // Firefox starts no drag at all without data on the transfer.
-  e.dataTransfer.setData("text/plain", id);
+  beginDrag(e, id);
 }
 
 /* onOver moves the dragged row to where the pointer is, so the list shows the
    result before the drop rather than after it. */
 function onOver(e, overID) {
-  if (!dragging.value || overID === dragging.value) return;
+  if (!dragging.value) return;
   e.preventDefault();
+  if (overID === dragging.value) return;
   const tasks = props.tab.data.sessions;
   const from = tasks.findIndex((s) => s.id === dragging.value);
   const to = tasks.findIndex((s) => s.id === overID);
@@ -284,7 +284,6 @@ async function doDelete() {
           v-for="row in visible"
           :key="row.task.id"
           class="flex items-center gap-1"
-          :class="dragging === row.task.id ? 'opacity-40' : ''"
           :draggable="!row.archived && renaming !== row.task.id && !filtering"
           @dragstart="onStart($event, row.task.id)"
           @dragover="onOver($event, row.task.id)"

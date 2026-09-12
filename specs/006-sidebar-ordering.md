@@ -24,6 +24,17 @@ browser drag and drop. The list moves below the pointer immediately and one
 request is sent on drop; if the server refuses it, the row goes back where it
 was.
 
+All draggable rows and tabs stay fully opaque. `web/src/drag.js` supplies a
+shared transparent drag preview, so the browser has no visible ghost to fade
+or animate back after release. The row stays at its current position
+immediately, including in the project task list and the centre tab strip.
+The row under the pointer accepts the drop even when it is the dragged row
+itself after reordering.
+
+`e2e/tests/drag-drop.spec.js` uses real mouse drags on sidebar projects and
+tasks, project-page tasks, and file tabs. It checks accepted drops onto the
+moved row, full opacity, one order request, and the order after a reload.
+
 Project order lives in `projects.position` and task order in
 `sessions.position`, which serves the sidebar and the project page alike.
 Positions are written `1..n`, and a row created afterwards takes the next

@@ -14,6 +14,7 @@ import {
   selectTab,
   startCurrentTask,
 } from "../store";
+import { beginDrag } from "../drag";
 import Transcript from "./Transcript.vue";
 import PromptBar from "./PromptBar.vue";
 import StatusDot from "./StatusDot.vue";
@@ -68,16 +69,15 @@ const dragging = ref("");
 /* The strip reorders under the pointer, so where a tab is when it is let go
    is where it stays. moveTab refuses to mix kinds. */
 function onOver(e, id) {
-  if (!dragging.value || dragging.value === id) return;
+  if (!dragging.value) return;
   e.preventDefault();
+  if (dragging.value === id) return;
   moveTab(dragging.value, id);
 }
 
 function onStart(e, id) {
   dragging.value = id;
-  e.dataTransfer.effectAllowed = "move";
-  // Firefox starts no drag at all without data on the transfer.
-  e.dataTransfer.setData("text/plain", id);
+  beginDrag(e, id);
 }
 
 function onEnd() {
@@ -121,10 +121,7 @@ const badge = computed(() => {
           :aria-label="item.name"
           :title="item.title"
           class="flex shrink-0 cursor-grab items-center gap-1.5 border-b-2 px-2.5 py-2 active:cursor-grabbing"
-          :class="[
-            item.id === S.activeTab ? item.colors.edge : 'border-transparent',
-            dragging === item.id ? 'opacity-40' : '',
-          ]"
+          :class="item.id === S.activeTab ? item.colors.edge : 'border-transparent'"
           @click="selectTab(item.id)"
           @dragstart="onStart($event, item.id)"
           @dragover="onOver($event, item.id)"

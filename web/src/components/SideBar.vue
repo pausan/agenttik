@@ -21,6 +21,7 @@ import {
   toggleProjectTasks,
 } from "../store";
 import { SEGMENTED } from "../ui";
+import { beginDrag } from "../drag";
 import FileTree from "./FileTree.vue";
 import ScheduleRow from "./ScheduleRow.vue";
 import TaskRow from "./TaskRow.vue";
@@ -136,20 +137,15 @@ const activeSchedule = computed(() =>
   S.owner?.kind === "schedule" ? S.owner.scheduleID : 0,
 );
 
-function beginDrag(e, value) {
-  e.dataTransfer.effectAllowed = "move";
-  // Firefox does not start a drag unless the transfer carries data.
-  e.dataTransfer.setData("text/plain", String(value));
-}
-
 function onProjectStart(e, id) {
   draggingProject.value = id;
   beginDrag(e, id);
 }
 
 function onProjectOver(e, overID) {
-  if (!draggingProject.value || draggingProject.value === overID) return;
+  if (!draggingProject.value) return;
   e.preventDefault();
+  if (draggingProject.value === overID) return;
   const from = S.projects.findIndex((p) => p.id === draggingProject.value);
   const to = S.projects.findIndex((p) => p.id === overID);
   if (from < 0 || to < 0) return;
@@ -169,9 +165,10 @@ function onTaskStart(e, projectID, taskID) {
 
 function onTaskOver(e, projectID, overID) {
   const dragged = draggingTask.value;
-  if (!dragged || dragged.projectID !== projectID || dragged.taskID === overID) return;
+  if (!dragged || dragged.projectID !== projectID) return;
   e.stopPropagation();
   e.preventDefault();
+  if (dragged.taskID === overID) return;
   const project = S.projects.find((p) => p.id === projectID);
   if (!project) return;
   const from = project.recent_sessions.findIndex((s) => s.id === dragged.taskID);
@@ -229,10 +226,7 @@ function onTaskDrop(e) {
             <div
               draggable="true"
               class="mb-0.5 flex cursor-grab items-start gap-1 rounded-[var(--ui-radius)] px-1.5 py-1 active:cursor-grabbing"
-              :class="[
-                draggingProject === p.id ? 'opacity-40' : '',
-                S.activeProjectID === p.id ? 'bg-primary/10' : 'hover:bg-elevated',
-              ]"
+              :class="S.activeProjectID === p.id ? 'bg-primary/10' : 'hover:bg-elevated'"
               @dragstart="onProjectStart($event, p.id)"
               @dragend="onProjectDrop"
             >
@@ -289,10 +283,7 @@ function onTaskDrop(e) {
             v-if="!folded(p)"
             v-for="s in p.recent_sessions"
             :key="s.id"
-            :class="[
-              draggingTask?.taskID === s.id ? 'opacity-40' : '',
-              renaming === s.id ? '' : 'cursor-grab active:cursor-grabbing',
-            ]"
+            :class="renaming === s.id ? '' : 'cursor-grab active:cursor-grabbing'"
             :draggable="renaming !== s.id"
             @dragstart.stop="onTaskStart($event, p.id, s.id)"
             @dragover="onTaskOver($event, p.id, s.id)"

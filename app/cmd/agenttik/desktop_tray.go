@@ -5,7 +5,6 @@ package main
 import (
 	"context"
 	_ "embed"
-	"fmt"
 	"log"
 	"runtime"
 	"sync"
@@ -45,16 +44,8 @@ func (w *window) startTray(config store.DesktopConfig) func() {
 		w.trayFailed(err)
 		return func() {}
 	}
-	// Ctrl+Q is the one fixed global shortcut. Register it before the
-	// user-configured shortcut so a setting cannot take it away from quit.
-	stopQuit, err := registerToggle("Ctrl+Q", w.quit)
-	if err != nil {
-		w.trayFailed(fmt.Errorf("quit shortcut: %w", err))
-		return func() {}
-	}
 	stopToggle, err := registerToggle(config.ToggleShortcut, w.toggle)
 	if err != nil {
-		stopQuit()
 		w.trayFailed(err)
 		return func() {}
 	}
@@ -91,7 +82,6 @@ func (w *window) startTray(config store.DesktopConfig) func() {
 	// Called on the main OS thread, before Wails takes over its native loop.
 	start()
 	return func() {
-		stopQuit()
 		stopToggle()
 		ready.Wait()
 		close(done)

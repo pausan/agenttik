@@ -101,8 +101,9 @@ type window struct {
 
 func (w *window) opened(ctx context.Context) {
 	w.mu.Lock()
-	defer w.mu.Unlock()
 	w.ctx = ctx
+	w.mu.Unlock()
+	runtime.EventsOn(ctx, "agenttik:quit", func(...interface{}) { w.quit() })
 }
 
 // present raises the window and says whether there was one. Wails queues both

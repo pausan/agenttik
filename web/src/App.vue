@@ -117,14 +117,14 @@ useErrors(useToast());
    is read from the physical code: on some layouts Alt and a digit produce a
    different character. */
 function onKey(e) {
-  // In tray mode the native shell registers this chord globally and calls
-  // window.quit, so Wails' close hook cannot turn it back into a hide. The
-  // focused-window path covers desktop launches without tray mode; browsers
-  // have no injected runtime and keep their own Ctrl+Q behaviour.
+  // Emit a native quit request so the desktop shell can mark the close as
+  // intentional before Wails runs the close-to-tray hook. This is an
+  // app-window shortcut, not a global registration; browsers have no
+  // injected runtime and keep their own Ctrl+Q behaviour.
   if (e.code === "KeyQ" && e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey) {
-    if (!window.runtime?.Quit) return;
+    if (!window.runtime?.EventsEmit) return;
     e.preventDefault();
-    if (!e.repeat) window.runtime.Quit();
+    if (!e.repeat) window.runtime.EventsEmit("agenttik:quit");
     return;
   }
   if (hit(e, "task.prev")) return run(e, () => selectAdjacentSidebarRow(-1));

@@ -16,7 +16,8 @@ opens on the picture when the remembered view is one an image cannot show, the
 tab is `readOnly` from the moment it is built so no Save button appears, and
 `gotoLine` leaves it alone since a line means nothing in a picture. Its text is
 never fetched: `loadFileTab` short-circuits, and the bytes go straight from the
-new endpoint into the element that draws them.
+raw endpoint into the element that draws them. A separate small metadata
+response supplies the header's [file size and color depth](059-file-information.md).
 
 **An image's Diff is the two pictures, side by side, and only that.** `ImageDiff`
 replaces `FileDiff` for an image and carries no unified/split toggle: there is

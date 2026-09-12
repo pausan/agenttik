@@ -11,11 +11,12 @@
    The bar underneath is the file's own: a conversation's prompt box has no
    business under a file, so MainPanel leaves it out and this takes its
    place. */
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 
 import { canPreview, isDirty, isFont, isImage, saveFile, setFileMode } from "../store";
 import { langOf } from "../highlight";
-import { nf } from "../api";
+import { api, nf } from "../api";
+import { fileInfoLabel } from "../file-info";
 import { SEGMENTED } from "../ui";
 import FileDiff from "./FileDiff.vue";
 import FileEditor from "./FileEditor.vue";
@@ -26,6 +27,32 @@ const props = defineProps({ tab: { type: Object, required: true } });
 
 const image = computed(() => isImage(props.tab.path));
 const font = computed(() => isFont(props.tab.path));
+
+const info = ref(null);
+const dimensions = ref(null);
+const details = computed(() => fileInfoLabel(info.value, dimensions.value));
+watch(() => props.tab.id, () => { dimensions.value = null; });
+// A deleted diff describes the old file. A commit must never show today's
+// metadata. Ignore a response if the reusable tab has moved to another file.
+watch(
+  () => [props.tab.id, props.tab.content, props.tab.diff],
+  async (_, __, onCleanup) => {
+    let stale = false;
+    onCleanup(() => { stale = true; });
+    info.value = null;
+    const tab = props.tab;
+    const deleted = /^deleted file mode /m.test(tab.diff || "");
+    const rev = deleted ? (tab.commit ? tab.commit + "^" : "HEAD") : tab.commit;
+    const query = `path=${encodeURIComponent(tab.path)}${rev ? `&rev=${encodeURIComponent(rev)}` : ""}`;
+    try {
+      const value = await api("GET", `/api/projects/${tab.projectID}/file-info?${query}`);
+      if (!stale) info.value = value;
+    } catch {
+      // A missing file or unreadable header must not hide its diff or editor.
+    }
+  },
+  { immediate: true },
+);
 
 /* A file opened from a commit has one view. There is nothing to edit in a
    revision that has already been made, and its text is not what is on disk,
@@ -81,10 +108,11 @@ const stat = computed(() => {
 
 <template>
   <div class="flex min-h-0 flex-1 flex-col">
-    <div class="flex shrink-0 items-center gap-3 border-b border-default bg-default px-5 py-1.5">
+    <div class="flex shrink-0 flex-wrap items-center gap-3 border-b border-default bg-default px-5 py-1.5">
       <span class="path-clip min-w-0 flex-1 truncate font-mono text-xs text-dimmed">
         <span>{{ tab.path }}</span>
       </span>
+      <span v-if="details" class="shrink-0 font-mono text-xs text-dimmed" aria-label="File information">{{ details }}</span>
       <span v-if="tab.commit" class="shrink-0 font-mono text-xs text-primary" title="Shown as this commit changed it">
         @ {{ tab.commit }}
       </span>
@@ -129,8 +157,8 @@ const stat = computed(() => {
         No changes to this file.
       </p>
       <FileDiff v-else-if="body === 'diff'" :diff="tab.diff" />
-      <ImageDiff v-else-if="body === 'images'" :tab="tab" />
-      <FilePreview v-else-if="body === 'preview'" :tab="tab" />
+      <ImageDiff v-else-if="body === 'images'" :tab="tab" @dimensions="dimensions = $event" />
+      <FilePreview v-else-if="body === 'preview'" :tab="tab" @dimensions="dimensions = $event" />
       <FileEditor v-else :tab="tab" />
     </div>
 

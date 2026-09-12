@@ -15,6 +15,7 @@ import { rawURL } from "../store";
 import ImageFrame from "./ImageFrame.vue";
 
 const props = defineProps({ tab: { type: Object, required: true } });
+const emit = defineEmits(["dimensions"]);
 
 const before = computed(() => (props.tab.commit ? props.tab.commit + "^" : "HEAD"));
 const after = computed(() => props.tab.commit || "");
@@ -35,6 +36,7 @@ const deleted = computed(() => /^deleted file mode /m.test(props.tab.diff || "")
         :src="rawURL(tab, before)"
         :label="tab.commit ? 'before' : 'HEAD'"
         missing="No image on this side."
+        @dimensions="deleted && emit('dimensions', $event)"
       />
     </div>
     <div class="flex min-h-0 min-w-0 flex-1">
@@ -44,6 +46,7 @@ const deleted = computed(() => /^deleted file mode /m.test(props.tab.diff || "")
         :src="rawURL(tab, after)"
         :label="tab.commit ? 'after' : 'working tree'"
         missing="No image on this side."
+        @dimensions="emit('dimensions', $event)"
       />
     </div>
   </div>

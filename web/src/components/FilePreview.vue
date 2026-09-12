@@ -25,6 +25,7 @@ import FontPreview from "./FontPreview.vue";
 import ImageFrame from "./ImageFrame.vue";
 
 const props = defineProps({ tab: { type: Object, required: true } });
+const emit = defineEmits(["dimensions"]);
 
 const text = computed(() => props.tab.edited ?? props.tab.content ?? "");
 const isHTML = computed(() => /\.html?$/i.test(props.tab.path));
@@ -47,8 +48,8 @@ const svg = computed(() => "data:image/svg+xml;charset=utf-8," + encodeURICompon
   ></iframe>
 
   <div v-else-if="isSVG || image" class="flex h-full min-h-0 px-5 py-4">
-    <ImageFrame v-if="isSVG" :src="svg" fit missing="This is not an SVG a browser can draw." />
-    <ImageFrame v-else :src="rawURL(tab)" />
+    <ImageFrame v-if="isSVG" :src="svg" fit missing="This is not an SVG a browser can draw." @dimensions="emit('dimensions', $event)" />
+    <ImageFrame v-else :src="rawURL(tab)" @dimensions="emit('dimensions', $event)" />
   </div>
 
   <FontPreview v-else-if="isFont(tab.path)" :src="rawURL(tab)" />

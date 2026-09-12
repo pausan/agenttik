@@ -3,10 +3,10 @@
    image diff uses two.
 
    The size underneath is read off the element once the browser has decoded
-   it, which is the only place it is known — and in a diff it is most of the
-   answer, since an image that changed shape says so before anything else
-   does. For the same reason a raster image is never scaled up: two pictures
-   both stretched to their pane would look the same size when they are not.
+   it. In a diff it is most of the answer, since an image that changed shape
+   says so before anything else does. For the same reason a raster image is
+   never scaled up: two pictures both stretched to their pane would look the
+   same size when they are not.
    A vector has no pixels to blur, so `fit` lets an SVG fill the pane.
 
    A source that fails to load is ordinary on one side of a diff — a file just
@@ -22,6 +22,7 @@ const props = defineProps({
 });
 
 const size = ref("");
+const emit = defineEmits(["dimensions"]);
 const failed = ref(false);
 
 /* The same component serves the next file opened in the tab, so the size and
@@ -39,6 +40,7 @@ watch(
 function onLoad(e) {
   const { naturalWidth: w, naturalHeight: h } = e.target;
   size.value = w && h ? `${w} × ${h}` : "";
+  emit("dimensions", { width: w, height: h });
 }
 </script>
 

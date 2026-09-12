@@ -178,6 +178,7 @@ func (s *Server) routes() {
 	api.Get("/projects/:id/commit", s.projectCommit)
 	api.Get("/projects/:id/commit/diff", s.projectCommitDiff)
 	api.Get("/projects/:id/file", s.projectFile)
+	api.Get("/projects/:id/file-info", s.projectFileInfo)
 	api.Put("/projects/:id/file", s.saveProjectFile)
 	api.Post("/projects/:id/entry", s.createEntry)
 	api.Post("/projects/:id/entry/rename", s.renameEntry)

@@ -90,41 +90,49 @@ watch(open, async (on) => {
         </nav>
 
         <div class="min-h-0 flex-1 overflow-auto pr-1">
-          <GeneralSettings
-            v-show="section === 'general'"
-            :filter="filter"
-            @count="counts.general = $event"
-          />
-          <ProjectSettings
-            v-show="section === 'projects'"
-            :filter="filter"
-            @count="counts.projects = $event"
-          />
-          <AppearanceSettings
-            v-show="section === 'appearance'"
-            :filter="filter"
-            @count="counts.appearance = $event"
-          />
-          <ModelSettings
-            v-show="section === 'models'"
-            :filter="filter"
-            @count="counts.models = $event"
-          />
-          <SubscriptionSettings
-            v-show="section === 'subscriptions'"
-            :filter="filter"
-            @count="counts.subscriptions = $event"
-          />
-          <ServerSettings
-            v-show="section === 'server'"
-            :filter="filter"
-            @count="counts.server = $event"
-          />
-          <ShortcutSettings
-            v-show="section === 'shortcuts'"
-            :filter="filter"
-            @count="counts.shortcuts = $event"
-          />
+          <div v-show="section === 'general'">
+            <GeneralSettings
+              :filter="filter"
+              @count="counts.general = $event"
+            />
+          </div>
+          <div v-show="section === 'projects'">
+            <ProjectSettings
+              :filter="filter"
+              @count="counts.projects = $event"
+            />
+          </div>
+          <div v-show="section === 'appearance'">
+            <AppearanceSettings
+              :filter="filter"
+              @count="counts.appearance = $event"
+            />
+          </div>
+          <div v-show="section === 'models'">
+            <ModelSettings
+              :filter="filter"
+              @count="counts.models = $event"
+            />
+          </div>
+          <div v-show="section === 'subscriptions'">
+            <SubscriptionSettings
+              :filter="filter"
+              @count="counts.subscriptions = $event"
+            />
+          </div>
+          <div v-show="section === 'server'">
+            <ServerSettings
+              :active="open && section === 'server'"
+              :filter="filter"
+              @count="counts.server = $event"
+            />
+          </div>
+          <div v-show="section === 'shortcuts'">
+            <ShortcutSettings
+              :filter="filter"
+              @count="counts.shortcuts = $event"
+            />
+          </div>
         </div>
       </div>
     </template>

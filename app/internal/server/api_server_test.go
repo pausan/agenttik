@@ -170,16 +170,67 @@ func TestLockTurnsOffAgain(t *testing.T) {
 	}
 }
 
-// TestLockNeedsAPasswordFirst checks the switch cannot produce a lock that
-// asks for something nothing has ever set.
-func TestLockNeedsAPasswordFirst(t *testing.T) {
-	s, _ := exposed(t)
+func TestLockWithoutPasswordBlocksAccess(t *testing.T) {
+	s, addr := exposed(t)
 	resp := do(t, s, "PUT", "/api/server/auth", map[string]any{"enabled": true})
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", resp.StatusCode)
 	}
-	if info := decode[serverConfigInfo](t, do(t, s, "GET", "/api/server", nil)); info.AuthEnabled {
-		t.Error("the lock was turned on with no password")
+	info := decode[serverConfigInfo](t, resp)
+	if !info.AuthEnabled || info.HasPassword || info.TOTPSecret == "" {
+		t.Fatalf("want enabled lock with generated seed and no password: %+v", info)
+	}
+	saved := decode[serverConfigInfo](t, do(t, s, "GET", "/api/server", nil))
+	if !saved.AuthEnabled || saved.TOTPSecret != info.TOTPSecret {
+		t.Fatal("lock was not persisted")
+	}
+	client := browser()
+	for _, path := range []string{"/api/server", "/api/server/auth/code"} {
+		r := fetch(t, client, addr+path, "application/json")
+		r.Body.Close()
+		if r.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("%s: status = %d", path, r.StatusCode)
+		}
+	}
+	code, _ := netauth.Code(info.TOTPSecret, time.Now())
+	r, err := client.PostForm(addr+"/__auth/login", url.Values{"password": {""}, "code": {code}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Body.Close()
+	if r.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("empty password login: %d", r.StatusCode)
+	}
+}
+
+func TestServerCurrentCode(t *testing.T) {
+	s, _ := exposed(t)
+	missing := do(t, s, "GET", "/api/server/auth/code", nil)
+	missing.Body.Close()
+	if missing.StatusCode != http.StatusNotFound {
+		t.Fatalf("no seed: %d", missing.StatusCode)
+	}
+	seed := lockTheServer(t, s)
+	before := time.Now()
+	resp := do(t, s, "GET", "/api/server/auth/code", nil)
+	if resp.Header.Get("Cache-Control") != "no-store" {
+		t.Fatal("code must not be cached")
+	}
+	var result struct {
+		Code           string `json:"code"`
+		RefreshAfterMS int64  `json:"refresh_after_ms"`
+	}
+	result = decode[struct {
+		Code           string `json:"code"`
+		RefreshAfterMS int64  `json:"refresh_after_ms"`
+	}](t, resp)
+	first, _ := netauth.Code(seed, before)
+	last, _ := netauth.Code(seed, time.Now())
+	if result.Code != first && result.Code != last {
+		t.Fatalf("wrong current code: %q", result.Code)
+	}
+	if result.RefreshAfterMS < 0 || result.RefreshAfterMS > 30000 {
+		t.Fatalf("invalid refresh delay: %d", result.RefreshAfterMS)
 	}
 }
 

@@ -154,6 +154,7 @@ func (s *Server) routes() {
 	api.Put("/server/auth", s.putServerAuth)
 	api.Post("/server/auth/totp", s.resetServerTOTP)
 	api.Get("/server/auth/totp.png", s.serverTOTPQR)
+	api.Get("/server/auth/code", s.serverTOTPCode)
 
 	api.Get("/projects", s.listProjects)
 	api.Post("/projects", s.createProject)

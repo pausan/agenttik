@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -163,9 +164,6 @@ func (s *Server) putServerAuth(c *fiber.Ctx) error {
 		cfg.TOTPSecret = secret
 	}
 	if body.Enabled {
-		if cfg.PasswordHash == "" {
-			return badRequest("set a password before asking for one")
-		}
 		if cfg.TOTPSecret == "" {
 			secret, err := netauth.NewSecret()
 			if err != nil {
@@ -230,4 +228,25 @@ func (s *Server) serverTOTPQR(c *fiber.Ctx) error {
 	c.Type("png")
 	c.Set("Cache-Control", "no-store")
 	return c.Send(png)
+}
+
+// serverTOTPCode uses the server clock, just like login verification.
+func (s *Server) serverTOTPCode(c *fiber.Ctx) error {
+	if s.network == nil {
+		return badRequest("nothing to configure: this is a web launch")
+	}
+	cfg, err := s.store.GetServerConfig()
+	if err != nil {
+		return err
+	}
+	if cfg.TOTPSecret == "" {
+		return fiber.NewError(fiber.StatusNotFound, "no authenticator seed has been set")
+	}
+	now := time.Now()
+	code, err := netauth.Code(cfg.TOTPSecret, now)
+	if err != nil {
+		return err
+	}
+	c.Set("Cache-Control", "no-store")
+	return c.JSON(fiber.Map{"code": code, "refresh_after_ms": now.Truncate(netauth.Period).Add(netauth.Period).Sub(now).Milliseconds()})
 }

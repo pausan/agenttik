@@ -14,9 +14,13 @@ import {
   setServerAuth,
   setServerConfig,
 } from "../../store";
+import { api } from "../../api";
 import { fuzzyAny } from "../../fuzzy";
 
-const props = defineProps({ filter: { type: String, default: "" } });
+const props = defineProps({
+  filter: { type: String, default: "" },
+  active: { type: Boolean, default: false },
+});
 const emit = defineEmits(["count"]);
 
 const rows = computed(() =>
@@ -115,29 +119,13 @@ async function copyLink() {
   window.setTimeout(() => (copied.value = false), 1200);
 }
 
-/* ------------------------------------------------------------------ the lock
-
-   Turning it on needs a password, which cannot be read back out of the
-   server, so the switch alone is not enough to do it with: asking for one
-   opens the fields instead, and the first saved password is what actually
-   turns it on. Turning it off is immediate — there is nothing to collect. */
-
-const setUp = ref(false); // the password fields are open
+/* Enabling the lock takes effect even before a password is saved. */
 const password = ref("");
 const confirm = ref("");
 const busy = ref(false);
 
-const showAuth = computed(() => S.serverConfig.auth_enabled || setUp.value);
-
 function toggleAuth(on) {
-  if (!on) {
-    setUp.value = false;
-    apply({ enabled: false });
-    return;
-  }
-  // A password already set is all it takes; otherwise collect one first.
-  if (S.serverConfig.has_password) apply({ enabled: true });
-  else setUp.value = true;
+  apply({ enabled: on });
 }
 
 async function apply(patch) {
@@ -163,7 +151,6 @@ async function savePassword() {
   const pw = password.value;
   password.value = confirm.value = "";
   await apply({ enabled: true, password: pw });
-  setUp.value = false;
 }
 
 /* The seed field is the whole of "reset it or set it": it shows the current
@@ -202,6 +189,37 @@ async function copySeed() {
   seedCopied.value = true;
   window.setTimeout(() => (seedCopied.value = false), 1200);
 }
+
+// Only poll while this pane is visible. Cleanup also discards old seed responses.
+const currentCode = ref("");
+watch(
+  () => [props.active, rows.value.length, S.serverConfig.auth_enabled, S.serverConfig.totp_secret],
+  ([active, visible, enabled, secret], _, onCleanup) => {
+    let stopped = false;
+    let timer;
+    currentCode.value = "";
+    onCleanup(() => {
+      stopped = true;
+      clearTimeout(timer);
+    });
+    if (!active || !visible || !enabled || !secret) return;
+    async function refresh() {
+      let delay = 30000;
+      try {
+        const result = await api("GET", "/api/server/auth/code");
+        if (stopped) return;
+        currentCode.value = result.code;
+        delay = Math.max(100, result.refresh_after_ms);
+      } catch {
+        if (stopped) return;
+        currentCode.value = "";
+      }
+      timer = setTimeout(refresh, delay);
+    }
+    refresh();
+  },
+  { immediate: true },
+);
 
 /* The QR is an endpoint rather than a data URI, so the seed itself is the
    cache key: it changes exactly when the picture has to. */
@@ -284,7 +302,10 @@ const qr = computed(() =>
           in, so a forgotten password locks nobody out of here.
         </p>
 
-        <div v-if="showAuth" class="mt-3.5">
+        <div v-if="S.serverConfig.auth_enabled" class="mt-3.5">
+          <p v-if="!S.serverConfig.has_password" class="mb-2 text-xs text-warning">
+            Browser access is blocked until you save a password.
+          </p>
           <div class="text-xs font-medium text-muted">
             {{ S.serverConfig.has_password ? "Change the password" : "Password" }}
           </div>
@@ -348,6 +369,11 @@ const qr = computed(() =>
                   @click="copySeed"
                 />
               </div>
+              <div class="mt-2">
+                <div class="text-xs text-muted">Current code</div>
+                <output aria-label="Current code" class="font-mono text-lg tracking-widest">{{ currentCode || "------" }}</output>
+                <p class="text-xs text-dimmed">Refreshes every 30 seconds.</p>
+              </div>
               <UButton
                 label="New seed"
                 icon="i-lucide-refresh-cw"
@@ -359,7 +385,7 @@ const qr = computed(() =>
                 @click="rollSeed"
               />
               <p class="mt-2 max-w-80 text-xs text-dimmed">
-                A new seed, or a new password, signs every browser out and has to be paired again.
+                Changing the password or seed signs every browser out. A new seed needs pairing again.
               </p>
             </div>
           </div>

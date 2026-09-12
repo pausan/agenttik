@@ -89,9 +89,7 @@ func code(key []byte, counter uint64) string {
 	return fmt.Sprintf("%0*d", digits, n%1_000_000)
 }
 
-// Code is what the authenticator shows for secret at time t. Exported for
-// the tests and for nothing else — the app never needs to produce a code,
-// only to check one.
+// Code is what the authenticator and the settings pane show for secret at time t.
 func Code(secret string, t time.Time) (string, error) {
 	key, err := b32.DecodeString(secret)
 	if err != nil {

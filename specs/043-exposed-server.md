@@ -120,10 +120,14 @@ like General's Enter/Enqueue pair. Other is different: picking it only
 reveals the field, because a fresh "Other" and whatever well-known host was
 saved before are otherwise indistinguishable — it applies on blur, once a
 host has actually been typed. The port field validates its range client-side
-before ever calling `PUT`. The lock's switch is the one control that cannot
-apply on the spot in both directions: a password cannot be read back out of
-the server, so asking for one opens the fields and the first saved password
-is what arms it, while turning it off has nothing to collect and goes at once.
+before ever calling `PUT`. The lock switch applies in both directions immediately.
+Enabling it generates a random TOTP seed if none exists. Without a saved
+password, browser access is blocked and the pane explains how to unlock it.
+The current six-digit code appears beside the seed and QR. While the Server
+pane is visible, `GET /api/server/auth/code` returns the server-clock code and
+milliseconds until the next 30-second boundary, when the pane refreshes it.
+The endpoint uses `Cache-Control: no-store` and the same access gate as settings.
+Polling stops when the pane or dialog closes; failed refreshes clear the code.
 
 ## How the lock is built
 
@@ -141,7 +145,9 @@ refuses anything at or below it. Six digits are good for a minute and a half
 either side of their own step, which is a long while for somebody who read
 them off a screen to type them in as well.
 
-**Passwords are bcrypt, and guessing is throttled.** bcrypt's default cost
+**Passwords are bcrypt, and guessing is throttled.** Each stored bcrypt string
+contains its random salt, cost, and hash; plaintext passwords are never stored
+or returned by the API. bcrypt's default cost
 puts about a tenth of a second under every attempt on its own; five wrong
 ones from an address lock that address out for a quarter of an hour, counted
 from the connection's own remote address rather than a forwarding header,
@@ -158,11 +164,8 @@ also what keeps another site from making the API do anything with that
 cookie, since no CSRF token is minted anywhere.
 
 **A half-set lock opens for nobody.** Enabled with no password, or no seed,
-refuses every login rather than letting everybody through. `PUT
-/api/server/auth` will not arm the switch without a password, and rolls a
-seed rather than making the user find one, so the state is not reachable
-through the UI — but an interrupted write or a hand-edited database is, and
-the gate is the wrong place to be optimistic.
+refuses every login rather than letting everybody through. This is a supported
+setup state: the switch stays enabled while a password is being added.
 
 **A browser gets a page; everything else gets a status.** An unauthenticated
 navigation is answered with a self-contained login form and nothing else —

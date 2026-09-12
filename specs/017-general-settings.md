@@ -74,3 +74,7 @@ in Appearance, because the sidebar it changes is visible behind the dialog.
 
 Both panes count their rows for the rail's filter like the other three, so
 `enqueue` narrows to General 2 and Shortcuts 1, and `fold` to General 2.
+
+Pane visibility is applied to a wrapper in the settings dialog, so both
+General sections disappear when another sidebar section is selected. Panes
+stay mounted to keep filter match counts current.

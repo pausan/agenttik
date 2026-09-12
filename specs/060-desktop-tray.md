@@ -36,7 +36,10 @@ reports an error in Settings and the process log; closing still exits normally.
 Wails retains its event loop. `cardinalby/go-systray` uses its external-loop
 entry point on the main OS thread; its macOS delegate has a distinct name and
 does not replace Wails' delegate. The tray embeds PNG/ICO exports of
-`web/public/agenttik.svg` independently of the UI build.
+`web/public/agenttik.svg` independently of the UI build. The PNG is an 8-bit
+RGBA browser rendering because simpler SVG rasterizers can discard the logo's
+filtered gradient marks and leave an apparently blank dark tile. The ICO
+contains 16, 24, 32, 48 and 64 px versions for Windows scaling.
 
 Linux uses the StatusNotifier/AppIndicator tray protocol and a dedicated X11
 connection for the global key grab, including Caps Lock/Num Lock variants.

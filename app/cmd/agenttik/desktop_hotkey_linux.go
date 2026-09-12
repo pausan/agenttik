@@ -3,15 +3,41 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"strings"
+	"sync"
 
+	"github.com/BurntSushi/xgb"
 	"github.com/BurntSushi/xgb/xproto"
 	"github.com/BurntSushi/xgbutil"
 	"github.com/BurntSushi/xgbutil/keybind"
 	"github.com/godbus/dbus/v5"
 )
+
+var quietXGBClosedEventLog sync.Once
+
+// xgb reports a closed event channel as an invalid nil event before returning
+// the documented (nil, nil) result from WaitForEvent. Keep real XGB messages,
+// but drop that one expected shutdown diagnostic.
+type xgbLogWriter struct {
+	dst io.Writer
+}
+
+func (w xgbLogWriter) Write(p []byte) (int, error) {
+	if bytes.Contains(p, []byte("Invalid event/error type: <nil>")) {
+		return len(p), nil
+	}
+	return w.dst.Write(p)
+}
+
+func suppressClosedXGBEventLog() {
+	quietXGBClosedEventLog.Do(func() {
+		xgb.Logger.SetOutput(xgbLogWriter{dst: xgb.Logger.Writer()})
+	})
+}
 
 func checkTray() error {
 	if os.Getenv("XDG_SESSION_TYPE") == "wayland" || os.Getenv("WAYLAND_DISPLAY") != "" {
@@ -30,6 +56,7 @@ func checkTray() error {
 }
 
 func registerToggle(chord string, toggle func()) (func(), error) {
+	suppressClosedXGBEventLog()
 	xu, err := xgbutil.NewConn()
 	if err != nil {
 		return nil, fmt.Errorf("global shortcut: %w", err)

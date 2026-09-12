@@ -3,11 +3,33 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"os/exec"
 	"testing"
 	"time"
 )
+
+func TestXGBLogWriter(t *testing.T) {
+	var got bytes.Buffer
+	w := xgbLogWriter{dst: &got}
+
+	message := []byte("XGB: xgb.go:526: Invalid event/error type: <nil>\n")
+	if n, err := w.Write(message); err != nil || n != len(message) {
+		t.Fatalf("discarded write: n=%d err=%v", n, err)
+	}
+	if got.Len() != 0 {
+		t.Fatalf("closed-event diagnostic was forwarded: %q", got.String())
+	}
+
+	other := []byte("XGB: a real error\n")
+	if n, err := w.Write(other); err != nil || n != len(other) {
+		t.Fatalf("forwarded write: n=%d err=%v", n, err)
+	}
+	if got.String() != string(other) {
+		t.Fatalf("forwarded %q, want %q", got.String(), other)
+	}
+}
 
 // Run on a private X server: xvfb-run go test -tags "desktop production webkit2_41" ./app/cmd/agenttik -run TestGlobalToggle
 func TestGlobalToggle(t *testing.T) {

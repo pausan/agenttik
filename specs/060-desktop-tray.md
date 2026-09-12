@@ -44,9 +44,11 @@ contains 16, 24, 32, 48 and 64 px versions for Windows scaling.
 Linux uses the StatusNotifier/AppIndicator tray protocol and a dedicated X11
 connection for the global key grab, including Caps Lock/Num Lock variants.
 The event reader blocks while idle. Matching release/press timestamps filter
-X11's synthetic auto-repeat pairs. Closing the connection releases
-all grabs and stops the reader. Linux requires an X11 session and a tray host
-(e.g. GNOME's AppIndicator extension); Wayland is currently unsupported.
+X11's synthetic auto-repeat pairs. Closing the connection releases all grabs
+and stops the reader; the known nil-event diagnostic from the XGB dependency is
+not shown, while other XGB diagnostics remain visible. Linux requires an X11
+session and a tray host (e.g. GNOME's AppIndicator extension); Wayland is
+currently unsupported.
 Windows and macOS use `golang.design/x/hotkey`. macOS requires Accessibility
 permission for its event tap; registration failure appears in Settings.
 

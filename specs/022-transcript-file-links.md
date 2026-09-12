@@ -1,4 +1,10 @@
-# Paths in a transcript open the file
+# Links in a transcript
+
+Web links in agent replies follow in the browser. On the desktop, the app
+opens them in the system browser because its embedded view cannot open a new
+window itself. Right-clicking a web link offers **Open in browser** and **Copy
+link**. In a browser deployment, a normal click keeps its usual new-tab
+behaviour and the menu's open action does the same.
 
 A file the agent names in its reply is clickable, and clicking it opens that
 file in a tab — the project's temporary tab, the same one a click in the Tree

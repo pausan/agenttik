@@ -12,7 +12,7 @@
    id to rewrite. */
 import { computed, nextTick, ref } from "vue";
 
-import { S, copyText, editMessage, openFileRef } from "../store";
+import { S, copyText, editMessage, openExternal, openFileRef } from "../store";
 import { markdown } from "../markdown";
 
 const props = defineProps({ message: { type: Object, required: true } });
@@ -47,12 +47,37 @@ const editable = computed(
 );
 
 /* A path the agent wrote is a button inside the rendered markdown, so one
-   listener on the bubble answers all of them however many there are. */
+   listener on the bubble answers all of them however many there are. The
+   desktop webview cannot follow target=_blank, so its web links go through
+   the same system-browser bridge as Settings' server address. */
 function onClick(e) {
+  const link = e.target.closest("a[href]");
+  if (link && openExternal(link.href)) {
+    e.preventDefault();
+    return;
+  }
   const hit = e.target.closest("button.file");
   if (!hit) return;
   openFileRef(hit.dataset.file, Number(hit.dataset.line) || 0);
 }
+
+/* An embedded desktop view has no browser context menu, so aim one shared
+   menu at the link under the pointer. In a normal browser the anchor still
+   follows itself; opening from this menu uses a new tab. */
+const aimedLink = ref("");
+function aimLink(e) {
+  aimedLink.value = e.target.closest("a[href]")?.href || "";
+}
+
+function openLink() {
+  if (!aimedLink.value) return;
+  if (!openExternal(aimedLink.value)) window.open(aimedLink.value, "_blank", "noopener,noreferrer");
+}
+
+const linkMenu = computed(() => [
+  { label: "Open in browser", icon: "i-lucide-external-link", disabled: !aimedLink.value, onSelect: openLink },
+  { label: "Copy link", icon: "i-lucide-copy", disabled: !aimedLink.value, onSelect: () => copyText(aimedLink.value) },
+]);
 
 const copied = ref(false);
 async function copy() {
@@ -153,7 +178,9 @@ function onKey(e) {
     </form>
 
     <template v-else>
-      <div v-if="rendered" :class="classes" v-html="html" @click="onClick" />
+      <UContextMenu v-if="rendered" :items="linkMenu">
+        <div :class="classes" v-html="html" @click="onClick" @contextmenu="aimLink" />
+      </UContextMenu>
       <div v-else :class="classes">{{ message.content }}</div>
     </template>
   </div>

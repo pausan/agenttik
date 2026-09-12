@@ -366,7 +366,7 @@ func TestContextTokensComeFromTheLastTurn(t *testing.T) {
 	for _, n := range []int64{40_000, 90_000} {
 		turn, err := s.StartTurn("s1", "opus", "")
 		must(t, err)
-		turn.ContextTokens, turn.InputTokens, turn.Status = n, 10, "ok"
+		turn.ContextTokens, turn.ContextIsMain, turn.InputTokens, turn.Status = n, true, 10, "ok"
 		must(t, s.FinishTurn(turn))
 	}
 	stats, err := s.SessionStats("s1")
@@ -376,6 +376,65 @@ func TestContextTokensComeFromTheLastTurn(t *testing.T) {
 	}
 	if stats.InputTokens != 20 {
 		t.Errorf("input tokens = %d, want the sum 20", stats.InputTokens)
+	}
+}
+
+func TestUnverifiedHistoricalContextIsNotShownAsMain(t *testing.T) {
+	s := testStore(t)
+	p, _ := s.CreateProject("alpha", "/tmp/alpha")
+	must(t, s.CreateSession(&Session{ID: "s1", ProjectID: p.ID, Provider: "codex", Model: "gpt"}))
+	turn, err := s.StartTurn("s1", "gpt", "")
+	must(t, err)
+	turn.ContextTokens, turn.Status = 2_000_000, "ok"
+	must(t, s.FinishTurn(turn))
+
+	stats, err := s.SessionStats("s1")
+	must(t, err)
+	if stats.ContextTokens != 0 {
+		t.Errorf("unverified context = %d, want hidden from the main gauge", stats.ContextTokens)
+	}
+	turns, err := s.ListTurns("s1")
+	must(t, err)
+	if len(turns) != 1 || turns[0].ContextTokens != 2_000_000 {
+		t.Errorf("historical context was not preserved: %+v", turns)
+	}
+}
+
+func TestStatsPartitionMainAndSubagentUsage(t *testing.T) {
+	s := testStore(t)
+	p, _ := s.CreateProject("alpha", "/tmp/alpha")
+	must(t, s.CreateSession(&Session{ID: "s1", ProjectID: p.ID, Provider: "codex", Model: "gpt"}))
+
+	turn, err := s.StartTurn("s1", "gpt", "")
+	must(t, err)
+	turn.InputTokens, turn.OutputTokens = 100, 20
+	turn.MainInputTokens, turn.MainOutputTokens = 60, 12
+	turn.SubagentInputTokens, turn.SubagentOutputTokens = 30, 8
+	turn.SubagentCount, turn.UsageBreakdown = 2, true
+	turn.Status = "ok"
+	must(t, s.FinishTurn(turn))
+
+	// An unscoped turn stays in the task totals without being mislabeled as
+	// root usage. The UI derives the remaining 15 tokens as unattributed.
+	unscoped, err := s.StartTurn("s1", "gpt", "")
+	must(t, err)
+	unscoped.InputTokens, unscoped.OutputTokens, unscoped.Status = 15, 1, "ok"
+	must(t, s.FinishTurn(unscoped))
+
+	stats, err := s.SessionStats("s1")
+	must(t, err)
+	if stats.InputTokens != 115 || stats.OutputTokens != 21 ||
+		stats.MainInputTokens != 60 || stats.MainOutputTokens != 12 ||
+		stats.SubagentInputTokens != 30 || stats.SubagentOutputTokens != 8 ||
+		stats.SubagentCount != 2 || stats.UsageBreakdownTurns != 1 {
+		t.Errorf("stats = %+v", stats)
+	}
+
+	turns, err := s.ListTurns("s1")
+	must(t, err)
+	if len(turns) != 2 || !turns[0].UsageBreakdown ||
+		turns[0].SubagentCount != 2 || turns[1].UsageBreakdown {
+		t.Errorf("turns = %+v", turns)
 	}
 }
 

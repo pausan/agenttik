@@ -47,9 +47,6 @@ func (u usage) agentUsage() agent.Usage {
 		InputTokens:     u.InputTokens,
 		OutputTokens:    u.OutputTokens,
 		CacheReadTokens: u.CachedInputTokens,
-		// Codex's input_tokens already includes cached input tokens. It is the
-		// complete last prompt size, so it is the context-gauge value too.
-		ContextTokens: u.InputTokens,
 	}
 }
 

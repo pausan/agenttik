@@ -200,12 +200,30 @@ type Turn struct {
 	Status           string  `json:"status"`
 	Error            string  `json:"error"`
 
-	// ContextTokens is the size of the last prompt sent during the turn, not a
-	// sum over the turn's requests. See the migration that adds the column.
+	// ContextTokens is the size of the root agent's latest prompt during the
+	// turn, not a sum over the task's root and child requests.
 	ContextTokens int64 `json:"context_tokens"`
+	// ContextIsMain distinguishes a provider-confirmed root prompt from
+	// context values recorded before agent identity was available.
+	ContextIsMain bool `json:"context_is_main"`
 	// ContextWindow is the window the provider reported for this turn, or 0
 	// when it reported none. See the migration that adds the column.
 	ContextWindow int64 `json:"context_window"`
+
+	// Providers that expose agent identity partition the task's aggregate
+	// usage into the root conversation and delegated child agents. A false
+	// UsageBreakdown leaves this turn unclassified.
+	MainInputTokens          int64 `json:"main_input_tokens"`
+	MainOutputTokens         int64 `json:"main_output_tokens"`
+	MainCacheReadTokens      int64 `json:"main_cache_read_tokens"`
+	MainCacheWriteTokens     int64 `json:"main_cache_write_tokens"`
+	SubagentInputTokens      int64 `json:"subagent_input_tokens"`
+	SubagentOutputTokens     int64 `json:"subagent_output_tokens"`
+	SubagentCacheReadTokens  int64 `json:"subagent_cache_read_tokens"`
+	SubagentCacheWriteTokens int64 `json:"subagent_cache_write_tokens"`
+	SubagentCount            int64 `json:"subagent_count"`
+	UsageBreakdown           bool  `json:"usage_breakdown"`
+
 	// RateLimits is the subscription allowance the provider volunteered during
 	// the turn, as the JSON the API serves, or empty when it volunteered none.
 	RateLimits string `json:"rate_limits,omitempty"`
@@ -237,6 +255,19 @@ type Stats struct {
 	// ContextWindow is the window the provider last reported, which the gauge
 	// prefers over the static per-model figure. 0 falls back to that figure.
 	ContextWindow int64 `json:"context_window"`
+
+	MainInputTokens          int64 `json:"main_input_tokens"`
+	MainOutputTokens         int64 `json:"main_output_tokens"`
+	MainCacheReadTokens      int64 `json:"main_cache_read_tokens"`
+	MainCacheWriteTokens     int64 `json:"main_cache_write_tokens"`
+	SubagentInputTokens      int64 `json:"subagent_input_tokens"`
+	SubagentOutputTokens     int64 `json:"subagent_output_tokens"`
+	SubagentCacheReadTokens  int64 `json:"subagent_cache_read_tokens"`
+	SubagentCacheWriteTokens int64 `json:"subagent_cache_write_tokens"`
+	SubagentCount            int64 `json:"subagent_count"`
+	// UsageBreakdownTurns tells the UI whether the scoped zero values above
+	// mean "none" or "the provider did not identify agents".
+	UsageBreakdownTurns int64 `json:"usage_breakdown_turns"`
 }
 
 // ProjectStats is Stats over a whole project plus the session counts the

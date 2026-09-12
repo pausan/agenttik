@@ -115,6 +115,16 @@ func (p *Provider) Run(ctx context.Context, req agent.TurnRequest) (<-chan agent
 	if err := req.CheckWorkDir(); err != nil {
 		return nil, err
 	}
+	if !req.Isolated {
+		return p.runAppServer(ctx, req)
+	}
+	return p.runExec(ctx, req)
+}
+
+// runExec keeps the CLI's compact one-shot transport for agenttik's own title
+// and outcome prompts. Real task turns use app-server, whose per-thread usage
+// is what distinguishes the main context from cumulative and child work.
+func (p *Provider) runExec(ctx context.Context, req agent.TurnRequest) (<-chan agent.Event, error) {
 	cmd := exec.Command(Binary, buildArgs(req)...)
 	cmd.Dir = req.WorkDir
 	// Which subscription answers the turn. Nil for the machine's own login,
@@ -220,7 +230,6 @@ func handleLine(line []byte, out chan<- agent.Event) {
 	case "turn.completed":
 		if env.Usage != nil {
 			usage := env.Usage.agentUsage()
-			out <- agent.Event{Type: agent.EventUsage, Usage: &agent.Usage{ContextTokens: usage.ContextTokens}}
 			out <- agent.Event{Type: agent.EventDone, Usage: &usage}
 		} else {
 			out <- agent.Event{Type: agent.EventDone}

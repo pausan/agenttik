@@ -15,6 +15,9 @@ type envelope struct {
 	Subtype string `json:"subtype"`
 
 	SessionID string `json:"session_id"`
+	// Subtask messages name the tool call that owns their child agent. Empty
+	// means this line belongs to the main conversation.
+	ParentToolUseID string `json:"parent_tool_use_id"`
 
 	// type=stream_event
 	Event *streamEvent `json:"event"`
@@ -176,4 +179,9 @@ type usage struct {
 // prompt, whether it was cached or sent again.
 func (u usage) contextTokens() int64 {
 	return u.InputTokens + u.CacheReadInputTokens + u.CacheCreationInputTokens
+}
+
+func (u usage) hasTokens() bool {
+	return u.InputTokens != 0 || u.OutputTokens != 0 ||
+		u.CacheReadInputTokens != 0 || u.CacheCreationInputTokens != 0
 }

@@ -160,3 +160,32 @@ func TestParseAssistantWithoutUsageEmitsNothing(t *testing.T) {
 		t.Errorf("got %+v, want no events", got)
 	}
 }
+
+func TestParseSeparatesSubagentUsageFromMainContext(t *testing.T) {
+	stream := `{"type":"assistant","message":{"usage":{"input_tokens":10,"output_tokens":2,` +
+		`"cache_read_input_tokens":100,"cache_creation_input_tokens":5},"content":[]}}` + "\n" +
+		`{"type":"assistant","parent_tool_use_id":"agent-1","message":{"usage":{` +
+		`"input_tokens":20,"output_tokens":4,"cache_read_input_tokens":200,` +
+		`"cache_creation_input_tokens":6},"content":[]}}` + "\n" +
+		`{"type":"assistant","parent_tool_use_id":"agent-1","message":{"usage":{` +
+		`"input_tokens":30,"output_tokens":5,"cache_read_input_tokens":300,` +
+		`"cache_creation_input_tokens":7},"content":[]}}` + "\n" +
+		`{"type":"result","usage":{"input_tokens":60,"output_tokens":11,` +
+		`"cache_read_input_tokens":600,"cache_creation_input_tokens":18}}` + "\n"
+
+	got := collect(t, stream)
+	if len(got) != 2 || got[0].Type != agent.EventUsage || got[1].Type != agent.EventDone {
+		t.Fatalf("got %+v", got)
+	}
+	if got[0].Usage.ContextTokens != 115 {
+		t.Errorf("main context = %d, want 115", got[0].Usage.ContextTokens)
+	}
+	u := got[1].Usage
+	if u.ContextTokens != 115 || u.MainInputTokens != 10 || u.MainOutputTokens != 2 ||
+		u.MainCacheReadTokens != 100 || u.MainCacheWriteTokens != 5 ||
+		u.SubagentInputTokens != 50 || u.SubagentOutputTokens != 9 ||
+		u.SubagentCacheReadTokens != 500 || u.SubagentCacheWriteTokens != 13 ||
+		u.SubagentCount != 1 || !u.UsageBreakdown {
+		t.Errorf("usage = %+v", u)
+	}
+}

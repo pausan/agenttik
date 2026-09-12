@@ -199,15 +199,25 @@ func start(req agent.TurnRequest) (*exec.Cmd, io.ReadCloser, *strings.Builder, e
 // read against.
 func parse(r io.Reader, model string, out chan<- agent.Event) {
 	br := bufio.NewReaderSize(r, 64*1024)
+	p := streamParser{model: model, subagents: make(map[string]struct{})}
 	for {
 		line, err := readLine(br)
 		if len(line) > 0 {
-			handleLine(line, model, out)
+			p.handleLine(line, out)
 		}
 		if err != nil {
 			return
 		}
 	}
+}
+
+type streamParser struct {
+	model         string
+	main          usage
+	subagentsUsed usage
+	subagents     map[string]struct{}
+	contextTokens int64
+	hasBreakdown  bool
 }
 
 // readLine reads one line of any length, which matters because tool results
@@ -226,7 +236,7 @@ func readLine(br *bufio.Reader) ([]byte, error) {
 	}
 }
 
-func handleLine(line []byte, model string, out chan<- agent.Event) {
+func (p *streamParser) handleLine(line []byte, out chan<- agent.Event) {
 	var env envelope
 	if err := json.Unmarshal(line, &env); err != nil {
 		// Non-JSON noise on stdout is not fatal; skip it.
@@ -248,12 +258,14 @@ func handleLine(line []byte, model string, out chan<- agent.Event) {
 			out <- agent.Event{Type: agent.EventLimits, Limits: env.RateLimitInfo.limits()}
 		}
 	case "assistant":
-		// Every assistant message names the prompt that produced it, cached
-		// blocks included. That is the context in use right now, which the
-		// turn's summed totals cannot tell us.
-		if n := env.Message.Usage.contextTokens(); n > 0 {
+		// Every assistant message names the prompt that produced it. Only a
+		// root message moves the main context gauge; child-agent prompts have
+		// independent windows and used to make this ring jump to a false 100%.
+		if n := env.Message.Usage.contextTokens(); n > 0 && env.ParentToolUseID == "" {
+			p.contextTokens = n
 			out <- agent.Event{Type: agent.EventUsage, Usage: &agent.Usage{ContextTokens: n}}
 		}
+		p.addUsage(env.ParentToolUseID, env.Message.Usage)
 		// Text already arrived as deltas; take only tool calls from here.
 		for _, b := range env.Message.Content {
 			if b.Type == "tool_use" {
@@ -276,15 +288,43 @@ func handleLine(line []byte, model string, out chan<- agent.Event) {
 			}
 			out <- agent.Event{Type: agent.EventError, Text: msg}
 		}
-		out <- agent.Event{Type: agent.EventDone, Usage: &agent.Usage{
-			InputTokens:      env.Usage.InputTokens,
-			OutputTokens:     env.Usage.OutputTokens,
-			CacheReadTokens:  env.Usage.CacheReadInputTokens,
-			CacheWriteTokens: env.Usage.CacheCreationInputTokens,
-			CostUSD:          env.TotalCostUSD,
-			ContextWindow:    env.contextWindow(model),
-		}}
+		usage := agent.Usage{
+			InputTokens:              env.Usage.InputTokens,
+			OutputTokens:             env.Usage.OutputTokens,
+			CacheReadTokens:          env.Usage.CacheReadInputTokens,
+			CacheWriteTokens:         env.Usage.CacheCreationInputTokens,
+			CostUSD:                  env.TotalCostUSD,
+			ContextTokens:            p.contextTokens,
+			ContextWindow:            env.contextWindow(p.model),
+			MainInputTokens:          p.main.InputTokens,
+			MainOutputTokens:         p.main.OutputTokens,
+			MainCacheReadTokens:      p.main.CacheReadInputTokens,
+			MainCacheWriteTokens:     p.main.CacheCreationInputTokens,
+			SubagentInputTokens:      p.subagentsUsed.InputTokens,
+			SubagentOutputTokens:     p.subagentsUsed.OutputTokens,
+			SubagentCacheReadTokens:  p.subagentsUsed.CacheReadInputTokens,
+			SubagentCacheWriteTokens: p.subagentsUsed.CacheCreationInputTokens,
+			SubagentCount:            int64(len(p.subagents)),
+			UsageBreakdown:           p.hasBreakdown,
+		}
+		out <- agent.Event{Type: agent.EventDone, Usage: &usage}
 	}
+}
+
+func (p *streamParser) addUsage(parentToolUseID string, u usage) {
+	if !u.hasTokens() {
+		return
+	}
+	p.hasBreakdown = true
+	dst := &p.main
+	if parentToolUseID != "" {
+		dst = &p.subagentsUsed
+		p.subagents[parentToolUseID] = struct{}{}
+	}
+	dst.InputTokens += u.InputTokens
+	dst.OutputTokens += u.OutputTokens
+	dst.CacheReadInputTokens += u.CacheReadInputTokens
+	dst.CacheCreationInputTokens += u.CacheCreationInputTokens
 }
 
 func handleStreamEvent(ev *streamEvent, out chan<- agent.Event) {

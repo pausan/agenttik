@@ -550,11 +550,17 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 				produced = true
 			}
 		case agent.EventUsage:
-			// Mid-turn usage reports the size of one prompt, not the turn's
-			// totals, so it only moves the context gauge. The last one wins:
-			// it describes the context as it stands when the turn ends.
-			if ev.Usage != nil && ev.Usage.ContextTokens > 0 {
-				turn.ContextTokens = ev.Usage.ContextTokens
+			// Mid-turn usage reports the main agent's current prompt, not the
+			// task totals. The last one wins: it describes the root context as
+			// it stands when the turn ends.
+			if ev.Usage != nil {
+				if ev.Usage.ContextTokens > 0 {
+					turn.ContextTokens = ev.Usage.ContextTokens
+					turn.ContextIsMain = true
+				}
+				if ev.Usage.ContextWindow > 0 {
+					turn.ContextWindow = ev.Usage.ContextWindow
+				}
 			}
 		case agent.EventLimits:
 			// The allowance the provider volunteered. Kept on the turn so the
@@ -570,7 +576,23 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 				turn.CacheReadTokens = ev.Usage.CacheReadTokens
 				turn.CacheWriteTokens = ev.Usage.CacheWriteTokens
 				turn.CostUSD = ev.Usage.CostUSD
-				turn.ContextWindow = ev.Usage.ContextWindow
+				if ev.Usage.ContextTokens > 0 {
+					turn.ContextTokens = ev.Usage.ContextTokens
+					turn.ContextIsMain = true
+				}
+				if ev.Usage.ContextWindow > 0 {
+					turn.ContextWindow = ev.Usage.ContextWindow
+				}
+				turn.MainInputTokens = ev.Usage.MainInputTokens
+				turn.MainOutputTokens = ev.Usage.MainOutputTokens
+				turn.MainCacheReadTokens = ev.Usage.MainCacheReadTokens
+				turn.MainCacheWriteTokens = ev.Usage.MainCacheWriteTokens
+				turn.SubagentInputTokens = ev.Usage.SubagentInputTokens
+				turn.SubagentOutputTokens = ev.Usage.SubagentOutputTokens
+				turn.SubagentCacheReadTokens = ev.Usage.SubagentCacheReadTokens
+				turn.SubagentCacheWriteTokens = ev.Usage.SubagentCacheWriteTokens
+				turn.SubagentCount = ev.Usage.SubagentCount
+				turn.UsageBreakdown = ev.Usage.UsageBreakdown
 				produced = produced || ev.Usage.OutputTokens > 0
 			}
 		case agent.EventError:

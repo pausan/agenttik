@@ -141,14 +141,30 @@ type Usage struct {
 	CacheWriteTokens int64   `json:"cache_write_tokens"`
 	CostUSD          float64 `json:"cost_usd"`
 
-	// ContextTokens is the size of one prompt the provider sent — cached
-	// blocks included — so it can be compared against the model's window.
-	// The counts above are summed over the turn; this one never is.
+	// ContextTokens is the size of the main agent's latest prompt — cached
+	// blocks included — so it can be compared against that model's window.
+	// The counts above are summed over the whole task; this one never is.
 	ContextTokens int64 `json:"context_tokens,omitempty"`
 	// ContextWindow is the window the provider says it ran the model in. It
 	// beats the static figure in Model.ContextWindow, which is only a guess
 	// until a turn reports one. 0 means the provider did not say.
 	ContextWindow int64 `json:"context_window,omitempty"`
+
+	// Providers that identify delegated work partition the task totals below.
+	// UsageBreakdown says the partition is known; false keeps older turns and
+	// providers without agent identity honest instead of calling all of their
+	// usage "main". Any difference between the task totals and these two
+	// scopes is reported as unattributed.
+	MainInputTokens          int64 `json:"main_input_tokens,omitempty"`
+	MainOutputTokens         int64 `json:"main_output_tokens,omitempty"`
+	MainCacheReadTokens      int64 `json:"main_cache_read_tokens,omitempty"`
+	MainCacheWriteTokens     int64 `json:"main_cache_write_tokens,omitempty"`
+	SubagentInputTokens      int64 `json:"subagent_input_tokens,omitempty"`
+	SubagentOutputTokens     int64 `json:"subagent_output_tokens,omitempty"`
+	SubagentCacheReadTokens  int64 `json:"subagent_cache_read_tokens,omitempty"`
+	SubagentCacheWriteTokens int64 `json:"subagent_cache_write_tokens,omitempty"`
+	SubagentCount            int64 `json:"subagent_count,omitempty"`
+	UsageBreakdown           bool  `json:"usage_breakdown,omitempty"`
 }
 
 type Event struct {

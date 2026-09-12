@@ -219,6 +219,8 @@ func runScript(ctx context.Context, req agent.TurnRequest, events chan<- agent.E
 	events <- agent.Event{Type: agent.EventDone, Usage: &agent.Usage{
 		InputTokens: 42, OutputTokens: 17, CacheReadTokens: 5, CacheWriteTokens: 3,
 		CostUSD: 0.0042, ContextTokens: int64(len(req.Prompt)), ContextWindow: 128_000,
+		MainInputTokens: 42, MainOutputTokens: 17, MainCacheReadTokens: 5,
+		MainCacheWriteTokens: 3, UsageBreakdown: true,
 	}}
 }
 

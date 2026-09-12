@@ -86,7 +86,11 @@ func TestTurnPersistsTranscriptAndMetrics(t *testing.T) {
 		{Type: agent.EventToolUse, Tool: &agent.ToolEvent{Name: "Read", Input: `{"path":"/x"}`}},
 		{Type: agent.EventText, Text: "done"},
 		{Type: agent.EventDone, Usage: &agent.Usage{InputTokens: 11, OutputTokens: 22,
-			CacheReadTokens: 3, CacheWriteTokens: 4, CostUSD: 1.5}},
+			CacheReadTokens: 3, CacheWriteTokens: 4, CostUSD: 1.5,
+			ContextTokens: 7, ContextWindow: 100,
+			MainInputTokens: 8, MainOutputTokens: 20,
+			SubagentInputTokens: 3, SubagentOutputTokens: 2,
+			SubagentCount: 1, UsageBreakdown: true}},
 	}}
 	r, st, sess := setup(t, fp)
 
@@ -117,6 +121,11 @@ func TestTurnPersistsTranscriptAndMetrics(t *testing.T) {
 	if stats.Turns != 1 || stats.InputTokens != 11 || stats.OutputTokens != 22 ||
 		stats.CacheReadTokens != 3 || stats.CacheWriteTokens != 4 || stats.CostUSD != 1.5 {
 		t.Errorf("stats = %+v", stats)
+	}
+	if stats.ContextTokens != 7 || stats.ContextWindow != 100 ||
+		stats.MainInputTokens != 8 || stats.SubagentInputTokens != 3 ||
+		stats.SubagentCount != 1 || stats.UsageBreakdownTurns != 1 {
+		t.Errorf("scoped stats = %+v", stats)
 	}
 
 	updated, _ := st.GetSession(sess.ID)

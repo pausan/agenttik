@@ -262,6 +262,28 @@ ALTER TABLE server_config ADD COLUMN totp_secret   TEXT    NOT NULL DEFAULT '';
 -- existed and every one whose provider had nothing to summarise.
 ALTER TABLE sessions ADD COLUMN summary TEXT NOT NULL DEFAULT '';
 	`,
+	`
+-- Token totals belong to a task, which can contain many main-agent model
+-- calls and delegated child-agent calls. Providers that expose the identity
+-- of those calls fill this partition; usage_breakdown distinguishes a known
+-- zero from historical and provider usage that cannot be attributed.
+ALTER TABLE turns ADD COLUMN main_input_tokens           INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE turns ADD COLUMN main_output_tokens          INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE turns ADD COLUMN main_cache_read_tokens      INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE turns ADD COLUMN main_cache_write_tokens     INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE turns ADD COLUMN subagent_input_tokens       INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE turns ADD COLUMN subagent_output_tokens      INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE turns ADD COLUMN subagent_cache_read_tokens  INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE turns ADD COLUMN subagent_cache_write_tokens INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE turns ADD COLUMN subagent_count              INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE turns ADD COLUMN usage_breakdown             INTEGER NOT NULL DEFAULT 0;
+
+-- Existing context_tokens predate agent identity: Codex filled them from a
+-- task aggregate and Claude could leave a child prompt there. Preserve those
+-- raw records, but only a newly confirmed root prompt is eligible for the
+-- main-context gauge.
+ALTER TABLE turns ADD COLUMN context_is_main INTEGER NOT NULL DEFAULT 0;
+	`,
 }
 
 func migrate(db *sql.DB) error {

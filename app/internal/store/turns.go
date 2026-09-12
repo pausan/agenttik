@@ -39,12 +39,21 @@ func (s *Store) FinishTurn(t *Turn) error {
 	_, err := s.db.Exec(
 		`UPDATE turns SET ended_at = ?, input_tokens = ?, output_tokens = ?,
 		    cache_read_tokens = ?, cache_write_tokens = ?, cost_usd = ?,
-		    context_tokens = ?, context_window = ?, rate_limits = ?,
+		    context_tokens = ?, context_is_main = ?, context_window = ?, rate_limits = ?,
+		    main_input_tokens = ?, main_output_tokens = ?,
+		    main_cache_read_tokens = ?, main_cache_write_tokens = ?,
+		    subagent_input_tokens = ?, subagent_output_tokens = ?,
+		    subagent_cache_read_tokens = ?, subagent_cache_write_tokens = ?,
+		    subagent_count = ?, usage_breakdown = ?,
 		    status = ?, error = ?
 		 WHERE id = ?`,
 		nowMillis(), t.InputTokens, t.OutputTokens, t.CacheReadTokens,
-		t.CacheWriteTokens, t.CostUSD, t.ContextTokens, t.ContextWindow,
-		t.RateLimits, t.Status, t.Error, t.ID)
+		t.CacheWriteTokens, t.CostUSD, t.ContextTokens, t.ContextIsMain, t.ContextWindow,
+		t.RateLimits, t.MainInputTokens, t.MainOutputTokens,
+		t.MainCacheReadTokens, t.MainCacheWriteTokens,
+		t.SubagentInputTokens, t.SubagentOutputTokens,
+		t.SubagentCacheReadTokens, t.SubagentCacheWriteTokens,
+		t.SubagentCount, t.UsageBreakdown, t.Status, t.Error, t.ID)
 	if err != nil {
 		return fmt.Errorf("finish turn %d: %w", t.ID, err)
 	}
@@ -75,7 +84,12 @@ func (s *Store) DiscardTurn(turnID int64) error {
 const statsSelect = `SELECT COUNT(*),
 	COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0),
 	COALESCE(SUM(cache_read_tokens),0), COALESCE(SUM(cache_write_tokens),0),
-	SUM(cost_usd), SUM(COALESCE(ended_at, started_at) - started_at)
+	SUM(cost_usd), SUM(COALESCE(ended_at, started_at) - started_at),
+	COALESCE(SUM(main_input_tokens),0), COALESCE(SUM(main_output_tokens),0),
+	COALESCE(SUM(main_cache_read_tokens),0), COALESCE(SUM(main_cache_write_tokens),0),
+	COALESCE(SUM(subagent_input_tokens),0), COALESCE(SUM(subagent_output_tokens),0),
+	COALESCE(SUM(subagent_cache_read_tokens),0), COALESCE(SUM(subagent_cache_write_tokens),0),
+	COALESCE(SUM(subagent_count),0), COALESCE(SUM(usage_breakdown),0)
 	FROM turns `
 
 func (s *Store) scanStats(where string, args ...any) (*Stats, error) {
@@ -84,7 +98,12 @@ func (s *Store) scanStats(where string, args ...any) (*Stats, error) {
 	var dur sql.NullInt64
 	err := s.db.QueryRow(statsSelect+where, args...).
 		Scan(&st.Turns, &st.InputTokens, &st.OutputTokens,
-			&st.CacheReadTokens, &st.CacheWriteTokens, &cost, &dur)
+			&st.CacheReadTokens, &st.CacheWriteTokens, &cost, &dur,
+			&st.MainInputTokens, &st.MainOutputTokens,
+			&st.MainCacheReadTokens, &st.MainCacheWriteTokens,
+			&st.SubagentInputTokens, &st.SubagentOutputTokens,
+			&st.SubagentCacheReadTokens, &st.SubagentCacheWriteTokens,
+			&st.SubagentCount, &st.UsageBreakdownTurns)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +122,8 @@ func (s *Store) SessionStats(sessionID string) (*Stats, error) {
 	var ctx sql.NullInt64
 	err = s.db.QueryRow(
 		`SELECT context_tokens FROM turns
-		 WHERE session_id = ? AND context_tokens > 0 ORDER BY id DESC LIMIT 1`,
+		 WHERE session_id = ? AND context_tokens > 0 AND context_is_main = 1
+		 ORDER BY id DESC LIMIT 1`,
 		sessionID).Scan(&ctx)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("session stats %s: %w", sessionID, err)
@@ -209,7 +229,13 @@ func (s *Store) ListTurns(sessionID string) ([]Turn, error) {
 	rows, err := s.db.Query(
 		`SELECT id, session_id, model, effort, started_at, COALESCE(ended_at,0),
 		        input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-		        cost_usd, context_tokens, context_window, rate_limits, status, error
+		        cost_usd, context_tokens, context_is_main, context_window,
+		        main_input_tokens, main_output_tokens,
+		        main_cache_read_tokens, main_cache_write_tokens,
+		        subagent_input_tokens, subagent_output_tokens,
+		        subagent_cache_read_tokens, subagent_cache_write_tokens,
+		        subagent_count, usage_breakdown,
+		        rate_limits, status, error
 		 FROM turns WHERE session_id = ? ORDER BY id`, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("list turns: %w", err)
@@ -221,7 +247,12 @@ func (s *Store) ListTurns(sessionID string) ([]Turn, error) {
 		var t Turn
 		if err := rows.Scan(&t.ID, &t.SessionID, &t.Model, &t.Effort, &t.StartedAt,
 			&t.EndedAt, &t.InputTokens, &t.OutputTokens, &t.CacheReadTokens,
-			&t.CacheWriteTokens, &t.CostUSD, &t.ContextTokens, &t.ContextWindow,
+			&t.CacheWriteTokens, &t.CostUSD, &t.ContextTokens, &t.ContextIsMain, &t.ContextWindow,
+			&t.MainInputTokens, &t.MainOutputTokens,
+			&t.MainCacheReadTokens, &t.MainCacheWriteTokens,
+			&t.SubagentInputTokens, &t.SubagentOutputTokens,
+			&t.SubagentCacheReadTokens, &t.SubagentCacheWriteTokens,
+			&t.SubagentCount, &t.UsageBreakdown,
 			&t.RateLimits, &t.Status, &t.Error); err != nil {
 			return nil, fmt.Errorf("list turns: %w", err)
 		}

@@ -34,7 +34,14 @@ Because this is `FolderPicker`, the Options pane's repoint button
 
 ## Cloning
 
-Each repository has its own input row. Pasting whitespace-separated URLs into a row creates one row per URL. A non-empty row checks its remote after a short pause by asking git for its refs, not history. A spinner, tick, or cross appears at the input's right edge. A valid final row creates an empty next row automatically. Empty rows are ignored, and a row can be deleted.
+Each repository has its own input row. Typing in the final row immediately
+creates an empty next row, even while validation is pending or fails. Pasting
+whitespace-separated URLs creates one row per URL and a trailing empty input.
+A non-empty row checks its remote after a short pause by asking git for its
+refs, not history. A spinner, tick, or cross appears at the input's right edge.
+Checks for edited or deleted rows cannot replace the current result. Empty
+rows are ignored. Each row has a delete button beside its input; long URLs
+and error messages stay inside the dialog, and long lists scroll.
 
 GitHub and GitLab web links become their SSH remotes; ordinary HTTPS, git, and SSH remotes remain accepted. Add project stays disabled while a check is running or any non-empty row is invalid. It starts sequential clones for the checked rows and reports progress. A failed clone becomes a broken row and prevents adding the project until it is fixed or deleted. The dialog can be minimized during this work; its compact progress button restores it without interrupting the queue.
 

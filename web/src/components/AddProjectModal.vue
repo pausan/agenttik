@@ -51,26 +51,28 @@ watch(path, () => (error.value = ""));
 
 // A check only asks git for remote refs, never repository history. Debouncing
 // stops a request from starting for every character typed into a row.
-function scheduleCheck(row) {
+function scheduleCheck(row, value = row.url) {
   clearTimeout(row.timer);
+  row.url = value;
+  const revision = row.revision = (row.revision || 0) + 1;
   const remote = row.url.trim();
   row.error = "";
   if (!remote) {
     row.state = "empty";
     return;
   }
+  if (repos.value.at(-1) === row) addRepo();
   row.state = "checking";
-  row.timer = setTimeout(() => check(row, remote), 350);
+  row.timer = setTimeout(() => check(row, remote, revision), 350);
 }
 
-async function check(row, remote) {
+async function check(row, remote, revision) {
   try {
     await api("POST", "/api/fs/remote", { url: remote });
-    if (row.url.trim() !== remote) return;
+    if (!repos.value.includes(row) || row.revision !== revision) return;
     row.state = "valid";
-    if (repos.value.at(-1) === row) addRepo();
   } catch (e) {
-    if (row.url.trim() !== remote) return;
+    if (!repos.value.includes(row) || row.revision !== revision) return;
     row.state = "invalid";
     row.error = e?.message || String(e);
   }
@@ -80,10 +82,11 @@ function paste(row, event) {
   const remotes = event.clipboardData?.getData("text").trim().split(/\s+/).filter(Boolean) || [];
   if (remotes.length < 2) return;
   event.preventDefault();
+  clearTimeout(row.timer);
   const index = repos.value.indexOf(row);
   const rows = remotes.map((url) => reactive({ url, state: "empty", error: "", timer: null }));
   repos.value.splice(index, 1, ...rows);
-  nextTick(() => rows.forEach(scheduleCheck));
+  rows.forEach((row) => scheduleCheck(row));
 }
 
 function forget(row) {
@@ -149,37 +152,40 @@ function submit() {
       <FolderPicker ref="picker" v-model="path" :label="mode === 'repos' ? 'Base folder' : 'Folder'" @submit="submit" />
 
       <template v-if="mode === 'repos'">
-        <div class="space-y-2">
-          <label v-for="(row, i) in repos" :key="row" class="block text-xs font-medium text-muted">
-            <span v-if="i === 0">Git repositories</span>
-            <UInput
-              v-model="row.url"
-              class="mt-1 w-full font-normal"
-              placeholder="https://github.com/org/repo or git@github.com:org/repo.git"
-              autocomplete="off"
-              :disabled="cloning || row.state === 'cloned'"
-              @input="scheduleCheck(row)"
-              @paste="paste(row, $event)"
-            >
-              <template #trailing>
-                <UIcon v-if="row.state === 'checking'" name="i-lucide-loader-circle" class="animate-spin text-dimmed" />
-                <UIcon v-else-if="row.state === 'valid' || row.state === 'cloned'" name="i-lucide-check" class="text-success" />
-                <UIcon v-else-if="row.state === 'invalid' || row.state === 'failed'" name="i-lucide-x" class="text-error" />
-              </template>
-            </UInput>
-            <p v-if="row.error" class="mt-1 text-error">{{ row.error }}</p>
-            <UButton
-              v-if="row.state !== 'cloned'"
-              color="neutral"
-              variant="ghost"
-              size="xs"
-              icon="i-lucide-trash-2"
-              class="mt-1"
-              :disabled="cloning"
-              :aria-label="'Delete ' + (row.url || 'repository')"
-              @click="forget(row)"
-            />
-          </label>
+        <p class="text-xs font-medium text-muted">Git repositories</p>
+        <div class="mt-1 max-h-60 space-y-2 overflow-y-auto">
+          <div v-for="(row, i) in repos" :key="row" class="text-xs text-muted">
+            <div class="flex min-w-0 items-center gap-2">
+              <UInput
+                :model-value="row.url"
+                :aria-label="'Repository ' + (i + 1)"
+                class="min-w-0 flex-1 font-normal"
+                placeholder="https://github.com/org/repo or git@github.com:org/repo.git"
+                autocomplete="off"
+                :disabled="cloning || row.state === 'cloned'"
+                @update:model-value="scheduleCheck(row, $event)"
+                @paste="paste(row, $event)"
+              >
+                <template #trailing>
+                  <UIcon v-if="row.state === 'checking' || row.state === 'cloning'" name="i-lucide-loader-circle" class="animate-spin text-dimmed" />
+                  <UIcon v-else-if="row.state === 'valid' || row.state === 'cloned'" name="i-lucide-check" class="text-success" />
+                  <UIcon v-else-if="row.state === 'invalid' || row.state === 'failed'" name="i-lucide-x" class="text-error" />
+                </template>
+              </UInput>
+              <UButton
+                v-if="row.state !== 'cloned'"
+                color="neutral"
+                variant="ghost"
+                size="xs"
+                icon="i-lucide-trash-2"
+                class="shrink-0"
+                :disabled="cloning"
+                :aria-label="'Delete ' + (row.url || 'repository')"
+                @click="forget(row)"
+              />
+            </div>
+            <p v-if="row.error" class="mt-1 break-all text-error">{{ row.error }}</p>
+          </div>
         </div>
         <p class="mt-2 text-xs text-dimmed">
           GitHub and GitLab web links use SSH automatically. Paste several URLs to add rows.

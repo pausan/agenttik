@@ -3,61 +3,78 @@ import assert from "node:assert/strict";
 import { setSmartSearch, smartSearch, searchTasks, refreshSmartIndex } from "./smart-search.js";
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
-const workers = [];
-globalThis.localStorage = { setItem() {} };
-globalThis.fetch = async () => new Response(JSON.stringify([{ id: "task", title: "Test" }]), {
-  headers: { "content-type": "application/json" },
+const response = (data, status = 200) => new Response(JSON.stringify(data), {
+  status, headers: { "content-type": "application/json" },
 });
-globalThis.Worker = class {
-  messages = [];
-  terminated = false;
-  constructor() { workers.push(this); }
-  postMessage(data) { this.messages.push(data); }
-  terminate() { this.terminated = true; }
-  reply(data) { this.onmessage({ data }); }
-};
+const ready = { phase: "ready", percent: 100, total: 1, version: 1 };
+globalThis.localStorage = { setItem() {} };
 
-test("disabling cancels indexing and ignores late progress from the old worker", async () => {
+test("disabling ignores late backend progress and preserves a later enable", async () => {
+  const pending = [];
+  globalThis.fetch = () => new Promise((resolve) => pending.push(resolve));
   try {
     setSmartSearch(true);
+    setSmartSearch(false);
+    setSmartSearch(true);
+    pending[0](response(ready));
     await flush();
-    const old = workers.at(-1);
-    assert.equal(old.messages[0].type, "index");
-    old.reply({ progress: { phase: "download", percent: 35 } });
+    assert.equal(smartSearch.phase, "loading");
+    pending[1](response({ phase: "download", percent: 35 }));
+    await flush();
     assert.equal(smartSearch.percent, 35);
     setSmartSearch(false);
     await flush();
-    assert.equal(old.terminated, true);
     assert.equal(smartSearch.phase, "idle");
-    setSmartSearch(true);
-    await flush();
-    old.reply({ progress: { phase: "ready", percent: 100 } });
-    assert.equal(smartSearch.phase, "loading");
-  } finally { setSmartSearch(false); await flush(); }
+  } finally { setSmartSearch(false); }
 });
 
-test("queries wait for indexing, errors are surfaced and a retry creates a new worker", async () => {
+test("queries wait for indexing and send only the query and task ids", async () => {
+  let finish;
+  const calls = [];
+  globalThis.fetch = async (path, options) => {
+    calls.push([path, options]);
+    if (path.endsWith("/index")) return new Promise((resolve) => { finish = resolve; });
+    return response({ task: 0.8 });
+  };
+  try {
+    setSmartSearch(true);
+    const result = searchTasks("query", ["task"]);
+    assert.equal(calls.length, 1);
+    finish(response(ready));
+    assert.deepEqual(await result, { task: 0.8 });
+    assert.equal(calls[1][0], "/api/smart-search/query");
+    assert.deepEqual(JSON.parse(calls[1][1].body), { query: "query", ids: ["task"] });
+  } finally { setSmartSearch(false); }
+});
+
+test("backend errors are surfaced and retry recovers", async () => {
+  globalThis.fetch = async () => response({ error: "Disk full" }, 503);
   try {
     setSmartSearch(true);
     await flush();
-    const worker = workers.at(-1);
-    const result = searchTasks("query", ["task"]);
-    assert.equal(worker.messages.length, 1);
-    worker.reply({ progress: { phase: "ready", total: 1 } });
-    worker.reply({ id: worker.messages[0].id });
-    await flush();
-    assert.equal(worker.messages[1].type, "search");
-    worker.reply({ id: worker.messages[1].id, result: { task: 0.8 } });
-    assert.deepEqual(await result, { task: 0.8 });
-    const indexing = refreshSmartIndex();
-    await flush();
-    worker.reply({ id: worker.messages.at(-1).id, error: "Disk full" });
-    await indexing;
     assert.equal(smartSearch.phase, "error");
     assert.equal(smartSearch.error, "Disk full");
+    globalThis.fetch = async () => response(ready);
     setSmartSearch(true);
     await flush();
-    assert.notEqual(workers.at(-1), worker);
+    assert.equal(smartSearch.phase, "ready");
     assert.equal(smartSearch.error, "");
-  } finally { setSmartSearch(false); await flush(); }
+    await refreshSmartIndex();
+    assert.equal(smartSearch.version, 1);
+  } finally { setSmartSearch(false); }
+});
+
+test("in-flight query results cannot survive disabling", async () => {
+  let finish;
+  globalThis.fetch = async (path) => path.endsWith("/index") ? response(ready)
+    : new Promise((resolve) => { finish = resolve; });
+  try {
+    setSmartSearch(true);
+    await flush();
+    const result = searchTasks("query", ["task"]);
+    setSmartSearch(false);
+    finish(response({ task: 0.8 }));
+    await assert.rejects(result, /stopped/);
+    assert.equal(smartSearch.phase, "idle");
+  } finally { setSmartSearch(false); }
 });

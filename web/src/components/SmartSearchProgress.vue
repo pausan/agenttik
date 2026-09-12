@@ -4,7 +4,8 @@ import { smartSearch, setSmartSearch } from "../smart-search.js";
 
 <template>
   <div v-if="smartSearch.enabled" class="my-2 text-xs text-muted" role="status" aria-live="polite">
-    <template v-if="smartSearch.phase === 'download'">
+    <template v-if="smartSearch.phase === 'runtime'">Preparing search runtime on the Agenttik host…</template>
+    <template v-else-if="smartSearch.phase === 'download'">
       Downloading Bekko a8m… {{ Math.floor(smartSearch.percent) }}%
       <progress class="mt-1 block w-full accent-current" aria-label="Model download" :value="smartSearch.percent" max="100" />
     </template>

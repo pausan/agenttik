@@ -4,44 +4,17 @@ import { api } from "./api.js";
 const KEY = "agenttik.smartSearch";
 export const smartSearch = reactive({ enabled: false, phase: "idle", percent: 0,
   completed: 0, total: 0, seconds: null, error: "", version: 0 });
-let worker;
-let sequence = 0;
 let generation = 0;
 let indexing;
 let refreshRequested = false;
 let timer;
-const requests = new Map();
+let cancelPoll;
 
-function stopWorker() {
-  worker?.terminate();
-  worker = null;
-  for (const { reject } of requests.values()) reject(new Error("Smart Search stopped"));
-  requests.clear();
-}
-
-function request(type, payload) {
-  if (!worker) {
-    worker = new Worker(new URL("./smart-search.worker.js", import.meta.url), { type: "module" });
-    const activeWorker = worker;
-    worker.onmessage = ({ data }) => {
-      if (worker !== activeWorker) return;
-      if (data.progress) { Object.assign(smartSearch, data.progress); return; }
-      const pending = requests.get(data.id);
-      requests.delete(data.id);
-      if (data.error) pending?.reject(new Error(data.error));
-      else pending?.resolve(data.result);
-    };
-    worker.onerror = (event) => {
-      if (worker !== activeWorker) return;
-      for (const { reject } of requests.values()) reject(new Error(event.message || "Could not start Smart Search"));
-      requests.clear();
-      stopWorker();
-    };
-  }
-  return new Promise((resolve, reject) => {
-    const id = ++sequence;
-    requests.set(id, { resolve, reject });
-    worker.postMessage({ id, type, ...payload });
+function pause() {
+  return new Promise((resolve) => {
+    const timeout = setTimeout(done, 500);
+    function done() { clearTimeout(timeout); cancelPoll = null; resolve(); }
+    cancelPoll = done;
   });
 }
 
@@ -52,16 +25,16 @@ export function refreshSmartIndex() {
   const operation = (async () => {
     try {
       smartSearch.error = "";
-      // limit=0 is the existing API's unbounded listing, including archived tasks.
-      const tasks = await api("GET", "/api/sessions?window=all&include_done=true&limit=0");
-      if (current !== generation) return;
-      const changed = await request("index", { tasks });
-      if (current === generation && changed) smartSearch.version++;
-    } catch (error) {
-      if (current === generation) {
-        smartSearch.error = error.message;
-        smartSearch.phase = "error";
+      let status = await api("POST", "/api/smart-search/index");
+      while (current === generation) {
+        Object.assign(smartSearch, status);
+        if (status.phase === "ready" || status.phase === "error") break;
+        await pause();
+        if (current !== generation) return;
+        status = await api("GET", "/api/smart-search");
       }
+    } catch (error) {
+      if (current === generation) Object.assign(smartSearch, { error: error.message, phase: "error" });
     } finally {
       if (current === generation) {
         indexing = null;
@@ -80,10 +53,11 @@ export function setSmartSearch(enabled) {
   localStorage.setItem(KEY, enabled ? "1" : "0");
   generation++;
   clearInterval(timer);
-  stopWorker();
+  cancelPoll?.();
   indexing = null;
   refreshRequested = false;
-  Object.assign(smartSearch, { enabled, phase: enabled ? "loading" : "idle", error: "", percent: 0 });
+  Object.assign(smartSearch, { enabled, phase: enabled ? "loading" : "idle", error: "", percent: 0,
+    completed: 0, total: 0, seconds: null });
   if (enabled) {
     refreshSmartIndex();
     timer = setInterval(refreshSmartIndex, 30000);
@@ -95,11 +69,14 @@ export function initSmartSearch() {
 }
 
 export async function searchTasks(query, ids) {
-  if (indexing) await indexing;
-  if (!smartSearch.enabled || smartSearch.phase !== "ready") throw new Error(smartSearch.error || "Smart Search is preparing");
   const current = generation;
+  if (indexing) await indexing;
+  if (current !== generation || !smartSearch.enabled) throw new Error("Smart Search stopped");
+  if (smartSearch.phase !== "ready") throw new Error(smartSearch.error || "Smart Search is preparing");
   try {
-    return await request("search", { query, ids });
+    const scores = await api("POST", "/api/smart-search/query", { query, ids });
+    if (current !== generation) throw new Error("Smart Search stopped");
+    return scores;
   } catch (error) {
     if (current === generation) Object.assign(smartSearch, { phase: "error", error: error.message });
     throw error;

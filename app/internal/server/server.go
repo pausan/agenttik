@@ -13,6 +13,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -29,6 +30,7 @@ import (
 	"github.com/pausan/agenttik/app/internal/netauth"
 	"github.com/pausan/agenttik/app/internal/netserver"
 	"github.com/pausan/agenttik/app/internal/runner"
+	"github.com/pausan/agenttik/app/internal/smartsearch"
 	"github.com/pausan/agenttik/app/internal/store"
 	"github.com/pausan/agenttik/web"
 )
@@ -39,6 +41,7 @@ type Server struct {
 	runner   *runner.Runner
 	registry *agent.Registry
 	watchers *watchers
+	search   *smartsearch.Service
 
 	// closing is closed by Shutdown to release the SSE handlers. Fiber waits
 	// for every open connection, and a live stream never ends on its own, so
@@ -106,6 +109,9 @@ func New(s *store.Store, reg *agent.Registry, r *runner.Runner) *Server {
 	srv := &Server{app: app, store: s, runner: r, registry: reg,
 		watchers: newWatchers(r.Hub()), closing: make(chan struct{})}
 	srv.auth = netauth.New(srv.credentials)
+	srv.search = smartsearch.New(filepath.Join(s.Dir(), "smart-search"), func() ([]store.Session, error) {
+		return s.ListSessions(store.SessionFilter{})
+	})
 	srv.routes()
 
 	// The UI is a Vite build, so a binary made without it says so rather than
@@ -136,6 +142,9 @@ func uiMissing(c *fiber.Ctx) error {
 
 func (s *Server) routes() {
 	api := s.app.Group("/api")
+	api.Get("/smart-search", s.smartSearchStatus)
+	api.Post("/smart-search/index", s.refreshSmartSearch)
+	api.Post("/smart-search/query", s.querySmartSearch)
 	api.Post("/attachments", s.uploadAttachment)
 	api.Get("/attachments/:name", s.getAttachment)
 
@@ -233,7 +242,7 @@ func (s *Server) Listener(ln net.Listener) error { return s.app.Listener(ln) }
 // remaining connections. The timeout is a backstop: a stuck client must never
 // keep the app alive after the window is closed.
 func (s *Server) Shutdown() error {
-	s.closeOnce.Do(func() { close(s.closing) })
+	s.closeOnce.Do(func() { close(s.closing); s.search.Close() })
 	return s.app.ShutdownWithTimeout(shutdownTimeout)
 }
 

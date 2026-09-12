@@ -25,6 +25,9 @@ test("project task time filter combines with fuzzy search", async ({ page }) => 
 });
 
 test("Smart Search can be cancelled during download and stays disabled after reload", async ({ page }) => {
+  await page.route("**/api/smart-search**", (route) => route.fulfill({
+    json: { phase: "download", percent: 35, total: 0, version: 0 },
+  }));
   await openSettings(page);
   const dialog = page.getByRole("dialog");
   const fuzzy = dialog.getByRole("radio", { name: "Fuzzy Search (default)", exact: true });
@@ -42,19 +45,9 @@ test("Smart Search can be cancelled during download and stays disabled after rel
 test("Bekko downloads, indexes and retrieves a task across languages", async ({ page, agenttik }) => {
   test.skip(!process.env.AGENTTIK_TEST_BEKKO, "Downloads the real Bekko model");
   test.setTimeout(240000);
-  await page.addInitScript(() => {
-    window.bekkoProgress = [];
-    const OriginalWorker = window.Worker;
-    window.Worker = class extends OriginalWorker {
-      constructor(...args) {
-        super(...args);
-        this.addEventListener("message", ({ data }) => {
-          if (data.progress) window.bekkoProgress.push(data.progress);
-        });
-      }
-    };
-  });
-  await page.reload();
+  const browserAssets = [];
+  page.on("request", (request) => browserAssets.push(request.url()));
+  await page.context().route("https://huggingface.co/**", (route) => route.abort());
   await addProject(page);
   const projects = await (await page.request.get(agenttik.url + "/api/projects")).json();
   for (const title of ["Repair user login and authentication", "Change the background color"]) {
@@ -68,9 +61,7 @@ test("Bekko downloads, indexes and retrieves a task across languages", async ({ 
   const status = page.getByRole("dialog").getByRole("status");
   await expect(status).toContainText(/Smart Search (ready|unavailable)/, { timeout: 180000 });
   await expect(status).toContainText("Smart Search ready · 2 tasks indexed");
-  const progress = await page.evaluate(() => window.bekkoProgress);
-  expect(progress.some((p) => p.phase === "download" && p.percent > 0)).toBeTruthy();
-  expect(progress.some((p) => p.phase === "index" && p.completed === 1 && Number.isFinite(p.seconds))).toBeTruthy();
+  expect(browserAssets.some((url) => /onnx|\.wasm|smart-search\.worker/.test(url))).toBeFalsy();
   await page.keyboard.press("Escape");
   await openProject(page);
   await page.getByPlaceholder("Smart Search tasks").fill("Repair user login and authentication");
@@ -78,11 +69,9 @@ test("Bekko downloads, indexes and retrieves a task across languages", async ({ 
   await page.getByPlaceholder("Smart Search tasks").fill("autenticación de usuarios");
   await expect(page.locator("main").getByText("Repair user login and authentication", { exact: true })).toBeVisible({ timeout: 30000 });
   await expect(page.locator("main").getByText("Change the background color", { exact: true })).toBeHidden();
-  // Cached model and vectors must work with model-host requests blocked.
-  await page.context().route("https://huggingface.co/**", (route) => route.abort());
+  // Reload reuses the shared backend index; the browser never downloads model files.
   await page.reload();
   await expect(page.getByText(/Smart Search ready · 2 tasks indexed/)).toBeVisible({ timeout: 60000 });
-  expect(await page.evaluate(() => window.bekkoProgress.filter((p) => p.phase === "index" && p.total > 0))).toEqual([]);
   await page.getByPlaceholder("Smart Search tasks").fill("users cannot sign in");
   await expect(page.locator("main").getByText("Repair user login and authentication", { exact: true })).toBeVisible({ timeout: 30000 });
   const created = await page.request.post(agenttik.url + "/api/sessions", {

@@ -1,54 +1,64 @@
 # Smart Search
 
 Settings → General → Project task search offers Fuzzy Search (default) and
-Smart Search. The choice is local to this browser/device and survives reloads.
-Only the Tasks tab of a project uses Smart Search. Settings, the launcher,
-folder pickers and every other existing search keep their fuzzy matching.
+Smart Search. The preference is local to each browser and survives reloads.
+Only project task search changes; other searches keep fuzzy matching.
 
-Enabling downloads the MIT-licensed `hotchpotch/bekko-embedding-v1-a8m`
-model at revision `c721113d59a1d91b447450324f51c4b3332c924a`. Its compact
-`onnx/model.onnx` is selected with `dtype: fp32`: the export already quantizes
-the vocabulary table while preserving the transformer weights. Transformers.js
-4.2 runs it in a dedicated worker with single-thread WASM. The runtime is bundled
-with the app and loaded only when enabled. No task text goes to a model service.
+The Go backend runs the MIT-licensed `hotchpotch/bekko-embedding-v1-a8m`
+model at revision `c721113d59a1d91b447450324f51c4b3332c924a`. Native ONNX
+Runtime 1.24.1 and the Hugging Face tokenizer library v0.1.4 load through
+Go bindings without cgo or a Node.js requirement. Runtime libraries download
+on first enable, with checksum verification by the runtime bindings. ONNX
+Runtime uses the host's user cache; the tokenizer library, model and task
+vectors live under `smart-search/` in Agenttik's data directory. The browser
+ships no inference runtime, worker, model, or WASM asset. Task text stays on
+the Agenttik host; no task text is sent to the model download service.
 
-The model download has a percentage progress bar. It is followed by task
-indexing, with a separate bar, completed/total count, and seconds remaining
-estimated from elapsed time per completed task. Before the first task completes,
-the UI says it is estimating. Both Settings and the project page show progress,
-errors and Retry. Disabling terminates the worker and cancels pending work;
-the downloaded files and completed embeddings remain cached for reuse.
+One service per backend shares a model and index across browsers. Loading,
+indexing and queries are serialized. Nothing downloads or initializes at app
+startup. Enabling starts indexing; disabling stops that browser's polling and
+ignores pending results. Shared backend work continues for other clients and
+keeps its model loaded until shutdown. Model downloads honor server shutdown;
+native-library setup finishes within the bindings' own download timeouts.
 
-Model files use the browser Cache API where available. Embeddings are stored
-in IndexedDB, keyed by task id and exact indexed text, in a revision-specific
-database. Browser storage can be cleared or evicted; a later enable rebuilds
-what is missing. Each browser has its own cache and preference.
+The API is:
 
-The initial index covers all tasks, including archived tasks, through
-`GET /api/sessions?window=all&include_done=true&limit=0`. Indexed text consists
-of title, opening prompt (the API's preview), and archive outcome. Full transcripts
-are not indexed. Inputs are truncated to 512 tokens to bound CPU work. Mean
-pooling and L2 normalization produce 384-dimensional float32 vectors; no prefixes are
-added. Unchanged text reuses its stored vector. Project metadata changes trigger
-a refresh, and a 30-second refresh catches changes elsewhere. Deleted tasks are
-removed from the index.
+- `POST /api/smart-search/index`: starts or joins an indexing pass, returns
+  202 with progress. The backend reads all tasks directly from its database.
+- `GET /api/smart-search`: phase, percentage, completed/total, estimated seconds,
+  error, and index version. Enabled browsers poll every 500 ms during preparation.
+- `POST /api/smart-search/query`: `{query, ids}` → task-id-to-cosine-score map.
+  Queries accept up to 16384 bytes and 100000 candidate IDs. Missing IDs are omitted.
 
-Queries are debounced by 250 ms and embedded with the same pipeline. Inference
-is serialized; outdated responses cannot replace newer queries. The latest
-query vector is reused until its text changes. Results are restricted to the
-current project's tasks, filtered to cosine similarity >= 0.30, and sorted
-descending across both open and archived tasks. This threshold is a starting
-heuristic, not a probability of relevance. An empty query keeps the ordinary
-open-then-archived ordering. Preparing or failed Smart Search is explicit in the
-UI; selecting Fuzzy Search immediately restores title matching.
+Preparation shows runtime setup, model download percentage, then indexing
+progress with counts and estimated seconds remaining. Failures show Retry in
+Settings and project views. Project metadata changes and a 30-second browser
+timer request refreshes. Concurrent refreshes coalesce. Index versions change
+only when indexed content or membership changes.
 
-The project task time filter applies in both modes: Last 24h, Last week
-(7 days), Last month (30 days), All times (default). It uses `last_active_at`,
-inclusive at the cutoff, and resets on project changes. Time filtering disables
-drag reordering and resets pagination, just like a text filter.
+Indexed text is title (or “Untitled task”), opening prompt preview, and archive
+outcome, separated by newlines. Full transcripts are excluded. Inputs truncate
+to 512 tokens. Mean pooling and L2 normalization produce 384-dimensional float32
+vectors. Queries use the same model and reuse the latest query vector.
+Revision-specific vector files match exact text; unchanged tasks reuse vectors
+across refreshes and restarts. Invalid cache entries rebuild. Writes use temporary
+files and rename. Deleted tasks are removed from memory and disk during refresh.
+Browser IndexedDB caches from older builds are unused and can be cleared.
 
-Verification: task-search unit tests cover ranking, thresholds, fuzzy behavior,
-time boundaries and ETA. Browser tests cover time filtering and cancellation.
-Run `AGENTTIK_TEST_BEKKO=1 npx playwright test tests/smart-search.spec.js`
-from `e2e/` for the real model download, cross-language retrieval, cached offline
-reload, and indexing newly created/deleted tasks.
+Queries debounce by 250 ms. Outdated responses cannot replace newer queries.
+The frontend restricts results to the current project's tasks, filters scores
+below 0.30 and sorts descending across open and archived tasks. The threshold
+is a heuristic, not a probability. Empty queries keep open-then-archived order.
+Selecting Fuzzy Search immediately restores title matching.
+
+The task time filter applies in both modes: Last 24h, Last week (7 days), Last
+month (30 days), All times (default). It uses `last_active_at`, inclusive at the
+cutoff, and resets on project changes. Time filtering disables drag reordering
+and resets pagination, just like a text filter.
+
+Verification: Go tests cover cache reuse/restart, updates/deletion, query reuse,
+coalescing, errors/retry, shutdown, download integrity and API validation. Browser
+unit tests cover requests and stale-response cancellation. Playwright covers time
+filters and disabling. Set `AGENTTIK_TEST_BEKKO=1` for the real Go model test and
+`e2e/tests/smart-search.spec.js` retrieval test. Optional
+`AGENTTIK_TEST_BEKKO_DIR` reuses Go integration-test downloads across runs.

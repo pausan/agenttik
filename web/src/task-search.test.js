@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { dot, filterTaskRows, secondsLeft, taskText } from "./task-search.js";
+import { filterTaskRows, taskText } from "./task-search.js";
 
 const now = 1800000000000;
 const tasks = [
@@ -28,15 +28,7 @@ test("time windows use last activity with exact inclusive boundaries", () => {
   assert.equal(filterTaskRows([{ id: "edge", last_active_at: now - 86400000 }], "", "1d", null, now).length, 1);
   assert.deepEqual(ids(filterTaskRows(tasks, "query", "1d", { a: 0.4, b: 0.9 }, now)), ["a"]);
 });
-test("blank smart queries preserve the ordinary list and task metadata supplies semantic text", () => {
+test("blank smart queries preserve the ordinary list", () => {
   assert.deepEqual(ids(filterTaskRows(tasks, "  ", "all", {}, now)), ["a", "b", "c", "d"]);
   assert.equal(taskText({ prompt: "Fix login", summary: "Added tests" }), "Untitled task\nFix login\nAdded tests");
-});
-test("ETA and normalized dot product", () => {
-  assert.equal(secondsLeft(0, 10, 500), null);
-  assert.equal(secondsLeft(2, 10, 3000), 12);
-  assert.equal(secondsLeft(10, 10, 3000), 0);
-  assert.equal(dot([1, 0], [0, 1]), 0);
-  assert.equal(dot([0.6, 0.8], [0.6, 0.8]), 1);
-  assert.throws(() => dot([1], [1, 2]));
 });

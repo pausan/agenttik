@@ -155,7 +155,7 @@ const folding = computed({
     <div class="mb-0.5 font-semibold text-highlighted">Project task search</div>
     <p class="mb-2 text-xs text-dimmed">
       Smart Search downloads Bekko a8m (about 150 MB with its tokenizer), then indexes all tasks.
-      Runs on this device and remembers the download. Only task search in project views changes;
+      Runs on the Agenttik host and shares the cached model and index across browsers. Only task search in project views changes;
       all other searches stay fuzzy.
     </p>
     <URadioGroup :model-value="smartSearch.enabled" :items="searchRows" size="sm" @update:model-value="setSmartSearch" />

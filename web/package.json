@@ -9,11 +9,9 @@
     "test": "node --test \"src/**/*.test.js\""
   },
   "dependencies": {
-    "@huggingface/transformers": "4.2.0",
     "@iconify-json/lucide": "^1.2.130",
     "@iconify/vue": "^5.0.1",
     "@nuxt/ui": "^4.11.1",
-    "onnxruntime-web": "1.26.0-dev.20260416-b7804b056c",
     "vue": "^3.5.42",
     "vue-router": "^5.3.1"
   },

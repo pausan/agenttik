@@ -252,6 +252,57 @@ func TestStopCancelsTurn(t *testing.T) {
 	}
 }
 
+func TestStopPreservesUnstartedQueuedPromptsAfterRestart(t *testing.T) {
+	r, st, sess := setup(t, &fakeProvider{})
+	prompts := []string{"First prompt\nwith details", "Second prompt", "Second prompt"}
+	for _, prompt := range prompts {
+		if _, err := st.EnqueueMessage(sess.ID, prompt, sess.Provider, 0, sess.Model, sess.Effort); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := r.Stop(sess.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Stop(sess.ID); err != ErrNotRunning {
+		t.Fatalf("second stop = %v", err)
+	}
+	path := filepath.Join(st.Dir(), "t.db")
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := store.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	messages, err := reopened.ListMessages(sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) != len(prompts) {
+		t.Fatalf("messages = %+v, want %d saved prompts", messages, len(prompts))
+	}
+	for i, message := range messages {
+		if message.Content != prompts[i] || message.Role != store.RoleUser || message.TurnID != 0 {
+			t.Errorf("message %d = %+v", i, message)
+		}
+	}
+	queued, err := reopened.ListQueuedMessages(sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(queued) != 0 {
+		t.Fatalf("queue = %+v", queued)
+	}
+	turns, err := reopened.ListTurns(sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(turns) != 0 {
+		t.Fatalf("stopped prompts started turns: %+v", turns)
+	}
+}
+
 func TestErrorEventMarksSessionFailed(t *testing.T) {
 	fp := &fakeProvider{script: []agent.Event{
 		{Type: agent.EventError, Text: "boom"},

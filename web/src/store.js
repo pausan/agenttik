@@ -2957,24 +2957,14 @@ export async function stopTurn() {
   return stopTask(tab.sessionID);
 }
 
-// Stopping from a sidebar row works for an active turn and for work waiting in
-// the project queue. The server clears queued prompts in either case; their
-// words are not the user's to lose, so — when this session is open in a tab —
-// they go back in the draft, the same box an ordinary unsent prompt waits in,
-// rather than vanishing with the queue. Left alone if something is already
-// typed there, same as a failed send or enqueue.
+// Stop preserves queued text on the server. Reload it even if the queue was
+// already cleared by a turn's final event; local drafts remain untouched.
 export async function stopTask(sessionID) {
   if (!sessionID) return;
   try {
     await api("POST", `/api/sessions/${sessionID}/stop`);
     const tab = S.tabs.find((open) => open.kind === "session" && open.sessionID === sessionID);
-    if (tab) {
-      if (!tab.draft && tab.detail.queued?.length) {
-        tab.draft = tab.detail.queued.map((q) => q.prompt).join("\n\n");
-      }
-      tab.detail.queued = [];
-      tab.detail.session.queue_count = 0;
-    }
+    if (tab) await syncMessages(tab);
     await Promise.all([refreshProjects(), refreshSessions()]);
     reloadProjects();
   } catch (e) {

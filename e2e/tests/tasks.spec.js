@@ -215,6 +215,34 @@ test("a second prompt queues behind a running turn and runs in order", async ({ 
   await expect(page.getByText("Queued", { exact: true })).toHaveCount(0);
 });
 
+test("Stop keeps an unstarted task's text after reload without replacing its draft", async ({ page }) => {
+  await addProject(page);
+  await openProject(page);
+  await newTask(page);
+  await pickModel(page);
+  await sendPrompt(page, "@wait 60000");
+  await expect(page.getByText("running", { exact: true })).toBeVisible();
+
+  await newTask(page);
+  await pickModel(page);
+  const prompt = "Keep every detail of this queued request";
+  await page.getByPlaceholder("Ask the agent…").fill(prompt);
+  await page.getByRole("button", { name: "More prompt actions" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Enqueue", exact: true }).click();
+  await expect(page.getByLabel("Queued prompt").getByText(prompt)).toBeVisible();
+  await page.getByPlaceholder("Ask the agent…").fill("An existing draft");
+
+  const row = sidebar(page).locator("[draggable]").filter({ hasText: prompt });
+  await row.getByRole("button", { name: "Stop task", exact: true }).click();
+  await expect(page.getByLabel("Queued prompt")).toHaveCount(0);
+  await expect(page.getByText("You", { exact: true })).toHaveCount(1);
+  await expect(page.getByPlaceholder("Ask the agent…")).toHaveValue("An existing draft");
+  await page.reload();
+  await expect(page.getByText("You", { exact: true })).toHaveCount(1);
+  await expect(page.locator(".group.mb-4").getByText(prompt, { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Queued prompt")).toHaveCount(0);
+});
+
 test("the subscription allowance bars show the provider's reported usage", async ({ page }) => {
   await addProject(page);
   await openProject(page);

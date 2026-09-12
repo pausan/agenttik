@@ -8,11 +8,12 @@ the project scheduler cannot start it again later. It is also what returns a
 task waiting out a provider outage to idle
 ([045](045-provider-outage-retry.md)).
 
-The words are not lost with the queue. If the task is open in a tab, its
-removed prompts go back into that tab's draft — the same box an unsent prompt
-waits in ([012](012-task-queue.md)) — in the order they would have run, ready
-to edit and send again. Nothing is overwritten if something is already typed
-there, the same rule a failed send or enqueue follows.
+Queued prompts move into the saved transcript as user messages, in queue
+order, in the same database transaction that removes them from the queue.
+They have no turn attached because they did not run. Their text survives
+stopping from a closed tab, reopening the task, and restarting the app.
+An open tab reloads the saved transcript after Stop. Existing draft text is
+left untouched; saved prompts can be copied or edited from the transcript.
 
 The server rejects an archive request for either state, so the rule holds for
 callers outside the sidebar. The same rule stops a busy project being archived;

@@ -432,14 +432,33 @@ func (s *Store) RemoveQueuedMessage(id int64) error {
 	return nil
 }
 
-// RemoveQueuedMessages drops every prompt waiting for one session. Stopping a
-// queued session uses this so the scheduler cannot pick it up later.
-func (s *Store) RemoveQueuedMessages(sessionID string) (int64, error) {
-	res, err := s.db.Exec(`DELETE FROM queued_messages WHERE session_id = ?`, sessionID)
+// StopQueuedMessages moves waiting prompts into the transcript atomically, so
+// stopping scheduling never discards accepted text. No turn has run for these
+// messages, so they have no turn id.
+func (s *Store) StopQueuedMessages(sessionID string) (int64, error) {
+	tx, err := s.db.Begin()
 	if err != nil {
-		return 0, fmt.Errorf("remove queued messages: %w", err)
+		return 0, fmt.Errorf("stop queued messages: %w", err)
 	}
-	return res.RowsAffected()
+	defer tx.Rollback()
+	_, err = tx.Exec(`INSERT INTO messages (session_id, role, content, created_at)
+		SELECT session_id, ?, prompt, created_at FROM queued_messages
+		WHERE session_id = ?`+queuedOrder, RoleUser, sessionID)
+	if err != nil {
+		return 0, fmt.Errorf("preserve queued messages: %w", err)
+	}
+	res, err := tx.Exec(`DELETE FROM queued_messages WHERE session_id = ?`, sessionID)
+	if err != nil {
+		return 0, fmt.Errorf("stop queued messages: %w", err)
+	}
+	removed, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("stop queued messages: %w", err)
+	}
+	return removed, nil
 }
 
 func (s *Store) QueueCount(sessionID string) (int64, error) {

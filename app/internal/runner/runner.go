@@ -484,9 +484,8 @@ func (r *Runner) activeInProject(projectID int64) []context.CancelFunc {
 	return cancels
 }
 
-// Stop cancels the running turn and drops queued prompts, so the session is
-// not scheduled again after the current CLI process exits.
-
+// Stop cancels the running turn and moves queued prompts into the transcript,
+// so the session is not scheduled again after the current CLI process exits.
 func (r *Runner) Stop(sessionID string) error {
 	sess, err := r.store.GetSession(sessionID)
 	if err != nil {
@@ -498,7 +497,7 @@ func (r *Runner) Stop(sessionID string) error {
 	r.mu.Lock()
 	turn, ok := r.active[sessionID]
 	r.mu.Unlock()
-	removed, err := r.store.RemoveQueuedMessages(sessionID)
+	removed, err := r.store.StopQueuedMessages(sessionID)
 	if err != nil {
 		return err
 	}

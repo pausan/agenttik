@@ -7,7 +7,7 @@ import Chord from "./Chord.vue";
 import ContextPane from "./ContextPane.vue";
 import { useTextHistory } from "../text-history";
 import { isMobile } from "../ui";
-import { clipboardImages, promptImages, promptText, uploadImage, withImages } from "../prompt-images";
+import { clipboardImages, promptImages, promptText, readClipboardImages, uploadImage, withImages } from "../prompt-images";
 
 /* Everything below is reached by a click or a chord, never by the first
    paint, so its code is fetched from its own chunk the moment it is first
@@ -33,9 +33,11 @@ const images = computed(() => promptImages(S.owner?.draft));
 const uploading = computed(() => !!S.owner?.imageUploads);
 
 async function onPaste(e) {
-  const files = clipboardImages(e.clipboardData);
+  let files = clipboardImages(e.clipboardData);
   const owner = S.owner;
-  if (!files.length || !owner) return;
+  if (!owner) return;
+  const readClipboard = !files.length && !e.clipboardData?.types?.length && navigator.clipboard?.read;
+  if (!files.length && !readClipboard) return;
   e.preventDefault();
   const pastedText = e.clipboardData.getData("text/plain");
   if (pastedText) {
@@ -44,6 +46,7 @@ async function onPaste(e) {
   }
   owner.imageUploads = (owner.imageUploads || 0) + 1;
   try {
+    if (readClipboard) files = await readClipboardImages(navigator.clipboard);
     for (const file of files) {
       const image = await uploadImage(file);
       owner.draft = withImages(promptText(owner.draft), [...promptImages(owner.draft), image]);

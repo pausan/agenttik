@@ -45,6 +45,39 @@ test("ordinary paste retains the browser default", async ({ page }) => {
   expect(allowed).toBe(true);
 });
 
+test("empty WebKit paste event reads clipboard images into the prompt", async ({ page }) => {
+  await addProject(page);
+  await openProject(page);
+  await newTask(page);
+  await page.getByPlaceholder("Ask the agent…").evaluate((box) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 2;
+    const bytes = Uint8Array.from(atob(canvas.toDataURL("image/png").split(",")[1]), (c) => c.charCodeAt(0));
+    Object.defineProperty(navigator.clipboard, "read", { configurable: true, value: async () => [
+      new ClipboardItem({ "image/png": new Blob([bytes], { type: "image/png" }) }),
+    ] });
+    box.dispatchEvent(new ClipboardEvent("paste", { clipboardData: new DataTransfer(), bubbles: true, cancelable: true }));
+  });
+  const image = page.locator(".prompt-bar").getByRole("img", { name: "Attached image 1" });
+  await expect(image).toBeVisible();
+  await expect.poll(() => image.evaluate((img) => img.naturalWidth)).toBe(2);
+});
+
+test("real Ctrl+V pastes a clipboard image into the prompt", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await addProject(page);
+  await openProject(page);
+  await newTask(page);
+  await page.evaluate(async () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 2;
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+  });
+  await page.getByPlaceholder("Ask the agent…").press("Control+v");
+  await expect(page.locator(".prompt-bar").getByRole("img", { name: "Attached image 1" })).toBeVisible();
+});
+
 test("failed submission restores both the text and pasted image", async ({ page }) => {
   await addProject(page);
   await openProject(page);

@@ -4,6 +4,11 @@ Ctrl+V (or the platform paste command) in the prompt accepts one or several
 clipboard images. Repeated pastes add images. Each has a preview and remove
 button. Text-only paste remains native; mixed clipboard text is inserted at
 the selection. Send, Enqueue and Schedule wait for uploads to finish.
+The handler reads images from the paste event's items or files. Linux WebKit
+can leave both lists empty for an image paste; in that case it reads images
+through `navigator.clipboard.read()` during the paste gesture. It reads one
+image representation per clipboard item and does not read the clipboard for
+ordinary text paste.
 
 PNG, JPEG, GIF and WebP are accepted, up to 4 MiB each. The browser uploads
 each file as bytes to `POST /api/attachments`. The server checks the content

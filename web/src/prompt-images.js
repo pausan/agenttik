@@ -13,9 +13,21 @@ export function withImages(text, images) {
 }
 
 export function clipboardImages(data) {
-  return Array.from(data?.items || [])
+  const images = Array.from(data?.items || [])
     .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
     .map((item) => item.getAsFile()).filter(Boolean);
+  return images.length ? images : Array.from(data?.files || []).filter((file) => file.type.startsWith("image/"));
+}
+
+// WebKit on Linux can deliver an image paste with empty DataTransfer lists.
+// Read only during that paste gesture; ordinary text paste needs no permission.
+export async function readClipboardImages(clipboard) {
+  const images = [];
+  for (const item of await clipboard.read()) {
+    const type = item.types.find((type) => type.startsWith("image/"));
+    if (type) images.push(await item.getType(type));
+  }
+  return images;
 }
 
 export async function uploadImage(file) {

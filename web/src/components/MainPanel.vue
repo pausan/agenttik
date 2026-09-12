@@ -33,7 +33,7 @@ const StatsPane = defineAsyncComponent(() => import("./StatsPane.vue"));
    a task does, so both are cut to keep the strip readable with a dozen of them
    open. Projects and files are named by a folder and a file, which are already
    as short as they are going to get. */
-const MAX_LABEL = 20;
+const MAX_LABEL = 32;
 const named = (kind) => kind === "session" || kind === "schedule";
 const short = (label) =>
   label.length > MAX_LABEL ? label.slice(0, MAX_LABEL - 3) + "..." : label;

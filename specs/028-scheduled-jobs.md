@@ -212,7 +212,7 @@ conversation share ([008](008-project-workspaces.md)): opening a job replaces
 whichever of the three was in front rather than adding a tab beside it. A job
 is read the way a page is, and walking a project's jobs with `Ctrl+PageDown`
 would otherwise leave one tab behind per job looked at. Its label is cut to the
-same 20 characters a task's is, since a job names itself from a prompt exactly
+same 32 characters (including `...`) a task's is, since a job names itself from a prompt exactly
 as a task does ([above](#the-name)). Its header carries the job's name and number
 ([above](#the-number)), the recurrence in words, when the next run is due, a
 Run menu ([above](#running-one-now)), Pause/Resume and Delete.

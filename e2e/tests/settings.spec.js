@@ -104,8 +104,9 @@ test("database path is read-only, copyable, and searchable with a formatted size
   await openSettings(page);
   const dialog = page.getByRole("dialog");
   const path = dialog.getByLabel("Path on the Agenttik host");
-  await expect(path).toHaveValue(`${agenttik.dataDir}/agenttik.db`);
-  await expect(path).toHaveAttribute("readonly", "");
+  await expect(path).toHaveText(`${agenttik.dataDir}/agenttik.db`);
+  await expect(path).toHaveClass(/bg-muted/);
+  await expect(dialog.locator("section:visible > div.font-semibold").last()).toHaveText("Database");
   await expect(dialog.getByText(/^Database file size: \d+\.\d (B|KB|MB|GB)$/)).toBeVisible();
   await dialog.getByRole("button", { name: "Copy database path" }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${agenttik.dataDir}/agenttik.db`);

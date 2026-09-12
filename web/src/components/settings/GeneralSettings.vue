@@ -109,18 +109,6 @@ const folding = computed({
 
 <template>
   <DesktopSettings :filter="filter" @count="desktopCount = $event" />
-  <section v-if="showDatabase" class="mb-5">
-    <div class="mb-0.5 font-semibold text-highlighted">Database</div>
-    <template v-if="database">
-      <label for="database-path" class="text-xs text-dimmed">Path on the Agenttik host</label>
-      <div class="mt-1 flex items-center gap-2">
-        <UInput id="database-path" :model-value="database.database_path" readonly class="min-w-0 flex-1" :title="database.database_path" />
-        <UButton :icon="copied ? 'i-lucide-check' : 'i-lucide-copy'" color="neutral" variant="ghost" aria-label="Copy database path" @click="copyDatabasePath" />
-      </div>
-      <p class="mt-1 text-xs text-dimmed">Database file size: {{ fileSize(database.database_size) }}</p>
-    </template>
-    <p v-else class="text-xs text-dimmed">Database details unavailable.</p>
-  </section>
   <section v-if="promptRows.length">
     <div class="mb-0.5 font-semibold text-highlighted">Prompt</div>
     <p class="mb-2 text-xs text-dimmed">
@@ -182,5 +170,22 @@ const folding = computed({
     </p>
     <URadioGroup :model-value="smartSearch.enabled" :items="searchRows" size="sm" @update:model-value="setSmartSearch" />
     <SmartSearchProgress />
+  </section>
+  <section v-if="showDatabase" class="mt-5">
+    <div class="mb-0.5 font-semibold text-highlighted">Database</div>
+    <template v-if="database">
+      <div class="text-xs text-dimmed">Path on the Agenttik host</div>
+      <div class="mt-1 flex items-center gap-2">
+        <output
+          id="database-path"
+          aria-label="Path on the Agenttik host"
+          :title="database.database_path"
+          class="min-w-0 flex-1 overflow-x-auto rounded-[var(--ui-radius)] bg-muted px-2 py-1.5 font-mono text-xs text-highlighted whitespace-nowrap"
+        >{{ database.database_path }}</output>
+        <UButton :icon="copied ? 'i-lucide-check' : 'i-lucide-copy'" color="neutral" variant="ghost" aria-label="Copy database path" @click="copyDatabasePath" />
+      </div>
+      <p class="mt-1 text-xs text-dimmed">Database file size: {{ fileSize(database.database_size) }}</p>
+    </template>
+    <p v-else class="text-xs text-dimmed">Database details unavailable.</p>
   </section>
 </template>

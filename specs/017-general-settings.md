@@ -9,17 +9,6 @@ are inserted, and project task search. **Fuzzy Search** is the default;
 **Smart Search** downloads Bekko a8m and indexes tasks locally, with download
 and indexing progress in this pane. See [057](057-smart-search.md).
 
-## Database
-
-General shows the absolute database path on the Agenttik host in a read-only
-field, with a button that copies the full path and confirms success with a check.
-The file size uses decimal units (B, KB, MB, and so on), rounded to one decimal.
-It measures the main `.db` file only, excluding SQLite's WAL and shared-memory
-files. Details are read when the settings pane mounts, without polling.
-`GET /api/general` includes `database_path` and `database_size` (bytes);
-these fields are informational and cannot be changed through `PUT /api/general`.
-The settings filter matches database, path, size, storage, and copy.
-
 ## Desktop tray
 
 Desktop launches offer **Close to tray** and a configurable global show/hide
@@ -113,3 +102,15 @@ or `MAX(position) + 1` for bottom in the same SQL statement. Task positions
 are scoped to their project; archived items count toward both bounds.
 Sidebar and project task lists share these positions. Schedule rows and
 archive history keep their own ordering.
+
+## Database
+
+Database is the final section in General. It shows the absolute database path
+on the Agenttik host as text over a gray background, with a button that copies
+the full path and confirms success with a check. The file size uses decimal
+units (B, KB, MB, and so on), rounded to one decimal. It measures the main
+`.db` file only, excluding SQLite's WAL and shared-memory files. Details are
+read when the settings pane mounts, without polling.
+`GET /api/general` includes `database_path` and `database_size` (bytes);
+these fields are informational and cannot be changed through `PUT /api/general`.
+The settings filter matches database, path, size, storage, and copy.

@@ -90,7 +90,9 @@ knows nothing about HTTP or SQL.
 
 ## Shutdown
 
-Closing the window, or Ctrl-C in web mode, has to end the process. A live SSE
+Closing the window normally ends the process. With **Close to tray** enabled,
+it hides the window and keeps tasks running; the tray's Quit action ends the
+process (see [060](060-desktop-tray.md)). Ctrl-C in web mode ends the process. A live SSE
 stream never finishes by itself and Fiber waits for every open connection, so
 `Server.Shutdown` closes a `closing` channel first — that releases the stream
 handlers — and only then waits, with a 3s cap, for what is left. Without the

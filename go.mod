@@ -3,11 +3,16 @@ module github.com/pausan/agenttik
 go 1.25.0
 
 require (
+	github.com/BurntSushi/xgb v0.0.0-20210121224620-deaf085860bc
+	github.com/BurntSushi/xgbutil v0.0.0-20190907113008-ad855c713046
+	github.com/cardinalby/go-systray v1.0.2
 	github.com/fsnotify/fsnotify v1.9.0
+	github.com/godbus/dbus/v5 v5.1.0
 	github.com/gofiber/fiber/v2 v2.52.15
 	github.com/google/uuid v1.6.0
 	github.com/valyala/fasthttp v1.51.0
 	github.com/wailsapp/wails/v2 v2.15.0
+	golang.design/x/hotkey v0.6.1
 	golang.org/x/crypto v0.53.0
 	golang.org/x/sys v0.46.0
 	modernc.org/sqlite v1.29.10
@@ -20,7 +25,6 @@ require (
 	github.com/bep/debounce v1.2.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
-	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/jchv/go-winloader v0.0.0-20210711035445-715c2860da7e // indirect

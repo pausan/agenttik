@@ -33,6 +33,10 @@ func runDesktop(srv *server.Server, lock *single.Lock, defaultAddr string) error
 	// does, so the hook goes in before anything is serving on it.
 	win := &window{}
 	srv.OnForeground(win.present)
+	config, err := srv.ConfigureDesktop(win.trayStatus)
+	if err != nil {
+		return err
+	}
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -75,8 +79,11 @@ func runDesktop(srv *server.Server, lock *single.Lock, defaultAddr string) error
 		BackgroundColour: &options.RGBA{R: 17, G: 18, B: 21, A: 255},
 		OnStartup:        win.opened,
 		OnShutdown:       func(ctx context.Context) { srv.Shutdown() },
+		OnBeforeClose:    win.beforeClose,
 	}
 	configureDesktop(app)
+	stopTray := win.startTray(config)
+	defer stopTray()
 	return wails.Run(app)
 }
 
@@ -84,8 +91,12 @@ func runDesktop(srv *server.Server, lock *single.Lock, defaultAddr string) error
 // answering by the time Wails calls opened, and a second launch can ask to be
 // raised in that gap, so the context crosses goroutines and needs the guard.
 type window struct {
-	mu  sync.Mutex
-	ctx context.Context
+	mu        sync.Mutex
+	ctx       context.Context
+	hidden    bool
+	trayReady bool
+	quitting  bool
+	trayError string
 }
 
 func (w *window) opened(ctx context.Context) {
@@ -98,13 +109,14 @@ func (w *window) opened(ctx context.Context) {
 // calls onto the native UI loop, so any goroutine may make them.
 func (w *window) present() bool {
 	w.mu.Lock()
+	defer w.mu.Unlock()
 	ctx := w.ctx
-	w.mu.Unlock()
-	if ctx == nil {
+	if ctx == nil || w.quitting {
 		return false
 	}
 	runtime.WindowShow(ctx)
 	runtime.WindowUnminimise(ctx)
+	w.hidden = false
 	return true
 }
 

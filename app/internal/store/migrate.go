@@ -306,6 +306,12 @@ CREATE TABLE general_config (
 );
 INSERT INTO general_config (id) VALUES (1);
 	`,
+	`CREATE TABLE desktop_config (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    close_to_tray INTEGER NOT NULL DEFAULT 0,
+    toggle_shortcut TEXT NOT NULL DEFAULT 'Ctrl+Shift+A'
+);
+INSERT INTO desktop_config (id) VALUES (1);`,
 }
 
 func migrate(db *sql.DB) error {

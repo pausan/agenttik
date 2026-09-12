@@ -9,6 +9,12 @@ are inserted, and project task search. **Fuzzy Search** is the default;
 **Smart Search** downloads Bekko a8m and indexes tasks locally, with download
 and indexing progress in this pane. See [057](057-smart-search.md).
 
+## Desktop tray
+
+Desktop launches offer **Close to tray** and a configurable global show/hide
+shortcut, defaulting to `Ctrl+Shift+A`. Save and restart to apply changes.
+See [060](060-desktop-tray.md) for lifecycle and platform support.
+
 ## Enter sends, or Enter enqueues
 
 Picking the other way round swaps the pair: Enter enqueues and `Ctrl+Enter`

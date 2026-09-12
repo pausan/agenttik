@@ -86,6 +86,9 @@ All timestamps are **unix milliseconds**, so turn timings need no second table.
   Account 0 is deliberately not a row: it is the machine's own signed-in CLI,
   so an existing database needs no backfill and a fresh one no seed. See
   [050](050-subscription-accounts.md).
+- **desktop_config** — singleton `id=1, close_to_tray, toggle_shortcut`.
+  Defaults to disabled and `Ctrl+Shift+A`; applied by the desktop shell at
+  startup. See [060](060-desktop-tray.md).
 - **server_config** — one row, `id` fixed at 1: `enabled, host, port` for the
   listener Settings › Server exposes ([043](043-exposed-server.md)). A blank
   host and a 0 port mean "never saved", which the app fills with its own

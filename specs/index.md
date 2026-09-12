@@ -9,6 +9,7 @@ screen, **session** for the row, the route or the CLI flag.
 
 | Doc | What it covers |
 |-----|----------------|
+| [060](060-desktop-tray.md) | Close to tray, global show/hide shortcut, native lifecycle |
 | [001](001-architecture.md) | Process model, packages, request flow |
 | [002](002-data-model.md) | SQLite schema, metrics, storage location |
 | [003](003-providers.md) | Provider interface, CLI invocation, event mapping |

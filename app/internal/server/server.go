@@ -48,7 +48,8 @@ type Server struct {
 
 	// foreground raises the app's window, and says whether there was one to
 	// raise. Set by the desktop shell before serving starts; nil in web mode.
-	foreground func() bool
+	foreground    func() bool
+	desktopStatus func() string
 
 	// network is the desktop shell's optional exposed-server manager, and the
 	// host and port it falls back to when nothing has been saved yet. Set by
@@ -151,6 +152,8 @@ func (s *Server) routes() {
 	api.Post("/fs/clone", s.cloneRepo)
 	api.Post("/fs/remote", s.checkRemote)
 	api.Post("/foreground", s.raiseWindow)
+	api.Get("/desktop", s.getDesktopConfig)
+	api.Put("/desktop", s.putDesktopConfig)
 	api.Get("/general", s.getGeneralConfig)
 	api.Put("/general", s.putGeneralConfig)
 	api.Get("/server", s.getServerConfig)

@@ -70,3 +70,30 @@ test("new item position defaults to top and remembers bottom", async ({ page }) 
   await top.click();
   await expect(top).toBeChecked();
 });
+
+
+test("desktop tray settings save the toggle and shortcut", async ({ page }) => {
+  let config = { available: true, close_to_tray: false, toggle_shortcut: "Ctrl+Shift+A", error: "" };
+  await page.route("**/api/desktop", async (route) => {
+    if (route.request().method() === "PUT") config = { ...config, ...route.request().postDataJSON() };
+    await route.fulfill({ json: config });
+  });
+  await openSettings(page);
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByLabel("Show / hide shortcut")).toHaveValue("Ctrl+Shift+A");
+  await dialog.getByRole("checkbox", { name: "Close to tray" }).check();
+  await dialog.getByLabel("Show / hide shortcut").fill("Alt+Shift+B");
+  await dialog.getByRole("button", { name: "Save tray settings" }).click();
+  await expect(dialog.getByText("Saved. Restart agenttik to apply these settings.")).toBeVisible();
+  expect(config.close_to_tray).toBe(true);
+  expect(config.toggle_shortcut).toBe("Alt+Shift+B");
+  await page.reload();
+  await openSettings(page);
+  await expect(dialog.getByRole("checkbox", { name: "Close to tray" })).toBeChecked();
+  await expect(dialog.getByLabel("Show / hide shortcut")).toHaveValue("Alt+Shift+B");
+});
+
+test("web mode does not offer tray controls", async ({ page }) => {
+  await openSettings(page);
+  await expect(page.getByText("Desktop tray", { exact: true })).toHaveCount(0);
+});

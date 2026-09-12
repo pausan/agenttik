@@ -3,7 +3,7 @@
 Enqueue is `Enter`; `Ctrl+Enter` sends. `Alt+Enter` no longer queues anything:
 it was chosen because `Ctrl+Enter` looked taken, and it is not.
 
-Every chord the app answers to now comes from one registry, `shortcuts.js`, and
+Browser shortcuts come from one registry, `shortcuts.js`, and
 the handlers ask it a question instead of spelling a key out —
 `hit(e, "prompt.send")` rather than `e.key === "Enter"`. A chord is written the
 way it reads, `Ctrl+Shift+T`, and compared on the physical `e.code`, so a
@@ -11,7 +11,11 @@ layout where Alt and a digit produce a different character still matches. The
 modifiers are matched exactly, which is what lets `Ctrl+T` and `Ctrl+Shift+T`
 be two bindings whose handlers can be tested in any order.
 
-Most of them are editable. Click a chord in Settings and the next keystroke
+The desktop global show/hide shortcut lives in General → Desktop tray,
+because the native shell registers it before the UI loads; see
+[060](060-desktop-tray.md).
+
+Most browser shortcuts are editable. Click a chord in Settings and the next keystroke
 becomes the binding; Escape cancels, and a per-row arrow restores that row's
 default. Recording listens in the capture phase with propagation stopped, so
 binding `Ctrl+P` records `Ctrl+P` instead of opening the launcher, and Escape

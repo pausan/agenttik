@@ -6,11 +6,13 @@ import { fuzzyAny } from "../../fuzzy";
 import { api } from "../../api";
 import Chord from "../Chord.vue";
 import { smartSearch, setSmartSearch } from "../../smart-search.js";
+import DesktopSettings from "./DesktopSettings.vue";
 import SmartSearchProgress from "../SmartSearchProgress.vue";
 
 const props = defineProps({ filter: { type: String, default: "" } });
 const emit = defineEmits(["count"]);
 
+const desktopCount = ref(0);
 const position = ref("top");
 const positionReady = ref(false);
 const savingPosition = ref(false);
@@ -82,7 +84,7 @@ const searchRows = computed(() => fuzzyAny(["general", "project", "tasks", "smar
   { value: false, label: "Fuzzy Search (default)", description: "Match task titles as you type" },
   { value: true, label: "Smart Search", description: "Find related tasks by meaning, across languages" },
 ] : []);
-watchEffect(() => emit("count", promptRows.value.length + foldRows.value.length + positionRows.value.length + searchRows.value.length));
+watchEffect(() => emit("count", desktopCount.value + promptRows.value.length + foldRows.value.length + positionRows.value.length + searchRows.value.length));
 
 const chosen = computed({
   get: () => enterDoes(),
@@ -96,6 +98,7 @@ const folding = computed({
 </script>
 
 <template>
+  <DesktopSettings :filter="filter" @count="desktopCount = $event" />
   <section v-if="promptRows.length">
     <div class="mb-0.5 font-semibold text-highlighted">Prompt</div>
     <p class="mb-2 text-xs text-dimmed">

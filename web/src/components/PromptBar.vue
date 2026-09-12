@@ -1,12 +1,18 @@
 <script setup>
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, defineAsyncComponent, nextTick, ref, watch } from "vue";
 
 import { S, accountLabel, contextWindow, enqueue, enterDoes, fail, hit, isStarred, limitsKey, modelPickerGroups, parseModelChoice, providerOf, refreshSubscriptionLimits, send, setModel, stopTurn, toggleStar } from "../store";
-import ScheduleModal from "./ScheduleModal.vue";
 import { ago } from "../api";
 import Chord from "./Chord.vue";
 import ContextPane from "./ContextPane.vue";
 import { useTextHistory } from "../text-history";
+
+/* Everything below is reached by a click or a chord, never by the first
+   paint, so its code is fetched from its own chunk the moment it is first
+   needed instead of being parsed on the way in. The chunks are built into
+   the binary beside the main one, so this is still a read off the local
+   server and never a network call. */
+const ScheduleModal = defineAsyncComponent(() => import("./ScheduleModal.vue"));
 
 /* The unsent prompt belongs to the conversation, not to this bar: one bar
    serves every session, so text kept here would follow you between tabs. */
@@ -526,7 +532,7 @@ function runMenuAction(action) {
         </UFieldGroup>
       </div>
     </div>
-    <ScheduleModal v-model:open="scheduling" />
+    <ScheduleModal v-if="scheduling" v-model:open="scheduling" />
     <p class="mx-auto mt-1.5 flex max-w-[860px] flex-wrap items-center gap-x-1.5 px-1 text-xs text-dimmed">
       <template v-for="(hint, i) in hints" :key="hint.what">
         <span v-if="i">·</span>

@@ -117,10 +117,12 @@ export const REPO = fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/,
 
 export async function addProject(page, path = REPO) {
   await page.getByRole("button", { name: "Add project" }).click();
-  const field = page.getByPlaceholder("~/code/myproject");
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  const field = dialog.getByPlaceholder("~/code/myproject");
   await expect(field).toHaveValue(/.+/); // the picker prefills it with $HOME
   await field.fill(path);
-  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await dialog.getByRole("button", { name: "Add project", exact: true }).click();
   await expect(sidebar(page).getByText(path)).toBeVisible();
 }
 

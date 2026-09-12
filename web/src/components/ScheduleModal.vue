@@ -18,7 +18,7 @@ watch(open, (on) => {
   if (!on) return;
   form.value = loadScheduleDefaults();
   forever.value = form.value.remaining === -1;
-});
+}, { immediate: true });
 
 /* -1 is forever, and the counter reaches 0 on its own; 0 is not something to
    be asked for, so the toggle switches between forever and a count. */

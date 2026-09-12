@@ -3,6 +3,7 @@ package server
 import (
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"io"
 	"net"
@@ -210,6 +211,44 @@ func TestIndexIsServed(t *testing.T) {
 	}
 	if resp.StatusCode != want {
 		t.Errorf("status = %d, want %d (ui built: %v)", resp.StatusCode, want, web.Built())
+	}
+}
+
+func TestAPIResponsesAreCompressed(t *testing.T) {
+	s, st := newTestServer(t)
+	if _, err := st.CreateProject(strings.Repeat("project ", 100), t.TempDir()); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/projects", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+	resp, err := s.app.Test(req, 5000)
+	if err != nil {
+		t.Fatalf("GET /api/projects: %v", err)
+	}
+	defer resp.Body.Close()
+	if got := resp.Header.Get("Content-Encoding"); got != "gzip" {
+		t.Fatalf("content encoding = %q, want gzip", got)
+	}
+	plain, err := gzip.NewReader(resp.Body)
+	if err != nil {
+		t.Fatalf("open gzip body: %v", err)
+	}
+	defer plain.Close()
+	var projects []store.Project
+	if err := json.NewDecoder(plain).Decode(&projects); err != nil {
+		t.Fatalf("decode gzip body: %v", err)
+	}
+	if len(projects) != 1 {
+		t.Fatalf("projects = %d, want 1", len(projects))
+	}
+}
+
+func TestStreamPathSkipsCompression(t *testing.T) {
+	if !isStreamPath("/api/stream") {
+		t.Error("the stream path should skip compression")
+	}
+	if isStreamPath("/api/projects") {
+		t.Error("an ordinary API path should be compressed")
 	}
 }
 

@@ -14,6 +14,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [003](003-providers.md) | Provider interface, CLI invocation, event mapping |
 | [004](004-ui.md) | Layout, panels, shortcuts, HTTP API |
 | [005](005-testing.md) | The three test layers and how they are isolated |
+| [052](052-launch-budget.md) | Restored-window launch budget, concurrent reads, and deferred UI work |
 
 ## Projects and tasks
 

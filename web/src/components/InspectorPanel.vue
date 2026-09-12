@@ -1,12 +1,18 @@
 <script setup>
-import { computed } from "vue";
+import { computed, defineAsyncComponent } from "vue";
 
 import { S } from "../store";
 import FileList from "./FileList.vue";
-import LogsPane from "./LogsPane.vue";
-import StatsPane from "./StatsPane.vue";
-import OptionsPane from "./OptionsPane.vue";
 import { SEGMENTED } from "../ui";
+
+/* Everything below is reached by a click or a chord, never by the first
+   paint, so its code is fetched from its own chunk the moment it is first
+   needed instead of being parsed on the way in. The chunks are built into
+   the binary beside the main one, so this is still a read off the local
+   server and never a network call. */
+const LogsPane = defineAsyncComponent(() => import("./LogsPane.vue"));
+const StatsPane = defineAsyncComponent(() => import("./StatsPane.vue"));
+const OptionsPane = defineAsyncComponent(() => import("./OptionsPane.vue"));
 
 const LABELS = { changed: "Changed", options: "Options", logs: "Commits", stats: "Stats" };
 

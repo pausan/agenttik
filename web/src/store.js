@@ -157,8 +157,14 @@ export function fail(err) {
 /* ------------------------------------------------------------- providers */
 
 export async function loadProviders() {
-  S.providers = await api("GET", "/api/providers");
-  S.stars = await api("GET", "/api/stars");
+  // Two answers that do not depend on each other, and the providers one can
+  // cost a CLI probe, so they are asked for together.
+  const [providers, stars] = await Promise.all([
+    api("GET", "/api/providers"),
+    api("GET", "/api/stars"),
+  ]);
+  S.providers = providers;
+  S.stars = stars;
 }
 
 export function providerOf(name) {
@@ -851,10 +857,19 @@ export async function reorderProjects(ids) {
 /* openProject puts the project in a tab: everything still open in it, with
    its totals, files and options on the right. */
 export async function openProject(id, silent = false) {
-  const tabID = "project:" + id;
-  const open = S.tabs.find((t) => t.id === tabID);
+  const open = S.tabs.find((t) => t.id === "project:" + id);
   if (open) return setContextTab(open);
+  const show = await loadProjectTab(id, silent);
+  if (!show) return;
+  show();
+  await Promise.all([refreshProjects(), refreshSessions()]).catch(fail);
+}
 
+/* loadProjectTab fetches the page and hands back what puts it on the strip,
+   or nothing when there is no page to put there. Fetching is split from
+   showing so a restored strip can ask for all its tabs at once and still
+   rebuild them in the order they were saved in — see restoreOpenTabs. */
+async function loadProjectTab(id, silent = false) {
   let project, stats, metrics, sessions, archived, schedules;
   try {
     [project, stats, metrics, sessions, archived, schedules] = await Promise.all([
@@ -867,16 +882,16 @@ export async function openProject(id, silent = false) {
     ]);
   } catch (e) {
     if (!silent) fail(e);
-    return;
+    return null;
   }
-  setContextTab({
-    id: tabID,
-    kind: "project",
-    label: project.name,
-    projectID: id,
-    data: { project, stats, metrics, sessions, archived, schedules },
-  });
-  await Promise.all([refreshProjects(), refreshSessions()]).catch(fail);
+  return () =>
+    setContextTab({
+      id: "project:" + id,
+      kind: "project",
+      label: project.name,
+      projectID: id,
+      data: { project, stats, metrics, sessions, archived, schedules },
+    });
 }
 
 /* The project page's own list is what is still open in the project, in the
@@ -1190,21 +1205,28 @@ export async function openSchedule(id, silent = false) {
     await reloadScheduleTab(open);
     return selectTab(tabID);
   }
+  (await loadScheduleTab(id, silent))?.();
+}
+
+/* loadScheduleTab reads the job and hands back what puts it on the strip, the
+   same way loadProjectTab does. */
+async function loadScheduleTab(id, silent = false) {
   let detail;
   try {
     detail = await api("GET", "/api/schedules/" + id);
   } catch (e) {
     if (!silent) fail(e);
-    return;
+    return null;
   }
-  setContextTab({
-    id: tabID,
-    kind: "schedule",
-    label: detail.schedule.title,
-    scheduleID: id,
-    projectID: detail.schedule.project_id,
-    data: detail,
-  });
+  return () =>
+    setContextTab({
+      id: "schedule:" + id,
+      kind: "schedule",
+      label: detail.schedule.title,
+      scheduleID: id,
+      projectID: detail.schedule.project_id,
+      data: detail,
+    });
 }
 
 async function reloadScheduleTab(tab) {
@@ -1550,30 +1572,38 @@ export function startCurrentTask() {
 }
 
 export async function openTask(id, silent = false) {
-  const tabID = "session:" + id;
-  const open = S.tabs.find((t) => t.id === tabID);
+  const open = S.tabs.find((t) => t.id === "session:" + id);
   if (open) return setContextTab(open);
+  const show = await loadTaskTab(id, silent);
+  if (!show) return;
+  show();
+  await Promise.all([refreshProjects(), refreshSessions()]).catch(fail);
+}
 
+/* loadTaskTab reads the conversation and hands back what puts it on the
+   strip, the same way loadProjectTab does. */
+async function loadTaskTab(id, silent = false) {
   let detail;
   try {
     detail = await api("GET", "/api/sessions/" + id);
   } catch (e) {
     if (!silent) fail(e);
-    return;
+    return null;
   }
-  rememberUsed(detail.session);
-  setContextTab({
-    id: tabID,
-    kind: "session",
-    label: tabLabel(detail.session),
-    sessionID: id,
-    detail,
-    pendingQueued: [],
-    // Unsent text belongs to the conversation, not to the prompt bar, so it
-    // survives every tab switch and only closing throws it away.
-    draft: S.drafts[id] || "",
-  });
-  await Promise.all([refreshProjects(), refreshSessions()]).catch(fail);
+  return () => {
+    rememberUsed(detail.session);
+    setContextTab({
+      id: "session:" + id,
+      kind: "session",
+      label: tabLabel(detail.session),
+      sessionID: id,
+      detail,
+      pendingQueued: [],
+      // Unsent text belongs to the conversation, not to the prompt bar, so it
+      // survives every tab switch and only closing throws it away.
+      draft: S.drafts[id] || "",
+    });
+  };
 }
 
 /* accountID is which subscription of that provider answers the next prompt.
@@ -1833,10 +1863,17 @@ function openingMode(path, line) {
    opens read-only in Diff and stays there. Its id carries the revision, so
    the same path can be open once per commit and once for the working tree. */
 async function openFileIn(projectID, ownerID, path, opts = {}) {
+  (await loadFileTabIn(projectID, ownerID, path, opts))?.();
+}
+
+/* loadFileTabIn reads the file and hands back what puts its tab on the strip,
+   the same way loadProjectTab does — nothing, when the file cannot be read or
+   is already open and was only brought to the front. */
+async function loadFileTabIn(projectID, ownerID, path, opts = {}) {
   const { silent = false, commit = "", pin = false, line = 0 } = opts;
-  if (!projectID) return;
+  if (!projectID) return null;
   const tabID = commit ? `file:${projectID}:${commit}:${path}` : `file:${projectID}:${path}`;
-  if (selectOpenFile(tabID, pin, line)) return;
+  if (selectOpenFile(tabID, pin, line)) return null;
   const tab = {
     id: tabID,
     kind: "file",
@@ -1863,14 +1900,20 @@ async function openFileIn(projectID, ownerID, path, opts = {}) {
     await loadFileTab(tab);
   } catch (e) {
     if (!silent) fail(e);
-    return;
+    return null;
   }
-  // A double click is two clicks, so the second call can arrive while this
-  // one is still fetching: whichever tab is open by now is the tab.
-  if (selectOpenFile(tabID, pin, line)) return;
-  const previous = tab.temp ? tempFileIn(projectID) : null;
-  if (previous) swapTab(previous.id, tab);
-  else addTab(tab);
+  return () => {
+    // A double click is two clicks, so the second call can arrive while this
+    // one is still fetching: whichever tab is open by now is the tab.
+    if (selectOpenFile(tabID, pin, line)) return;
+    // The owner is checked here rather than before the read: a restored strip
+    // rebuilds in the saved order, so the view a file was opened from may
+    // only have landed while the file itself was being fetched.
+    if (!S.tabs.some((open) => open.id === tab.owner)) tab.owner = "";
+    const previous = tab.temp ? tempFileIn(projectID) : null;
+    if (previous) swapTab(previous.id, tab);
+    else addTab(tab);
+  };
 }
 
 /* loadFileTab fetches the view the tab is showing, once. The tab may not be
@@ -2073,10 +2116,17 @@ const saveOpenTabs = debounce(() => {
   }
 }, 300);
 
-/* Restoring opens the same kinds of tabs through the ordinary actions, so
-   their data is fetched anew and missing projects or sessions are skipped. A
-   file is restored against its own project, and keeps the view it was opened
-   from only if that one came back too. */
+/* Restoring asks for every saved tab at once and rebuilds the strip from the
+   answers, in the order the tabs were saved in. Their data is fetched anew,
+   so missing projects and sessions are skipped; a file is restored against
+   its own project, and keeps the view it was opened from only if that one
+   came back too.
+
+   The order the strip is rebuilt in matters — a project keeps one context
+   tab, the last one wins, and a file follows its view — but nothing about the
+   order it is *fetched* in does. Asking for a tab only once the one before it
+   has answered was most of what a launch cost: a strip of eight was eight
+   round trips deep before the first thing was on screen. */
 async function restoreOpenTabs() {
   let saved;
   try {
@@ -2089,20 +2139,8 @@ async function restoreOpenTabs() {
 
   restoringTabs = true;
   try {
-    for (const tab of saved.tabs) {
-      if (tab?.kind === "project" && tab.projectID) {
-        await openProject(tab.projectID, true);
-      } else if (tab?.kind === "schedule" && tab.scheduleID) {
-        await openSchedule(tab.scheduleID, true);
-      } else if (tab?.kind === "session" && tab.sessionID) {
-        await openTask(tab.sessionID, true);
-        const open = S.tabs.find((t) => t.id === tab.id);
-        if (open) open.draft = typeof tab.draft === "string" ? tab.draft : "";
-      } else if (tab?.kind === "file" && typeof tab.path === "string") {
-        const owner = S.tabs.some((open) => open.id === tab.owner) ? tab.owner : "";
-        await openFileIn(tab.projectID, owner, tab.path, restoreOpts(tab));
-      }
-    }
+    const loaded = await Promise.all(saved.tabs.map(loadSavedTab));
+    for (const show of loaded) show?.();
     if (S.projects.some((p) => p.id === saved.activeProjectID)) {
       S.activeProjectID = saved.activeProjectID;
     }
@@ -2110,7 +2148,31 @@ async function restoreOpenTabs() {
   } finally {
     restoringTabs = false;
     saveOpenTabs();
+    // The strip is whole by now, so the stream is opened once for it rather
+    // than reopened between every two tabs.
+    resubscribe();
   }
+}
+
+/* loadSavedTab fetches one saved tab and hands back what puts it on the
+   strip, or nothing when it cannot be rebuilt. */
+function loadSavedTab(tab) {
+  if (tab?.kind === "project" && tab.projectID) return loadProjectTab(tab.projectID, true);
+  if (tab?.kind === "schedule" && tab.scheduleID) return loadScheduleTab(tab.scheduleID, true);
+  if (tab?.kind === "file" && typeof tab.path === "string") {
+    return loadFileTabIn(tab.projectID, tab.owner, tab.path, restoreOpts(tab));
+  }
+  if (tab?.kind === "session" && tab.sessionID) {
+    return loadTaskTab(tab.sessionID, true).then((show) => {
+      if (!show) return null;
+      return () => {
+        show();
+        const open = S.tabs.find((candidate) => candidate.id === tab.id);
+        if (open) open.draft = typeof tab.draft === "string" ? tab.draft : "";
+      };
+    });
+  }
+  return Promise.resolve(null);
 }
 
 watch(
@@ -2378,6 +2440,10 @@ watch(currentProjectID, () => resubscribe());
 /* resubscribe reopens the stream when the set of open tabs changes, and does
    nothing when it has not. */
 function resubscribe() {
+  // A strip being restored changes what the stream would carry once per tab
+  // it rebuilds. It is opened once, after the last of them — see
+  // restoreOpenTabs.
+  if (restoringTabs) return;
   const url = subscriptionURL();
   if (url === streamURL) return;
   streamURL = url;
@@ -3078,11 +3144,14 @@ export async function init() {
     if (S.tabs.some(isDirty)) e.preventDefault();
   });
   try {
-    // None of these four depend on each other's result, so they go over the
-    // wire together instead of one after another — a launch with several
-    // saved tabs was paying for four round trips in a row before the first
-    // one of them could even start restoring.
-    await Promise.all([loadProviders(), refreshProjects(), refreshSessions(), refreshSchedules()]);
+    // What the first paint draws is the sidebar's projects, its task rows and
+    // the strip that was left open, and those need exactly these two. The
+    // rest is fetched beside them but never waited for: a provider's answer
+    // can cost a CLI probe of a second or more, and the model it names is
+    // worth showing late rather than holding an otherwise ready window on.
+    const behind = Promise.all([loadProviders(), refreshSchedules()]);
+    behind.catch(fail);
+    await Promise.all([refreshProjects(), refreshSessions()]);
     await restoreOpenTabs();
     // A first launch has no tabs to say which project is selected, and the
     // sidebar, the Tree and Ctrl+N all want one.

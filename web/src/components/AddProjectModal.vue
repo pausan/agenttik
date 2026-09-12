@@ -46,7 +46,7 @@ watch(open, async (on) => {
   reset();
   await nextTick();
   picker.value?.open();
-});
+}, { immediate: true });
 watch(path, () => (error.value = ""));
 
 // A check only asks git for remote refs, never repository history. Debouncing

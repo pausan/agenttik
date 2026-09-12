@@ -14,12 +14,14 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/adaptor"
+	"github.com/gofiber/fiber/v2/middleware/compress"
 	"github.com/gofiber/fiber/v2/middleware/filesystem"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 
@@ -83,6 +85,22 @@ func New(s *store.Store, reg *agent.Registry, r *runner.Runner) *Server {
 		Immutable: true,
 	})
 	app.Use(recover.New())
+	// The UI is over a megabyte of script and stylesheet, and the task list
+	// behind the sidebar is a few hundred kilobytes of JSON. Over loopback
+	// that costs nothing either way, but Settings › Server can put this same
+	// UI in front of a browser on another machine ([043]), and there it is
+	// the difference between a window that opens at once and one that spends
+	// a second downloading itself. Best speed rather than best size: the
+	// saving is already most of the bytes, and the rest is not worth spending
+	// a local CPU on.
+	//
+	// The stream is left alone. It is a connection that stays open and is
+	// read a frame at a time; compressing it would hold those frames in a
+	// buffer waiting for more, which is the one thing it cannot do.
+	app.Use(compress.New(compress.Config{
+		Level: compress.LevelBestSpeed,
+		Next:  func(c *fiber.Ctx) bool { return isStreamPath(c.Path()) },
+	}))
 
 	srv := &Server{app: app, store: s, runner: r, registry: reg,
 		watchers: newWatchers(r.Hub()), closing: make(chan struct{})}
@@ -102,6 +120,10 @@ func New(s *store.Store, reg *agent.Registry, r *runner.Runner) *Server {
 		app.Use("/", uiMissing)
 	}
 	return srv
+}
+
+func isStreamPath(path string) bool {
+	return strings.HasPrefix(path, "/api/stream")
 }
 
 // uiMissing answers when the binary carries no compiled UI.

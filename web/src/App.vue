@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, onUnmounted, ref } from "vue";
+import { defineAsyncComponent, onMounted, onUnmounted, ref } from "vue";
 import { useToast } from "@nuxt/ui/composables";
 
 import {
@@ -21,13 +21,23 @@ import {
 import SideBar from "./components/SideBar.vue";
 import MainPanel from "./components/MainPanel.vue";
 import InspectorPanel from "./components/InspectorPanel.vue";
-import AddProjectModal from "./components/AddProjectModal.vue";
-import SettingsModal from "./components/SettingsModal.vue";
-import GoToModal from "./components/GoToModal.vue";
 import Splitter from "./components/Splitter.vue";
-import UnsavedModal from "./components/UnsavedModal.vue";
+
+/* Everything below is reached by a click or a chord, never by the first
+   paint, so its code is fetched from its own chunk the moment it is first
+   needed instead of being parsed on the way in. The chunks are built into
+   the binary beside the main one, so this is still a read off the local
+   server and never a network call. */
+const AddProjectModal = defineAsyncComponent(() => import("./components/AddProjectModal.vue"));
+const SettingsModal = defineAsyncComponent(() => import("./components/SettingsModal.vue"));
+const GoToModal = defineAsyncComponent(() => import("./components/GoToModal.vue"));
+const UnsavedModal = defineAsyncComponent(() => import("./components/UnsavedModal.vue"));
 
 const addProject = ref(false);
+// The add-project dialog can keep a clone going after it is minimized, so it
+// stays mounted after its first use. The other dialogs have no work to keep
+// alive and mount only while open.
+const addProjectLoaded = ref(false);
 const settings = ref(false);
 const settingsSection = ref("general");
 const goTo = ref(false);
@@ -44,6 +54,11 @@ const bootSpinner = ref(false);
 function openSettings(id) {
   settingsSection.value = id;
   settings.value = true;
+}
+
+function openAddProject() {
+  addProjectLoaded.value = true;
+  addProject.value = true;
 }
 
 useErrors(useToast());
@@ -127,7 +142,7 @@ onUnmounted(() => window.removeEventListener("keydown", onKey));
     >
       <SideBar
         ref="sideBar"
-        @add-project="addProject = true"
+        @add-project="openAddProject"
         @setup="openSettings('general')"
         @shortcuts="openSettings('shortcuts')"
       />
@@ -147,14 +162,15 @@ onUnmounted(() => window.removeEventListener("keydown", onKey));
       <UIcon name="i-lucide-loader-circle" class="size-6 animate-spin text-muted" />
     </div>
 
-    <UnsavedModal />
-    <AddProjectModal v-model:open="addProject" />
-    <SettingsModal v-model:open="settings" v-model:section="settingsSection" />
+    <UnsavedModal v-if="S.closing" />
+    <AddProjectModal v-if="addProjectLoaded" v-model:open="addProject" />
+    <SettingsModal v-if="settings" v-model:open="settings" v-model:section="settingsSection" />
     <GoToModal
+      v-if="goTo"
       v-model:open="goTo"
       @projects="sideBar?.showProjects()"
       @tree="sideBar?.showTree()"
-      @add-project="addProject = true"
+      @add-project="openAddProject"
       @settings="openSettings('general')"
       @shortcuts="openSettings('shortcuts')"
     />

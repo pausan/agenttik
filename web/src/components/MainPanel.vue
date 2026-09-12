@@ -4,7 +4,7 @@
    The strip is the active project's tabs only. Each kind has its own colour,
    tabs can be dragged within their kind. Session shortcuts use the sidebar
    order, so file tabs never consume an Alt number. */
-import { computed, ref } from "vue";
+import { computed, defineAsyncComponent, ref } from "vue";
 
 import {
   S,
@@ -15,11 +15,17 @@ import {
   startCurrentTask,
 } from "../store";
 import Transcript from "./Transcript.vue";
-import ProjectView from "./ProjectView.vue";
-import ScheduleView from "./ScheduleView.vue";
-import FileView from "./FileView.vue";
 import PromptBar from "./PromptBar.vue";
 import StatusDot from "./StatusDot.vue";
+
+/* Everything below is reached by a click or a chord, never by the first
+   paint, so its code is fetched from its own chunk the moment it is first
+   needed instead of being parsed on the way in. The chunks are built into
+   the binary beside the main one, so this is still a read off the local
+   server and never a network call. */
+const ProjectView = defineAsyncComponent(() => import("./ProjectView.vue"));
+const ScheduleView = defineAsyncComponent(() => import("./ScheduleView.vue"));
+const FileView = defineAsyncComponent(() => import("./FileView.vue"));
 
 /* A session title can be a whole sentence, and a job names itself exactly as
    a task does, so both are cut to keep the strip readable with a dozen of them

@@ -31,11 +31,21 @@ const elapsed = computed(() =>
 const elapsedLabel = computed(() => `${elapsed.value} ${elapsed.value === 1 ? "second" : "seconds"}`);
 const clockFace = computed(() => CLOCK_FACES[Math.floor(now.value / 250) % CLOCK_FACES.length]);
 
+/* A long conversation costs more to draw than opening it is worth waiting
+   for: several hundred bubbles, each one a component and a markdown parse,
+   is most of what a launch onto a busy task spends. The box opens scrolled to
+   the bottom, so all but the last screenful of that is drawn where nobody is
+   looking — TAIL rows go in first and the rest follows once they are on
+   screen. Anything shorter than TAIL is drawn whole and never notices. */
+const TAIL = 40;
+const shown = ref(TAIL);
+let reveal = 0;
+
 /* A run of consecutive tool calls is handed to one ToolGroup, which shows
    only its latest until asked for the rest. Grouping reads role and nothing
    else, so a streaming delta — which only grows a message's content — does
    not rebuild the list. */
-const rows = computed(() => {
+const allRows = computed(() => {
   const messages = S.detail?.messages || [];
   const out = [];
   for (let i = 0; i < messages.length; i++) {
@@ -51,6 +61,42 @@ const rows = computed(() => {
   }
   return out;
 });
+
+const rows = computed(() =>
+  allRows.value.length > shown.value ? allRows.value.slice(-shown.value) : allRows.value,
+);
+
+/* Opening a task — at launch, or by switching to its tab — draws the tail and
+   then the whole thing. The rest is drawn from a timeout inside a frame
+   callback: the callback runs before the tail is painted, the timeout after
+   it, which is the first moment the rest costs nobody anything.
+
+   The box is put back at the bottom afterwards, since the rows going in above
+   the tail are what the scroll position was measured against. */
+function revealTranscript() {
+  const turn = ++reveal;
+  shown.value = TAIL;
+  if (allRows.value.length <= TAIL) return;
+  requestAnimationFrame(() =>
+    setTimeout(async () => {
+      // A tab switch can happen between the frame and its timeout. Its old
+      // callback must not reveal the new conversation before its tail paints.
+      if (turn !== reveal) return;
+      shown.value = Infinity;
+      await nextTick();
+      if (turn === reveal && box.value) box.value.scrollTop = box.value.scrollHeight;
+    }, 0),
+  );
+}
+
+watch(() => S.detail?.session.id, revealTranscript, { immediate: true });
+// A short live conversation can cross the threshold without changing tabs.
+// It gets the same one-paint tail rather than hiding its earlier rows until
+// the user leaves and returns.
+watch(
+  () => allRows.value.length > TAIL,
+  (long, wasLong) => long && !wasLong && revealTranscript(),
+);
 
 /* Queued prompts are drawn under the transcript, each with how long it has
    been waiting, so opening a session shows the text that is going to run. */
@@ -221,7 +267,10 @@ watch(
 onMounted(() => {
   clock = window.setInterval(() => (now.value = Date.now()), 250);
 });
-onUnmounted(() => window.clearInterval(clock));
+onUnmounted(() => {
+  reveal++;
+  window.clearInterval(clock);
+});
 
 /* Follow the stream: every delta grows the last message, so watching the
    messages deeply is what tells us to scroll. */

@@ -55,7 +55,7 @@ watch(open, async (on) => {
     fail(e);
     open.value = false;
   }
-});
+}, { immediate: true });
 </script>
 
 <template>

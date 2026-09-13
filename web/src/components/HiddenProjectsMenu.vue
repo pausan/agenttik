@@ -11,6 +11,7 @@ import { fuzzy, segments } from "../fuzzy";
 const open = ref(false);
 const query = ref("");
 const loading = ref(false);
+const restoring = ref(false);
 
 const items = computed(() => {
   const needle = query.value.trim();
@@ -66,15 +67,30 @@ watch(open, (isOpen) => {
 });
 
 async function restore(id) {
+  if (restoring.value) return;
   const item = items.value.find((candidate) => candidate.value === id);
   if (!item) return;
-  open.value = false;
-  await setProjectHidden(item.project, false);
+  await restoreProjects([item.project]);
+}
+
+async function restoreProjects(projects) {
+  if (restoring.value) return;
+  restoring.value = true;
+  try {
+    for (const project of [...projects]) {
+      await setProjectHidden(project, false);
+    }
+  } finally {
+    restoring.value = false;
+  }
 }
 </script>
 
 <template>
-  <UPopover v-model:open="open" :content="{ side: 'top', sideOffset: 8 }">
+  <UPopover
+    v-model:open="open"
+    :content="{ side: 'top', sideOffset: 8, onFocusOutside: (event) => event.preventDefault() }"
+  >
     <UButton
       color="neutral"
       variant="ghost"
@@ -108,6 +124,19 @@ async function restore(id) {
         </template>
         <template #empty="{ searchTerm }">
           {{ searchTerm ? `Nothing matches “${searchTerm}”.` : "No hidden projects." }}
+        </template>
+        <template #footer>
+          <div class="p-2">
+            <UButton
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-eye"
+              label="Restore all"
+              :loading="restoring"
+              :disabled="loading || restoring || !S.hiddenProjects.length"
+              @click="restoreProjects(S.hiddenProjects)"
+            />
+          </div>
         </template>
       </UCommandPalette>
     </template>

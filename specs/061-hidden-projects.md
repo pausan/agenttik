@@ -9,7 +9,12 @@ place. A task that is already running continues to run.
 The sidebar footer contains a **Hidden projects** button. Opening it displays a
 small command-palette menu with only the hidden project names. Its search field
 is fuzzy autocomplete: a subsequence such as `wb` matches `web`, with better
-matches first. Selecting a name restores the project and closes the menu.
+matches first. Selecting a name restores the project and keeps the menu open
+so more projects can be restored. Clicking the eye-off button again closes it.
+The **Restore all** button restores every hidden project, regardless of the
+search filter, and keeps the menu open. It is disabled while loading or
+restoring projects and when no hidden projects remain. Restores run sequentially
+to preserve the existing saved-row insertion behavior.
 
 ## Ordering
 

@@ -58,6 +58,9 @@ test("a project can be hidden and fuzzy-restored from the hidden menu", async ({
   await expect(match).toBeVisible();
   await match.click();
 
+  await expect(search).toBeVisible();
+  await expect(match).toHaveCount(0);
+  await sidebar(page).getByRole("button", { name: "Hidden projects" }).click();
   await expect(search).toBeHidden();
   await expect(sidebar(page).getByText(REPO + "/web", { exact: true })).toBeVisible();
   const rows = sidebar(page).locator(".sidebar-project");
@@ -69,6 +72,44 @@ test("a project can be hidden and fuzzy-restored from the hidden menu", async ({
   await expect(reloadedRows.nth(0)).toContainText(REPO + "/e2e");
   await expect(reloadedRows.nth(1)).toContainText(REPO + "/web");
   await expect(reloadedRows.nth(2)).toContainText(REPO + "/app");
+});
+
+test("hidden projects can be restored repeatedly and all at once while searching", async ({ page }) => {
+  for (const folder of ["app", "web", "e2e"]) {
+    await addProject(page, REPO + "/" + folder);
+    await sidebar(page).locator(".sidebar-project").filter({ hasText: REPO + "/" + folder })
+      .getByRole("button", { name: "Hide project" }).click();
+    await expect(sidebar(page).getByText(REPO + "/" + folder, { exact: true })).toHaveCount(0);
+  }
+
+  const toggle = sidebar(page).getByRole("button", { name: "Hidden projects" });
+  const search = page.getByPlaceholder("Find hidden projects…");
+  await toggle.click();
+  for (const folder of ["app", "web"]) {
+    await page.getByRole("option", { name: folder, exact: true }).click();
+    await expect(search).toBeVisible();
+    await expect(page.getByRole("option", { name: folder, exact: true })).toHaveCount(0);
+    await expect(sidebar(page).getByText(REPO + "/" + folder, { exact: true })).toBeVisible();
+  }
+  await toggle.click();
+  await expect(search).toBeHidden();
+  await sidebar(page).locator(".sidebar-project").filter({ hasText: REPO + "/web" })
+    .getByRole("button", { name: "Hide project" }).click();
+  await toggle.click();
+  await search.fill("wb");
+  await expect(page.getByRole("option", { name: "web", exact: true })).toBeVisible();
+  await expect(page.getByRole("option", { name: "e2e", exact: true })).toHaveCount(0);
+  const restoreAll = page.getByRole("button", { name: "Restore all", exact: true });
+  await restoreAll.click();
+  for (const folder of ["app", "web", "e2e"]) {
+    await expect(sidebar(page).getByText(REPO + "/" + folder, { exact: true })).toBeVisible();
+  }
+  await expect(search).toBeVisible();
+  await expect(restoreAll).toBeDisabled();
+  await search.fill("");
+  await expect(page.getByText("No hidden projects.", { exact: true })).toBeVisible();
+  await toggle.click();
+  await expect(search).toBeHidden();
 });
 
 test("opening a project puts its panes on the right and Tree on the left", async ({ page }) => {

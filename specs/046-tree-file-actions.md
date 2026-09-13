@@ -2,13 +2,22 @@
 
 The Tree pane is a file manager as well as a listing. A right click anywhere in
 it opens one menu — **Open in system browser** ([048](048-open-in-system-browser.md)),
-**Expand recursively**, then **New file**, **New folder**, **Rename** and **Delete** — and **F2**
+**Copy path**, **Send path to prompt**, **Expand recursively**, then **New file**, **New folder**, **Rename** and **Delete** — and **F2**
 renames the row the keyboard is on without going through the menu at all.
 
 The four file operations are what this file is about, and each of them
 asks first: three ask for a name, the fourth asks for a yes. All four are
 `TreeActionModal`, because three of them differ only in their wording and a
 component each would have been four copies of the same dialog.
+
+## Paths
+
+**Copy path** copies the clicked file or folder's project-relative path with
+the shared clipboard helper. **Send path to prompt** appends that path to the
+current task's draft, preserving existing text and attached images, and opens
+and focuses the task prompt. It does not submit anything. From a project page,
+it starts or reuses a blank task first. Both actions are disabled on empty
+space, where there is no file or folder path.
 
 ## What the click was aimed at
 

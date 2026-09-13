@@ -89,3 +89,39 @@ test("Tree remembers expansion and supports recursive expansion, arrows and filt
     await rm(other, { recursive: true, force: true });
   }
 });
+
+test("Tree paths can be copied or appended to an unsent prompt", async ({ page, context }) => {
+  const root = await mkdtemp(join(tmpdir(), "agenttik-tree-paths-"));
+  try {
+    await mkdir(join(root, "src"));
+    await writeFile(join(root, "src/my file.txt"), "contents\n");
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await addProject(page, root);
+    await openProject(page, root);
+    const tree = sidebar(page);
+    await tree.getByRole("tab", { name: "Tree", exact: true }).click();
+    await tree.getByRole("button", { name: "src", exact: true }).click();
+    const file = tree.getByRole("button", { name: "my file.txt", exact: true });
+    const action = async (row, name) => {
+      await row.click({ button: "right" });
+      await page.getByRole("menuitem", { name, exact: true }).click();
+    };
+    await action(file, "Copy path");
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("src/my file.txt");
+    await action(file, "Send path to prompt");
+    const prompt = page.getByPlaceholder("Ask the agent…");
+    await expect(prompt).toHaveValue("src/my file.txt");
+    await expect(prompt).toBeFocused();
+    await prompt.fill("Please review:");
+    await file.click();
+    await expect(prompt).toHaveCount(0);
+    await action(file, "Send path to prompt");
+    await expect(prompt).toHaveValue("Please review:\nsrc/my file.txt");
+    await expect(prompt).toBeFocused();
+    await action(tree.getByRole("button", { name: "src", exact: true }), "Send path to prompt");
+    await expect(prompt).toHaveValue("Please review:\nsrc/my file.txt\nsrc");
+    await expect(prompt).toBeFocused();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

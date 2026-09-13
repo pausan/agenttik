@@ -3,9 +3,10 @@
    and restarts; filtering temporarily reveals matching non-ignored paths. */
 import { computed, nextTick, ref, watch } from "vue";
 
-import { S, currentProjectID, openFile, openInSystem } from "../store";
+import { S, copyText, currentProjectID, focusPrompt, openFile, openInSystem, selectTab, startCurrentTask } from "../store";
 import { buildTree, countFiles, filterTree } from "../tree";
 import { segments } from "../fuzzy";
+import { promptImages, promptText, withImages } from "../prompt-images";
 import TreeActionModal from "./TreeActionModal.vue";
 
 /* The flat listing only changes when the project does, so the tree is built
@@ -137,6 +138,20 @@ function ask(kind, node) {
   action.value = { kind, ...at };
 }
 
+async function sendPathToPrompt() {
+  const path = aimed.value.path;
+  const projectID = currentProjectID();
+  if (!path) return;
+  if (S.owner?.kind !== "session") await startCurrentTask();
+  const owner = S.owner;
+  if (owner?.kind !== "session" || currentProjectID() !== projectID) return;
+  const text = promptText(owner.draft);
+  owner.draft = withImages(text + (text && !/\s$/.test(text) ? "\n" : "") + path, promptImages(owner.draft));
+  selectTab(owner.id);
+  await nextTick();
+  focusPrompt();
+}
+
 const menu = computed(() => [
   [
     // A click that missed every row aims at the project folder, which is
@@ -146,6 +161,10 @@ const menu = computed(() => [
       icon: "i-lucide-external-link",
       onSelect: () => openInSystem(aimed.value.path),
     },
+  ],
+  [
+    { label: "Copy path", icon: "i-lucide-copy", disabled: !aimed.value.path, onSelect: () => copyText(aimed.value.path) },
+    { label: "Send path to prompt", icon: "i-lucide-message-square-plus", disabled: !aimed.value.path, onSelect: sendPathToPrompt },
   ],
   [
     { label: "Expand recursively", icon: "i-lucide-list-tree", disabled: !aimed.value.dir, onSelect: expandRecursively },

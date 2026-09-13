@@ -104,26 +104,29 @@ func (w *window) quit() {
 	wruntime.Quit(ctx)
 }
 
-func (w *window) toggle() {
+// toggle answers the global shortcut. The window goes to the tray only when it
+// is already the one in front; from anywhere else — behind another
+// application, minimised, or in the tray — the shortcut brings it forward.
+// Unminimise is what raises and focuses it, and it is harmless on a window
+// that is neither hidden nor minimised.
+func (w *window) toggle(foreground bool) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.ctx == nil || !w.trayReady || w.quitting {
 		return
 	}
-	minimised := wruntime.WindowIsMinimised(w.ctx)
-	if shortcutHidesWindow(w.focused, w.hidden, minimised) {
+	if foreground {
 		wruntime.WindowHide(w.ctx)
 		w.hidden = true
-		w.focused = false
-	} else {
-		wruntime.WindowShow(w.ctx)
-		wruntime.WindowUnminimise(w.ctx)
-		w.hidden = false
+		return
 	}
+	wruntime.WindowShow(w.ctx)
+	wruntime.WindowUnminimise(w.ctx)
+	w.hidden = false
 }
 
 // The tray action remains a visibility toggle. Opening the tray moves focus
-// away from the app, so applying the shortcut's focus rule here would make an
+// away from the app, so applying the shortcut's rule here would make an
 // already visible window come forward instead of hiding it.
 func (w *window) toggleVisibility() {
 	w.mu.Lock()
@@ -138,12 +141,7 @@ func (w *window) toggleVisibility() {
 	} else {
 		wruntime.WindowHide(w.ctx)
 		w.hidden = true
-		w.focused = false
 	}
-}
-
-func shortcutHidesWindow(focused, hidden, minimised bool) bool {
-	return focused && !hidden && !minimised
 }
 
 func (w *window) beforeClose(ctx context.Context) bool {
@@ -154,6 +152,5 @@ func (w *window) beforeClose(ctx context.Context) bool {
 	}
 	wruntime.WindowHide(ctx)
 	w.hidden = true
-	w.focused = false
 	return true
 }

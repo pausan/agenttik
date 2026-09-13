@@ -39,8 +39,8 @@ func TestGlobalToggle(t *testing.T) {
 	if _, err := exec.LookPath("xdotool"); err != nil {
 		t.Skip("needs xdotool")
 	}
-	events := make(chan struct{}, 10)
-	stop, err := registerToggle("Ctrl+Shift+A", func() { events <- struct{}{} })
+	events := make(chan bool, 10)
+	stop, err := registerToggle("Ctrl+Shift+A", func(foreground bool) { events <- foreground })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestGlobalToggle(t *testing.T) {
 			stop()
 		}
 	}()
-	other, err := registerToggle("Ctrl+Shift+A", func() {})
+	other, err := registerToggle("Ctrl+Shift+A", func(bool) {})
 	if err == nil {
 		other()
 		t.Fatal("accepted a conflicting shortcut")
@@ -63,7 +63,12 @@ func TestGlobalToggle(t *testing.T) {
 	}
 	run("keydown", "ctrl+shift+a")
 	select {
-	case <-events:
+	// The private display has no window of ours in front, and answering that
+	// takes X round trips from the same goroutine that reads the key events.
+	case foreground := <-events:
+		if foreground {
+			t.Fatal("reported this process as the foreground application")
+		}
 	case <-time.After(time.Second):
 		t.Fatal("shortcut did not fire")
 	}
@@ -86,7 +91,7 @@ func TestGlobalToggle(t *testing.T) {
 	}
 	stop()
 	stopped = true
-	stop, err = registerToggle("Ctrl+Shift+A", func() {})
+	stop, err = registerToggle("Ctrl+Shift+A", func(bool) {})
 	if err != nil {
 		t.Fatalf("shortcut was not released: %v", err)
 	}

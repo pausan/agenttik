@@ -13,6 +13,7 @@ import (
 	"github.com/BurntSushi/xgb"
 	"github.com/BurntSushi/xgb/xproto"
 	"github.com/BurntSushi/xgbutil"
+	"github.com/BurntSushi/xgbutil/ewmh"
 	"github.com/BurntSushi/xgbutil/keybind"
 	"github.com/godbus/dbus/v5"
 )
@@ -55,7 +56,21 @@ func checkTray() error {
 	return nil
 }
 
-func registerToggle(chord string, toggle func()) (func(), error) {
+// appIsForeground reports whether the window the desktop has in front belongs
+// to this process. The window manager keeps _NET_ACTIVE_WINDOW current and the
+// key grab does not disturb it, so this is what the user sees at the moment
+// the shortcut fires. Anything it cannot read counts as not in front, which
+// leaves the shortcut showing the window rather than hiding it.
+func appIsForeground(xu *xgbutil.XUtil) bool {
+	active, err := ewmh.ActiveWindowGet(xu)
+	if err != nil || active == 0 {
+		return false
+	}
+	pid, err := ewmh.WmPidGet(xu, active)
+	return err == nil && int(pid) == os.Getpid()
+}
+
+func registerToggle(chord string, toggle func(foreground bool)) (func(), error) {
 	suppressClosedXGBEventLog()
 	xu, err := xgbutil.NewConn()
 	if err != nil {
@@ -102,7 +117,7 @@ func registerToggle(chord string, toggle func()) (func(), error) {
 				}
 				// X11 auto-repeat emits release/press pairs with the same timestamp.
 				if !down && e.Time != released {
-					toggle()
+					toggle(appIsForeground(xu))
 				}
 				down = true
 			case xproto.KeyReleaseEvent:

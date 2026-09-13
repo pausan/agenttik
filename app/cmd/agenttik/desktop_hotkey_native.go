@@ -11,7 +11,7 @@ import (
 
 func checkTray() error { return nil }
 
-func registerToggle(chord string, toggle func()) (func(), error) {
+func registerToggle(chord string, toggle func(foreground bool)) (func(), error) {
 	parts := strings.Split(chord, "+")
 	var mods []hotkey.Modifier
 	for _, part := range parts[:len(parts)-1] {
@@ -47,7 +47,7 @@ func registerToggle(chord string, toggle func()) (func(), error) {
 				case <-hk.Keydown():
 					if !down {
 						down = true
-						toggle()
+						toggle(appIsForeground())
 					}
 				case <-hk.Keyup():
 					down = false

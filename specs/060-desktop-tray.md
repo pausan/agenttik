@@ -4,9 +4,10 @@ Settings → General → Desktop tray offers an opt-in **Close to tray** setting
 and a **Show / hide shortcut**, defaulting to `Ctrl+Shift+A`. Save and restart
 the desktop app to apply either change. The window opens normally at launch.
 Closing it hides it and keeps the server and tasks running. The shortcut works
-with another application focused. When agenttik is visible and in the
-foreground, the shortcut hides it. Otherwise the shortcut shows, restores and
-brings the window to the foreground. Holding the shortcut acts once.
+with another application focused. When agenttik is the window in front, the
+shortcut hides it to the tray. From anywhere else — behind another
+application, minimised, or already in the tray — it shows the window and
+brings it to the front. Holding the shortcut acts once.
 
 The tray menu provides **Show / Hide agenttik** and **Quit**. Its Show / Hide
 action toggles visibility regardless of which application has focus. Quit
@@ -43,6 +44,14 @@ RGBA browser rendering because simpler SVG rasterizers can discard the logo's
 filtered gradient marks and leave an apparently blank dark tile. The ICO
 contains 16, 24, 32, 48 and 64 px versions for Windows scaling.
 
+The shortcut asks the operating system which window is in front at the moment
+it fires, rather than mirroring focus events from the UI, because a webview
+reports focus late and misses window manager changes altogether. Linux reads
+`_NET_ACTIVE_WINDOW` and its `_NET_WM_PID` over the same X11 connection that
+holds the grab; Windows compares the process behind `GetForegroundWindow` with
+its own; macOS asks `NSRunningApplication`. A check that cannot answer counts
+as not in front, so the shortcut shows the window.
+
 Linux configures JavaScriptCore to use signal 34 before WebKit starts when the
 environment has not chosen a value, so its GC signal does not collide with
 Go's signal handler. An explicit value is applied through the same API. It
@@ -62,13 +71,16 @@ permission for its event tap; registration failure appears in Settings.
 Store/API tests cover defaults, persistence, invalid chords, web mode and
 startup error reporting. Browser tests cover saving and reopening settings
 and hiding the controls in web mode. The isolated Linux test exercises the
-default chord, auto-repeat, registration conflict and unregister/re-register:
+default chord, auto-repeat, the reported foreground state, registration
+conflict and unregister/re-register:
 
 ```sh
 AGENTTIK_TEST_HOTKEY=1 xvfb-run -a go test -race -tags 'desktop production webkit2_41' ./app/cmd/agenttik -run TestGlobalToggle -count=1
 ```
 
-A live Linux smoke check verifies shortcut hide/show, close-to-tray,
-second-launch restore, Ctrl+Q with Close to tray enabled, and tray Quit. Linux
+A live Linux smoke check verifies that the shortcut hides the window it has in
+front and raises it from behind another application, from minimised and from
+the tray, plus close-to-tray, second-launch restore, Ctrl+Q with Close to tray
+enabled, and tray Quit. Linux
 desktop and Windows cross-builds are checked. macOS runtime behavior
 requires verification on a Mac.

@@ -149,9 +149,10 @@ func (s *Server) listStars(c *fiber.Ctx) error {
 }
 
 type starBody struct {
-	Provider string `json:"provider"`
-	Model    string `json:"model"`
-	Effort   string `json:"effort"`
+	Provider  string `json:"provider"`
+	AccountID int64  `json:"account_id"`
+	Model     string `json:"model"`
+	Effort    string `json:"effort"`
 }
 
 func (s *Server) addStar(c *fiber.Ctx) error {
@@ -162,7 +163,7 @@ func (s *Server) addStar(c *fiber.Ctx) error {
 	if b.Provider == "" || b.Model == "" {
 		return badRequest("provider and model are required")
 	}
-	if err := s.store.AddStar(b.Provider, b.Model, b.Effort); err != nil {
+	if err := s.store.AddStar(b.Provider, b.AccountID, b.Model, b.Effort); err != nil {
 		return err
 	}
 	return c.SendStatus(fiber.StatusNoContent)
@@ -173,7 +174,52 @@ func (s *Server) removeStar(c *fiber.Ctx) error {
 	if err := c.BodyParser(&b); err != nil {
 		return badRequest("invalid body: %v", err)
 	}
-	if err := s.store.RemoveStar(b.Provider, b.Model, b.Effort); err != nil {
+	if err := s.store.RemoveStar(b.Provider, b.AccountID, b.Model, b.Effort); err != nil {
+		return err
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+func (s *Server) reorderStars(c *fiber.Ctx) error {
+	var body []starBody
+	if err := c.BodyParser(&body); err != nil {
+		return badRequest("invalid body: %v", err)
+	}
+	stars := make([]store.Star, len(body))
+	for i, star := range body {
+		stars[i] = store.Star{Provider: star.Provider, AccountID: star.AccountID,
+			Model: star.Model, Effort: star.Effort}
+	}
+	if err := s.store.ReorderStars(stars); err != nil {
+		return err
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+func (s *Server) listModelVisibility(c *fiber.Ctx) error {
+	choices, err := s.store.ListHiddenModelChoices()
+	if err != nil {
+		return err
+	}
+	return c.JSON(choices)
+}
+
+type modelVisibilityBody struct {
+	Provider  string `json:"provider"`
+	AccountID int64  `json:"account_id"`
+	Model     string `json:"model"`
+	Hidden    bool   `json:"hidden"`
+}
+
+func (s *Server) setModelVisibility(c *fiber.Ctx) error {
+	var body modelVisibilityBody
+	if err := c.BodyParser(&body); err != nil {
+		return badRequest("invalid body: %v", err)
+	}
+	if body.Provider == "" {
+		return badRequest("provider is required")
+	}
+	if err := s.store.SetModelChoiceHidden(body.Provider, body.AccountID, body.Model, body.Hidden); err != nil {
 		return err
 	}
 	return c.SendStatus(fiber.StatusNoContent)

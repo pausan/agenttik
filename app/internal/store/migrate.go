@@ -319,6 +319,35 @@ INSERT INTO desktop_config (id) VALUES (1);`,
 ALTER TABLE projects ADD COLUMN hidden_at      INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE projects ADD COLUMN hidden_position INTEGER NOT NULL DEFAULT 0;
 `,
+	`
+-- A favourite spends one subscription, so that subscription is part of the
+-- combination. Position is explicit because Settings can reorder the list.
+-- Existing favourites belong to the system subscription, which is the only
+-- subscription they could name before this migration.
+ALTER TABLE starred_models RENAME TO starred_models_old;
+CREATE TABLE starred_models (
+    provider   TEXT    NOT NULL,
+    account_id INTEGER NOT NULL DEFAULT 0,
+    model      TEXT    NOT NULL,
+    effort     TEXT    NOT NULL DEFAULT '',
+    position   INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (provider, account_id, model, effort)
+);
+INSERT INTO starred_models (provider, account_id, model, effort, position, created_at)
+SELECT provider, 0, model, effort, created_at, created_at FROM starred_models_old;
+DROP TABLE starred_models_old;
+
+-- One row hides either a subscription/provider group (model is empty) or one
+-- model inside it. Keeping only hidden rows makes visible the default for old
+-- databases and for models a provider adds later.
+CREATE TABLE hidden_model_choices (
+    provider   TEXT    NOT NULL,
+    account_id INTEGER NOT NULL DEFAULT 0,
+    model      TEXT    NOT NULL DEFAULT '',
+    PRIMARY KEY (provider, account_id, model)
+);
+`,
 }
 
 func migrate(db *sql.DB) error {

@@ -226,6 +226,9 @@ func (s *Server) routes() {
 	api.Get("/stars", s.listStars)
 	api.Post("/stars", s.addStar)
 	api.Delete("/stars", s.removeStar)
+	api.Put("/stars/order", s.reorderStars)
+	api.Get("/model-visibility", s.listModelVisibility)
+	api.Put("/model-visibility", s.setModelVisibility)
 }
 
 // shutdownTimeout bounds how long Shutdown waits for open connections.

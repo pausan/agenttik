@@ -327,9 +327,20 @@ type Account struct {
 
 type Star struct {
 	Provider  string `json:"provider"`
+	AccountID int64  `json:"account_id"`
 	Model     string `json:"model"`
 	Effort    string `json:"effort"`
+	Position  int64  `json:"position"`
 	CreatedAt int64  `json:"created_at"`
+}
+
+// HiddenModelChoice is a subscription/provider group when Model is empty,
+// or one model in that group otherwise. Rows are preferences for model
+// pickers; they do not invalidate tasks that already use the choice.
+type HiddenModelChoice struct {
+	Provider  string `json:"provider"`
+	AccountID int64  `json:"account_id"`
+	Model     string `json:"model"`
 }
 
 // ServerConfig is whether and where the desktop window's server is also

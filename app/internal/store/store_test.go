@@ -205,16 +205,30 @@ func TestTurnMetricsAggregate(t *testing.T) {
 
 func TestStarsRoundTrip(t *testing.T) {
 	s := testStore(t)
-	must(t, s.AddStar("claude", "opus", "high"))
-	must(t, s.AddStar("claude", "opus", "high")) // duplicate is a no-op
+	must(t, s.AddStar("claude", 4, "opus", "high"))
+	must(t, s.AddStar("claude", 4, "opus", "high")) // duplicate is a no-op
 	stars, _ := s.ListStars()
-	if len(stars) != 1 {
-		t.Fatalf("got %d stars, want 1", len(stars))
+	if len(stars) != 1 || stars[0].AccountID != 4 {
+		t.Fatalf("stars = %+v, want one on account 4", stars)
 	}
-	must(t, s.RemoveStar("claude", "opus", "high"))
+	must(t, s.RemoveStar("claude", 4, "opus", "high"))
 	stars, _ = s.ListStars()
 	if len(stars) != 0 {
 		t.Errorf("got %d stars after remove, want 0", len(stars))
+	}
+
+	must(t, s.SetModelChoiceHidden("claude", 4, "opus", true))
+	must(t, s.SetModelChoiceHidden("claude", 4, "", true))
+	hidden, err := s.ListHiddenModelChoices()
+	must(t, err)
+	if len(hidden) != 2 || hidden[0].Model != "" || hidden[1].Model != "opus" {
+		t.Fatalf("hidden model choices = %+v", hidden)
+	}
+	must(t, s.SetModelChoiceHidden("claude", 4, "opus", false))
+	hidden, err = s.ListHiddenModelChoices()
+	must(t, err)
+	if len(hidden) != 1 || hidden[0].Model != "" {
+		t.Fatalf("hidden model choices after showing opus = %+v", hidden)
 	}
 }
 

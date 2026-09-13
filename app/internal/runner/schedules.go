@@ -315,3 +315,18 @@ func monthDay(year int, month time.Month, day int, atMinute int64, loc *time.Loc
 	}
 	return time.Date(year, month, day, int(atMinute/60), int(atMinute%60), 0, 0, loc)
 }
+
+// RunPinnedPrompt starts an ordinary task from a saved prompt. It has no
+// schedule run, counter or automatic archive behavior.
+func (r *Runner) RunPinnedPrompt(s *store.Schedule, prompt string) (*store.Session, error) {
+	sess := &store.Session{ID: uuid.NewString(), ProjectID: s.ProjectID,
+		Provider: s.Provider, AccountID: s.AccountID, Model: s.Model,
+		Effort: s.Effort, Permission: s.Permission}
+	if err := r.store.CreateSession(sess); err != nil {
+		return nil, err
+	}
+	if _, err := r.Send(sess.ID, prompt); err != nil && !errors.Is(err, ErrProviderAway) {
+		return nil, err
+	}
+	return sess, nil
+}

@@ -81,7 +81,7 @@ func (s *Store) ListSchedules(f ScheduleFilter) ([]Schedule, error) {
 	var where []string
 	var args []any
 	if f.Since > 0 {
-		where = append(where, "(s.created_at >= ? OR s.paused = 0)")
+		where = append(where, "(s.created_at >= ? OR s.paused = 0 OR s.every = 'pinned')")
 		args = append(args, f.Since)
 	}
 	if f.ProjectID > 0 {
@@ -101,9 +101,9 @@ func (s *Store) ListSchedules(f ScheduleFilter) ([]Schedule, error) {
 		query += " WHERE " + strings.Join(where, " AND ")
 	}
 	if f.ProjectID > 0 {
-		query += ` ORDER BY s.position, s.created_at`
+		query += ` ORDER BY (s.every = 'pinned') DESC, s.position, s.created_at`
 	} else {
-		query += ` ORDER BY (s.next_run_at = 0) , s.next_run_at, s.created_at DESC`
+		query += ` ORDER BY (s.every = 'pinned') DESC, (s.next_run_at = 0), s.next_run_at, s.created_at DESC`
 	}
 	if f.Limit > 0 {
 		query += " LIMIT ?"
@@ -133,7 +133,7 @@ func (s *Store) ListSchedules(f ScheduleFilter) ([]Schedule, error) {
 // schedules go with it: a project nobody can see must not be starting tasks.
 func (s *Store) DueSchedules(now int64) ([]Schedule, error) {
 	rows, err := s.db.Query(`SELECT `+scheduleCols+scheduleFrom+
-		` WHERE s.paused = 0 AND s.done_at = 0 AND s.remaining <> 0 AND s.next_run_at <= ?
+		` WHERE s.every <> 'pinned' AND s.paused = 0 AND s.done_at = 0 AND s.remaining <> 0 AND s.next_run_at <= ?
 		  AND p.archived_at = 0
 		  ORDER BY s.next_run_at`, now)
 	if err != nil {

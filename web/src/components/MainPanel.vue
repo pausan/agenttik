@@ -25,6 +25,7 @@ import StatusDot from "./StatusDot.vue";
    the binary beside the main one, so this is still a read off the local
    server and never a network call. */
 const ProjectView = defineAsyncComponent(() => import("./ProjectView.vue"));
+const PinnedPromptView = defineAsyncComponent(() => import("./PinnedPromptView.vue"));
 const ScheduleView = defineAsyncComponent(() => import("./ScheduleView.vue"));
 const FileView = defineAsyncComponent(() => import("./FileView.vue"));
 const StatsPane = defineAsyncComponent(() => import("./StatsPane.vue"));
@@ -210,6 +211,7 @@ const badge = computed(() => {
     </div>
 
     <ProjectView v-if="current?.kind === 'project'" :tab="current" />
+    <PinnedPromptView v-else-if="current?.kind === 'schedule' && current.data.schedule.every === 'pinned'" :key="current.id" :tab="current" />
     <ScheduleView v-else-if="current?.kind === 'schedule'" :tab="current" />
     <FileView v-else-if="current?.kind === 'file'" :tab="current" />
     <Transcript v-else />

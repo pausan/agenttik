@@ -3,7 +3,8 @@
 Ctrl+V (or the platform paste command) in the prompt accepts one or several
 clipboard images. Repeated pastes add images. Each has a preview and remove
 button. Text-only paste remains native; mixed clipboard text is inserted at
-the selection. Send, Enqueue and Schedule wait for uploads to finish.
+the selection. Send, Enqueue, Schedule and Pinned task wait for uploads to finish and require
+at least one non-whitespace text character.
 The handler reads images from the paste event's items or files. Linux WebKit
 can leave both lists empty for an image paste; in that case it reads images
 through `navigator.clipboard.read()` during the paste gesture. It reads one
@@ -23,7 +24,8 @@ controls. Arbitrary filenames are refused.
 
 Drafts contain `![Attached image](/api/attachments/<name>)` references, hidden
 from the prompt text box and shown as previews. This uses the existing draft,
-queue, schedule, transcript and retry storage; images alone are a valid prompt.
+queue, schedule, transcript and retry storage; the stored format supports images alone, but the prompt bar requires typed
+text before enabling its actions ([062](062-pinned-prompts.md)).
 The transcript renders references as links. Before starting a turn, the runner
 resolves references to absolute local paths and asks the agent to use its
 image-reading tool. Image understanding requires a provider with that tool

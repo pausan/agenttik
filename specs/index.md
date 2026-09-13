@@ -39,6 +39,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [049](049-project-creation-modes.md) | Adding a project on a folder, or on a base folder of repositories cloned into it |
 | [051](051-task-outcomes.md) | What an archived task came to, written from its last reply and drawn under its row |
 | [061](061-hidden-projects.md) | Temporarily hiding projects and restoring them to their saved sidebar position |
+| [062](062-pinned-prompts.md) | Saved prompts, manual runs and explicit editing |
 
 ## Prompting and turns
 

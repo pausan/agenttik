@@ -1,6 +1,7 @@
 # Scheduled jobs
 
-A prompt can be scheduled to run again and again. The Send menu holds a third
+A prompt can be scheduled to run again and again. Manual-only saved prompts
+use the same storage with `every = pinned`; see [062](062-pinned-prompts.md). The Send menu holds a third
 action, **Schedule**, beside Send and Enqueue. It asks for a recurrence and a
 number of runs, and leaves a schedule behind in the project. When each run
 comes due the schedule starts a *new* task with the same prompt, on the
@@ -273,7 +274,7 @@ Migration 7 adds two tables and one column:
 - **schedules** — `id, project_id, title, prompt, provider, model, effort,
   permission, every, interval_minutes, at_minute, anchor_at, remaining, paused,
   next_run_at, created_at, done_at, position`. `every` is `interval`, `day`,
-  `week` or `month`. `at_minute` is minutes past local midnight for the three
+  `week` or `month` for repeating jobs (`pinned` for manual-only prompts). `at_minute` is minutes past local midnight for the three
   calendar forms; `interval_minutes` is the whole X hours Y minutes for the
   first. `anchor_at` is when the form was chosen — the creation time until
   the recurrence is edited into a different form — which is what fixes the

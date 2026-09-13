@@ -1,7 +1,7 @@
 <script setup>
 import { computed, defineAsyncComponent, nextTick, ref, watch } from "vue";
 
-import { S, accountLabel, contextWindow, enqueue, enterDoes, fail, hit, isStarred, limitsKey, modelPickerGroups, parseModelChoice, providerOf, refreshSubscriptionLimits, send, setModel, stopTurn, toggleStar } from "../store";
+import { S, createSchedule, accountLabel, contextWindow, enqueue, enterDoes, fail, hit, isStarred, limitsKey, modelPickerGroups, parseModelChoice, providerOf, refreshSubscriptionLimits, send, setModel, stopTurn, toggleStar } from "../store";
 import { ago } from "../api";
 import Chord from "./Chord.vue";
 import ContextPane from "./ContextPane.vue";
@@ -30,6 +30,7 @@ const modelOpen = ref(false);
 const queueOpen = ref(false);
 const scheduling = ref(false);
 const images = computed(() => promptImages(S.owner?.draft));
+const empty = computed(() => !text.value.trim());
 const uploading = computed(() => !!S.owner?.imageUploads);
 
 async function onPaste(e) {
@@ -333,7 +334,7 @@ async function star() {
 
 /* send clears the draft itself, and only when it really sends. */
 function submit() {
-  if (!uploading.value) send(S.owner?.draft || "");
+  if (!empty.value && !uploading.value) send(S.owner?.draft || "");
 }
 
 function onPromptInput(e) {
@@ -341,7 +342,7 @@ function onPromptInput(e) {
 }
 
 function enqueuePrompt() {
-  if (!uploading.value) enqueue(S.owner?.draft || "");
+  if (!empty.value && !uploading.value) enqueue(S.owner?.draft || "");
 }
 
 /* Send and enqueue are bindings, so the box answers whatever Settings says.
@@ -378,23 +379,24 @@ const hints = computed(() => [
 
 /* The button does what Enter does, so its label, icon and disabled state
    track the keybinding. The menu beside it is the Send menu (specs/012,
-   specs/028): Send, Enqueue and Schedule, always in that order, so it never
+   specs/028, specs/062): Send, Enqueue, Schedule and Pinned task, in that order, so it never
    reshuffles when Settings moves Enter between Send and Enqueue. */
 const actions = computed(() => ({
-  send: { label: "Send", icon: "i-lucide-send", run: submit, disabled: !!S.detail?.running || uploading.value },
-  enqueue: { label: "Enqueue", icon: "i-lucide-clock", run: enqueuePrompt, disabled: uploading.value },
+  send: { label: "Send", icon: "i-lucide-send", run: submit, disabled: empty.value || !!S.detail?.running || uploading.value },
+  enqueue: { label: "Enqueue", icon: "i-lucide-clock", run: enqueuePrompt, disabled: empty.value || uploading.value },
   /* Schedule keeps the prompt rather than sending it: the dialog asks how
      often and how many times, and every run after that is a session of its
      own. See specs/028-scheduled-jobs.md. */
-  schedule: { label: "Schedule…", icon: "i-lucide-repeat", run: () => (scheduling.value = true), disabled: !S.owner?.draft?.trim() || uploading.value },
+  schedule: { label: "Schedule…", icon: "i-lucide-repeat", run: () => (scheduling.value = true), disabled: empty.value || uploading.value },
+  pin: { label: "Pinned task", icon: "i-lucide-pin", run: () => createSchedule({ every: "pinned", remaining: 0 }), disabled: empty.value || uploading.value },
 }));
 const primary = computed(() => actions.value[enterDoes() === "enqueue" ? "enqueue" : "send"]);
-const menu = computed(() => [actions.value.send, actions.value.enqueue, actions.value.schedule]);
+const menu = computed(() => [actions.value.send, actions.value.enqueue, actions.value.schedule, actions.value.pin]);
 
 /* The menu closes itself: whichever action was chosen has just been used. */
 function runMenuAction(action) {
   queueOpen.value = false;
-  action.run();
+  if (!action.disabled) action.run();
 }
 </script>
 
@@ -564,7 +566,7 @@ function runMenuAction(action) {
           <UFieldGroup size="sm">
             <UButton type="submit" :disabled="primary.disabled" :label="primary.label" :trailing-icon="primary.icon" />
             <UPopover v-model:open="queueOpen">
-              <UButton type="button" icon="i-lucide-chevron-down" aria-label="More prompt actions" />
+              <UButton type="button" :disabled="empty || uploading" icon="i-lucide-chevron-down" aria-label="More prompt actions" />
               <template #content>
                 <div class="p-1">
                   <UButton

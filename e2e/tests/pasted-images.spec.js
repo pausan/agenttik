@@ -11,7 +11,7 @@ async function pasteImages(page, count) {
   }, count);
 }
 
-test("paste multiple images, remove one, restore draft and send images alone", async ({ page }) => {
+test("paste multiple images, remove one, restore draft and require text before sending", async ({ page }) => {
   await addProject(page);
   await openProject(page);
   await newTask(page);
@@ -26,6 +26,8 @@ test("paste multiple images, remove one, restore draft and send images alone", a
   await pasteImages(page, 1);
   await expect(previews).toHaveCount(2);
   await expect(page.getByRole("status").filter({ hasText: "Saving images" })).toHaveCount(0);
+  await expect(page.locator('button[type="submit"]')).toBeDisabled();
+  await page.getByPlaceholder("Ask the agent…").fill("Describe these images");
   const request = page.waitForRequest((r) => r.method() === "POST" && /\/(messages|queue)$/.test(new URL(r.url()).pathname));
   await page.locator('button[type="submit"]').click();
   const sent = (await request).postDataJSON().prompt;

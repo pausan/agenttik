@@ -102,8 +102,10 @@ func (s *Server) createSchedule(c *fiber.Ctx) error {
 	if body.Model == "" {
 		body.Model = provider.Models()[0].ID
 	}
-	if err := checkRecurrence(body.Every, body.IntervalMinutes, body.AtMinute); err != nil {
-		return err
+	if body.Every != store.EveryPinned {
+		if err := checkRecurrence(body.Every, body.IntervalMinutes, body.AtMinute); err != nil {
+			return err
+		}
 	}
 	// Below -1 is -1: there is one way to say forever, and 0 is what the
 	// counter reaches on its own rather than something to be asked for.
@@ -136,13 +138,17 @@ func (s *Server) createSchedule(c *fiber.Ctx) error {
 		AnchorAt:        time.Now().UnixMilli(),
 		Remaining:       body.Remaining,
 	}
-	sched.NextRunAt = runner.FirstRun(sched, time.Now()).UnixMilli()
+	if sched.Every == store.EveryPinned {
+		sched.Remaining, sched.IntervalMinutes, sched.AtMinute = 0, 0, 0
+	} else {
+		sched.NextRunAt = runner.FirstRun(sched, time.Now()).UnixMilli()
+	}
 	if err := s.store.CreateSchedule(sched); err != nil {
 		return err
 	}
 	// A job created with a name of its own is not guessed at; one named from
 	// its first line is, and the guess arrives a few seconds later.
-	if !named {
+	if !named && sched.Every != store.EveryPinned {
 		s.runner.NameSchedule(sched)
 	}
 	full, err := s.store.GetSchedule(sched.ID)
@@ -213,6 +219,9 @@ func (s *Server) updateSchedule(c *fiber.Ctx) error {
 	sched, err := s.store.GetSchedule(id)
 	if err != nil {
 		return err
+	}
+	if sched.Every == store.EveryPinned && (body.Every != nil || body.Paused != nil || body.Remaining != nil) {
+		return badRequest("pinned prompts have no recurrence")
 	}
 	if body.Title != nil {
 		if title := strings.TrimSpace(*body.Title); title != "" {
@@ -318,7 +327,8 @@ func (s *Server) updateSchedule(c *fiber.Ctx) error {
 // running, Enqueue waits for the project to be free.
 func (s *Server) runScheduleNow(c *fiber.Ctx) error {
 	var body struct {
-		Enqueue bool `json:"enqueue"`
+		Enqueue bool    `json:"enqueue"`
+		Prompt  *string `json:"prompt"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return badRequest("invalid body: %v", err)
@@ -326,6 +336,27 @@ func (s *Server) runScheduleNow(c *fiber.Ctx) error {
 	id, err := scheduleID(c)
 	if err != nil {
 		return err
+	}
+	sched, err := s.store.GetSchedule(id)
+	if err != nil {
+		return err
+	}
+	if sched.Every == store.EveryPinned {
+		if sched.DoneAt != 0 {
+			return badRequest("pinned prompt is archived")
+		}
+		prompt := sched.Prompt
+		if body.Prompt != nil {
+			prompt = strings.TrimSpace(*body.Prompt)
+		}
+		if prompt == "" {
+			return badRequest("prompt is required")
+		}
+		sess, err := s.runner.RunPinnedPrompt(sched, prompt)
+		if err != nil {
+			return err
+		}
+		return c.Status(fiber.StatusCreated).JSON(sess)
 	}
 	if err := s.runner.RunScheduleNow(id, body.Enqueue); err != nil {
 		return err

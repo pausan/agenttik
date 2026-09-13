@@ -211,6 +211,7 @@ const activeJob = computed(() => (S.owner?.kind === "schedule" ? S.owner.schedul
 function jobSub({ schedule, archived }) {
   const clock = scheduleLabel(schedule);
   if (archived) return `${clock} · archived ${ago(schedule.done_at)}`;
+  if (schedule.every === "pinned") return clock;
   if (schedule.paused) return `${clock} · paused`;
   return `${clock} · next run ${isoLocal(schedule.next_run_at)}`;
 }

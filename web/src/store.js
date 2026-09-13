@@ -612,7 +612,7 @@ const ROW_ID = { project: "projectID", schedule: "scheduleID", session: "session
 export function selectAdjacentSidebarRow(step) {
   const rows = S.projects.flatMap((project) => [
     { kind: "project", id: project.id },
-    ...project.schedules.map((schedule) => ({ kind: "schedule", id: schedule.id })),
+    ...project.schedules.filter((s) => s.every !== "pinned").map((schedule) => ({ kind: "schedule", id: schedule.id })),
     ...project.recent_sessions.map((session) => ({ kind: "session", id: session.id })),
   ]);
   if (!rows.length) return;
@@ -1230,7 +1230,7 @@ export async function createSchedule(form) {
       at_minute: form.every === "interval" ? 0 : atMinute(form.at),
       remaining: form.remaining,
     });
-    rememberScheduleDefaults(form);
+    if (form.every !== "pinned") rememberScheduleDefaults(form);
     await Promise.all([refreshProjects(), refreshSchedules()]).catch(() => {});
     openSchedule(created.schedule.id);
   } catch (e) {
@@ -1258,6 +1258,7 @@ function clock(atMinute) {
 }
 
 export function scheduleLabel(schedule) {
+  if (schedule.every === "pinned") return "Pinned task";
   if (schedule.every === "interval") {
     const h = Math.floor(schedule.interval_minutes / 60);
     const m = schedule.interval_minutes % 60;
@@ -1338,7 +1339,7 @@ const reloadSchedules = debounce(() => {
   refreshSessions().catch(() => {});
 }, 150);
 
-async function patchSchedule(schedule, body) {
+export async function patchSchedule(schedule, body) {
   try {
     const updated = await api("PATCH", "/api/schedules/" + schedule.id, body);
     const tab = S.tabs.find((t) => t.kind === "schedule" && t.scheduleID === schedule.id);
@@ -3344,4 +3345,14 @@ export async function init() {
   Promise.all([loadProviders(), refreshSchedules()]).catch(fail);
   initialized = true;
   initSmartSearch();
+}
+
+export async function runPinnedPrompt(schedule, prompt) {
+  try {
+    const session = await api("POST", `/api/schedules/${schedule.id}/run`,
+      prompt === undefined ? {} : { prompt });
+    await refreshProjects();
+    await pickTask(session.id);
+    return session;
+  } catch (e) { fail(e); }
 }

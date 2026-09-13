@@ -9,6 +9,13 @@
    nor Resume — archived already means paused, and resuming something put away
    would schedule nothing. Its archive icon is the way back. */
 import { nextTick, ref } from "vue";
+import { runPinnedPrompt } from "../store";
+const playing = ref(false);
+async function play(schedule) {
+  if (playing.value) return;
+  playing.value = true;
+  try { await runPinnedPrompt(schedule); } finally { playing.value = false; }
+}
 
 const props = defineProps({
   schedule: { type: Object, required: true },
@@ -68,7 +75,7 @@ defineExpose({ edit });
           :class="active ? 'text-primary' : archived ? 'text-muted' : 'text-highlighted'"
         >
           <UIcon
-            :name="archived ? 'i-lucide-archive' : schedule.paused ? 'i-lucide-pause' : 'i-lucide-repeat'"
+            :name="archived ? 'i-lucide-archive' : schedule.every === 'pinned' ? 'i-lucide-pin' : schedule.paused ? 'i-lucide-pause' : 'i-lucide-repeat'"
             class="size-3.5 block shrink-0"
             :class="archived || schedule.paused ? 'text-dimmed' : 'text-primary'"
           />
@@ -79,7 +86,7 @@ defineExpose({ edit });
             :title="`Job #${schedule.id} — its runs carry this number`"
             >#{{ schedule.id }}</span
           >
-          <span class="shrink-0 font-mono text-[10px] text-dimmed tabular-nums">
+          <span v-if="schedule.every !== 'pinned'" class="shrink-0 font-mono text-[10px] text-dimmed tabular-nums">
             {{ schedule.remaining < 0 ? "∞" : schedule.remaining }}
           </span>
         </span>
@@ -88,13 +95,14 @@ defineExpose({ edit });
       <button
         type="button"
         class="mr-1 shrink-0 rounded p-1 text-dimmed hover:text-primary"
-        title="Rename schedule"
+        :title="schedule.every === 'pinned' ? 'Rename pinned task' : 'Rename schedule'"
         @click.stop="edit"
       >
         <UIcon name="i-lucide-pencil" class="size-3.5 block" />
       </button>
+      <UButton v-if="!archived && schedule.every === 'pinned'" icon="i-lucide-play" aria-label="Play pinned task" title="Play pinned task" variant="ghost" size="xs" :disabled="playing" @click.stop="play(schedule)" />
       <button
-        v-if="!archived"
+        v-if="!archived && schedule.every !== 'pinned'"
         type="button"
         class="mr-1 shrink-0 rounded p-1 text-dimmed hover:text-primary"
         :title="schedule.paused ? 'Resume schedule' : 'Pause schedule'"
@@ -104,12 +112,12 @@ defineExpose({ edit });
         <UIcon :name="schedule.paused ? 'i-lucide-play' : 'i-lucide-pause'" class="size-3.5 block" />
       </button>
       <button
-        v-if="schedule.paused || archived"
+        v-if="schedule.every === 'pinned' || schedule.paused || archived"
         type="button"
         class="mr-1 shrink-0 rounded p-1 text-dimmed hover:text-primary"
         :class="archived ? 'text-primary' : ''"
         :aria-pressed="archived"
-        :title="archived ? 'Unarchive schedule' : 'Archive schedule'"
+        :title="schedule.every === 'pinned' ? (archived ? 'Unarchive pinned task' : 'Archive pinned task') : (archived ? 'Unarchive schedule' : 'Archive schedule')"
         @click.stop="$emit('toggle-archive')"
       >
         <UIcon

@@ -366,6 +366,7 @@ const (
 
 // Recurrence kinds.
 const (
+	EveryPinned   = "pinned" // Saved prompt, only run by an explicit user action.
 	EveryInterval = "interval"
 	EveryDay      = "day"
 	EveryWeek     = "week"

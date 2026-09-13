@@ -1,13 +1,13 @@
 # Two ways to start a project
 
-Add project opens on a segmented **Folder | Git repos** switch. Both end in
+Add project opens on a segmented **Folder | Multiple Git Repos** switch. Both end in
 the same thing — one project on one folder — and differ only in whether that
 folder is filled in on the way.
 
 **Folder** is the original: pick a folder that already exists, optionally name
 the project, Add.
 
-**Git repos** picks a *base folder* and clones one or more repositories into
+**Multiple Git Repos** picks a *base folder* and clones one or more repositories into
 it. The project points at the base folder, so every checkout under it is one
 working directory the agent sees at once: it can read across the repositories
 and change more than one in a turn.

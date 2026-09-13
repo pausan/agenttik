@@ -6,7 +6,7 @@ import { SEGMENTED } from "../ui";
 import FolderPicker from "./FolderPicker.vue";
 
 const open = defineModel("open", { type: Boolean, default: false });
-const MODES = [{ label: "Folder", value: "folder" }, { label: "Git repos", value: "repos" }];
+const MODES = [{ label: "Folder", value: "folder" }, { label: "Multiple Git Repos", value: "repos" }];
 const mode = ref("folder");
 const path = ref("");
 const name = ref("");
@@ -152,7 +152,7 @@ function submit() {
       <FolderPicker ref="picker" v-model="path" :label="mode === 'repos' ? 'Base folder' : 'Folder'" @submit="submit" />
 
       <template v-if="mode === 'repos'">
-        <p class="text-xs font-medium text-muted">Git repositories</p>
+        <p class="text-xs font-medium text-muted">Add one or more git repositories</p>
         <div class="mt-1 max-h-60 space-y-2 overflow-y-auto">
           <div v-for="(row, i) in repos" :key="row" class="text-xs text-muted">
             <div class="flex min-w-0 items-center gap-2">

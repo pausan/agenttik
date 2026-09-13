@@ -3,7 +3,8 @@ import { expect, test } from "../fixtures.js";
 async function openRepos(page) {
   await page.getByRole("button", { name: "Add project", exact: true }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("tab", { name: "Git repos" }).click();
+  await dialog.getByRole("tab", { name: "Multiple Git Repos" }).click();
+  await expect(dialog.getByText("Add one or more git repositories", { exact: true })).toBeVisible();
   return dialog;
 }
 

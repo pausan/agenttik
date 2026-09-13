@@ -12,16 +12,16 @@ type DesktopConfig struct {
 
 // ValidateDesktopShortcut keeps the portable shortcut vocabulary explicit.
 func ValidateDesktopShortcut(chord string) error {
-	if chord == "Ctrl+Q" {
-		return fmt.Errorf("Ctrl+Q is reserved for quitting")
+	if chord == "Ctrl+Q" || chord == "Cmd+Q" {
+		return fmt.Errorf("%s is reserved for quitting", chord)
 	}
 	parts := strings.Split(chord, "+")
 	if len(parts) < 2 {
-		return fmt.Errorf("shortcut needs Ctrl, Alt or Shift and a letter, digit or F1–F12")
+		return fmt.Errorf("shortcut needs Ctrl, Cmd, Alt or Shift and a letter, digit or F1–F12")
 	}
 	seen := map[string]bool{}
 	for _, mod := range parts[:len(parts)-1] {
-		if (mod != "Ctrl" && mod != "Alt" && mod != "Shift") || seen[mod] {
+		if (mod != "Ctrl" && mod != "Cmd" && mod != "Alt" && mod != "Shift") || seen[mod] {
 			return fmt.Errorf("invalid or repeated shortcut modifier: %s", mod)
 		}
 		seen[mod] = true

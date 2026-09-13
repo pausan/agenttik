@@ -7,6 +7,7 @@ import (
 	_ "embed"
 	"log"
 	"runtime"
+	"strings"
 	"sync"
 
 	"github.com/cardinalby/go-systray"
@@ -40,6 +41,7 @@ func (w *window) startTray(config store.DesktopConfig) func() {
 	if !config.CloseToTray {
 		return func() {}
 	}
+	config.ToggleShortcut = desktopShortcutForOS(config.ToggleShortcut, runtime.GOOS)
 	if err := checkTray(); err != nil {
 		w.trayFailed(err)
 		return func() {}
@@ -89,8 +91,21 @@ func (w *window) startTray(config store.DesktopConfig) func() {
 	}
 }
 
+func desktopShortcutForOS(chord, goos string) string {
+	if goos != "darwin" {
+		return chord
+	}
+	parts := strings.Split(chord, "+")
+	for i, part := range parts[:len(parts)-1] {
+		if part == "Ctrl" {
+			parts[i] = "Cmd"
+		}
+	}
+	return strings.Join(parts, "+")
+}
+
 // quit marks the close as intentional before asking Wails to leave. That flag
-// is what makes OnBeforeClose bypass close-to-tray for both Ctrl+Q and the
+// is what makes OnBeforeClose bypass close-to-tray for both the quit chord and the
 // tray menu.
 func (w *window) quit() {
 	w.mu.Lock()

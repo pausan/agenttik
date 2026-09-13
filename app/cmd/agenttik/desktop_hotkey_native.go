@@ -18,6 +18,8 @@ func registerToggle(chord string, toggle func(foreground bool)) (func(), error) 
 		switch part {
 		case "Ctrl":
 			mods = append(mods, hotkey.ModCtrl)
+		case "Cmd":
+			mods = append(mods, commandModifier)
 		case "Shift":
 			mods = append(mods, hotkey.ModShift)
 		case "Alt":

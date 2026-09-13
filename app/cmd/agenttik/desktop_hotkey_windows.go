@@ -9,7 +9,10 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-const altModifier = hotkey.ModAlt
+const (
+	altModifier     = hotkey.ModAlt
+	commandModifier = hotkey.ModWin
+)
 
 var (
 	user32                       = windows.NewLazySystemDLL("user32.dll")

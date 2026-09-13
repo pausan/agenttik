@@ -28,12 +28,12 @@ func TestDesktopConfigPersists(t *testing.T) {
 }
 
 func TestDesktopShortcut(t *testing.T) {
-	for _, chord := range []string{"Ctrl+Shift+A", "Alt+0", "Shift+F1", "Ctrl+Alt+Shift+F12"} {
+	for _, chord := range []string{"Ctrl+Shift+A", "Cmd+Shift+A", "Alt+0", "Shift+F1", "Ctrl+Alt+Shift+F12"} {
 		if err := ValidateDesktopShortcut(chord); err != nil {
 			t.Errorf("%q: %v", chord, err)
 		}
 	}
-	for _, chord := range []string{"", "A", "Ctrl+", "Ctrl+a", "Ctrl+Ctrl+A", "Meta+A", "Ctrl+F0", "Ctrl+F13", "Ctrl+Shift", "Ctrl+A+B", "Ctrl+Q"} {
+	for _, chord := range []string{"", "A", "Ctrl+", "Ctrl+a", "Ctrl+Ctrl+A", "Meta+A", "Ctrl+F0", "Ctrl+F13", "Ctrl+Shift", "Ctrl+A+B", "Ctrl+Q", "Cmd+Q"} {
 		if ValidateDesktopShortcut(chord) == nil {
 			t.Errorf("accepted %q", chord)
 		}

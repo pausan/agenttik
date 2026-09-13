@@ -16,6 +16,7 @@ import { api } from "./api";
 import { debounce } from "./debounce";
 import { ACCENTS, DEFAULT_COLORS, NEUTRALS, applyColors } from "./theme";
 import { ACTIONS, matches } from "./shortcuts";
+import { platformChord, primaryChord } from "./platform";
 import { initSmartSearch } from "./smart-search.js";
 
 /* Sidebar widths are the user's, so they are kept across reloads. */
@@ -3224,7 +3225,7 @@ export function loadKeys() {
   for (const a of ACTIONS) {
     const chords = saved[a.id] || saved[LEGACY_TASK_ACTIONS[a.id]];
     if (a.fixed || !Array.isArray(chords) || !chords.length) continue;
-    if (chords.every((c) => typeof c === "string" && c)) S.keys[a.id] = chords;
+    if (chords.every((c) => typeof c === "string" && c)) S.keys[a.id] = chords.map((c) => platformChord(c));
   }
 }
 
@@ -3287,7 +3288,7 @@ function sameChords(a, b) {
 
    Moving either chord somewhere else in Shortcuts is still allowed, and reads
    back here as neither arrangement. */
-export const PROMPT_CHORDS = { plain: "Enter", modified: "Ctrl+Enter" };
+export const PROMPT_CHORDS = { plain: "Enter", modified: primaryChord("Enter") };
 
 /* enterDoes names what the plain Enter submits with: "send", "enqueue", or
    "custom" once Shortcuts has moved one of them off this pair. */

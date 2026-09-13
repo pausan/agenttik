@@ -24,6 +24,7 @@ import MainPanel from "./components/MainPanel.vue";
 import InspectorPanel from "./components/InspectorPanel.vue";
 import Splitter from "./components/Splitter.vue";
 import { MOBILE_QUERY } from "./ui";
+import { MACOS } from "./platform";
 
 /* Everything below is reached by a click or a chord, never by the first
    paint, so its code is fetched from its own chunk the moment it is first
@@ -130,8 +131,9 @@ function onKey(e) {
   // Emit a native quit request so the desktop shell can mark the close as
   // intentional before Wails runs the close-to-tray hook. This is an
   // app-window shortcut, not a global registration; browsers have no
-  // injected runtime and keep their own Ctrl+Q behaviour.
-  if (e.code === "KeyQ" && e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey) {
+  // injected runtime and keep their own platform quit behaviour.
+  const quitModifier = MACOS ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+  if (e.code === "KeyQ" && quitModifier && !e.altKey && !e.shiftKey) {
     if (!window.runtime?.EventsEmit) return;
     e.preventDefault();
     if (!e.repeat) window.runtime.EventsEmit("agenttik:quit");

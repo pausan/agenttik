@@ -36,6 +36,7 @@ func TestDesktopConfigAPI(t *testing.T) {
 		status int
 	}{
 		{"Ctrl+Shift+B", http.StatusOK},
+		{"Cmd+Shift+B", http.StatusOK},
 		{"A", http.StatusBadRequest},
 		{"Ctrl+Ctrl+A", http.StatusBadRequest},
 		{"Ctrl+F13", http.StatusBadRequest},
@@ -57,7 +58,7 @@ func TestDesktopConfigAPI(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&got); err != nil {
 		t.Fatal(err)
 	}
-	if !got.Available || !got.CloseToTray || got.ToggleShortcut != "Ctrl+Shift+B" || got.Error != "shortcut already taken" {
+	if !got.Available || !got.CloseToTray || got.ToggleShortcut != "Cmd+Shift+B" || got.Error != "shortcut already taken" {
 		t.Fatalf("saved: %+v", got)
 	}
 }

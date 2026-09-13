@@ -15,6 +15,7 @@ import {
   startCurrentTask,
 } from "../store";
 import { beginDrag } from "../drag";
+import { primaryChord } from "../platform";
 import Transcript from "./Transcript.vue";
 import PromptBar from "./PromptBar.vue";
 import StatusDot from "./StatusDot.vue";
@@ -159,7 +160,7 @@ const badge = computed(() => {
         variant="ghost"
         size="xs"
         class="shrink-0 max-md:hidden"
-        title="New task  (Ctrl+N)"
+        :title="`New task (${primaryChord('N')})`"
         aria-label="New task"
         @click="startCurrentTask()"
       />

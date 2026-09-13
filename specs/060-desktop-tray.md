@@ -1,8 +1,9 @@
 # Desktop tray and global shortcut
 
 Settings → General → Desktop tray offers an opt-in **Close to tray** setting
-and a **Show / hide shortcut**, defaulting to `Ctrl+Shift+A`. Save and restart
-the desktop app to apply either change. The window opens normally at launch.
+and a **Show / hide shortcut**, defaulting to `Ctrl+Shift+A` on Windows and
+Linux and `Cmd+Shift+A` on macOS. Save and restart the desktop app to apply
+either change. The window opens normally at launch.
 Closing it hides it and keeps the server and tasks running. The shortcut works
 with another application focused. When agenttik is the window in front, the
 shortcut hides it to the tray. From anywhere else — behind another
@@ -14,9 +15,9 @@ action toggles visibility regardless of which application has focus. Quit
 bypasses close-to-tray and runs the normal shutdown. A second launch restores
 a hidden window through the existing foreground hook. Disabling Close to tray
 and restarting removes the tray and releases the shortcut; closing then exits.
-`Ctrl+Q` is a fixed app-window quit shortcut: it exits the process from the
-focused window even when Close to tray is enabled. It is not registered
-globally and cannot be chosen as the show/hide shortcut.
+`Ctrl+Q`, or `Cmd+Q` on macOS, is a fixed app-window quit shortcut: it exits
+the process from the focused window even when Close to tray is enabled. It is
+not registered globally and cannot be chosen as the show/hide shortcut.
 
 ## Storage and API
 
@@ -26,11 +27,11 @@ and `toggle_shortcut`. `GET /api/desktop` adds `available` (desktop shell) and
 fields. Web mode reports unavailable and rejects writes. The UI hides the
 controls in web mode. Settings search includes the tray and shortcut fields.
 
-A shortcut contains one or more distinct `Ctrl`, `Alt`, `Shift` modifiers and
-a letter A–Z, digit 0–9, or F1–F12, separated by `+`; `Ctrl+Q` is reserved for
-quitting. This desktop shortcut is stored separately from the browser shortcuts
-because it must be registered before the webview opens. Native registration
-checks availability on startup.
+A shortcut contains one or more distinct `Ctrl`, `Cmd`, `Alt`, `Shift`
+modifiers and a letter A–Z, digit 0–9, or F1–F12, separated by `+`; the
+platform quit chord is reserved for quitting. This desktop shortcut is stored
+separately from the browser shortcuts because it must be registered before the
+webview opens. Native registration checks availability on startup.
 A missing tray host or failed registration leaves close-to-tray inactive and
 reports an error in Settings and the process log; closing still exits normally.
 
@@ -63,8 +64,10 @@ and stops the reader; the known nil-event diagnostic from the XGB dependency is
 not shown, while other XGB diagnostics remain visible. Linux requires an X11
 session and a tray host (e.g. GNOME's AppIndicator extension); Wayland is
 currently unsupported.
-Windows and macOS use `golang.design/x/hotkey`. macOS requires Accessibility
-permission for its event tap; registration failure appears in Settings.
+Windows and macOS use `golang.design/x/hotkey`. On macOS, stored `Ctrl` tray
+chords from earlier versions are registered and displayed with `Cmd`. macOS
+requires Accessibility permission for its event tap; registration failure
+appears in Settings.
 
 ## Verification
 

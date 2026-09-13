@@ -40,3 +40,12 @@ func TestTrayImages(t *testing.T) {
 		t.Fatalf("tray ICO has %d sizes, want at least 4", count)
 	}
 }
+
+func TestMacOSDesktopShortcutUsesCommand(t *testing.T) {
+	if got := desktopShortcutForOS("Ctrl+Shift+A", "darwin"); got != "Cmd+Shift+A" {
+		t.Fatalf("macOS shortcut = %q", got)
+	}
+	if got := desktopShortcutForOS("Ctrl+Shift+A", "windows"); got != "Ctrl+Shift+A" {
+		t.Fatalf("Windows shortcut = %q", got)
+	}
+}

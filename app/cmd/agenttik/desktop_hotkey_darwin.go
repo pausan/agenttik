@@ -17,7 +17,10 @@ import "C"
 
 import "golang.design/x/hotkey"
 
-const altModifier = hotkey.ModOption
+const (
+	altModifier     = hotkey.ModOption
+	commandModifier = hotkey.ModCmd
+)
 
 // appIsForeground reports whether this application is the active one, which is
 // what macOS calls the app whose window the desktop has in front.

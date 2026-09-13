@@ -77,7 +77,7 @@ func registerToggle(chord string, toggle func(foreground bool)) (func(), error) 
 		return nil, fmt.Errorf("global shortcut: %w", err)
 	}
 	keybind.Initialize(xu)
-	chord = strings.NewReplacer("Ctrl", "Control", "Alt", "Mod1", "+", "-").Replace(chord)
+	chord = strings.NewReplacer("Ctrl", "Control", "Cmd", "Mod4", "Alt", "Mod1", "+", "-").Replace(chord)
 	mods, codes, err := keybind.ParseString(xu, chord)
 	if err != nil {
 		xu.Conn().Close()

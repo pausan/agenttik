@@ -18,6 +18,7 @@ import { langOf } from "../highlight";
 import { api, nf } from "../api";
 import { fileInfoLabel } from "../file-info";
 import { SEGMENTED } from "../ui";
+import { primaryChord } from "../platform";
 import FileDiff from "./FileDiff.vue";
 import FileEditor from "./FileEditor.vue";
 import FilePreview from "./FilePreview.vue";
@@ -135,7 +136,7 @@ const stat = computed(() => {
         variant="ghost"
         :disabled="!dirty"
         :loading="tab.saving"
-        title="Save (Ctrl+S)"
+        :title="`Save (${primaryChord('S')})`"
         @click="saveFile(tab)"
         >Save</UButton
       >

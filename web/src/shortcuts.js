@@ -1,7 +1,7 @@
 /* Every chord the app answers to, and the two functions that compare one to a
    keyboard event.
 
-   A chord is written the way it reads — "Ctrl+Shift+T" — but matched on the
+   A chord is written the way it reads — "Cmd+Shift+T" on macOS — but matched on the
    physical key: on some layouts Alt and a digit produce a different character,
    so e.code is what the comparison uses and the letter in the chord is turned
    back into a code.
@@ -10,32 +10,34 @@
    the textareas answer to themselves. They are listed so the dialog is the
    whole truth, and they are not rebindable. */
 
-export const ACTIONS = [
-  { id: "task.new", group: "Tasks", what: "New task in the current project", keys: ["Ctrl+N", "Ctrl+T"] },
-  { id: "task.rename", group: "Tasks", what: "Rename the current task or scheduled job", keys: ["F2"] },
-  { id: "tab.close", group: "Conversations", what: "Close the current tab", keys: ["Ctrl+W"] },
-  { id: "tab.reopen", group: "Conversations", what: "Restore the last closed tab in this project", keys: ["Ctrl+Shift+T"] },
+import { MACOS, primaryChord } from "./platform.js";
 
-  { id: "tab.prev", group: "Tabs", what: "Previous tab", keys: ["Ctrl+Shift+Tab"] },
-  { id: "tab.next", group: "Tabs", what: "Next tab", keys: ["Ctrl+Tab"] },
-  { id: "task.prev", group: "Tasks", what: "Previous project or task in the sidebar", keys: ["Ctrl+PageUp"] },
-  { id: "task.next", group: "Tasks", what: "Next project or task in the sidebar", keys: ["Ctrl+PageDown"] },
+export const ACTIONS = [
+  { id: "task.new", group: "Tasks", what: "New task in the current project", keys: [primaryChord("N"), primaryChord("T")] },
+  { id: "task.rename", group: "Tasks", what: "Rename the current task or scheduled job", keys: ["F2"] },
+  { id: "tab.close", group: "Conversations", what: "Close the current tab", keys: [primaryChord("W")] },
+  { id: "tab.reopen", group: "Conversations", what: "Restore the last closed tab in this project", keys: [primaryChord("Shift+T")] },
+
+  { id: "tab.prev", group: "Tabs", what: "Previous tab", keys: [primaryChord("Shift+Tab")] },
+  { id: "tab.next", group: "Tabs", what: "Next tab", keys: [primaryChord("Tab")] },
+  { id: "task.prev", group: "Tasks", what: "Previous project or task in the sidebar", keys: [primaryChord("PageUp")] },
+  { id: "task.next", group: "Tasks", what: "Next project or task in the sidebar", keys: [primaryChord("PageDown")] },
   { id: "task.at", group: "Tasks", what: "Go straight to one of the first nine tasks", keys: ["Alt+1…9"], fixed: true },
   { id: "project.at", group: "Tabs", what: "Switch to one of the first eight projects, again to fold its tasks", keys: ["Alt+A…H"], fixed: true },
 
-  { id: "goto", group: "Panels", what: "Command Palette", keys: ["Ctrl+Shift+P"] },
+  { id: "goto", group: "Panels", what: "Command Palette", keys: [primaryChord("Shift+P")] },
   { id: "panel.projects", group: "Panels", what: "Projects", keys: ["Alt+P"] },
   { id: "panel.tree", group: "Panels", what: "Tree, cursor in the filter", keys: ["Alt+T"] },
   { id: "divider.resize", group: "Panels", what: "Resize a selected divider", keys: ["←", "→"], fixed: true },
 
-  { id: "file.goto", group: "Files", what: "Go to file", keys: ["Ctrl+P"] },
-  { id: "file.save", group: "Files", what: "Save the file in front", keys: ["Ctrl+S"] },
+  { id: "file.goto", group: "Files", what: "Go to file", keys: [primaryChord("P")] },
+  { id: "file.save", group: "Files", what: "Save the file in front", keys: [primaryChord("S")] },
   { id: "file.indent", group: "Files", what: "Indent, with the caret in a file", keys: ["Tab"], fixed: true },
-  { id: "edit.undo", group: "Files", what: "Undo / redo file and draft edits", keys: ["Ctrl+Z", "Ctrl+Y"], fixed: true },
+  { id: "edit.undo", group: "Files", what: "Undo / redo file and draft edits", keys: [primaryChord("Z"), primaryChord("Y")], fixed: true },
 
-  { id: "prompt.send", group: "Prompt", what: "Send", keys: ["Ctrl+Enter"] },
+  { id: "prompt.send", group: "Prompt", what: "Send", keys: [primaryChord("Enter")] },
   { id: "prompt.enqueue", group: "Prompt", what: "Enqueue", keys: ["Enter"] },
-  { id: "prompt.editLast", group: "Prompt", what: "Edit the last queued prompt", keys: ["Ctrl+E"] },
+  { id: "prompt.editLast", group: "Prompt", what: "Edit the last queued prompt", keys: [primaryChord("E")] },
   { id: "prompt.newline", group: "Prompt", what: "New line", keys: ["Shift+Enter"], fixed: true },
 ];
 
@@ -55,7 +57,7 @@ function parse(chord) {
   const parts = chord.split("+").map((p) => p.trim()).filter(Boolean);
   const key = parts.pop() || "";
   const has = (m) => parts.some((p) => p.toLowerCase() === m);
-  c = { ctrl: has("ctrl"), alt: has("alt"), shift: has("shift"), meta: has("meta"), code: codeOf(key) };
+  c = { ctrl: has("ctrl"), alt: has("alt"), shift: has("shift"), meta: has("meta") || has("cmd"), code: codeOf(key) };
   parsed.set(chord, c);
   return c;
 }
@@ -97,7 +99,7 @@ export function modifiersOf(e) {
   if (e.ctrlKey) parts.push("Ctrl");
   if (e.altKey) parts.push("Alt");
   if (e.shiftKey) parts.push("Shift");
-  if (e.metaKey) parts.push("Meta");
+  if (e.metaKey) parts.push(MACOS ? "Cmd" : "Meta");
   return parts;
 }
 

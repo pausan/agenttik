@@ -3,12 +3,14 @@ import { computed, onMounted, ref, watchEffect } from "vue";
 import { api } from "../../api";
 import { fail } from "../../store";
 import { fuzzyAny } from "../../fuzzy";
+import { MACOS, desktopChord, primaryChord } from "../../platform";
 
 const props = defineProps({ filter: { type: String, default: "" } });
 const emit = defineEmits(["count"]);
 const config = ref(null);
 const enabled = ref(false);
-const shortcut = ref("Ctrl+Shift+A");
+const defaultShortcut = primaryChord("Shift+A");
+const shortcut = ref(defaultShortcut);
 const saving = ref(false);
 const saved = ref(false);
 const visible = computed(() => config.value?.available && fuzzyAny(
@@ -19,7 +21,7 @@ onMounted(async () => {
   try {
     config.value = await api("GET", "/api/desktop");
     enabled.value = config.value.close_to_tray;
-    shortcut.value = config.value.toggle_shortcut;
+    shortcut.value = desktopChord(config.value.toggle_shortcut);
   } catch (e) { fail(e); }
 });
 async function save() {
@@ -30,7 +32,7 @@ async function save() {
       close_to_tray: enabled.value,
       toggle_shortcut: shortcut.value.trim(),
     });
-    shortcut.value = config.value.toggle_shortcut;
+    shortcut.value = desktopChord(config.value.toggle_shortcut);
     saved.value = true;
   } catch (e) { fail(e); }
   finally { saving.value = false; }
@@ -47,8 +49,8 @@ async function save() {
     <form class="flex flex-col items-start gap-2" @submit.prevent="save">
       <UCheckbox v-model="enabled" label="Close to tray" :disabled="saving" @update:model-value="saved = false" />
       <label for="tray-shortcut" class="text-sm text-muted">Show / hide shortcut</label>
-      <UInput id="tray-shortcut" v-model="shortcut" :disabled="saving" placeholder="Ctrl+Shift+A" @update:model-value="saved = false" />
-      <p class="text-xs text-dimmed">Use Ctrl, Alt or Shift with A–Z, 0–9 or F1–F12. Ctrl+Q is reserved for quitting. Default: Ctrl+Shift+A.</p>
+      <UInput id="tray-shortcut" v-model="shortcut" :disabled="saving" :placeholder="defaultShortcut" @update:model-value="saved = false" />
+      <p class="text-xs text-dimmed">Use {{ MACOS ? "Cmd" : "Ctrl" }}, Alt or Shift with A–Z, 0–9 or F1–F12. {{ primaryChord("Q") }} is reserved for quitting. Default: {{ defaultShortcut }}.</p>
       <UButton type="submit" size="sm" :loading="saving">Save tray settings</UButton>
       <p class="text-xs" :class="saved ? 'text-success' : 'text-dimmed'">
         {{ saved ? "Saved. Restart agenttik to apply these settings." : "Changes take effect after restarting agenttik." }}

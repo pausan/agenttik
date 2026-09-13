@@ -40,3 +40,25 @@ func TestTrayImages(t *testing.T) {
 		t.Fatalf("tray ICO has %d sizes, want at least 4", count)
 	}
 }
+
+func TestShortcutOnlyHidesForegroundVisibleWindow(t *testing.T) {
+	tests := []struct {
+		name      string
+		focused   bool
+		hidden    bool
+		minimised bool
+		want      bool
+	}{
+		{name: "foreground and visible", focused: true, want: true},
+		{name: "behind another app", want: false},
+		{name: "hidden in tray", focused: true, hidden: true, want: false},
+		{name: "minimised", focused: true, minimised: true, want: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := shortcutHidesWindow(test.focused, test.hidden, test.minimised); got != test.want {
+				t.Fatalf("shortcutHidesWindow(%v, %v, %v) = %v, want %v", test.focused, test.hidden, test.minimised, got, test.want)
+			}
+		})
+	}
+}

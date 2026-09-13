@@ -94,6 +94,7 @@ type window struct {
 	mu        sync.Mutex
 	ctx       context.Context
 	hidden    bool
+	focused   bool
 	trayReady bool
 	quitting  bool
 	trayError string
@@ -104,6 +105,14 @@ func (w *window) opened(ctx context.Context) {
 	w.ctx = ctx
 	w.mu.Unlock()
 	runtime.EventsOn(ctx, "agenttik:quit", func(...interface{}) { w.quit() })
+	runtime.EventsOn(ctx, "agenttik:window-focused", func(...interface{}) { w.setFocused(true) })
+	runtime.EventsOn(ctx, "agenttik:window-blurred", func(...interface{}) { w.setFocused(false) })
+}
+
+func (w *window) setFocused(focused bool) {
+	w.mu.Lock()
+	w.focused = focused
+	w.mu.Unlock()
 }
 
 // present raises the window and says whether there was one. Wails queues both

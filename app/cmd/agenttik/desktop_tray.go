@@ -70,7 +70,7 @@ func (w *window) startTray(config store.DesktopConfig) func() {
 			for {
 				select {
 				case <-toggle.ClickedCh:
-					w.toggle()
+					w.toggleVisibility()
 				case <-quit.ClickedCh:
 					w.quit()
 				case <-done:
@@ -110,6 +110,27 @@ func (w *window) toggle() {
 	if w.ctx == nil || !w.trayReady || w.quitting {
 		return
 	}
+	minimised := wruntime.WindowIsMinimised(w.ctx)
+	if shortcutHidesWindow(w.focused, w.hidden, minimised) {
+		wruntime.WindowHide(w.ctx)
+		w.hidden = true
+		w.focused = false
+	} else {
+		wruntime.WindowShow(w.ctx)
+		wruntime.WindowUnminimise(w.ctx)
+		w.hidden = false
+	}
+}
+
+// The tray action remains a visibility toggle. Opening the tray moves focus
+// away from the app, so applying the shortcut's focus rule here would make an
+// already visible window come forward instead of hiding it.
+func (w *window) toggleVisibility() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.ctx == nil || !w.trayReady || w.quitting {
+		return
+	}
 	if w.hidden || wruntime.WindowIsMinimised(w.ctx) {
 		wruntime.WindowShow(w.ctx)
 		wruntime.WindowUnminimise(w.ctx)
@@ -117,7 +138,12 @@ func (w *window) toggle() {
 	} else {
 		wruntime.WindowHide(w.ctx)
 		w.hidden = true
+		w.focused = false
 	}
+}
+
+func shortcutHidesWindow(focused, hidden, minimised bool) bool {
+	return focused && !hidden && !minimised
 }
 
 func (w *window) beforeClose(ctx context.Context) bool {
@@ -128,5 +154,6 @@ func (w *window) beforeClose(ctx context.Context) bool {
 	}
 	wruntime.WindowHide(ctx)
 	w.hidden = true
+	w.focused = false
 	return true
 }

@@ -4,13 +4,15 @@ Settings → General → Desktop tray offers an opt-in **Close to tray** setting
 and a **Show / hide shortcut**, defaulting to `Ctrl+Shift+A`. Save and restart
 the desktop app to apply either change. The window opens normally at launch.
 Closing it hides it and keeps the server and tasks running. The shortcut works
-with another application focused and toggles the window. A minimized window
-is restored. Holding the shortcut toggles once.
+with another application focused. When agenttik is visible and in the
+foreground, the shortcut hides it. Otherwise the shortcut shows, restores and
+brings the window to the foreground. Holding the shortcut acts once.
 
-The tray menu provides **Show / Hide agenttik** and **Quit**. Quit bypasses
-close-to-tray and runs the normal shutdown. A second launch restores a hidden
-window through the existing foreground hook. Disabling Close to tray and
-restarting removes the tray and releases the shortcut; closing then exits.
+The tray menu provides **Show / Hide agenttik** and **Quit**. Its Show / Hide
+action toggles visibility regardless of which application has focus. Quit
+bypasses close-to-tray and runs the normal shutdown. A second launch restores
+a hidden window through the existing foreground hook. Disabling Close to tray
+and restarting removes the tray and releases the shortcut; closing then exits.
 `Ctrl+Q` is a fixed app-window quit shortcut: it exits the process from the
 focused window even when Close to tray is enabled. It is not registered
 globally and cannot be chosen as the show/hide shortcut.

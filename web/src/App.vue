@@ -188,6 +188,19 @@ function run(e, action) {
   action();
 }
 
+function reportWindowFocus(focused) {
+  const event = focused ? "agenttik:window-focused" : "agenttik:window-blurred";
+  window.runtime?.EventsEmit?.(event);
+}
+
+function reportWindowFocused() {
+  reportWindowFocus(true);
+}
+
+function reportWindowBlurred() {
+  reportWindowFocus(false);
+}
+
 onMounted(() => {
   const showSpinner = setTimeout(() => (bootSpinner.value = true), 1000);
   init().finally(() => {
@@ -195,12 +208,17 @@ onMounted(() => {
     bootSpinner.value = false;
   });
   window.addEventListener("keydown", onKey);
+  window.addEventListener("focus", reportWindowFocused);
+  window.addEventListener("blur", reportWindowBlurred);
   media.addEventListener("change", changeLayout);
   window.visualViewport?.addEventListener("resize", resizeViewport);
+  reportWindowFocus(document.hasFocus());
   resizeViewport();
 });
 onUnmounted(() => {
   window.removeEventListener("keydown", onKey);
+  window.removeEventListener("focus", reportWindowFocused);
+  window.removeEventListener("blur", reportWindowBlurred);
   media.removeEventListener("change", changeLayout);
   window.visualViewport?.removeEventListener("resize", resizeViewport);
 });

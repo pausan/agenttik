@@ -1,5 +1,5 @@
 <script setup>
-/* The accent and the grey. Both apply on click: the dialog has no Apply
+/* Mode, accent and grey apply on click: the dialog has no Apply
    button because seeing the colour is the only way to choose it. */
 import { computed, watchEffect } from "vue";
 
@@ -9,6 +9,9 @@ import { fuzzyAny } from "../../fuzzy";
 
 const props = defineProps({ filter: { type: String, default: "" } });
 const emit = defineEmits(["count"]);
+const showMode = computed(() =>
+  fuzzyAny(["color mode", "light", "dark", "night", "day", "system", "appearance", "theme"], props.filter) !== null,
+);
 
 const ROWS = [
   { key: "accent", label: "Accent", palettes: ACCENTS },
@@ -25,10 +28,18 @@ const rows = computed(() =>
   }),
 );
 
-watchEffect(() => emit("count", rows.value.length));
+watchEffect(() => emit("count", rows.value.length + Number(showMode.value)));
 </script>
 
 <template>
+  <section v-if="showMode" class="mb-6">
+    <label for="color-mode" class="mb-0.5 block font-semibold text-highlighted">Color mode</label>
+    <p class="mb-2 text-xs text-dimmed">
+      Choose Light, Dark, or System to follow your device’s appearance, including scheduled
+      changes. Takes effect immediately and is remembered per browser.
+    </p>
+    <UColorModeSelect id="color-mode" aria-label="Color mode" class="w-40" />
+  </section>
   <section v-if="rows.length">
     <div class="mb-0.5 font-semibold text-highlighted">Colours</div>
     <p class="mb-2 text-xs text-dimmed">

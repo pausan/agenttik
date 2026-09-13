@@ -1,5 +1,49 @@
 import { expect, openSettings, test } from "../fixtures.js";
 
+test("appearance modes persist and System follows device changes", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await openSettings(page, "Appearance");
+  const mode = page.getByRole("button", { name: "Color mode", exact: true });
+  const root = page.locator("html");
+  const choose = async (name) => {
+    await mode.click();
+    await page.getByRole("option", { name, exact: true }).click();
+    await expect(mode).toContainText(name);
+  };
+  await expect(mode).toContainText("System");
+  await expect(root).not.toHaveClass(/dark/);
+  const lightBackground = await page.locator("body").evaluate((el) => getComputedStyle(el).backgroundColor);
+  await choose("Dark");
+  await expect(root).toHaveClass(/dark/);
+  await expect(root).toHaveCSS("color-scheme", "dark");
+  expect(await page.locator("body").evaluate((el) => getComputedStyle(el).backgroundColor)).not.toBe(lightBackground);
+  await page.reload();
+  await expect(root).toHaveClass(/dark/);
+  await openSettings(page, "Appearance");
+  await expect(mode).toContainText("Dark");
+  await page.emulateMedia({ colorScheme: "dark" });
+  await choose("Light");
+  await expect(root).not.toHaveClass(/dark/);
+  await expect(root).toHaveCSS("color-scheme", "light");
+  await page.reload();
+  await expect(root).not.toHaveClass(/dark/);
+  await openSettings(page, "Appearance");
+  await expect(mode).toContainText("Light");
+  await choose("System");
+  await expect(root).toHaveClass(/dark/);
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect(root).not.toHaveClass(/dark/);
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect(root).toHaveClass(/dark/);
+  await page.reload();
+  await expect(root).toHaveClass(/dark/);
+  await openSettings(page, "Appearance");
+  await expect(mode).toContainText("System");
+  await page.getByPlaceholder("Filter settings…").fill("night");
+  await expect(mode).toBeVisible();
+  await expect(page.getByRole("button", { name: "Appearance 1", exact: true })).toBeVisible();
+});
+
 test("General disappears when another settings section is selected", async ({ page }) => {
   await openSettings(page);
   const dialog = page.getByRole("dialog");

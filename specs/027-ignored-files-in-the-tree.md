@@ -19,13 +19,13 @@ does not classify ignore rules, so its entries are not gray.
 
 The client combines the file lists. `buildTree` marks ignored files with
 `ig`; a nonempty folder is gray when all its children are ignored.
-Ignored folders start collapsed to keep large generated trees from filling
-the DOM. Other folders start expanded. Clicking toggles either kind.
+All folders start collapsed. Expansion is saved per project across sessions;
+clicking toggles either kind.
 
 The fuzzy filter matches full paths, including ignored files, and preserves
 alphabetical order and gray styling. A collapsed ignored folder shows its
-match count during filtering. Changing the filter resets folders to their
-initial expansion state. Clicking an ignored file opens it normally.
+match count during filtering. Filtering temporarily opens ordinary matching folders and preserves saved
+expansion. Ignored folders open if saved as expanded or toggled in the filter. Clicking an ignored file opens it normally.
 
 Regression tests cover listings beyond 20,000 entries, alphabetical order at
 multiple levels, and ignored entries remaining visible and marked after filtering.

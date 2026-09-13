@@ -2,10 +2,10 @@
 
 The Tree pane is a file manager as well as a listing. A right click anywhere in
 it opens one menu — **Open in system browser** ([048](048-open-in-system-browser.md)),
-then **New file**, **New folder**, then **Rename** and **Delete** — and **F2**
+**Expand recursively**, then **New file**, **New folder**, **Rename** and **Delete** — and **F2**
 renames the row the keyboard is on without going through the menu at all.
 
-The four that follow the first are what this file is about, and each of them
+The four file operations are what this file is about, and each of them
 asks first: three ask for a name, the fourth asks for a yes. All four are
 `TreeActionModal`, because three of them differ only in their wording and a
 component each would have been four copies of the same dialog.

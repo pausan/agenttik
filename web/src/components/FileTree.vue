@@ -1,26 +1,9 @@
 <script setup>
-/* The Tree pane: a filter box over the project's files as a real tree.
-
-   Folders start expanded and stay that way — the point of the pane is to see
-   where things are — and can be collapsed by hand. Typing filters on every
-   keystroke against the whole path, so "wesst" finds web/src/store.js, and
-   the letters that matched are highlighted wherever they fall along it.
-
-   What git ignores is in the tree too, drawn grey and sorted with everything
-   else. Folders come first, then files, and each group is alphabetical. Those
-   folders are the one exception to starting open: a dependency
-   tree is thousands of files against a project's hundred, and it would bury
-   both the pane and every filter typed into it. It stays one grey row
-   carrying the number of matches inside, and a click opens it.
-
-   The tree is also where files are made, renamed and deleted: a right click
-   offers the four, and F2 on the row under the cursor renames it. Each one
-   asks first — a name, or in the case of a delete a yes — in
-   TreeActionModal. The same menu opens the row on the desktop itself, which
-   asks nothing at all. */
+/* Project folders start collapsed. Explicit expansion survives project changes
+   and restarts; filtering temporarily reveals matching non-ignored paths. */
 import { computed, nextTick, ref, watch } from "vue";
 
-import { S, openFile, openInSystem } from "../store";
+import { S, currentProjectID, openFile, openInSystem } from "../store";
 import { buildTree, countFiles, filterTree } from "../tree";
 import { segments } from "../fuzzy";
 import TreeActionModal from "./TreeActionModal.vue";
@@ -31,21 +14,41 @@ const full = computed(() => buildTree(S.tree, S.treeIgnored, S.treeDirs));
 const shown = computed(() => filterTree(full.value, S.treeFilter));
 const matches = computed(() => countFiles(shown.value));
 
-/* Folders opened or closed by hand are remembered by path — a ref around a
-   Set is reactive in its own right, so mutating it is enough. It means
-   "closed" for a project folder and "open" for an ignored one, which is the
-   whole of the difference between them: one is occasionally closed, the other
-   occasionally opened. A filter is a search, so clearing the set puts each
-   kind back the way it starts. */
-const toggled = ref(new Set());
-watch(() => S.treeFilter, () => toggled.value.clear());
+const selected = ref("");
+const expanded = ref(new Set());
+const filterToggled = ref(new Map());
+const expansionKey = () => `agenttik.tree-expanded.${currentProjectID()}`;
+watch(currentProjectID, () => {
+  selected.value = "";
+  filterToggled.value.clear();
+  restoreExpansion();
+}, { flush: "sync" });
+watch(() => S.treeFilter, () => filterToggled.value.clear());
 
-const isOpen = (n) => toggled.value.has(n.path) === !!n.ig;
+function restoreExpansion() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(expansionKey()));
+    expanded.value = new Set(Array.isArray(saved) ? saved.filter((p) => typeof p === "string") : []);
+  } catch {
+    expanded.value = new Set();
+  }
+}
+restoreExpansion();
+
+function saveExpansion() {
+  if (!currentProjectID()) return;
+  try {
+    localStorage.setItem(expansionKey(), JSON.stringify([...expanded.value]));
+  } catch { /* Tree navigation still works when storage is unavailable. */ }
+}
+
+const isOpen = (n) => S.treeFilter.trim()
+  ? (filterToggled.value.get(n.path) ?? (!n.ig || expanded.value.has(n.path)))
+  : expanded.value.has(n.path);
 
 /* Opening the pane is asking to search it, so the sidebar puts the cursor
    here. */
 const filter = ref(null);
-const selected = ref("");
 const rowRefs = new Map();
 
 function setRowRef(path, el) {
@@ -53,9 +56,59 @@ function setRowRef(path, el) {
   else rowRefs.delete(path);
 }
 
-function toggle(path) {
-  const seen = toggled.value;
-  seen.has(path) ? seen.delete(path) : seen.add(path);
+function toggle(node) {
+  const open = !isOpen(node);
+  if (S.treeFilter.trim()) filterToggled.value.set(node.path, open);
+  open ? expanded.value.add(node.path) : expanded.value.delete(node.path);
+  saveExpansion();
+}
+
+function expandRecursively() {
+  const path = aimed.value.path;
+  const walk = (node) => {
+    if (!node.dir) return;
+    if (node.path && (!path || node.path === path || node.path.startsWith(path + "/"))) {
+      expanded.value.add(node.path);
+      filterToggled.value.delete(node.path);
+    }
+    for (const child of node.children) walk(child);
+  };
+  walk(full.value);
+  saveExpansion();
+}
+
+function focusRow(path) {
+  if (!path) return;
+  selected.value = path;
+  const row = rowRefs.get(path);
+  row?.querySelector("button")?.focus({ preventScroll: true });
+  row?.scrollIntoView({ block: "nearest" });
+}
+
+function onKey(event, row) {
+  if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) return;
+  if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const index = rows.value.findIndex((r) => r.node.path === row.node.path);
+  if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+    focusRow(rows.value[index + (event.key === "ArrowUp" ? -1 : 1)]?.node.path);
+  } else if (event.key === "ArrowRight") {
+    if (row.node.dir && !row.open) toggle(row.node);
+    else if (row.node.dir) focusRow(rows.value[index + 1]?.depth > row.depth ? rows.value[index + 1].node.path : "");
+  } else if (row.node.dir && row.open) {
+    toggle(row.node);
+  } else {
+    focusRow(row.node.path.split("/").slice(0, -1).join("/"));
+  }
+}
+
+function onPaneKey(event) {
+  if ((event.ctrlKey || event.metaKey) && event.code === "KeyF" && !event.altKey && !event.shiftKey) {
+    event.preventDefault();
+    event.stopPropagation();
+    filter.value?.inputRef?.focus();
+  }
 }
 
 function open(path, pin = false) {
@@ -95,6 +148,9 @@ const menu = computed(() => [
     },
   ],
   [
+    { label: "Expand recursively", icon: "i-lucide-list-tree", disabled: !aimed.value.dir, onSelect: expandRecursively },
+  ],
+  [
     { label: "New file", icon: "i-lucide-file-plus", onSelect: () => ask("file") },
     { label: "New folder", icon: "i-lucide-folder-plus", onSelect: () => ask("folder") },
   ],
@@ -124,7 +180,7 @@ function reveal(path) {
   for (const part of path.split("/").slice(0, -1)) {
     at = at.children?.find((c) => c.name === part);
     if (!at) return;
-    if (!isOpen(at)) toggle(at.path);
+    if (!isOpen(at)) toggle(at);
   }
 }
 
@@ -141,7 +197,7 @@ async function select(path) {
 /* A request can arrive while the Tree listing is still being fetched. Repeat
    the reveal when that listing lands so the selected row becomes visible then
    too. */
-watch([full, selected], async () => {
+watch(full, async () => {
   if (!selected.value) return;
   reveal(selected.value);
   await nextTick();
@@ -174,12 +230,13 @@ const rows = computed(() => {
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-col gap-2">
+  <div class="flex min-h-0 flex-col gap-2" @keydown="onPaneKey">
     <UInput
       ref="filter"
       v-model="S.treeFilter"
       icon="i-lucide-search"
       placeholder="Filter files"
+      @keydown.esc.prevent.stop="S.treeFilter = ''"
       class="w-full shrink-0"
       :ui="{ base: 'text-xs' }"
     >
@@ -220,7 +277,9 @@ const rows = computed(() => {
               :title="row.node.ig ? row.node.path + ' — ignored by git' : row.node.path"
               :aria-expanded="row.node.dir ? row.open : undefined"
               :aria-current="selected === row.node.path ? 'true' : undefined"
-              @click="row.node.dir ? toggle(row.node.path) : open(row.node.path)"
+              @focus="selected = row.node.path"
+              @click="row.node.dir ? toggle(row.node) : open(row.node.path)"
+              @keydown="onKey($event, row)"
               @dblclick="row.node.dir || open(row.node.path, true)"
               @keydown.f2.prevent.stop="ask('rename', row.node)"
             >

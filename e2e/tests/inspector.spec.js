@@ -72,11 +72,11 @@ test("the pane in use survives switching from a project to a task", async ({ pag
   await expect(page.getByLabel("Task statistics").getByText("Permission")).toBeVisible();
 });
 
-test("Go to anywhere opens the task Stats popover", async ({ page }) => {
+test("Command Palette opens the task Stats popover", async ({ page }) => {
   await newTask(page);
 
-  await page.keyboard.press("Control+p");
-  const goTo = page.getByRole("dialog", { name: "Go to anywhere" });
+  await page.keyboard.press("Control+Shift+p");
+  const goTo = page.getByRole("dialog", { name: "Command Palette" });
   await goTo.getByText("Task stats", { exact: true }).click();
 
   await expect(page.getByLabel("Task statistics")).toBeVisible();

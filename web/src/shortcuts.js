@@ -23,11 +23,12 @@ export const ACTIONS = [
   { id: "task.at", group: "Tasks", what: "Go straight to one of the first nine tasks", keys: ["Alt+1…9"], fixed: true },
   { id: "project.at", group: "Tabs", what: "Switch to one of the first eight projects, again to fold its tasks", keys: ["Alt+A…H"], fixed: true },
 
-  { id: "goto", group: "Panels", what: "Go to anywhere", keys: ["Ctrl+P"] },
+  { id: "goto", group: "Panels", what: "Command Palette", keys: ["Ctrl+Shift+P"] },
   { id: "panel.projects", group: "Panels", what: "Projects", keys: ["Alt+P"] },
   { id: "panel.tree", group: "Panels", what: "Tree, cursor in the filter", keys: ["Alt+T"] },
   { id: "divider.resize", group: "Panels", what: "Resize a selected divider", keys: ["←", "→"], fixed: true },
 
+  { id: "file.goto", group: "Files", what: "Go to file", keys: ["Ctrl+P"] },
   { id: "file.save", group: "Files", what: "Save the file in front", keys: ["Ctrl+S"] },
   { id: "file.indent", group: "Files", what: "Indent, with the caret in a file", keys: ["Tab"], fixed: true },
   { id: "edit.undo", group: "Files", what: "Undo / redo file and draft edits", keys: ["Ctrl+Z", "Ctrl+Y"], fixed: true },

@@ -1,5 +1,5 @@
 <script setup>
-/* Ctrl+P's fuzzy launcher keeps navigation and common actions in one place.
+/* Ctrl+Shift+P's fuzzy launcher keeps navigation and common actions in one place.
    Active tasks deliberately come from each project's open-task list:
    the Tasks pane is time-windowed and also includes archived sessions. */
 import { computed, ref, watch } from "vue";
@@ -150,13 +150,13 @@ const groups = computed(() =>
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Go to anywhere" :ui="{ content: 'max-w-xl' }">
+  <UModal v-model:open="open" title="Command Palette" :ui="{ content: 'max-w-xl' }">
     <template #content>
       <UCommandPalette
         v-model:search-term="query"
         :groups="groups"
         :fuse="{ resultLimit: 100 }"
-        placeholder="Go to anywhere…"
+        placeholder="Command Palette…"
         preserve-group-order
         close
         autofocus

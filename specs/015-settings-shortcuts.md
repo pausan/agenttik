@@ -62,3 +62,13 @@ and the launcher's new *Keyboard shortcuts* entry both open Settings on the
 Shortcuts section, so there is one list rather than two that can disagree —
 and it is now generated from the registry the handlers read, which is why it
 cannot disagree with them either.
+
+`Ctrl+Shift+P` opens **Command Palette**, the fuzzy launcher for navigation
+and actions. `Ctrl+P` opens **Go to file**, searching full relative paths in
+only the current project's live file listing, including ignored files.
+Matching is case-insensitive and accepts letters in order; the best 100
+matches are shown with matching letters highlighted. Arrow keys select a
+result, Enter or a click opens it, and Escape dismisses the dialog.
+Text opens in Edit; images and fonts open in Preview. This also applies to
+existing tabs and does not change the remembered mode for Tree selections.
+File search uses the usual temporary file tab and preserves unsaved edits.

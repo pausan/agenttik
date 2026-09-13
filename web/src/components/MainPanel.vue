@@ -92,7 +92,7 @@ const running = computed(() => !!S.detail?.running);
 
 /* Stats belongs to the task in front. Leaving that task closes its popover so
    it cannot reopen unexpectedly on a later conversation. The shared flag
-   also lets Go to anywhere open the same control. */
+   also lets Command Palette open the same control. */
 watch(
   () => S.detail?.session.id || "",
   () => (S.taskStatsOpen = false),

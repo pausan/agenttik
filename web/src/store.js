@@ -680,7 +680,7 @@ export function toggleProjectTasks(id) {
    until it is selected again.
 
    Selection is watched rather than switchProject called from, because a
-   project is also reached by Ctrl+PageDown and by Go to anywhere, which land
+   project is also reached by Ctrl+PageDown and by Command Palette, which land
    on a task and take its project with them. Nothing selected folds nothing:
    a project being deleted deselects before the next one is chosen. */
 export function setFoldOthers(on) {
@@ -1883,6 +1883,16 @@ export function openFile(path, pin = false) {
   return openFileIn(currentProjectID(), S.owner?.id || "", path, { pin });
 }
 
+/* File search always chooses the editor, or the native preview for media,
+   without changing the user's remembered mode for Tree selections. */
+export async function openFileForEdit(path) {
+  const projectID = currentProjectID();
+  const mode = isImage(path) || isFont(path) ? "preview" : "edit";
+  await openFileIn(projectID, S.owner?.id || "", path, { mode });
+  const tab = S.tabs.find((t) => t.id === `file:${projectID}:${path}`);
+  if (tab) await setFileMode(tab, mode, false);
+}
+
 /* Markdown links resolve from the document's folder, or from the project
    root in a transcript. The API bounds paths and checks that files exist. */
 export function resolveFileRef(path, basePath = "") {
@@ -1982,7 +1992,7 @@ async function loadFileTabIn(projectID, ownerID, path, opts = {}) {
     // temp is the tab a click opens: the next file clicked takes it over,
     // until a double click or a keystroke pins it.
     temp: !pin,
-    mode: commit ? "diff" : openingMode(path, line),
+    mode: commit ? "diff" : opts.mode || openingMode(path, line),
     // The line to scroll to once the editor has the text, cleared by it.
     goto: line,
     content: null,
@@ -2052,7 +2062,7 @@ async function loadFileTab(tab) {
 /* setFileMode switches one tab and remembers the choice for the next file —
    but only once the switch has worked, so a view that cannot be fetched puts
    the tab back rather than leaving it on an empty pane. */
-export async function setFileMode(tab, mode) {
+export async function setFileMode(tab, mode, remember = true) {
   if (tab?.kind !== "file" || tab.commit || tab.mode === mode || !FILE_MODES.includes(mode)) return;
   if (mode === "edit" && (isImage(tab.path) || isFont(tab.path))) return;
   const previous = tab.mode;
@@ -2063,8 +2073,10 @@ export async function setFileMode(tab, mode) {
     tab.mode = previous;
     return fail(e);
   }
-  S.fileMode = mode;
-  persist(FILE_MODE_KEY, mode);
+  if (remember) {
+    S.fileMode = mode;
+    persist(FILE_MODE_KEY, mode);
+  }
 }
 
 /* The two shapes of the same diff, on the same toggle, remembered the same

@@ -32,7 +32,8 @@ import { MOBILE_QUERY } from "./ui";
    server and never a network call. */
 const AddProjectModal = defineAsyncComponent(() => import("./components/AddProjectModal.vue"));
 const SettingsModal = defineAsyncComponent(() => import("./components/SettingsModal.vue"));
-const GoToModal = defineAsyncComponent(() => import("./components/GoToModal.vue"));
+const CommandPaletteModal = defineAsyncComponent(() => import("./components/CommandPaletteModal.vue"));
+const GoToFileModal = defineAsyncComponent(() => import("./components/GoToFileModal.vue"));
 const UnsavedModal = defineAsyncComponent(() => import("./components/UnsavedModal.vue"));
 
 const addProject = ref(false);
@@ -42,7 +43,8 @@ const addProject = ref(false);
 const addProjectLoaded = ref(false);
 const settings = ref(false);
 const settingsSection = ref("general");
-const goTo = ref(false);
+const commandPalette = ref(false);
+const goToFile = ref(false);
 const sideBar = ref(null);
 const mobileSideBar = ref(null);
 const media = window.matchMedia(MOBILE_QUERY);
@@ -142,7 +144,8 @@ function onKey(e) {
   if (hit(e, "task.new")) return run(e, startCurrentTask);
   if (hit(e, "task.rename")) return run(e, () => showSidebar("rename"));
   if (hit(e, "tab.reopen")) return run(e, reopenClosedTab);
-  if (hit(e, "goto")) return run(e, () => (goTo.value = true));
+  if (hit(e, "file.goto")) return run(e, () => (goToFile.value = true));
+  if (hit(e, "goto")) return run(e, () => (commandPalette.value = true));
   if (hit(e, "panel.tree")) return run(e, () => showSidebar("tree"));
   if (hit(e, "panel.projects")) return run(e, () => showSidebar("projects"));
   if (hit(e, "file.save")) {
@@ -286,9 +289,10 @@ onUnmounted(() => {
     <UnsavedModal v-if="S.closing" />
     <AddProjectModal v-if="addProjectLoaded" v-model:open="addProject" />
     <SettingsModal v-if="settings" v-model:open="settings" v-model:section="settingsSection" />
-    <GoToModal
-      v-if="goTo"
-      v-model:open="goTo"
+    <GoToFileModal v-if="goToFile" v-model:open="goToFile" />
+    <CommandPaletteModal
+      v-if="commandPalette"
+      v-model:open="commandPalette"
       @projects="showSidebar('projects')"
       @tree="showSidebar('tree')"
       @add-project="openAddProject"

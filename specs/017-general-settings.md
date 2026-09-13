@@ -68,7 +68,7 @@ question the setting asks.
 
 What is watched is `S.activeProjectID`, not a call inside `switchProject`. A
 project is reached by clicking its row and by `Alt` and its letter, but also by
-`Ctrl+PageDown` and by Go to anywhere, which land on a *task* or a *job* and
+`Ctrl+PageDown` and by Command Palette, which land on a *task* or a *job* and
 bring its project with them; one watcher covers all four and cannot be
 forgotten by the fifth. Nothing selected folds nothing, so the gap `detachProject` leaves before
 the next project is chosen passes through. A project that arrives while the

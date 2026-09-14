@@ -1,8 +1,8 @@
 import { execFileSync } from "node:child_process";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { addProject, openProject, newTask, inspector, test, expect } from "../fixtures.js";
+import { addProject, openProject, newTask, inspector, sidebar, test, expect } from "../fixtures.js";
 
 test("stage, unstage and commit through the expanded composer", async ({ page }) => {
   const root = await mkdtemp(join(tmpdir(), "staging-"));
@@ -47,6 +47,46 @@ test("stage, unstage and commit through the expanded composer", async ({ page })
     await expect(dialog).toBeHidden();
     await expect(pane.getByText("No staged files.")).toBeVisible();
     expect(git("log", "-1", "--format=%s").trim()).toBe("Add new file");
+    expect(git("status", "--porcelain")).toBe("");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+
+for (const surface of ["Changes", "Tree"]) test(`right-click in ${surface} reverts a changed file only after confirmation`, async ({ page }) => {
+  const root = await mkdtemp(join(tmpdir(), "revert-"));
+  const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8" });
+  try {
+    git("init", "-q");
+    git("config", "user.name", "Test");
+    git("config", "user.email", "test@example.com");
+    await writeFile(join(root, "file.txt"), "original\n");
+    git("add", ".");
+    git("commit", "-m", "Initial");
+    await writeFile(join(root, "file.txt"), "changed\n");
+    await addProject(page, root);
+    await openProject(page, root);
+    await newTask(page);
+    const pane = inspector(page);
+    let row = pane.locator("button[data-path='file.txt']");
+    if (surface === "Tree") {
+      await row.click({ button: "right" });
+      await page.getByRole("menuitem", { name: "Show in tree", exact: true }).click();
+      row = sidebar(page).getByRole("button", { name: "file.txt", exact: true });
+    }
+    await row.click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Revert changes" }).click();
+    const dialog = page.getByRole("dialog", { name: "Revert changes" });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    expect(await readFile(join(root, "file.txt"), "utf8")).toBe("changed\n");
+    await row.click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Revert changes" }).click();
+    await dialog.getByRole("button", { name: "Revert", exact: true }).click();
+    await expect(dialog).toBeHidden();
+    await expect(pane.getByText("No edited files.")).toBeVisible();
+    expect(await readFile(join(root, "file.txt"), "utf8")).toBe("original\n");
     expect(git("status", "--porcelain")).toBe("");
   } finally {
     await rm(root, { recursive: true, force: true });

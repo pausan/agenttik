@@ -2554,6 +2554,14 @@ export async function deleteEntry(path) {
   await refreshFiles();
 }
 
+export async function revertFile(path, projectID, repository) {
+  const result = await api("POST", `/api/projects/${projectID}/revert?repo=${encodeURIComponent(repository)}`, { path });
+  for (const affected of result.paths) {
+    for (const tab of fileTabsUnder(projectID, affected)) await closeTab(tab.id, false, true, false);
+  }
+  await refreshFiles();
+}
+
 function refreshFiles() {
   return Promise.all([refreshTree(), refreshChanged()]);
 }

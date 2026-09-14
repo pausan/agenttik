@@ -1,21 +1,30 @@
 <script setup>
 import { computed, ref } from "vue";
 
-import { openFile } from "../store";
+import TreeActionModal from "./TreeActionModal.vue";
+import { S, currentProjectID, openFile } from "../store";
 
 const emit = defineEmits(["show-in-tree"]);
 
-defineProps({
+const props = defineProps({
   files: { type: Array, required: true }, // [{ path, status? }]
+  allowRevert: { type: Boolean, default: false },
   empty: { type: String, required: true },
 });
 
+const action = ref(null);
 const aimed = ref("");
 function aim(e) {
   aimed.value = e.target.closest("[data-path]")?.dataset.path || "";
 }
 
 const menu = computed(() => [
+  ...(props.allowRevert && S.changed.some((f) => f.path === aimed.value) ? [{
+    label: "Revert changes…",
+    icon: "i-lucide-undo-2",
+    color: "error",
+    onSelect: () => { action.value = { kind: "revert", path: aimed.value, projectID: currentProjectID(), repository: S.repository }; },
+  }] : []),
   {
     label: "Show in tree",
     icon: "i-lucide-folder-tree",
@@ -45,5 +54,6 @@ const menu = computed(() => [
         </div>
       </div>
     </UContextMenu>
+    <TreeActionModal v-model:action="action" />
   </div>
 </template>

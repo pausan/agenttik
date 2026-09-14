@@ -135,7 +135,7 @@ const action = ref(null);
 function ask(kind, node) {
   const at = node ? { path: node.path, dir: node.dir } : aimed.value;
   if (!at.path && kind !== "file" && kind !== "folder") return;
-  action.value = { kind, ...at };
+  action.value = { kind, ...at, projectID: currentProjectID(), repository: S.repository };
 }
 
 /* Closing the menu hands focus back to the row it was opened from, which
@@ -184,6 +184,12 @@ const menu = computed(() => [
     { label: "New file", icon: "i-lucide-file-plus", onSelect: () => ask("file") },
     { label: "New folder", icon: "i-lucide-folder-plus", onSelect: () => ask("folder") },
   ],
+  ...(!aimed.value.dir && S.changed.some((f) => f.path === aimed.value.path) ? [[{
+    label: "Revert changes…",
+    icon: "i-lucide-undo-2",
+    color: "error",
+    onSelect: () => ask("revert"),
+  }]] : []),
   [
     {
       label: "Rename",

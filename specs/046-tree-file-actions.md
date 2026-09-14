@@ -10,6 +10,25 @@ asks first: three ask for a name, the fourth asks for a yes. All four are
 `TreeActionModal`, because three of them differ only in their wording and a
 component each would have been four copies of the same dialog.
 
+## Reverting changes
+
+Changed files in the Tree and file lists offer **Revert changes…** on right click.
+The confirmation names the file and explains that staged and unstaged changes
+will be discarded, newly added files removed, and open working-file tabs closed
+with their unsaved edits. Cancel leaves the file untouched. Unchanged files,
+folders and empty space do not offer this action.
+
+`POST /api/projects/:id/revert?repo=` accepts one project-relative `path`.
+The server matches it against the selected repository's current Git status;
+empty paths and paths without changes are rejected. Tracked files are restored
+in the index and working tree from HEAD, including both sides of renames.
+Untracked files and additions in repositories without a commit are removed.
+Literal pathspecs preserve special filenames. Parent paths must stay inside
+the repository, and directories (including submodules) are rejected.
+
+The response lists affected paths. Their working-file tabs close, while history
+tabs stay open, and the Tree and Changes lists refresh. Other files are untouched.
+
 ## Paths
 
 **Copy path** copies the clicked file or folder's project-relative path with

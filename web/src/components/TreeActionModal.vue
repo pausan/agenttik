@@ -1,17 +1,10 @@
 <script setup>
-/* The Tree's New file, New folder, Rename and Delete, in one dialog.
-
-   Three of them ask for a name and differ only in their wording; the fourth
-   asks a question that should not be answered by accident. One component, so
-   the four read as the four lines they are rather than as four modals.
-
-   `action` is what is being asked — the kind, and the row it was aimed at —
-   and clearing it closes the dialog. A failure leaves it open with the name
-   still in the box, because "that file already exists" is answered by typing
-   a different one, not by starting again. */
+/* File operations share one dialog. Naming actions ask for text; destructive
+   actions name the affected path and ask for confirmation. Failures keep the
+   dialog open so the user can retry. */
 import { computed, nextTick, ref, watch } from "vue";
 
-import { createEntry, deleteEntry, fail, openFile, renameEntry } from "../store";
+import { createEntry, deleteEntry, fail, openFile, renameEntry, revertFile } from "../store";
 
 const action = defineModel("action", { type: Object, default: null });
 const emit = defineEmits(["done"]);
@@ -20,6 +13,7 @@ const KINDS = {
   file: { title: "New file", confirm: "Create", label: "Name" },
   folder: { title: "New folder", confirm: "Create", label: "Name" },
   rename: { title: "Rename", confirm: "Rename", label: "New name" },
+  revert: { title: "Revert changes", confirm: "Revert" },
   delete: { title: "Delete", confirm: "Delete" },
 };
 
@@ -58,7 +52,8 @@ async function submit() {
   busy.value = true;
   try {
     let landed = now.path;
-    if (now.kind === "delete") await deleteEntry(now.path);
+    if (now.kind === "revert") await revertFile(now.path, now.projectID, now.repository);
+    else if (now.kind === "delete") await deleteEntry(now.path);
     else if (now.kind === "rename") landed = await renameEntry(now.path, name.value);
     else {
       landed = await createEntry(parent.value, name.value, now.kind === "folder");
@@ -103,7 +98,12 @@ async function submit() {
         <p class="path-clip truncate font-mono text-xs text-highlighted">
           <span>{{ at.path }}</span>
         </p>
-        <p class="mt-2 text-muted">
+        <p v-if="at.kind === 'revert'" class="mt-2 text-muted">
+          Restore this file to the last commit, discarding staged and unstaged changes.
+          Newly added files will be removed. Open file tabs will close, discarding unsaved edits.
+          This cannot be undone.
+        </p>
+        <p v-else class="mt-2 text-muted">
           {{ at.dir ? "This folder and everything in it" : "This file" }} will be deleted from disk.
           It cannot be undone.
         </p>
@@ -114,7 +114,7 @@ async function submit() {
       <div class="flex w-full justify-end gap-2">
         <UButton color="neutral" variant="ghost" label="Cancel" @click="action = null" />
         <UButton
-          :color="at.kind === 'delete' ? 'error' : 'primary'"
+          :color="['delete', 'revert'].includes(at.kind) ? 'error' : 'primary'"
           :label="kind?.confirm"
           :loading="busy"
           @click="submit"

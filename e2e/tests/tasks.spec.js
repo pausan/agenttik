@@ -83,10 +83,18 @@ test("model settings reorder favourites and hide a model from every picker", asy
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "Models", exact: true }).click();
   const favourites = page.getByRole("group", { name: "Favourite models" });
-  await page.getByRole("button", { name: "Move System · Fake Careful · High up" }).click();
+  const carefulHandle = page.getByRole("button", { name: "Reorder favourite System · Fake Careful · High" });
+  const rows = favourites.locator(":scope > div");
+  await carefulHandle.dragTo(rows.first());
+  await expect(rows.first()).toContainText("System · Fake Careful · High");
+  await carefulHandle.focus();
+  await page.keyboard.press("ArrowDown");
+  await expect(rows.last()).toContainText("System · Fake Careful · High");
+  await carefulHandle.dragTo(rows.first());
   await expect(favourites.locator(":scope > div").first()).toContainText("System · Fake Careful · High");
   await page.getByRole("button", { name: "Done" }).click();
 
+  await page.reload();
   await modelButton(page).click();
   await expect(page.getByRole("option").first()).toContainText("System · Fake Careful · High");
   await page.keyboard.press("Escape");

@@ -1,6 +1,6 @@
 <script setup>
 /* Visibility and order for the shared model picker. */
-import { computed, watchEffect } from "vue";
+import { computed, ref, watchEffect } from "vue";
 
 import {
   S,
@@ -53,11 +53,38 @@ async function setHidden(group, model, hidden) {
   }
 }
 
-async function moveFavourite(index, by) {
+const dragging = ref(null);
+const dropTarget = ref(null);
+
+function endDrag() {
+  dragging.value = null;
+  dropTarget.value = null;
+}
+
+function startDrag(event, star) {
+  if (props.filter) return event.preventDefault();
+  dragging.value = star;
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("text/plain", star.model);
+}
+
+function dragOver(event, star) {
+  if (!dragging.value || props.filter) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "move";
+  dropTarget.value = star;
+}
+
+function dropFavourite(star) {
+  const from = S.stars.indexOf(dragging.value);
+  endDrag();
+  return moveFavourite(from, S.stars.indexOf(star));
+}
+
+async function moveFavourite(index, to) {
+  if (props.filter || index < 0 || to < 0 || to >= S.stars.length || index === to) return;
   const next = [...S.stars];
-  const to = index + by;
-  if (to < 0 || to >= next.length) return;
-  [next[index], next[to]] = [next[to], next[index]];
+  next.splice(to, 0, next.splice(index, 1)[0]);
   try {
     await reorderStars(next);
   } catch (error) {
@@ -85,33 +112,31 @@ async function removeFavourite(star) {
     <section v-if="favouriteRows.length" role="group" aria-label="Favourite models" class="mb-4">
       <h3 class="mb-1 font-semibold text-highlighted">Favourites</h3>
       <div
-        v-for="({ star, provider, label }, index) in favouriteRows"
+        v-for="{ star, provider, label } in favouriteRows"
         :key="`${star.provider}:${star.account_id}:${star.model}:${star.effort}`"
-        class="flex min-w-0 items-center gap-1 py-0.5"
+        class="mr-3 flex min-w-0 items-center gap-1 rounded py-0.5"
+        :class="{ 'bg-elevated': dropTarget === star && dragging !== star, 'opacity-50': dragging === star }"
+        @dragover="dragOver($event, star)"
+        @dragleave="dropTarget === star && (dropTarget = null)"
+        @drop.prevent="dropFavourite(star)"
       >
+        <UButton
+          size="xs"
+          color="neutral"
+          variant="ghost"
+          icon="i-lucide-grip-vertical"
+          :draggable="!filter"
+          :disabled="!!filter"
+          :aria-label="`Reorder favourite ${label}`"
+          title="Drag to reorder, or use Up and Down arrow keys"
+          @dragstart="startDrag($event, star)"
+          @dragend="endDrag"
+          @keydown.up.prevent="moveFavourite(S.stars.indexOf(star), S.stars.indexOf(star) - 1)"
+          @keydown.down.prevent="moveFavourite(S.stars.indexOf(star), S.stars.indexOf(star) + 1)"
+        />
         <span class="min-w-0 flex-1 truncate text-[13px] text-highlighted" :title="`${label} · ${provider.display_name}`">
           {{ label }}
         </span>
-        <UButton
-          size="xs"
-          color="neutral"
-          variant="ghost"
-          icon="i-lucide-arrow-up"
-          :disabled="index === 0 || !!filter"
-          :aria-label="`Move ${label} up`"
-          title="Move up"
-          @click="moveFavourite(S.stars.indexOf(star), -1)"
-        />
-        <UButton
-          size="xs"
-          color="neutral"
-          variant="ghost"
-          icon="i-lucide-arrow-down"
-          :disabled="index === favouriteRows.length - 1 || !!filter"
-          :aria-label="`Move ${label} down`"
-          title="Move down"
-          @click="moveFavourite(S.stars.indexOf(star), 1)"
-        />
         <UButton
           size="xs"
           color="neutral"

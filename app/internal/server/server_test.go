@@ -181,12 +181,12 @@ func TestTreeListsFiles(t *testing.T) {
 }
 
 func TestParseStatus(t *testing.T) {
-	out := " M internal/x.go\n?? new.txt\nR  old.go -> new.go\n"
+	out := " M internal/x.go\x00?? new.txt\x00R  new.go\x00old.go\x00"
 	got := parseStatus(out)
 	want := []changedFile{
-		{Path: "internal/x.go", Status: "M"},
-		{Path: "new.txt", Status: "??"},
-		{Path: "new.go", Status: "R"},
+		{Path: "internal/x.go", Status: "M", Unstaged: true},
+		{Path: "new.txt", Status: "??", Unstaged: true},
+		{Path: "new.go", Status: "R", Staged: true, Original: "old.go"},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("got %+v", got)

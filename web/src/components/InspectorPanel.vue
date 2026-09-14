@@ -2,7 +2,7 @@
 import { computed, defineAsyncComponent } from "vue";
 
 import { S, selectRepository } from "../store";
-import FileList from "./FileList.vue";
+import ChangesPane from "./ChangesPane.vue";
 import { SEGMENTED } from "../ui";
 
 const emit = defineEmits(["show-in-tree"]);
@@ -50,10 +50,8 @@ const active = computed({
     <div class="min-h-0 flex-1 p-2.5" :class="active === 'logs' ? 'flex flex-col overflow-hidden' : 'overflow-auto'">
       <LogsPane v-if="active === 'logs'" @show-in-tree="emit('show-in-tree', $event)" />
       <OptionsPane v-else-if="active === 'options'" />
-      <FileList
+      <ChangesPane
         v-else-if="active === 'changed'"
-        :files="S.changed"
-        empty="No edited files."
         @show-in-tree="emit('show-in-tree', $event)"
       />
     </div>

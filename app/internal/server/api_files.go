@@ -284,8 +284,11 @@ func withoutDeleted(root string, paths []string) []string {
 }
 
 type changedFile struct {
-	Path   string `json:"path"`
-	Status string `json:"status"`
+	Path     string `json:"path"`
+	Status   string `json:"status"`
+	Staged   bool   `json:"staged"`
+	Unstaged bool   `json:"unstaged"`
+	Original string `json:"-"`
 }
 
 func (s *Server) projectChanges(c *fiber.Ctx) error {
@@ -296,7 +299,7 @@ func (s *Server) projectChanges(c *fiber.Ctx) error {
 	if !isGitRepo(root) {
 		return c.JSON([]changedFile{})
 	}
-	out, err := runGit(root, "status", "--porcelain=v1", "--untracked-files=all")
+	out, err := runGit(root, "status", "--porcelain=v1", "-z", "--untracked-files=all")
 	if err != nil {
 		return err
 	}
@@ -308,20 +311,22 @@ func (s *Server) projectChanges(c *fiber.Ctx) error {
 	return c.JSON(files)
 }
 
-// parseStatus turns `git status --porcelain=v1` output into changed files.
+// NUL delimiters preserve filenames containing whitespace, quotes and arrows.
 func parseStatus(out string) []changedFile {
 	files := []changedFile{}
-	for _, line := range splitLines(out) {
+	entries := strings.Split(out, "\x00")
+	for i := 0; i < len(entries); i++ {
+		line := entries[i]
 		if len(line) < 4 {
 			continue
 		}
-		status := strings.TrimSpace(line[:2])
-		path := line[3:]
-		// Renames are reported as "old -> new"; the new path is what matters.
-		if i := strings.Index(path, " -> "); i >= 0 {
-			path = path[i+4:]
+		f := changedFile{Path: line[3:], Status: strings.TrimSpace(line[:2]),
+			Staged: line[0] != ' ' && line[0] != '?', Unstaged: line[1] != ' '}
+		if strings.ContainsAny(line[:2], "RC") && i+1 < len(entries) {
+			i++
+			f.Original = entries[i]
 		}
-		files = append(files, changedFile{Path: strings.Trim(path, `"`), Status: status})
+		files = append(files, f)
 	}
 	return files
 }
@@ -520,7 +525,11 @@ func isGitRepo(root string) bool {
 }
 
 func runGit(dir string, args ...string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
+	return runGitWithTimeout(dir, gitTimeout, args...)
+}
+
+func runGitWithTimeout(dir string, timeout time.Duration, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	// --no-optional-locks keeps a read from writing: `git status` otherwise
 	// refreshes the index on disk, which the filesystem watcher would see as

@@ -224,6 +224,7 @@ watch(open, (isOpen) => {
       variant="ghost"
       :size="size"
       :class="starred ? 'text-yellow-500' : ''"
+      :ui="{ leadingIcon: starred ? 'fill-current' : '' }"
       :title="`${starred ? 'Remove from' : 'Add to'} favourites: ${choiceLabel(provider, accountId, model, effort)}`"
       :aria-label="`${starred ? 'Remove from' : 'Add to'} favourites: ${choiceLabel(provider, accountId, model, effort)}`"
       icon="i-lucide-star"

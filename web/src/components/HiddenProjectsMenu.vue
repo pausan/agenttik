@@ -84,6 +84,23 @@ async function restoreProjects(projects) {
     restoring.value = false;
   }
 }
+async function swapProjects() {
+  if (loading.value || restoring.value) return;
+  const visible = [...S.projects];
+  const hidden = [...S.hiddenProjects];
+  restoring.value = true;
+  try {
+    // Hide from the bottom so each project keeps its original saved row.
+    for (const project of visible.reverse()) {
+      await setProjectHidden(project, true);
+    }
+    for (const project of hidden) {
+      await setProjectHidden(project, false);
+    }
+  } finally {
+    restoring.value = false;
+  }
+}
 </script>
 
 <template>
@@ -126,7 +143,7 @@ async function restoreProjects(projects) {
           {{ searchTerm ? `Nothing matches “${searchTerm}”.` : "No hidden projects." }}
         </template>
         <template #footer>
-          <div class="p-2">
+          <div class="flex items-center gap-1 p-2">
             <UButton
               color="neutral"
               variant="ghost"
@@ -135,6 +152,14 @@ async function restoreProjects(projects) {
               :loading="restoring"
               :disabled="loading || restoring || !S.hiddenProjects.length"
               @click="restoreProjects(S.hiddenProjects)"
+            />
+            <UButton
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-arrow-left-right"
+              label="Swap"
+              :disabled="loading || restoring || (!S.projects.length && !S.hiddenProjects.length)"
+              @click="swapProjects"
             />
           </div>
         </template>

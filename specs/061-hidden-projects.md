@@ -16,6 +16,13 @@ search filter, and keeps the menu open. It is disabled while loading or
 restoring projects and when no hidden projects remain. Restores run sequentially
 to preserve the existing saved-row insertion behavior.
 
+The **Swap** button beside **Restore all** shows every hidden project and hides
+all currently visible projects, regardless of the search filter. It captures
+both lists before changing them and keeps the menu open. It also works when
+one list is empty, and is disabled while loading or changing visibility, or
+when both lists are empty. Changes run sequentially, hiding visible projects
+from bottom to top before restoring the previously hidden projects.
+
 ## Ordering
 
 When a project is hidden, its visible sidebar row is saved in

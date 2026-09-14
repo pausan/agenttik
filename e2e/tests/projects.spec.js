@@ -112,6 +112,48 @@ test("hidden projects can be restored repeatedly and all at once while searching
   await expect(search).toBeHidden();
 });
 
+test("swapping projects inverts visibility regardless of search and persists", async ({ page }) => {
+  for (const folder of ["app", "web", "e2e"]) {
+    await addProject(page, REPO + "/" + folder);
+  }
+  await sidebar(page).locator(".sidebar-project").filter({ hasText: REPO + "/web" })
+    .getByRole("button", { name: "Hide project" }).click();
+  await expect(sidebar(page).getByText(REPO + "/web", { exact: true })).toHaveCount(0);
+  await sidebar(page).getByRole("button", { name: "Hidden projects" }).click();
+  const search = page.getByPlaceholder("Find hidden projects…");
+  await search.fill("no match");
+  const swap = page.getByRole("button", { name: "Swap", exact: true });
+  await swap.click();
+  await expect(swap).toBeEnabled();
+  await expect(search).toBeVisible();
+  await expect(sidebar(page).getByText(REPO + "/web", { exact: true })).toBeVisible();
+  for (const folder of ["app", "e2e"]) {
+    await expect(sidebar(page).getByText(REPO + "/" + folder, { exact: true })).toHaveCount(0);
+  }
+  await search.fill("");
+  for (const folder of ["app", "e2e"]) {
+    await expect(page.getByRole("option", { name: folder, exact: true })).toBeVisible();
+  }
+  await page.reload();
+  await expect(sidebar(page).locator(".sidebar-project")).toHaveCount(1);
+  await expect(sidebar(page).getByText(REPO + "/web", { exact: true })).toBeVisible();
+  await sidebar(page).getByRole("button", { name: "Hidden projects" }).click();
+  await swap.click();
+  await expect(swap).toBeEnabled();
+  for (const folder of ["app", "e2e"]) {
+    await expect(sidebar(page).getByText(REPO + "/" + folder, { exact: true })).toBeVisible();
+  }
+  await expect(page.getByRole("option", { name: "web", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Restore all", exact: true }).click();
+  await expect(swap).toBeEnabled();
+  await swap.click();
+  await expect(swap).toBeEnabled();
+  await expect(sidebar(page).locator(".sidebar-project")).toHaveCount(0);
+  await swap.click();
+  await expect(swap).toBeEnabled();
+  await expect(sidebar(page).locator(".sidebar-project")).toHaveCount(3);
+});
+
 test("opening a project puts its panes on the right and Tree on the left", async ({ page }) => {
   await addProject(page);
   await openProject(page);

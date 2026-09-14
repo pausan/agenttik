@@ -34,7 +34,8 @@ test("stage, unstage and commit through the inline resizable composer", async ({
     const box = await field.boundingBox();
     const buttonBox = await commit.boundingBox();
     const stagedBox = await pane.getByRole("button", { name: /^Staged/ }).boundingBox();
-    expect(buttonBox.x).toBeGreaterThanOrEqual(box.x + box.width);
+    expect(buttonBox.x + buttonBox.width).toBeCloseTo(box.x + box.width, 0);
+    expect(buttonBox.y).toBeGreaterThanOrEqual(box.y + box.height);
     expect(buttonBox.y).toBeLessThan(stagedBox.y);
     expect(box.y + box.height).toBeLessThan(stagedBox.y);
     await expect(field).toHaveCSS("resize", "vertical");

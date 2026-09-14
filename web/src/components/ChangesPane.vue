@@ -39,8 +39,8 @@ async function act(action, path) {
 <template>
   <div class="space-y-3">
     <div class="space-y-2">
-      <div class="flex items-start gap-2">
-        <textarea v-model="message" aria-label="Commit message" placeholder="Commit message" rows="2" class="min-w-0 min-h-14 flex-1 resize-y rounded-md border border-default bg-default p-2 font-mono text-xs" />
+      <div class="flex flex-col items-end gap-2">
+        <textarea v-model="message" aria-label="Commit message" placeholder="Commit message" rows="2" class="w-full min-h-14 resize-y rounded-md border border-default bg-default p-2 font-mono text-xs" />
         <UButton label="Commit" size="sm" class="shrink-0" :loading="busy" :disabled="busy || !staged.length || !message.trim()" @click="act('commit')" />
       </div>
       <p v-if="error" role="alert" class="text-xs text-error">{{ error }}</p>
@@ -53,7 +53,7 @@ async function act(action, path) {
         </button>
         <UButton icon="i-lucide-minus" aria-label="Unstage all files" title="Unstage all files" size="xs" variant="ghost" color="neutral" :disabled="busy || !staged.length" @click="act('unstage')" />
       </div>
-      <FileList allow-revert :disabled="busy" v-if="expanded" :files="staged" empty="No staged files." @show-in-tree="emit('show-in-tree', $event)">
+      <FileList allow-revert :disabled="busy" v-if="expanded" :files="staged" compact-empty empty="No staged files." @show-in-tree="emit('show-in-tree', $event)">
         <template #actions="{ file }">
           <UButton icon="i-lucide-minus" :aria-label="`Unstage ${file.path}`" :title="`Unstage ${file.path}`" size="xs" variant="ghost" color="neutral" :disabled="busy" @click="act('unstage', file.path)" />
         </template>

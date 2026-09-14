@@ -10,6 +10,7 @@ const props = defineProps({
   files: { type: Array, required: true }, // [{ path, status? }]
   allowRevert: { type: Boolean, default: false },
   disabled: { type: Boolean, default: false },
+  compactEmpty: { type: Boolean, default: false },
   empty: { type: String, required: true },
 });
 
@@ -42,7 +43,7 @@ const menu = computed(() => [
 
 <template>
   <div>
-    <p v-if="!files.length" class="px-3 py-5 text-center text-dimmed">{{ empty }}</p>
+    <p v-if="!files.length" class="px-3 text-center text-dimmed" :class="compactEmpty ? 'py-3' : 'py-5'">{{ empty }}</p>
     <UContextMenu v-else :items="menu" :ui="{ content: 'w-56' }">
       <div @contextmenu="aim">
         <div v-for="f in files" :key="f.path" :data-path="f.path" class="flex items-center">

@@ -1,7 +1,7 @@
 # Staging and commits
 
 The task's Changed pane has an inline commit composer above an open, collapsible
-**Staged** section.
+**Staged** section. Its empty state uses compact vertical padding.
 Staged and unstaged files have separate counts; partially staged files appear
 in both lists. File rows still open the file and offer Show in tree.
 
@@ -12,7 +12,7 @@ Each section also offers an all-files button. Unstaging preserves working
 files, including before the first commit. Renames include both index paths.
 
 A vertically resizable commit message textarea sits above Staged, with the
-Commit button on its right. Editing stays inline. Switching project or
+Commit button below it, aligned to the right. Editing stays inline. Switching project or
 repository clears the draft. Commit needs staged files
 and a nonblank message. Git errors keep the draft and display inline.
 Successful commits clear the message and refresh changes and history.

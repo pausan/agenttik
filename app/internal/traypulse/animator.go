@@ -6,10 +6,10 @@ import (
 )
 
 // Step is how long one frame of the pulse is shown. Twelve steps make the
-// 1.8s cycle. It is deliberately slow: every step is an icon the tray host has
-// to be handed, over D-Bus on Linux and through the shell's icon cache on
-// Windows, and a breath does not need more.
-const Step = 150 * time.Millisecond
+// three-second cycle. It is deliberately slow: every step is an icon the tray
+// host has to be handed, over D-Bus on Linux and through the shell's icon
+// cache on Windows, and a breath does not need more.
+const Step = 250 * time.Millisecond
 
 // Animator shows the resting icon while nothing is running and plays the
 // pulse while something is. It owns every call to setIcon, so the tray is

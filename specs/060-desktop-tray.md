@@ -39,7 +39,7 @@ reports an error in Settings and the process log; closing still exits normally.
 
 While any turn is in flight the tray icon breathes: the sparkle dims a little
 below its resting brightness, rises well above it with a green halo around the
-mark, and falls back, over 1.8 seconds. It stops on the resting icon as the
+mark, and falls back, over three seconds. It stops on the resting icon as the
 last turn finishes, so a window left in the tray still says whether the app is
 working. Nothing else about the tray changes with it — no badge, no second
 icon, no menu entry.
@@ -53,7 +53,7 @@ the images. On Windows each frame is wrapped as an ICO holding 16, 32 and 64
 px, because the notification area reads no other format; the resting icon is
 still the committed ICO with its fuller set of sizes.
 
-A step every 150ms is as fast as it goes. Every step is an icon the host has
+A step every 250ms is as fast as it goes. Every step is an icon the host has
 to be handed — a D-Bus property and a signal on Linux, a cached temp file on
 Windows — and a breath does not need more. Nothing is sent at all while the
 app is idle: the animator blocks until the runner says work started.

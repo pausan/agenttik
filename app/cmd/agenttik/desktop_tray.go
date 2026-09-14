@@ -28,7 +28,7 @@ var trayICO []byte
 
 // pulseFrames is how many steps the rising half of the working pulse has.
 // Folded back on itself it makes a cycle of twelve, which at traypulse.Step is
-// the 1.8s breath.
+// a three-second breath.
 const pulseFrames = 7
 
 // icoSizes are the sizes the Windows pulse frames carry. The resting icon

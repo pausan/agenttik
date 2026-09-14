@@ -32,8 +32,11 @@ modifiers and a letter A–Z, digit 0–9, or F1–F12, separated by `+`; the
 platform quit chord is reserved for quitting. This desktop shortcut is stored
 separately from the browser shortcuts because it must be registered before the
 webview opens. Native registration checks availability on startup.
-A missing tray host or failed registration leaves close-to-tray inactive and
-reports an error in Settings and the process log; closing still exits normally.
+A missing tray host leaves close-to-tray inactive and reports an error in
+Settings and the process log; closing still exits normally. Shortcut registration
+failure does the same on Linux and Windows. On macOS, it leaves the tray, menu,
+pulse and close-to-tray active, with an error explaining that only the shortcut
+is unavailable. Grant Accessibility permission and restart to enable the shortcut.
 
 ## The working pulse
 

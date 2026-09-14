@@ -5,7 +5,9 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"image/png"
+	"strings"
 	"testing"
 )
 
@@ -47,5 +49,50 @@ func TestMacOSDesktopShortcutUsesCommand(t *testing.T) {
 	}
 	if got := desktopShortcutForOS("Ctrl+Shift+A", "windows"); got != "Ctrl+Shift+A" {
 		t.Fatalf("Windows shortcut = %q", got)
+	}
+}
+
+func TestTrayShortcutFailure(t *testing.T) {
+	for _, goos := range []string{"darwin", "linux", "windows"} {
+		t.Run(goos, func(t *testing.T) {
+			w := &window{}
+			stop := w.startTrayShortcut("Cmd+Shift+A", goos, func(string, func(bool)) (func(), error) {
+				return nil, errors.New("permission denied")
+			})
+			if (stop != nil) != (goos == "darwin") {
+				t.Fatalf("tray continues = %v on %s", stop != nil, goos)
+			}
+			if !strings.Contains(w.trayStatus(), "permission denied") {
+				t.Fatalf("missing registration error: %q", w.trayStatus())
+			}
+			if stop != nil {
+				if !strings.Contains(w.trayStatus(), "tray is active") {
+					t.Fatalf("missing partial availability message: %q", w.trayStatus())
+				}
+				stop() // Missing permission must also be safe at shutdown.
+			}
+		})
+	}
+}
+
+func TestTrayShortcutCleanup(t *testing.T) {
+	for _, goos := range []string{"darwin", "linux", "windows"} {
+		t.Run(goos, func(t *testing.T) {
+			w := &window{}
+			stopped := false
+			stop := w.startTrayShortcut("Ctrl+Shift+A", goos, func(chord string, toggle func(bool)) (func(), error) {
+				if chord != "Ctrl+Shift+A" || toggle == nil {
+					t.Fatal("missing shortcut registration arguments")
+				}
+				return func() { stopped = true }, nil
+			})
+			if stop == nil || w.trayStatus() != "" {
+				t.Fatal("successful registration disabled tray or reported an error")
+			}
+			stop()
+			if !stopped {
+				t.Fatal("shortcut not unregistered")
+			}
+		})
 	}
 }

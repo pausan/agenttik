@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	_ "embed"
+	"fmt"
 	"log"
 	"runtime"
 	"strings"
@@ -92,9 +93,8 @@ func (w *window) startTray(config store.DesktopConfig, turns *runner.Runner) fun
 		w.trayFailed(err)
 		return func() {}
 	}
-	stopToggle, err := registerToggle(config.ToggleShortcut, w.toggle)
-	if err != nil {
-		w.trayFailed(err)
+	stopToggle := w.startTrayShortcut(config.ToggleShortcut, runtime.GOOS, registerToggle)
+	if stopToggle == nil {
 		return func() {}
 	}
 	// The pulse is rendered before the tray exists, so a bad icon is found
@@ -147,6 +147,21 @@ func (w *window) startTray(config store.DesktopConfig, turns *runner.Runner) fun
 		<-pulsing
 		end()
 	}
+}
+
+// A nil cleanup means tray startup must stop. macOS can keep its menu and
+// close-to-tray behavior without granting the global shortcut permission.
+func (w *window) startTrayShortcut(chord, goos string, register func(string, func(bool)) (func(), error)) func() {
+	stop, err := register(chord, w.toggle)
+	if err == nil {
+		return stop
+	}
+	if goos == "darwin" {
+		w.trayFailed(fmt.Errorf("tray is active, but the show/hide shortcut is unavailable: %w", err))
+		return func() {}
+	}
+	w.trayFailed(err)
+	return nil
 }
 
 func desktopShortcutForOS(chord, goos string) string {

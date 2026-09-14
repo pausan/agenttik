@@ -12,8 +12,9 @@
    id to rewrite. */
 import { computed, nextTick, ref } from "vue";
 
-import { S, copyText, editMessage, effortsFor as effortsOf, modelPickerGroups, parseModelChoice, setModel } from "../store";
+import { S, copyText, editMessage, setModel } from "../store";
 import MarkdownContent from "./MarkdownContent.vue";
+import ModelSelection from "./ModelSelection.vue";
 
 const props = defineProps({ message: { type: Object, required: true } });
 
@@ -54,16 +55,11 @@ const draft = ref(null); // non-null while editing
 const box = ref(null);
 const sending = ref(false);
 const choosing = ref(false);
-const modelOpen = ref(false);
-const modelGroups = computed(modelPickerGroups);
 
-async function pickModel(value) {
-  modelOpen.value = false;
-  const { provider, accountID, model } = parseModelChoice(value);
-  const effort = S.detail.session.effort;
+async function chooseModel(choice) {
   choosing.value = true;
   try {
-    await setModel(provider, model, effortsOf(provider, model).includes(effort) ? effort : "", accountID);
+    await setModel(choice.provider, choice.model, choice.effort, choice.accountID);
   } finally {
     choosing.value = false;
   }
@@ -140,19 +136,17 @@ function onKey(e) {
         @keydown.enter.exact.prevent="submit()"
       />
       <div class="mt-1.5 flex flex-wrap items-center gap-2">
-        <UPopover v-model:open="modelOpen">
-          <UButton type="button" size="xs" :label="S.detail.session.model" title="Change edited prompt model" :disabled="sending || choosing" />
-          <template #content>
-            <UCommandPalette
-              class="w-80 max-w-[calc(100vw-2rem)]"
-              :groups="modelGroups"
-              value-key="value"
-              placeholder="Search models…"
-              :ui="{ viewport: 'max-h-[min(28rem,60vh)]' }"
-              @update:model-value="pickModel"
-            />
-          </template>
-        </UPopover>
+        <ModelSelection
+          :provider="S.detail.session.provider"
+          :account-id="S.detail.session.account_id || 0"
+          :model="S.detail.session.model"
+          :effort="S.detail.session.effort || ''"
+          size="xs"
+          :disabled="sending || choosing"
+          :loading="choosing"
+          title="Change edited prompt model"
+          @change="chooseModel"
+        />
         <UButton type="submit" size="xs" :loading="sending" :disabled="!draft.trim() || choosing" label="Send" />
         <UButton type="button" size="xs" :disabled="!draft.trim() || sending || choosing" label="Enqueue" @click="submit(true)" />
         <UButton

@@ -83,7 +83,8 @@ to be finished with the mouse.
 
 Each queued prompt also records the provider, model and effort selected when
 it was enqueued. Its bubble shows the model and offers the same cross-provider
-model search plus an effort picker. Editing one item — its text or its model —
+`ModelSelection` control, including fuzzy subscription/provider groups,
+favourites and a separate effort picker. Editing one item — its text or its model —
 does not change the task's default or other queued items. The PATCH that saves
 either kind of edit carries all four fields at once, built from the row
 already on screen with just the changed ones overridden, so a text edit keeps

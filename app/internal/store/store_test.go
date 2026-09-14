@@ -211,7 +211,14 @@ func TestStarsRoundTrip(t *testing.T) {
 	if len(stars) != 1 || stars[0].AccountID != 4 {
 		t.Fatalf("stars = %+v, want one on account 4", stars)
 	}
+	must(t, s.AddStar("codex", 0, "sol", "medium"))
+	must(t, s.ReorderStars([]Star{stars[0], {Provider: "codex", Model: "sol", Effort: "medium"}}))
+	stars, _ = s.ListStars()
+	if len(stars) != 2 || stars[0].Provider != "claude" || stars[1].Provider != "codex" {
+		t.Fatalf("reordered stars = %+v", stars)
+	}
 	must(t, s.RemoveStar("claude", 4, "opus", "high"))
+	must(t, s.RemoveStar("codex", 0, "sol", "medium"))
 	stars, _ = s.ListStars()
 	if len(stars) != 0 {
 		t.Errorf("got %d stars after remove, want 0", len(stars))

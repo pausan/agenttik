@@ -10,14 +10,9 @@ import { computed, ref, watch } from "vue";
 
 import {
   S,
-  accountLabel,
-  effortsFor,
   enterDoes,
   EVERY,
-  modelPickerGroups,
-  parseModelChoice,
   pickTask,
-  providerOf,
   removeSchedule,
   runScheduleNow,
   scheduleForm,
@@ -30,6 +25,7 @@ import {
   setScheduleRemaining,
 } from "../store";
 import { isoLocal } from "../api";
+import ModelSelection from "./ModelSelection.vue";
 
 const props = defineProps({ tab: { type: Object, required: true } });
 
@@ -84,53 +80,10 @@ function commitPrompt() {
   setSchedulePrompt(schedule.value, prompt.value);
 }
 
-/* So is the model. The picker is the prompt bar's, less the favourites a
-   schedule has no bar to star from: the providers, their models, and the
-   efforts of whichever model is chosen. Provider, model and effort travel
-   together, so switching to a model whose provider has no such effort drops
-   it rather than sending one the provider would reject. */
-const NONE = "__default";
-const modelOpen = ref(false);
-const modelSearch = ref("");
-const provider = computed(() => providerOf(schedule.value.provider));
-const selectedModel = computed(() =>
-  provider.value?.models.find((m) => m.id === schedule.value.model),
-);
-/* The subscription is named beside the model wherever the provider has more
-   than one: every run this job spawns spends that account's allowance. */
-const modelLabel = computed(() => {
-  const alias = accountLabel(schedule.value.provider, schedule.value.account_id);
-  const model = selectedModel.value?.label || schedule.value.model;
-  return alias ? `${model} · ${alias}` : model;
-});
-const efforts = computed(() => effortsFor(schedule.value.provider, schedule.value.model));
-
-const modelGroups = computed(modelPickerGroups);
-
-function pickModel(value) {
-  modelOpen.value = false;
-  const { provider: providerName, accountID, model } = parseModelChoice(value);
-  const nextEfforts = effortsFor(providerName, model);
-  const effort = schedule.value.effort || "";
-  setScheduleModel(schedule.value, providerName, model,
-    nextEfforts.includes(effort) ? effort : "", accountID);
+/* A model edit changes the saved job; runs already started keep their copy. */
+function chooseModel(choice) {
+  setScheduleModel(schedule.value, choice.provider, choice.model, choice.effort, choice.accountID);
 }
-
-const effortItems = computed(() => [
-  { label: "default effort", value: NONE },
-  ...efforts.value.map((e) => ({ label: e, value: e })),
-]);
-
-const effortValue = computed({
-  get: () => schedule.value.effort || NONE,
-  set: (v) =>
-    setScheduleModel(schedule.value, schedule.value.provider, schedule.value.model,
-      v === NONE ? "" : v),
-});
-
-watch(modelOpen, (open) => {
-  if (!open) modelSearch.value = "";
-});
 
 function commitCount() {
   editingCount.value = false;
@@ -267,30 +220,13 @@ function runTime(run) {
         />
         <div class="pt-1.5 text-muted">Model</div>
         <div class="flex flex-wrap items-center gap-2">
-          <UPopover v-model:open="modelOpen">
-            <UButton
-              type="button"
-              color="neutral"
-              variant="outline"
-              trailing-icon="i-lucide-chevron-down"
-              :label="modelLabel"
-              title="Choose model"
-            />
-            <template #content>
-              <UCommandPalette
-                class="w-80"
-                :groups="modelGroups"
-                value-key="value"
-                placeholder="Search models…"
-                v-model:search-term="modelSearch"
-                preserve-group-order
-                :ui="{ viewport: 'max-h-[min(28rem,60vh)]' }"
-                :fuse="{ fuseOptions: { keys: ['label', 'description'], threshold: 0.35, ignoreLocation: true }, resultLimit: 20 }"
-                @update:model-value="pickModel"
-              />
-            </template>
-          </UPopover>
-          <USelect v-model="effortValue" :items="effortItems" title="Effort" />
+          <ModelSelection
+            :provider="schedule.provider"
+            :account-id="schedule.account_id || 0"
+            :model="schedule.model"
+            :effort="schedule.effort || ''"
+            @change="chooseModel"
+          />
         </div>
         <div class="pt-1.5 text-muted">Repeats</div>
         <div class="flex flex-wrap items-center gap-2">

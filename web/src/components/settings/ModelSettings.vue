@@ -1,81 +1,171 @@
 <script setup>
-/* Star the model and effort combinations worth keeping at the top of the
-   prompt bar's picker. */
+/* Visibility and order for the shared model picker. */
 import { computed, watchEffect } from "vue";
 
-import { S, fail, isStarred, toggleStar } from "../../store";
+import {
+  S,
+  fail,
+  isModelChoiceHidden,
+  modelAccountLabel,
+  modelPickerGroups,
+  providerOf,
+  reorderStars,
+  setModelChoiceHidden,
+  toggleStar,
+} from "../../store";
 import { fuzzyAny } from "../../fuzzy";
 import StatusDot from "../StatusDot.vue";
 
 const props = defineProps({ filter: { type: String, default: "" } });
 const emit = defineEmits(["count"]);
 
-/* A provider the filter names keeps all its models; otherwise the models
-   themselves are matched. */
-const providers = computed(() =>
-  S.providers.flatMap((p) => {
-    if (fuzzyAny([p.display_name, p.name, "models"], props.filter) !== null) return [p];
-    const models = p.models.filter((m) => fuzzyAny([m.label, m.id], props.filter) !== null);
-    return models.length ? [{ ...p, models }] : [];
-  }),
-);
+const allGroups = computed(() => modelPickerGroups({ includeHidden: true }));
+const groups = computed(() => allGroups.value.flatMap((group) => {
+  const fields = [group.label, group.provider.display_name, group.provider.name,
+    group.account.alias, "models"];
+  if (fuzzyAny(fields, props.filter) !== null) return [group];
+  const items = group.items.filter((item) =>
+    fuzzyAny([item.label, item.model.label, item.model.id], props.filter) !== null,
+  );
+  return items.length ? [{ ...group, items }] : [];
+}));
 
-watchEffect(() => emit("count", providers.value.length));
+const favouriteRows = computed(() => S.stars.flatMap((star) => {
+  const provider = providerOf(star.provider);
+  const model = provider?.models.find((candidate) => candidate.id === star.model);
+  if (!provider || !model) return [];
+  const effort = star.effort
+    ? star.effort[0].toUpperCase() + star.effort.slice(1)
+    : "Default";
+  const label = [modelAccountLabel(star.provider, star.account_id), model.label, effort].join(" · ");
+  return fuzzyAny([label, provider.display_name, provider.name, model.id, "favourites"], props.filter) !== null
+    ? [{ star, provider, model, label }]
+    : [];
+}));
 
-async function star(provider, model, effort) {
+watchEffect(() => emit("count", groups.value.length + favouriteRows.value.length));
+
+async function setHidden(group, model, hidden) {
   try {
-    await toggleStar(provider, model.id, effort);
-  } catch (e) {
-    fail(e);
+    await setModelChoiceHidden(group.provider.name, group.account.id, model, hidden);
+  } catch (error) {
+    fail(error);
+  }
+}
+
+async function moveFavourite(index, by) {
+  const next = [...S.stars];
+  const to = index + by;
+  if (to < 0 || to >= next.length) return;
+  [next[index], next[to]] = [next[to], next[index]];
+  try {
+    await reorderStars(next);
+  } catch (error) {
+    fail(error);
+  }
+}
+
+async function removeFavourite(star) {
+  try {
+    await toggleStar(star.provider, star.account_id, star.model, star.effort || "");
+  } catch (error) {
+    fail(error);
   }
 }
 </script>
 
 <template>
-  <section v-if="providers.length">
+  <section v-if="groups.length || favouriteRows.length">
     <div class="mb-0.5 font-semibold text-highlighted">Models</div>
     <p class="mb-3.5 text-xs text-dimmed">
-      Star the model and effort combinations you use. Starred ones come first in the model picker.
-      agenttik runs the CLIs already signed in on this machine — it never handles your subscription
-      credentials.
+      Hidden subscriptions and models stay out of every model picker. Add favourites from the
+      main prompt, then set their order here.
     </p>
 
-    <!-- Named groups, because every Settings pane stays mounted: the
-         provider's name appears in the Subscriptions list too, so a locator
-         — or a screen reader — needs to know which list it is in. -->
+    <section v-if="favouriteRows.length" role="group" aria-label="Favourite models" class="mb-4">
+      <h3 class="mb-1 font-semibold text-highlighted">Favourites</h3>
+      <div
+        v-for="({ star, provider, label }, index) in favouriteRows"
+        :key="`${star.provider}:${star.account_id}:${star.model}:${star.effort}`"
+        class="flex min-w-0 items-center gap-1 py-0.5"
+      >
+        <span class="min-w-0 flex-1 truncate text-[13px] text-highlighted" :title="`${label} · ${provider.display_name}`">
+          {{ label }}
+        </span>
+        <UButton
+          size="xs"
+          color="neutral"
+          variant="ghost"
+          icon="i-lucide-arrow-up"
+          :disabled="index === 0 || !!filter"
+          :aria-label="`Move ${label} up`"
+          title="Move up"
+          @click="moveFavourite(S.stars.indexOf(star), -1)"
+        />
+        <UButton
+          size="xs"
+          color="neutral"
+          variant="ghost"
+          icon="i-lucide-arrow-down"
+          :disabled="index === favouriteRows.length - 1 || !!filter"
+          :aria-label="`Move ${label} down`"
+          title="Move down"
+          @click="moveFavourite(S.stars.indexOf(star), 1)"
+        />
+        <UButton
+          size="xs"
+          color="neutral"
+          variant="ghost"
+          icon="i-lucide-x"
+          :aria-label="`Remove favourite ${label}`"
+          title="Remove favourite"
+          @click="removeFavourite(star)"
+        />
+      </div>
+    </section>
+
     <section
-      v-for="p in providers"
-      :key="p.name"
+      v-for="group in groups"
+      :key="group.id"
       role="group"
-      :aria-label="`${p.display_name} models`"
+      :aria-label="`${group.label} models`"
       class="not-first:mt-4 not-first:border-t not-first:border-default not-first:pt-3.5"
+      :class="isModelChoiceHidden(group.provider.name, group.account.id) ? 'opacity-60' : ''"
     >
-      <div class="mb-0.5 flex items-center gap-2">
-        <span class="font-semibold text-highlighted">{{ p.display_name }}</span>
-        <UBadge :color="p.available ? 'primary' : 'neutral'" variant="soft" size="sm">
-          <StatusDot :status="p.available ? 'ok' : 'idle'" />
-          {{ p.available ? "ready" : "unavailable" }}
+      <div class="mb-1 flex items-center gap-2">
+        <UButton
+          size="xs"
+          color="neutral"
+          variant="ghost"
+          :icon="isModelChoiceHidden(group.provider.name, group.account.id) ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+          :aria-label="`${isModelChoiceHidden(group.provider.name, group.account.id) ? 'Show' : 'Hide'} ${group.label}`"
+          :title="`${isModelChoiceHidden(group.provider.name, group.account.id) ? 'Show' : 'Hide'} every model in ${group.label}`"
+          @click="setHidden(group, '', !isModelChoiceHidden(group.provider.name, group.account.id))"
+        />
+        <span class="font-semibold text-highlighted">{{ group.label }}</span>
+        <UBadge :color="group.provider.available ? 'primary' : 'neutral'" variant="soft" size="sm">
+          <StatusDot :status="group.provider.available ? 'ok' : 'idle'" />
+          {{ group.provider.available ? "ready" : "unavailable" }}
         </UBadge>
       </div>
-      <p v-if="!p.available && p.reason" class="mb-2 text-xs text-dimmed">
-        {{ p.reason }}
+      <p v-if="!group.provider.available && group.provider.reason" class="mb-2 text-xs text-dimmed">
+        {{ group.provider.reason }}
       </p>
 
-      <div v-for="m in p.models" :key="m.id" class="flex items-center gap-2.5 py-1">
-        <span class="w-24 shrink-0 text-[13px] text-highlighted">{{ m.label }}</span>
-        <div class="flex flex-wrap gap-1">
-          <UButton
-            v-for="e in ['', ...(m.efforts || p.efforts)]"
-            :key="e || 'default'"
-            size="xs"
-            :color="isStarred(p.name, m.id, e) ? 'primary' : 'neutral'"
-            :variant="isStarred(p.name, m.id, e) ? 'soft' : 'subtle'"
-            :title="`Star ${m.label} · ${e || 'default'}`"
-            class="rounded-full"
-            :label="(isStarred(p.name, m.id, e) ? '★ ' : '') + (e || 'default')"
-            @click="star(p.name, m, e)"
-          />
-        </div>
+      <div v-for="item in group.items" :key="item.model.id" class="flex min-w-0 items-center gap-2 py-0.5">
+        <UButton
+          size="xs"
+          color="neutral"
+          variant="ghost"
+          :icon="isModelChoiceHidden(group.provider.name, group.account.id, item.model.id) ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+          :disabled="isModelChoiceHidden(group.provider.name, group.account.id)"
+          :aria-label="`${isModelChoiceHidden(group.provider.name, group.account.id, item.model.id) ? 'Show' : 'Hide'} ${group.account.alias} · ${group.provider.display_name} · ${item.model.label}`"
+          :title="`${isModelChoiceHidden(group.provider.name, group.account.id, item.model.id) ? 'Show' : 'Hide'} this model`"
+          @click="setHidden(group, item.model.id, !isModelChoiceHidden(group.provider.name, group.account.id, item.model.id))"
+        />
+        <span class="min-w-0 truncate text-[13px] text-highlighted">
+          {{ group.account.alias }} · {{ group.provider.display_name }} · {{ item.model.label }}
+        </span>
       </div>
     </section>
   </section>

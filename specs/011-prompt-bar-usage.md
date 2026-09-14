@@ -1,8 +1,8 @@
 # Prompt-bar usage indicators
 
-The model control is a fuzzy-search palette. It preserves provider groups and
-favourite model-and-effort combinations, and searching matches both the display
-name and model id.
+The shared model control is a fuzzy-search palette. It preserves
+subscription/provider groups and ordered favourite combinations, and searches
+subscription, provider and model names and ids. See [009](009-model-picker.md).
 
 The prompt bar shows context usage as a circular ring. Clicking the ring or an
 allowance bar opens one panel: context count, window, and session totals are on

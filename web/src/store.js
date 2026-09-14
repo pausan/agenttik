@@ -63,6 +63,7 @@ export const TASK_WINDOWS = [
 export const S = reactive({
   providers: [],
   stars: [],
+  hiddenModelChoices: [],
   projects: [],
   // Archived projects: read when Settings opens, which is the only place
   // they are shown. See specs/041-project-archiving.md.
@@ -167,14 +168,16 @@ export function fail(err) {
 /* ------------------------------------------------------------- providers */
 
 export async function loadProviders() {
-  // Two answers that do not depend on each other, and the providers one can
+  // Three answers that do not depend on each other, and the providers one can
   // cost a CLI probe, so they are asked for together.
-  const [providers, stars] = await Promise.all([
+  const [providers, stars, hiddenModelChoices] = await Promise.all([
     api("GET", "/api/providers"),
     api("GET", "/api/stars"),
+    api("GET", "/api/model-visibility"),
   ]);
   S.providers = providers;
   S.stars = stars;
+  S.hiddenModelChoices = hiddenModelChoices;
 }
 
 export function providerOf(name) {
@@ -211,6 +214,12 @@ export function accountLabel(name, id) {
   return accounts.length < 2 ? "" : account.alias;
 }
 
+/* Every model control names the subscription, including System. The shorter
+   accountLabel above remains for places where a lone System label is noise. */
+export function modelAccountLabel(name, id) {
+  return accountOf(name, id)?.alias || (id ? "removed subscription" : "System");
+}
+
 /* The subscription a new task on this provider starts on. */
 export function defaultAccountOf(name) {
   return (accountsOf(name).find((a) => a.is_default) || { id: 0 }).id;
@@ -225,20 +234,20 @@ export function defaultAccountOf(name) {
 
    Values are `model:<provider>:<account>:<model>`, read back by
    parseModelChoice, so all three controls speak one format. */
-export function modelPickerGroups() {
+export function modelPickerGroups({ includeHidden = false } = {}) {
   return S.providers.flatMap((p) => {
     const accounts = p.accounts?.length ? p.accounts : [{ id: 0, alias: "" }];
-    const named = accounts.length > 1;
-    return accounts.map((account) => ({
+    return accounts.filter((account) => includeHidden || !isModelChoiceHidden(p.name, account.id)).map((account) => ({
       id: `${p.name}:${account.id}`,
-      label: named ? `${p.display_name} · ${account.alias}` : p.display_name,
-      items: p.models.map((m) => ({
-        label: named ? `${m.label} · ${account.alias}` : m.label,
-        description: named
-          ? `${p.display_name} · ${account.alias} · ${m.id}`
-          : `${p.display_name} · ${m.id}`,
+      label: `${account.alias || "System"} · ${p.display_name}`,
+      provider: p,
+      account,
+      items: p.models.filter((m) => includeHidden || !isModelChoiceHidden(p.name, account.id, m.id)).map((m) => ({
+        label: `${account.alias || "System"} · ${m.label}`,
+        search: `${account.alias || "System"} · ${p.display_name} · ${p.name} · ${m.label} · ${m.id}`,
         value: `model:${p.name}:${account.id}:${m.id}`,
         disabled: !p.available,
+        model: m,
       })),
     }));
   });
@@ -260,6 +269,29 @@ export function parseModelChoice(value) {
 export function effortsFor(provider, model) {
   const p = providerOf(provider);
   return p?.models.find((m) => m.id === model)?.efforts || p?.efforts || [];
+}
+
+export function isModelChoiceHidden(provider, accountID, model = "") {
+  return S.hiddenModelChoices.some(
+    (choice) => choice.provider === provider && choice.account_id === (accountID || 0) && choice.model === model,
+  );
+}
+
+export function isModelChoiceVisible(provider, accountID, model) {
+  return !isModelChoiceHidden(provider, accountID) && !isModelChoiceHidden(provider, accountID, model);
+}
+
+export async function setModelChoiceHidden(provider, accountID, model, hidden) {
+  await api("PUT", "/api/model-visibility", {
+    provider, account_id: accountID || 0, model: model || "", hidden,
+  });
+  const same = (choice) => choice.provider === provider &&
+    choice.account_id === (accountID || 0) && choice.model === (model || "");
+  S.hiddenModelChoices = hidden
+    ? [...S.hiddenModelChoices.filter((choice) => !same(choice)), {
+        provider, account_id: accountID || 0, model: model || "",
+      }]
+    : S.hiddenModelChoices.filter((choice) => !same(choice));
 }
 
 /* addAccount, renameAccount and removeAccount are Settings' own; each
@@ -400,22 +432,36 @@ export function refreshSubscriptionLimits(provider, accountID) {
   limitReads[key] = read;
   return read;
 }
-export function isStarred(provider, model, effort) {
+export function isStarred(provider, accountID, model, effort) {
   return S.stars.some(
-    (s) => s.provider === provider && s.model === model && (s.effort || "") === (effort || ""),
+    (s) => s.provider === provider && s.account_id === (accountID || 0) &&
+      s.model === model && (s.effort || "") === (effort || ""),
   );
 }
 
 /* toggleStar flips one combination and keeps S.stars in step without
    re-fetching the list. */
-export async function toggleStar(provider, model, effort) {
-  const on = isStarred(provider, model, effort);
-  await api(on ? "DELETE" : "POST", "/api/stars", { provider, model, effort });
+export async function toggleStar(provider, accountID, model, effort) {
+  const account = accountID || 0;
+  const on = isStarred(provider, account, model, effort);
+  await api(on ? "DELETE" : "POST", "/api/stars", {
+    provider, account_id: account, model, effort,
+  });
   S.stars = on
     ? S.stars.filter(
-        (s) => !(s.provider === provider && s.model === model && (s.effort || "") === (effort || "")),
+        (s) => !(s.provider === provider && s.account_id === account &&
+          s.model === model && (s.effort || "") === (effort || "")),
       )
-    : [...S.stars, { provider, model, effort, created_at: Date.now() }];
+    : [...S.stars, { provider, account_id: account, model, effort,
+        position: S.stars.length + 1, created_at: Date.now() }];
+}
+
+export async function reorderStars(stars) {
+  await api("PUT", "/api/stars/order", stars.map((star) => ({
+    provider: star.provider, account_id: star.account_id || 0,
+    model: star.model, effort: star.effort || "",
+  })));
+  S.stars = stars.map((star, index) => ({ ...star, position: index + 1 }));
 }
 
 /* ------------------------------------------------------------------ tabs */

@@ -17,9 +17,8 @@ test("a new task asks nothing and opens ready to prompt", async ({ page }) => {
   await newTask(page);
 
   await expect(page.getByRole("tab", { name: "New task" })).toBeVisible();
-  // The primary action is whichever of Send/Enqueue plain Enter currently
-  // performs — see shortcuts.js — so the submit button is found by kind.
-  await expect(page.locator('button[type="submit"]')).toBeEnabled();
+  await expect(page.getByPlaceholder("Ask the agent…")).toBeEnabled();
+  await expect(page.locator('button[type="submit"]')).toBeDisabled();
   await expect(page.getByRole("button", { name: "Stop" })).toBeHidden();
   await expect(page.getByText("idle")).toBeVisible();
   await expect(sidebar(page).getByText("Untitled task")).toBeVisible();
@@ -31,8 +30,7 @@ test("an empty prompt sends nothing", async ({ page }) => {
   await newTask(page);
 
   await page.getByPlaceholder("Ask the agent…").fill("   ");
-  await page.locator('button[type="submit"]').click();
-
+  await expect(page.locator('button[type="submit"]')).toBeDisabled();
   await expect(page.getByText("running", { exact: true })).toBeHidden();
   await expect(page.getByText("You", { exact: true })).toHaveCount(0);
 });
@@ -43,37 +41,68 @@ test("setup lists the providers and whether their CLI is installed", async ({ pa
 
   // Every pane of Settings stays mounted, and the Subscriptions one lists the
   // same providers, so each is asked for as its own group in this list.
-  await expect(page.getByRole("group", { name: "Claude Code models" })).toBeVisible();
-  await expect(page.getByRole("group", { name: "Codex models" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "System · Claude Code models" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "System · Codex models" })).toBeVisible();
   // The fake provider spawns no CLI, so it is ready regardless of what is
   // installed on the machine running the suite.
-  await expect(page.getByRole("group", { name: "Fake models" })).toBeVisible();
-  await expect(page.getByTitle(`Star ${FAKE_MODEL} · low`)).toBeVisible();
+  await expect(page.getByRole("group", { name: "System · Fake models" })).toBeVisible();
+  await expect(page.getByRole("button", { name: `Hide System · Fake · ${FAKE_MODEL}` })).toBeVisible();
   await expect(page.getByText("ready")).not.toHaveCount(0);
-
-  // Every model gets a chip per effort, plus default.
-  await expect(page.getByRole("button", { name: "default", exact: true }).first()).toBeVisible();
-  await expect(page.getByRole("button", { name: "xhigh", exact: true }).first()).toBeVisible();
 });
 
 test("a starred model and effort heads the picker and sets both at once", async ({ page }) => {
-  await page.getByRole("button", { name: "Settings" }).click();
-  await page.getByRole("button", { name: "Models" }).click();
-  await page.getByTitle(`Star ${FAKE_MODEL} · high`).click();
-  await expect(page.getByTitle(`Star ${FAKE_MODEL} · high`)).toHaveText("★ high");
-  await page.getByRole("button", { name: "Done" }).click();
-
   await addProject(page);
   await openProject(page);
   await newTask(page);
+  await pickModel(page);
+  await page.getByTitle("Effort", { exact: true }).click();
+  await page.getByRole("option", { name: "High", exact: true }).click();
+  await page.getByRole("button", { name: `Add to favourites: System · ${FAKE_MODEL} · High` }).click();
 
   await modelButton(page).click();
-  await expect(page.getByRole("option").first()).toContainText("★");
+  await expect(page.getByRole("option").first()).toContainText(`System · ${FAKE_MODEL} · High`);
   await page.getByRole("option").first().click();
 
   // Picking the combination set the effort too.
-  await expect(page.getByTitle("Effort")).toContainText("high");
+  await expect(page.getByTitle("Effort")).toContainText("High");
   await expect(page.getByText("high", { exact: true })).not.toHaveCount(0);
+});
+
+test("model settings reorder favourites and hide a model from every picker", async ({ page }) => {
+  await addProject(page);
+  await openProject(page);
+  await newTask(page);
+  await pickModel(page);
+
+  await page.getByTitle("Effort", { exact: true }).click();
+  await page.getByRole("option", { name: "High", exact: true }).click();
+  await page.getByRole("button", { name: `Add to favourites: System · ${FAKE_MODEL} · High` }).click();
+  await pickModel(page, "Fake Careful");
+  await page.getByRole("button", { name: "Add to favourites: System · Fake Careful · High" }).click();
+
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Models", exact: true }).click();
+  const favourites = page.getByRole("group", { name: "Favourite models" });
+  await page.getByRole("button", { name: "Move System · Fake Careful · High up" }).click();
+  await expect(favourites.locator(":scope > div").first()).toContainText("System · Fake Careful · High");
+  await page.getByRole("button", { name: "Done" }).click();
+
+  await modelButton(page).click();
+  await expect(page.getByRole("option").first()).toContainText("System · Fake Careful · High");
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Models", exact: true }).click();
+  await page.getByRole("button", { name: "Hide System · Fake · Fake Careful" }).click();
+  await page.getByRole("button", { name: "Done" }).click();
+  await page.reload();
+
+  // Existing tasks still say what they use, while the hidden row and its
+  // favourite no longer appear as choices.
+  await expect(modelButton(page)).toContainText("System · Fake Careful");
+  await modelButton(page).click();
+  await expect(page.getByRole("option", { name: /Fake Careful/ })).toHaveCount(0);
+  await expect(page.getByRole("option", { name: /Fake Quick/ }).first()).toBeVisible();
 });
 
 test("changing the model updates the badge and the stats", async ({ page }) => {
@@ -256,7 +285,7 @@ test("an edited failed prompt can send immediately with a different model", asyn
   await editor.getByRole("textbox").fill("corrected prompt");
   await editor.getByTitle("Change edited prompt model").click();
   await page.getByRole("option", { name: "Fake Careful" }).click();
-  await expect(editor.getByTitle("Change edited prompt model")).toHaveText("fake-careful");
+  await expect(editor.getByTitle("Change edited prompt model")).toHaveText("System · Fake Careful");
   await editor.getByRole("button", { name: "Send", exact: true }).click();
   await expect(editor).toHaveCount(0);
   await expect(page.getByText("idle", { exact: true })).toBeVisible();
@@ -292,7 +321,7 @@ for (const state of ["failed", "stopped"]) {
     await editor.getByRole("textbox").fill("corrected prompt");
     await editor.getByTitle("Change edited prompt model").click();
     await page.getByRole("option", { name: "Fake Careful" }).click();
-    await expect(editor.getByTitle("Change edited prompt model")).toHaveText("fake-careful");
+    await expect(editor.getByTitle("Change edited prompt model")).toHaveText("System · Fake Careful");
     await editor.getByRole("button", { name: "Enqueue", exact: true }).click();
     await expect(editor).toHaveCount(0);
     await expect(page.getByLabel("Queued prompt", { exact: true })).toContainText("corrected prompt");

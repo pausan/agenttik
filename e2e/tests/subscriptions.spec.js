@@ -77,11 +77,11 @@ test("the model picker names the subscription, and swapping runs the turn on it"
 
   // With two to choose from, every model entry says which one it would run
   // on, and so does the button once picked.
-  await pickModel(page, "Fake Quick · System");
-  await expect(modelButton(page)).toContainText("Fake Quick · System");
+  await pickModel(page, "System · Fake Quick");
+  await expect(modelButton(page)).toContainText("System · Fake Quick");
 
-  await pickModel(page, "Fake Quick · Personal");
-  await expect(modelButton(page)).toContainText("Fake Quick · Personal");
+  await pickModel(page, "Personal · Fake Quick");
+  await expect(modelButton(page)).toContainText("Personal · Fake Quick");
 
   // @account makes the fake provider report the login directory the runner
   // resolved, which is the only way to see from here that the turn really ran
@@ -101,7 +101,7 @@ test("a task on the machine's own login is unchanged by a second subscription ex
   await addProject(page);
   await openProject(page);
   await newTask(page);
-  await pickModel(page, "Fake Quick · System");
+  await pickModel(page, "System · Fake Quick");
 
   await sendPrompt(page, "@account");
   await expect(page.locator("main")).toContainText("account=system", { timeout: 15_000 });
@@ -115,7 +115,7 @@ test("removing a subscription says what still runs on it", async ({ page }) => {
   await addProject(page);
   await openProject(page);
   await newTask(page);
-  await pickModel(page, "Fake Quick · Personal");
+  await pickModel(page, "Personal · Fake Quick");
   await sendPrompt(page, "hello");
   await expect(page.locator("main")).toContainText("hello", { timeout: 15_000 });
 

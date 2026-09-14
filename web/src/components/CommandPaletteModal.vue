@@ -9,6 +9,8 @@ import { fuzzy, fuzzyAny, segments } from "../fuzzy";
 import {
   S,
   currentProjectID,
+  isModelChoiceVisible,
+  modelAccountLabel,
   openProject,
   openTask,
   providerOf,
@@ -75,14 +77,14 @@ const favourites = computed(() =>
   S.stars.flatMap((star) => {
     const provider = providerOf(star.provider);
     const model = provider?.models.find((candidate) => candidate.id === star.model);
-    if (!provider || !model) return [];
+    if (!provider || !model || !isModelChoiceVisible(star.provider, star.account_id, star.model)) return [];
     return [
       {
-        label: `${provider.display_name} ${model.label} · ${star.effort || "default"}`,
+        label: `${modelAccountLabel(star.provider, star.account_id)} · ${model.label} · ${star.effort || "Default"}`,
         description: "Apply to the current task",
         icon: "i-lucide-star",
         disabled: !S.detail,
-        onSelect: () => choose(() => setModel(star.provider, star.model, star.effort || "")),
+        onSelect: () => choose(() => setModel(star.provider, star.model, star.effort || "", star.account_id || 0)),
       },
     ];
   }),

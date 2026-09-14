@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from "vue";
-import { patchSchedule, removeSchedule, runPinnedPrompt, setScheduleArchived } from "../store";
+import { patchSchedule, removeSchedule, runPinnedPrompt, setScheduleArchived, setScheduleModel } from "../store";
+import ModelSelection from "./ModelSelection.vue";
 
 const props = defineProps({ tab: { type: Object, required: true } });
 const saved = computed(() => props.tab.data.schedule);
@@ -31,6 +32,9 @@ async function play(custom) {
     if (await runPinnedPrompt(saved.value, custom ? customPrompt.value : undefined)) customizing.value = false;
   } finally { busy.value = false; }
 }
+function chooseModel(choice) {
+  setScheduleModel(saved.value, choice.provider, choice.model, choice.effort, choice.accountID);
+}
 </script>
 
 <template>
@@ -46,7 +50,17 @@ async function play(custom) {
         <UButton v-else label="Unarchive" @click="setScheduleArchived(saved, false)" />
         <UButton label="Delete" icon="i-lucide-trash-2" color="error" variant="ghost" @click="removeSchedule(saved)" />
       </div>
-      <p class="mb-3 text-sm text-muted">Pinned task · {{ saved.model }}{{ saved.effort ? ' · ' + saved.effort : '' }}</p>
+      <div class="mb-3 flex flex-wrap items-center gap-2">
+        <span class="text-sm text-muted">Pinned task</span>
+        <ModelSelection
+          :provider="saved.provider"
+          :account-id="saved.account_id || 0"
+          :model="saved.model"
+          :effort="saved.effort || ''"
+          size="xs"
+          @change="chooseModel"
+        />
+      </div>
       <label class="block text-sm text-muted">
         Prompt
         <UTextarea v-model="prompt" aria-label="Pinned prompt" :rows="8" class="mt-1 w-full" :ui="{ base: 'resize-y' }" />

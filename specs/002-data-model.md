@@ -79,10 +79,15 @@ All timestamps are **unix milliseconds**, so turn timings need no second table.
   the gap one leaves could not be explained.
 - **sessions.schedule_id** — 0 for an ordinary task; otherwise the schedule
   that spawned it, so a finishing turn needs no lookup.
-- **starred_models** — `(provider, model, effort)` primary key. Starred
-  combinations sort first in the prompt bar's pickers. No subscription: a
-  favourite is a model and an effort, and picking one keeps the task on the
-  account it is already on ([050](050-subscription-accounts.md)).
+- **starred_models** — `(provider, account_id, model, effort)` primary key,
+  plus `position, created_at`. Favourite combinations sort first in every
+  model picker and can be reordered in Settings. The subscription is part of
+  the combination, so choosing a favourite always spends the account named on
+  its row ([050](050-subscription-accounts.md)).
+- **hidden_model_choices** — `(provider, account_id, model)` primary key. An
+  empty model hides that subscription/provider group; another value hides one
+  model in it. Only hidden rows are stored, so new provider models are visible
+  by default.
 - **provider_accounts** — one subscription a provider can run under. `id,
   provider, alias, home, is_default, created_at`, with `(provider, alias)`
   unique since the alias is how two are told apart wherever they are offered.

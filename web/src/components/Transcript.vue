@@ -2,19 +2,16 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
 import {
-  accountLabel,
-  effortsFor as effortsOf,
   focusPrompt,
   forceQueued,
-  modelPickerGroups,
   openProjectPrompt,
-  parseModelChoice,
   providerOf,
   S,
   updateQueuedModel,
   updateQueuedPrompt,
 } from "../store";
 import Message from "./Message.vue";
+import ModelSelection from "./ModelSelection.vue";
 import ToolGroup from "./ToolGroup.vue";
 
 const box = ref(null);
@@ -110,19 +107,6 @@ const editing = ref(0); // id of the queued prompt whose text is being edited, 0
 const editDraft = ref("");
 const editBox = ref(null);
 const saving = ref(false);
-const NONE = "__default";
-
-const modelOf = (provider, model) => providerOf(provider)?.models.find((candidate) => candidate.id === model);
-const labelOf = (provider, model) => modelOf(provider, model)?.label || model;
-const effortsFor = (q) => effortsOf(q.provider, q.model);
-const effortItems = (q) => [
-  { label: "default effort", value: NONE },
-  ...effortsFor(q).map((effort) => ({ label: effort, value: effort })),
-];
-/* The same groups the prompt bar offers, subscriptions included: a waiting
-   prompt can be moved to another account as freely as to another model. */
-const modelGroups = computed(modelPickerGroups);
-
 /* A prompt waiting behind *another* session starts beside it and interrupts
    nothing, so it says "Send now". One waiting behind its own session's turn
    cannot: a provider takes one prompt at a time, that turn is cancelled to
@@ -224,21 +208,8 @@ watch(
   },
 );
 
-function pickQueuedModel(q, value) {
-  const { provider, accountID, model } = parseModelChoice(value);
-  const efforts = effortsOf(provider, model);
-  setQueuedChoice(q, provider, model, efforts.includes(q.effort) ? q.effort : "", accountID);
-}
-
-/* A queued prompt names its subscription beside its model wherever there is
-   more than one to confuse it with. */
-function queuedLabel(q) {
-  const alias = accountLabel(q.provider, q.account_id);
-  return labelOf(q.provider, q.model) + (alias ? ` · ${alias}` : "");
-}
-
-function pickQueuedEffort(q, effort) {
-  setQueuedChoice(q, q.provider, q.model, effort === NONE ? "" : effort);
+function chooseQueuedModel(q, choice) {
+  setQueuedChoice(q, choice.provider, choice.model, choice.effort, choice.accountID);
 }
 
 async function force(q) {
@@ -390,35 +361,16 @@ watch(
               title="Edit this prompt"
               @click="startEdit(q)"
             />
-            <UPopover>
-              <UButton
-                color="neutral"
-                variant="ghost"
-                size="xs"
-                trailing-icon="i-lucide-chevron-down"
-                :label="queuedLabel(q)"
-                :loading="changing === q.id"
-                :disabled="q.pending || forcing !== 0 || changing !== 0 || editing !== 0"
-                title="Change queued model"
-              />
-              <template #content>
-                <UCommandPalette
-                  class="w-80 max-w-[calc(100vw-2rem)]"
-                  :groups="modelGroups"
-                  value-key="value"
-                  placeholder="Search models…"
-                  :fuse="{ fuseOptions: { keys: ['label', 'description'], threshold: 0.35, ignoreLocation: true }, resultLimit: 20 }"
-                  @update:model-value="pickQueuedModel(q, $event)"
-                />
-              </template>
-            </UPopover>
-            <USelect
-              :model-value="q.effort || NONE"
-              :items="effortItems(q)"
+            <ModelSelection
+              :provider="q.provider"
+              :account-id="q.account_id || 0"
+              :model="q.model"
+              :effort="q.effort || ''"
               size="xs"
               :disabled="q.pending || forcing !== 0 || changing !== 0 || editing !== 0"
-              title="Change queued effort"
-              @update:model-value="pickQueuedEffort(q, $event)"
+              :loading="changing === q.id"
+              title="Change queued model"
+              @change="chooseQueuedModel(q, $event)"
             />
             <UButton
               color="warning"

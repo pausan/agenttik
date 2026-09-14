@@ -229,9 +229,9 @@ Under it sit the prompt, the model, the
 spawned, newest first, each with its timestamp as `YYYY-MM-DD HH:mm:ss`.
 
 **The prompt and the model are as editable as the clock.** The prompt is a
-text box that commits when it is left, and the model is the prompt bar's own
-picker with its effort select beside it — less the favourites, which a
-schedule has no bar to star from. Nothing about what a schedule repeats is a
+text box that commits when it is left, and the model is the shared picker with
+its separate effort select. It includes ordered favourites but not the main
+prompt's favourite button. Nothing about what a schedule repeats is a
 decision made once: a typo, or a model that turned out to be the wrong one,
 should not cost the runs the schedule has already recorded. Only future runs
 follow the change — a run already spawned is an ordinary session and keeps the

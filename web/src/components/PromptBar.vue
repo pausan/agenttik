@@ -1,10 +1,11 @@
 <script setup>
 import { computed, defineAsyncComponent, nextTick, ref, watch } from "vue";
 
-import { S, createSchedule, accountLabel, contextWindow, enqueue, enterDoes, fail, hit, isStarred, limitsKey, modelPickerGroups, parseModelChoice, providerOf, refreshSubscriptionLimits, send, setModel, stopTurn, toggleStar } from "../store";
+import { S, createSchedule, contextWindow, enqueue, enterDoes, fail, hit, limitsKey, refreshSubscriptionLimits, send, setModel, stopTurn } from "../store";
 import { ago } from "../api";
 import Chord from "./Chord.vue";
 import ContextPane from "./ContextPane.vue";
+import ModelSelection from "./ModelSelection.vue";
 import { useTextHistory } from "../text-history";
 import { isMobile } from "../ui";
 import { clipboardImages, promptImages, promptText, readClipboardImages, uploadImage, withImages } from "../prompt-images";
@@ -26,7 +27,6 @@ const text = computed({
 });
 const history = useTextHistory(text, (value) => (text.value = value));
 const prompt = ref(null);
-const modelOpen = ref(false);
 const queueOpen = ref(false);
 const scheduling = ref(false);
 const images = computed(() => promptImages(S.owner?.draft));
@@ -74,152 +74,9 @@ watch(
   },
 );
 
-/* The effort picker cannot carry an empty value, so "no effort" travels as a
-   sentinel and is turned back into "" on the way to the API. */
-const NONE = "__default";
-
-const provider = computed(() => providerOf(S.detail?.session.provider));
-const effort = computed(() => S.detail?.session.effort || "");
-const selectedModel = computed(() =>
-  provider.value?.models.find((m) => m.id === S.detail?.session.model),
-);
-const effortsFor = (model) => model?.efforts || provider.value?.efforts || [];
-const selectedEfforts = computed(() => effortsFor(selectedModel.value));
-
-const modelOf = (providerName, id) => providerOf(providerName)?.models.find((m) => m.id === id);
-const labelOf = (providerName, id) => modelOf(providerName, id)?.label || id;
-
-/* Which subscription the next prompt would go on, named beside the model
-   wherever the provider has more than one — otherwise there is nothing to
-   tell it apart from and the name is noise. A task pointing at a
-   subscription that has been removed says so here rather than looking
-   ordinary and failing on send. */
-const accountAlias = computed(() =>
-  accountLabel(S.detail?.session.provider, S.detail?.session.account_id),
-);
-const modelButtonLabel = computed(() => {
-  const model = labelOf(S.detail.session.provider, S.detail.session.model);
-  return accountAlias.value ? `${model} · ${accountAlias.value}` : model;
-});
-
-/* A favourite is a model and an effort together — an effort on its own is
-   never starred — so starred combinations head the model picker as single
-   entries that set both. The effort picker below stays free to change either
-   way, starred or not. */
-const combos = computed(() =>
-  S.stars.filter((s) => modelOf(s.provider, s.model)),
-);
-
-const modelSearch = ref("");
-const collapsedProviders = ref(new Set());
-
-function providerCollapsed(providerName) {
-  return !modelSearch.value.trim() && collapsedProviders.value.has(providerName);
+function chooseModel(choice) {
+  setModel(choice.provider, choice.model, choice.effort, choice.accountID);
 }
-
-function toggleProvider(providerName) {
-  const next = new Set(collapsedProviders.value);
-  if (next.has(providerName)) next.delete(providerName);
-  else next.add(providerName);
-  collapsedProviders.value = next;
-}
-
-const onCombo = computed(() =>
-  combos.value.some(
-    (c) =>
-      c.provider === S.detail.session.provider &&
-      c.model === S.detail.session.model &&
-      (c.effort || "") === effort.value,
-  ),
-);
-
-/* One group per provider and subscription (050-subscription-accounts.md), so
-   a model and the account it would run on are picked in one go. A favourite
-   is a model and an effort only — never an account — so choosing one keeps
-   the subscription the task is already on. */
-const modelGroups = computed(() => [
-  ...(combos.value.length
-    ? [{
-        id: "favourites",
-        label: "Favourites",
-        items: combos.value.map((c, i) => ({
-          label: `★ ${labelOf(c.provider, c.model)} · ${c.effort || "default"}`,
-          description: providerOf(c.provider)?.display_name || c.provider,
-          value: "combo:" + i,
-          disabled: !providerOf(c.provider)?.available,
-        })),
-      }]
-    : []),
-  ...modelPickerGroups().map((group) =>
-    providerCollapsed(group.id)
-      ? {
-          ...group,
-          items: [{
-            label: `Show ${group.items.length} models`,
-            description: group.label,
-            value: `expand:${group.id}`,
-            icon: "i-lucide-chevron-right",
-          }],
-        }
-      : group,
-  ),
-]);
-
-const model = computed({
-  get: () =>
-    onCombo.value
-      ? "combo:" +
-        combos.value.findIndex(
-          (c) =>
-            c.provider === S.detail.session.provider &&
-            c.model === S.detail.session.model &&
-            (c.effort || "") === effort.value,
-        )
-      : `model:${S.detail.session.provider}:${S.detail.session.account_id || 0}:${S.detail.session.model}`,
-  set: (v) => {
-    const [kind, rest] = [v.slice(0, v.indexOf(":")), v.slice(v.indexOf(":") + 1)];
-    if (kind === "combo") {
-      // A favourite carries no subscription, so the task keeps the one it is
-      // on: that is the account whose allowance is on screen beside it.
-      const c = combos.value[Number(rest)];
-      setModel(c.provider, c.model, c.effort || "");
-    } else {
-      const { provider: providerName, accountID, model: modelID } = parseModelChoice(v);
-      const nextProvider = providerOf(providerName);
-      const next = nextProvider?.models.find((m) => m.id === modelID);
-      const nextEfforts = next?.efforts || nextProvider?.efforts || [];
-      setModel(providerName, modelID, nextEfforts.includes(effort.value) ? effort.value : "", accountID);
-    }
-  },
-});
-
-const effortItems = computed(() => [
-  { label: "default effort", value: NONE },
-  ...selectedEfforts.value.map((e) => ({ label: e, value: e })),
-]);
-
-const effortValue = computed({
-  get: () => effort.value || NONE,
-  set: (v) =>
-    setModel(S.detail.session.provider, S.detail.session.model, v === NONE ? "" : v,
-      S.detail.session.account_id || 0),
-});
-
-
-function pickModel(value) {
-  // A cleared palette selection does not change the task's model.
-  if (!value) return;
-  if (value.startsWith("expand:")) {
-    toggleProvider(value.slice("expand:".length));
-    return;
-  }
-  model.value = value;
-  modelOpen.value = false;
-}
-
-watch(modelOpen, (open) => {
-  if (!open) modelSearch.value = "";
-});
 
 const contextUsed = computed(() => S.detail?.stats.context_tokens || 0);
 const contextTotal = computed(() => contextWindow(S.detail?.session, S.detail?.stats));
@@ -319,19 +176,6 @@ watch(
   { immediate: true },
 );
 
-const starred = computed(() =>
-  isStarred(S.detail.session.provider, S.detail.session.model, effort.value),
-);
-
-async function star() {
-  const { provider: p, model: m } = S.detail.session;
-  try {
-    await toggleStar(p, m, effort.value);
-  } catch (e) {
-    fail(e);
-  }
-}
-
 /* send clears the draft itself, and only when it really sends. */
 function submit() {
   if (!empty.value && !uploading.value) send(S.owner?.draft || "");
@@ -426,55 +270,14 @@ function runMenuAction(action) {
       </div>
       <div class="prompt-controls flex items-center gap-1.5">
         <div class="prompt-model-controls contents">
-          <UPopover v-model:open="modelOpen">
-            <UButton
-              type="button"
-              color="neutral"
-              variant="outline"
-              size="sm"
-              trailing-icon="i-lucide-chevron-down"
-              :label="modelButtonLabel"
-              class="prompt-model"
-              title="Choose model and subscription"
-            />
-            <template #content>
-              <UCommandPalette
-                class="w-80 max-w-[calc(100vw-2rem)]"
-                :groups="modelGroups"
-                value-key="value"
-                placeholder="Search models…"
-                v-model:search-term="modelSearch"
-                preserve-group-order
-                :ui="{ viewport: 'max-h-[min(28rem,60vh)]' }"
-                :fuse="{ fuseOptions: { keys: ['label', 'description'], threshold: 0.35, ignoreLocation: true }, resultLimit: 20 }"
-                @update:model-value="pickModel"
-              >
-                <template #group-label="{ group, label }">
-                  <button
-                    v-if="group.id !== 'favourites'"
-                    type="button"
-                    class="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left font-semibold text-highlighted hover:bg-elevated"
-                    :aria-expanded="!providerCollapsed(group.id)"
-                    :aria-label="`${providerCollapsed(group.id) ? 'Expand' : 'Collapse'} ${label}`"
-                    @click.stop="toggleProvider(group.id)"
-                  >
-                    <UIcon :name="providerCollapsed(group.id) ? 'i-lucide-chevron-right' : 'i-lucide-chevron-down'" class="size-3.5" />
-                    <span class="truncate">{{ label }}</span>
-                  </button>
-                  <span v-else class="block px-1 py-0.5 font-semibold text-highlighted">{{ label }}</span>
-                </template>
-              </UCommandPalette>
-            </template>
-          </UPopover>
-          <USelect v-model="effortValue" :items="effortItems" size="sm" title="Effort" />
-          <UButton
-            color="neutral"
-            variant="ghost"
-            size="sm"
-            :class="starred ? 'text-yellow-500' : ''"
-            :title="`${starred ? 'Unstar' : 'Star'} ${labelOf(S.detail.session.provider, S.detail.session.model)} · ${effort || 'default'}`"
-            :label="starred ? '★' : '☆'"
-            @click="star"
+          <ModelSelection
+            :provider="S.detail.session.provider"
+            :account-id="S.detail.session.account_id || 0"
+            :model="S.detail.session.model"
+            :effort="S.detail.session.effort || ''"
+            show-favourite
+            class="prompt-model"
+            @change="chooseModel"
           />
         </div>
         <span class="flex-1 max-md:hidden" />

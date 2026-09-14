@@ -7,8 +7,9 @@ the click is visibly acknowledged.
 
 Your own prompts also get a pencil. It opens the prompt for editing in place —
 where it sits in the transcript, not in a dialogue over it — with Send,
-Enqueue, a model and subscription picker, Cancel, and Escape to leave.
-The picker updates the task's model, just like the prompt bar. Sending
+Enqueue, the shared model control, Cancel, and Escape to leave. The control has
+the same fuzzy model picker and separate effort select as the prompt bar,
+without its favourite button. It updates the task's choice. Sending
 truncates the transcript at that message and sends the new text as an ordinary
 turn. Enqueue truncates at the same point and queues the replacement with the
 selected model; it waits for other running tasks in the project. Both actions

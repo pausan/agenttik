@@ -191,15 +191,15 @@ signing out of this one can never touch the account the machine already had.
   with its usage count, and `Add a … subscription` where more than one is
   possible. Each row shows its login folder and whether it is signed in.
 - **Every model control.** The prompt bar's picker, a queued prompt's and a
-  job's all draw one group per provider *and subscription* — `Claude Code ·
-  Work` — with the alias in each entry's label and in its searchable
-  description. A provider with one subscription keeps its plain name and its
-  old layout. The chosen model reads back as `Opus · Work` on the button. All
-  three build their groups from `modelPickerGroups` in the store and share one
+  job's all draw one group per provider *and subscription* — `Work · Claude
+  Code` — with `Work · Opus` in each one-line entry. System is named even when
+  it is the only subscription. The chosen model reads back as `Work · Opus`
+  on the button. All controls build their groups from `modelPickerGroups` in
+  the store and share one
   value format, `model:<provider>:<account>:<model>`.
-- **Favourites carry no subscription.** A star is a model and an effort
-  ([009](009-model-picker.md)); picking one keeps the task on the account it is
-  already on, which is the account whose allowance is on screen beside it.
+- **Favourites carry the subscription.** A favourite is subscription,
+  provider, model and effort ([009](009-model-picker.md)); its visible line is
+  `Work · Opus · High`, and picking it applies that exact account.
 - **Task Stats** names the subscription under the provider, when there is more
   than one to name.
 

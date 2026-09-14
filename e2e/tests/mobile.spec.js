@@ -194,7 +194,7 @@ test.describe("phone", () => {
     await expect(settings).toBeVisible();
     await expectInViewport(page, settings);
     await settings.getByRole("button", { name: "Models", exact: true }).tap();
-    await expect(settings.getByRole("group", { name: "Fake models", exact: true })).toBeVisible();
+    await expect(settings.getByRole("group", { name: "System · Fake models", exact: true })).toBeVisible();
     await settings.getByRole("button", { name: "Done", exact: true }).tap();
     await expect(settings).toBeHidden();
     await expectPageFits(page);

@@ -105,7 +105,7 @@ archive history keep their own ordering.
 
 ## Database
 
-Database is the final section in General. It shows the absolute database path
+Database appears in General. It shows the absolute database path
 on the Agenttik host as text over a gray background, with a button that copies
 the full path and confirms success with a check. The file size uses decimal
 units (B, KB, MB, and so on), rounded to one decimal. It measures the main
@@ -114,3 +114,16 @@ read when the settings pane mounts, without polling.
 `GET /api/general` includes `database_path` and `database_size` (bytes);
 these fields are informational and cannot be changed through `PUT /api/general`.
 The settings filter matches database, path, size, storage, and copy.
+
+## Reset defaults
+
+The final section offers a warning dialog with Cancel and Reset defaults.
+Confirmation restores blue/zinc colors, System mode, keyboard shortcuts, prompt
+submission, folding, layout widths, file/diff modes, task list choices, remembered
+model and schedule choices, and fuzzy search in this browser. It clears model
+favourites and visibility overrides, resets default subscription choices, restores
+top insertion and default tray settings for all windows. Tray changes need a restart.
+`POST /api/general/reset` updates these database preferences in one transaction.
+Only named browser preference keys are removed; authentication, accounts, server
+configuration, project/task data, open tabs, files and drafts are preserved.
+The reset applies in place without reloading the page.

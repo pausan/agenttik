@@ -165,6 +165,7 @@ func (s *Server) routes() {
 	api.Put("/desktop", s.putDesktopConfig)
 	api.Get("/general", s.getGeneralConfig)
 	api.Put("/general", s.putGeneralConfig)
+	api.Post("/general/reset", s.resetPreferences)
 	api.Get("/server", s.getServerConfig)
 	api.Put("/server", s.putServerConfig)
 	api.Put("/server/auth", s.putServerAuth)

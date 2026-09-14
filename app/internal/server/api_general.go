@@ -36,3 +36,10 @@ func (s *Server) putGeneralConfig(c *fiber.Ctx) error {
 	}
 	return c.JSON(config)
 }
+
+func (s *Server) resetPreferences(c *fiber.Ctx) error {
+	if err := s.store.ResetPreferences(); err != nil {
+		return err
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}

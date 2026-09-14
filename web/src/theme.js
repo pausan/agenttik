@@ -10,7 +10,7 @@
    Tailwind only emits the colours it can see in the source. */
 import { useAppConfig } from "@nuxt/ui/runtime/vue/composables/useAppConfig.js";
 
-/* Round the hue wheel from agenttik's own green, which is the default. */
+/* Round the hue wheel from agenttik's own green. */
 export const ACCENTS = [
   { name: "agenttik", swatch: "bg-agenttik-500" },
   { name: "emerald", swatch: "bg-emerald-500" },
@@ -44,7 +44,7 @@ export const NEUTRALS = [
   { name: "stone", swatch: "bg-stone-500" },
 ];
 
-export const DEFAULT_COLORS = { accent: "agenttik", neutral: "zinc" };
+export const DEFAULT_COLORS = { accent: "blue", neutral: "zinc" };
 
 export function applyColors({ accent, neutral }) {
   const { colors } = useAppConfig().ui;

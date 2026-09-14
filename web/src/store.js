@@ -17,7 +17,7 @@ import { debounce } from "./debounce";
 import { ACCENTS, DEFAULT_COLORS, NEUTRALS, applyColors } from "./theme";
 import { ACTIONS, matches } from "./shortcuts";
 import { platformChord, primaryChord } from "./platform";
-import { initSmartSearch } from "./smart-search.js";
+import { initSmartSearch, setSmartSearch } from "./smart-search.js";
 
 /* Sidebar widths are the user's, so they are kept across reloads. */
 const LAYOUT_KEY = "agenttik.layout";
@@ -3414,4 +3414,25 @@ export async function runPinnedPrompt(schedule, prompt) {
     await pickTask(session.id);
     return session;
   } catch (e) { fail(e); }
+}
+
+// Apply in place so drafts, open files and running tasks survive the reset.
+export async function resetPreferences() {
+  await api("POST", "/api/general/reset");
+  S.stars = [];
+  S.hiddenModelChoices = [];
+  S.lastUsed = null;
+  S.layout = { left: 272, right: 312 };
+  S.fileMode = "edit";
+  S.diffView = "unified";
+  setFoldOthers(true);
+  setWindow(TASK_WINDOWS[0].value);
+  setTaskPageSize(25);
+  resetAllKeys();
+  setSmartSearch(false);
+  for (const [key, value] of Object.entries(DEFAULT_COLORS)) setColor(key, value);
+  for (const key of [LAYOUT_KEY, LAST_USED_KEY, FILE_MODE_KEY, DIFF_VIEW_KEY,
+    COLORS_KEY, KEYS_KEY, WINDOW_KEY, TASK_PAGE_KEY, SCHEDULE_KEY, FOLD_KEY,
+    "agenttik.smartSearch"]) localStorage.removeItem(key);
+  await loadProviders();
 }

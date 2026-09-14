@@ -150,11 +150,34 @@ test("database path is read-only, copyable, and searchable with a formatted size
   const path = dialog.getByLabel("Path on the Agenttik host");
   await expect(path).toHaveText(`${agenttik.dataDir}/agenttik.db`);
   await expect(path).toHaveClass(/bg-muted/);
-  await expect(dialog.locator("section:visible > div.font-semibold").last()).toHaveText("Database");
+  await expect(dialog.locator("section:visible > div.font-semibold").filter({ hasText: /^Database$/ })).toBeVisible();
   await expect(dialog.getByText(/^Database file size: \d+\.\d (B|KB|MB|GB)$/)).toBeVisible();
   await dialog.getByRole("button", { name: "Copy database path" }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${agenttik.dataDir}/agenttik.db`);
   await dialog.getByPlaceholder("Filter settings…").fill("database");
   await expect(path).toBeVisible();
   await expect(dialog.getByText("What the prompt box does", { exact: false })).toBeHidden();
+});
+
+test("reset defaults warns, cancels, and preserves browser data", async ({ page }) => {
+  await openSettings(page, "Appearance");
+  await expect(page.getByRole("button", { name: "blue", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "red", exact: true }).click();
+  await page.evaluate(() => localStorage.setItem("keep-auth", "signed-in"));
+  await page.getByRole("button", { name: "General", exact: true }).click();
+  await page.getByRole("button", { name: "Reset defaults", exact: true }).click();
+  const warning = page.getByRole("dialog", { name: "Reset defaults?", exact: true });
+  await expect(warning).toContainText("Accounts stay signed in");
+  await warning.getByRole("button", { name: "Cancel", exact: true }).click();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("agenttik.colors")).accent)).toBe("red");
+  await page.getByRole("button", { name: "Reset defaults", exact: true }).click();
+  await warning.getByRole("button", { name: "Reset defaults", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Defaults restored" })).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem("keep-auth"))).toBe("signed-in");
+  await page.getByRole("button", { name: "Appearance", exact: true }).click();
+  await expect(page.getByRole("button", { name: "blue", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Color mode", exact: true })).toContainText("System");
+  await page.reload();
+  await openSettings(page, "Appearance");
+  await expect(page.getByRole("button", { name: "blue", exact: true })).toHaveAttribute("aria-pressed", "true");
 });

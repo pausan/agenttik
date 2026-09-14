@@ -1,10 +1,11 @@
 <script setup>
 import { computed, onMounted, ref, watchEffect } from "vue";
 
-import { PROMPT_CHORDS, S, copyText, enterDoes, fail, setEnterDoes, setFoldOthers } from "../../store";
+import { PROMPT_CHORDS, S, copyText, enterDoes, fail, setEnterDoes, setFoldOthers, resetPreferences } from "../../store";
 import { fuzzyAny } from "../../fuzzy";
 import { fileSize } from "../../file-info.js";
 import { api } from "../../api";
+import { useColorMode } from "@nuxt/ui/runtime/vue/stubs/base.js";
 import Chord from "../Chord.vue";
 import { smartSearch, setSmartSearch } from "../../smart-search.js";
 import DesktopSettings from "./DesktopSettings.vue";
@@ -13,6 +14,24 @@ import SmartSearchProgress from "../SmartSearchProgress.vue";
 const props = defineProps({ filter: { type: String, default: "" } });
 const emit = defineEmits(["count"]);
 
+const colorMode = useColorMode();
+const confirmingReset = ref(false);
+const resetting = ref(false);
+const resetDone = ref(false);
+const desktopVersion = ref(0);
+const showReset = computed(() => fuzzyAny(["general", "reset", "defaults", "colors", "choices", "favourites", "shortcuts"], props.filter) !== null);
+async function resetDefaults() {
+  resetting.value = true;
+  try {
+    await resetPreferences();
+    colorMode.preference = "system";
+    position.value = "top";
+    desktopVersion.value++;
+    confirmingReset.value = false;
+    resetDone.value = true;
+  } catch (e) { fail(e); }
+  finally { resetting.value = false; }
+}
 const database = ref(null);
 const copied = ref(false);
 async function copyDatabasePath() {
@@ -94,7 +113,7 @@ const searchRows = computed(() => fuzzyAny(["general", "project", "tasks", "smar
   { value: false, label: "Fuzzy Search (default)", description: "Match task titles as you type" },
   { value: true, label: "Smart Search", description: "Find related tasks by meaning, across languages" },
 ] : []);
-watchEffect(() => emit("count", Number(showDatabase.value) + desktopCount.value + promptRows.value.length + foldRows.value.length + positionRows.value.length + searchRows.value.length));
+watchEffect(() => emit("count", Number(showReset.value) + Number(showDatabase.value) + desktopCount.value + promptRows.value.length + foldRows.value.length + positionRows.value.length + searchRows.value.length));
 
 const chosen = computed({
   get: () => enterDoes(),
@@ -108,7 +127,7 @@ const folding = computed({
 </script>
 
 <template>
-  <DesktopSettings :filter="filter" @count="desktopCount = $event" />
+  <DesktopSettings :key="desktopVersion" :filter="filter" @count="desktopCount = $event" />
   <section v-if="promptRows.length">
     <div class="mb-0.5 font-semibold text-highlighted">Prompt</div>
     <p class="mb-2 text-xs text-dimmed">
@@ -188,4 +207,20 @@ const folding = computed({
     </template>
     <p v-else class="text-xs text-dimmed">Database details unavailable.</p>
   </section>
+  <section v-if="showReset" class="mt-5">
+    <div class="mb-0.5 font-semibold text-highlighted">Reset defaults</div>
+    <p class="mb-2 text-xs text-dimmed">Restore colors, choices, favourites, and shortcuts. You will stay signed in to all accounts.</p>
+    <UButton color="warning" variant="soft" label="Reset defaults" @click="confirmingReset = true" />
+    <p v-if="resetDone" role="status" class="mt-2 text-xs text-success">Defaults restored. Restart Agenttik to apply tray settings.</p>
+  </section>
+  <UModal v-model:open="confirmingReset" title="Reset defaults?" :dismissible="!resetting">
+    <template #body>
+      <p>Reset appearance, shortcuts, remembered choices, model favourites and visibility, item placement, and tray settings? This cannot be undone.</p>
+      <p class="mt-2">Appearance and browser choices reset in this browser. Shared preferences reset for all windows. Accounts stay signed in. Server authentication, projects, tasks, open files, and drafts are preserved.</p>
+    </template>
+    <template #footer>
+      <UButton color="neutral" variant="ghost" label="Cancel" :disabled="resetting" @click="confirmingReset = false" />
+      <UButton color="warning" label="Reset defaults" :loading="resetting" @click="resetDefaults" />
+    </template>
+  </UModal>
 </template>

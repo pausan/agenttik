@@ -29,7 +29,7 @@ export default defineConfig({
     // built-in icons are bundled and every icon agenttik actually uses falls
     // back to a live fetch against the Iconify API the first time it renders.
     ui({
-      ui: { colors: { primary: "agenttik", neutral: "zinc" } },
+      ui: { colors: { primary: "blue", neutral: "zinc" } },
       icon: { clientBundle: { scan: true } },
     }),
     keepPlaceholder(),

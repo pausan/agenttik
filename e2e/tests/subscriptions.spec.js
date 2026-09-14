@@ -127,3 +127,25 @@ test("removing a subscription says what still runs on it", async ({ page }) => {
   await pane(page).getByRole("button", { name: "Remove", exact: true }).click();
   await expect(pane(page).getByText("Personal", { exact: true })).toHaveCount(0);
 });
+
+test("new tasks preserve the last-used subscription, model and effort", async ({ page }) => {
+  await openSettings(page, "Subscriptions");
+  await addSubscription(page, "Personal");
+  await page.getByRole("button", { name: "Done" }).click();
+  await addProject(page);
+  await openProject(page);
+  await newTask(page);
+  await pickModel(page, "Personal · Fake Quick");
+  await page.getByTitle("Effort", { exact: true }).click();
+  await page.getByRole("option", { name: "High", exact: true }).click();
+  await page.getByPlaceholder("Ask the agent…").fill("keep this draft");
+  const created = page.waitForRequest((r) => r.method() === "POST" && r.url().endsWith("/api/sessions"));
+  await page.keyboard.press("Control+n");
+  const body = (await created).postDataJSON();
+  expect(body.account_id).toBeGreaterThan(0);
+  expect(body.model).toBe("fake-quick");
+  expect(body.effort).toBe("high");
+  await expect(modelButton(page)).toContainText("Personal · Fake Quick");
+  await page.reload();
+  await expect(modelButton(page)).toContainText("Personal · Fake Quick");
+});

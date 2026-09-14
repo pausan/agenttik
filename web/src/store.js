@@ -635,6 +635,7 @@ export function selectTab(id) {
   const tab = S.tabs.find((t) => t.id === id);
   if (!tab) return;
   S.activeTab = id;
+  if (tab.kind === "session") rememberUsed(tab.detail.session);
   const projectID = projectOfTab(tab);
   if (projectID) S.activeProjectID = projectID;
 }
@@ -1587,6 +1588,7 @@ export function loadLastUsed() {
 function rememberUsed(sess) {
   S.lastUsed = {
     provider: sess.provider,
+    account_id: sess.account_id || 0,
     model: sess.model,
     effort: sess.effort || "",
     permission: sess.permission,
@@ -1611,6 +1613,7 @@ function sessionDefaults() {
     if (!p || !p.available || !p.models.some((m) => m.id === c.model)) continue;
     return {
       provider: p.name,
+      account_id: accountOf(p.name, c.account_id) ? (c.account_id || 0) : defaultAccountOf(p.name),
       model: c.model,
       effort: c.effort || "",
       permission: c.permission || "workspace",
@@ -1618,7 +1621,7 @@ function sessionDefaults() {
   }
   const p = S.providers.find((x) => x.available && x.models.length);
   if (!p) return null;
-  return { provider: p.name, model: p.models[0].id, effort: "", permission: "workspace" };
+  return { provider: p.name, account_id: defaultAccountOf(p.name), model: p.models[0].id, effort: "", permission: "workspace" };
 }
 
 /* blankSession is an untouched conversation of the project: nothing said,
@@ -1664,11 +1667,13 @@ async function blankSessionID(projectID) {
    to the front with the cursor in the box, which is what was being asked
    for. */
 export async function startTask(project) {
+  const cfg = sessionDefaults();
   /* The prompt bar's focus watcher only sees a request made after it mounts,
      and coming from a project page mounts it with this very switch, so the
      cursor is asked for once the switch has been drawn. */
   const reuse = async (tabID) => {
     selectTab(tabID);
+    if (cfg) await setModel(cfg.provider, cfg.model, cfg.effort, cfg.account_id);
     await nextTick();
     focusPrompt();
   };
@@ -1679,7 +1684,6 @@ export async function startTask(project) {
     await openTask(reusable);
     return reuse("session:" + reusable);
   }
-  const cfg = sessionDefaults();
   if (!cfg) return fail(new Error("No agent CLI is available. Open Settings to see why."));
   try {
     const sess = await api("POST", "/api/sessions", { project_id: project.id, ...cfg });

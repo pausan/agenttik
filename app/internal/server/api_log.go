@@ -21,8 +21,7 @@ const (
 	logFieldSep  = "\x1f"
 )
 
-// commitHash guards the one client-supplied value that reaches git as an argv
-// element. Anything but hex could be read as a flag rather than a revision.
+// commitHash guards client-supplied commit revisions passed to git. Anything but hex could be read as a flag rather than a revision.
 var commitHash = regexp.MustCompile(`^[0-9a-fA-F]{4,40}$`)
 
 type commitEntry struct {
@@ -37,6 +36,7 @@ type commitEntry struct {
 }
 
 type projectLog struct {
+	Branches []string `json:"branches"`
 	// Branch is empty on a detached HEAD, where Head is all there is to say.
 	Branch  string        `json:"branch"`
 	Head    string        `json:"head"`
@@ -51,9 +51,12 @@ func (s *Server) projectLog(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	body := projectLog{Commits: []commitEntry{}}
+	body := projectLog{Commits: []commitEntry{}, Branches: []string{}}
 	if !isGitRepo(root) {
 		return c.JSON(body)
+	}
+	if out, err := runGit(root, "for-each-ref", "--format=%(refname:strip=2)", "refs/heads/"); err == nil {
+		body.Branches = strings.Fields(out)
 	}
 	limit := c.QueryInt("limit", maxLogCommits)
 	if limit <= 0 || limit > maxLogCommits {

@@ -10,12 +10,60 @@
    the Tree pane uses, against the subject, the author and the hash together —
    so a hash prefix, a name, or the words of a message all reach the same
    commit. */
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 
-import { S, copyText, openCommitFile, toggleCommit } from "../store";
+import { S, copyText, openCommitFile, toggleCommit, currentProjectID, refreshLog, refreshChanged, refreshTree } from "../store";
+import { api } from "../api";
 import { fuzzy, segments } from "../fuzzy";
 
 const emit = defineEmits(["show-in-tree"]);
+
+const branchSearch = ref("");
+const busy = ref("");
+const error = ref("");
+const notice = ref("");
+const branches = computed(() => {
+  const names = S.log.branches || [];
+  const query = branchSearch.value.trim();
+  if (!query) return names;
+  return names.map((name) => ({ name, match: fuzzy(name, query) }))
+    .filter((item) => item.match)
+    .sort((a, b) => a.match.score - b.match.score)
+    .map((item) => item.name);
+});
+watch(() => [currentProjectID(), S.repository], () => {
+  branchSearch.value = "";
+  error.value = "";
+  notice.value = "";
+});
+const actions = [
+  { action: "pull", icon: "i-lucide-arrow-down", label: "Pull current branch" },
+  { action: "push", icon: "i-lucide-arrow-up", label: "Push current branch" },
+  { action: "clean", icon: "i-lucide-brush-cleaning", label: "Clean local branches merged into main or master" },
+];
+async function act(action, branch = S.log.branch) {
+  if (busy.value || !branch) return;
+  const id = currentProjectID();
+  const repo = S.repository;
+  const stillHere = () => id === currentProjectID() && repo === S.repository;
+  busy.value = action;
+  error.value = "";
+  notice.value = "";
+  try {
+    const result = await api("POST", `/api/projects/${id}/branches/${action}?repo=${encodeURIComponent(repo)}`, { branch });
+    if (stillHere()) {
+      branchSearch.value = "";
+      if (action === "clean") notice.value = result.deleted.length
+        ? `Removed: ${result.deleted.join(", ")}` : "No merged local branches to remove.";
+    }
+  } catch (e) {
+    if (stillHere()) error.value = e.message;
+  } finally {
+    // Refresh failures too: Git may have completed part of an operation.
+    if (stillHere()) await Promise.all([refreshLog(), refreshChanged(), refreshTree()]);
+    busy.value = "";
+  }
+}
 
 /* Each commit is matched once against one string. Building it per keystroke
    is cheaper than three matches per row, and it lets "pau context" find a
@@ -78,15 +126,37 @@ const menu = computed(() => [
 
 <template>
   <div class="flex min-h-0 flex-col gap-2">
-    <div class="flex shrink-0 items-baseline gap-2 px-0.5">
-      <UIcon name="i-lucide-git-branch" class="shrink-0 text-dimmed" />
-      <span class="truncate font-mono text-xs text-highlighted">
-        {{ S.log.branch || (S.log.head ? "detached" : "no branch") }}
-      </span>
-      <span v-if="S.log.head" class="shrink-0 font-mono text-[11px] text-dimmed">
-        {{ S.log.head }}
-      </span>
+    <div class="flex shrink-0 items-center gap-1">
+      <USelectMenu
+        :model-value="S.log.branch || undefined"
+        v-model:search-term="branchSearch"
+        :items="branches"
+        ignore-filter
+        icon="i-lucide-git-branch"
+        :placeholder="S.log.head ? 'detached' : 'no branch'"
+        aria-label="Current branch"
+        :search-input="{ placeholder: 'Search branches…' }"
+        :disabled="!!busy || !S.log.branches?.length"
+        class="min-w-0 flex-1"
+        :ui="{ base: 'font-mono text-xs' }"
+        @update:model-value="act('switch', $event)"
+      />
+      <UTooltip v-for="item in actions" :key="item.action" :text="item.label">
+        <UButton
+          :icon="item.icon"
+          :aria-label="item.label"
+          size="xs"
+          variant="ghost"
+          color="neutral"
+          :loading="busy === item.action"
+          :disabled="!!busy || !S.log.branch"
+          @click="act(item.action)"
+        />
+      </UTooltip>
     </div>
+    <span v-if="S.log.head" class="px-0.5 font-mono text-[11px] text-dimmed">{{ S.log.head }}</span>
+    <p v-if="error" role="alert" class="text-xs text-error">{{ error }}</p>
+    <p v-if="notice" role="status" class="text-xs text-dimmed">{{ notice }}</p>
 
     <UInput
       v-model="S.logFilter"

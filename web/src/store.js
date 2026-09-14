@@ -109,7 +109,7 @@ export const S = reactive({
   changed: [],
   repositories: [],
   repository: "",
-  log: { branch: "", head: "", commits: [] },
+  log: { branch: "", head: "", commits: [], branches: [] },
   logFilter: "",
   logOpen: "", // the commit whose file list is expanded
   logFiles: {}, // commit hash -> what it touched, fetched the first time it opens
@@ -2442,7 +2442,7 @@ export async function refreshLog() {
   }
 }
 
-const EMPTY_LOG = () => ({ branch: "", head: "", commits: [] });
+const EMPTY_LOG = () => ({ branch: "", head: "", commits: [], branches: [] });
 
 /* toggleCommit expands one row into the files it touched. The list is fetched
    once per commit: history does not change under us, so a row reopened later
@@ -2474,7 +2474,7 @@ export function openCommitFile(hash, path, pin = false) {
   return openFileIn(currentProjectID(), S.owner?.id || "", path, { commit: hash, pin });
 }
 
-async function refreshTree() {
+export async function refreshTree() {
   const id = currentProjectID();
   if (!id) return clearTree();
   try {

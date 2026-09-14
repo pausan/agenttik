@@ -2,8 +2,22 @@
 
 The right-hand panel carries a **Commits** pane beside Changed for a task and
 beside Options for a project — the history of the branch the project is on.
-The branch name and the short head hash sit above a filter box; under it, one
-row per commit.
+A branch autocomplete and the short head hash sit above a commit filter box.
+The autocomplete lists local branches, ranked by the same fuzzy subsequence
+search as the commit filter. Selecting a branch runs Git switch; checkout
+conflicts are reported in the pane.
+
+To its right, buttons with tooltips pull (down arrow), push (up arrow), and
+clean merged local branches (brush). Pull is fast-forward only. Push sends
+only HEAD to the current branch's configured upstream; a missing upstream is
+reported as an error. Controls are disabled while an action runs and remote
+actions have a two-minute timeout. The log, changes, and tree refresh afterward.
+
+Cleanup immediately deletes local branches whose tips are ancestors of either
+local main or local master. It preserves main, master, the current branch,
+and every branch checked out in another worktree. Remote branches are untouched.
+If neither base exists, nothing is deleted. The pane reports deleted names
+or that no branches qualified. Squash merges are not ancestry merges.
 
 A row is the commit subject, and under it, in grey, what identifies it:
 
@@ -58,7 +72,8 @@ other, revision included.
 
 | Method | Path | Answers |
 |---|---|---|
-| GET | `/api/projects/:id/log?limit=` | `{branch, head, commits[]}` — up to 500 commits, newest first |
+| GET | `/api/projects/:id/log?limit=` | `{branch, branches[], head, commits[]}` — up to 500 commits, newest first |
+| POST | `/api/projects/:id/branches/:action?repo=` | `{branch}`; action is switch, pull, push, or clean; clean returns `{deleted[]}`, others 204 |
 | GET | `/api/projects/:id/commit?hash=` | `{hash, files[{path,status,additions,deletions,binary}]}` |
 | GET | `/api/projects/:id/commit/diff?hash=&path=` | the same `{path, diff, partial}` a working-tree diff answers |
 
@@ -68,10 +83,10 @@ other and so cannot be one call. A commit's files are fetched once per commit
 — history does not change underneath — and the whole log is re-read when a
 turn ends, because a turn that commits has changed history as well as the tree.
 
-`hash` is the only client value handed to git as a revision, so it is matched
-against `^[0-9a-fA-F]{4,40}$` rather than merely escaped: anything else could
-be read as a flag. Paths go through the same `resolveInRoot` check as every
-other file route. A folder that is not a repository, and one with no commits
+`hash` is matched against `^[0-9a-fA-F]{4,40}$` rather than merely escaped: anything else could
+be read as a flag. Switch accepts only validated, existing local branch names.
+Other branch actions reject requests if the current branch no longer matches.
+Paths go through the same `resolveInRoot` check as every other file route. A folder that is not a repository, and one with no commits
 yet, both answer with an empty log rather than an error.
 
 A rename's destination is the file that exists, and git writes the pair either

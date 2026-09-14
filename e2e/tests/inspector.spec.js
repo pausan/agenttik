@@ -81,3 +81,34 @@ test("Command Palette opens the task Stats popover", async ({ page }) => {
 
   await expect(page.getByLabel("Task statistics")).toBeVisible();
 });
+
+test("commits offers fuzzy branch selection and branch actions", async ({ page }) => {
+  let branch = "main";
+  const requests = [];
+  await page.route("**/api/projects/*/log?*", (route) => route.fulfill({
+    json: { branch, branches: ["main", "feature/search", "fix/colors"], head: "12345678", commits: [] },
+  }));
+  await page.route("**/api/projects/*/branches/*", async (route) => {
+    const action = new URL(route.request().url()).pathname.split("/").pop();
+    const body = route.request().postDataJSON();
+    requests.push({ action, ...body });
+    if (action === "switch") branch = body.branch;
+    await route.fulfill(action === "clean" ? { json: { deleted: ["old-feature"] } } : { status: 204 });
+  });
+  // Reload so the initial log request uses the fixture.
+  await page.reload();
+  await openProject(page);
+  await inspector(page).getByRole("tab", { name: "Commits" }).click();
+  const select = inspector(page).getByRole("button", { name: "Current branch", exact: true });
+  await select.click();
+  await page.getByPlaceholder("Search branches…").fill("ftsr");
+  await expect(page.getByRole("option", { name: "feature/search" })).toBeVisible();
+  await expect(page.getByRole("option", { name: "fix/colors" })).toHaveCount(0);
+  await page.getByRole("option", { name: "feature/search" }).click();
+  await expect(select).toContainText("feature/search");
+  for (const name of ["Pull current branch", "Push current branch", "Clean local branches merged into main or master"]) {
+    await inspector(page).getByRole("button", { name, exact: true }).click();
+  }
+  await expect(inspector(page).getByRole("status")).toContainText("Removed: old-feature");
+  expect(requests).toEqual(["switch", "pull", "push", "clean"].map((action) => ({ action, branch: "feature/search" })));
+});

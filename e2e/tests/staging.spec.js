@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { addProject, openProject, newTask, inspector, sidebar, test, expect } from "../fixtures.js";
 
-test("stage, unstage and commit through the expanded composer", async ({ page }) => {
+test("stage, unstage and commit through the inline resizable composer", async ({ page }) => {
   const root = await mkdtemp(join(tmpdir(), "staging-"));
   const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8" });
   try {
@@ -25,26 +25,33 @@ test("stage, unstage and commit through the expanded composer", async ({ page })
     await expect(pane.getByRole("button", { name: "Stage new.txt", exact: true })).toBeVisible();
     await pane.getByRole("button", { name: "Stage all files", exact: true }).click();
     await expect(pane.getByRole("button", { name: "Unstage new.txt", exact: true })).toBeVisible();
-    const compact = await pane.getByRole("textbox", { name: "Commit message" }).boundingBox();
-    await pane.getByRole("textbox", { name: "Commit message" }).click();
-    const dialog = page.getByRole("dialog", { name: "Commit changes" });
-    const field = dialog.getByRole("textbox", { name: "Commit message" });
+    const field = pane.getByRole("textbox", { name: "Commit message" });
+    const commit = pane.getByRole("button", { name: "Commit", exact: true });
+    await expect(commit).toBeDisabled();
+    await field.click();
     await expect(field).toBeFocused();
-    expect((await field.boundingBox()).width).toBeGreaterThan(compact.width);
+    await expect(page.getByRole("dialog")).toBeHidden();
+    const box = await field.boundingBox();
+    const buttonBox = await commit.boundingBox();
+    const stagedBox = await pane.getByRole("button", { name: /^Staged/ }).boundingBox();
+    expect(buttonBox.x).toBeGreaterThanOrEqual(box.x + box.width);
+    expect(buttonBox.y).toBeLessThan(stagedBox.y);
+    expect(box.y + box.height).toBeLessThan(stagedBox.y);
+    await expect(field).toHaveCSS("resize", "vertical");
+    await page.mouse.move(box.x + box.width - 3, box.y + box.height - 3);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width - 3, box.y + box.height + 50, { steps: 5 });
+    await page.mouse.up();
+    expect((await field.boundingBox()).height).toBeGreaterThan(box.height + 30);
     await field.fill("Add new file");
-    await page.keyboard.press("Escape");
-    await expect(dialog).toBeHidden();
-    await expect(pane.getByRole("textbox", { name: "Commit message" })).toHaveValue("Add new file");
-    await pane.getByRole("textbox", { name: "Commit message" }).click();
-    await expect(field).toBeFocused();
     await page.route("**/api/projects/*/commit?*", (route) => route.fulfill({
       status: 400, json: { error: "Commit hook rejected the message" },
     }), { times: 1 });
-    await dialog.getByRole("button", { name: "Commit", exact: true }).click();
-    await expect(dialog.getByRole("alert")).toHaveText("Commit hook rejected the message");
+    await commit.click();
+    await expect(pane.getByRole("alert")).toHaveText("Commit hook rejected the message");
     await expect(field).toHaveValue("Add new file");
-    await dialog.getByRole("button", { name: "Commit", exact: true }).click();
-    await expect(dialog).toBeHidden();
+    await commit.click();
+    await expect(field).toHaveValue("");
     await expect(pane.getByText("No staged files.")).toBeVisible();
     expect(git("log", "-1", "--format=%s").trim()).toBe("Add new file");
     expect(git("status", "--porcelain")).toBe("");
@@ -54,7 +61,7 @@ test("stage, unstage and commit through the expanded composer", async ({ page })
 });
 
 
-for (const surface of ["Changes", "Tree"]) test(`right-click in ${surface} reverts a changed file only after confirmation`, async ({ page }) => {
+for (const surface of ["Changes", "Tree", "Changes button", "Staged button"]) test(`${surface} reverts a changed file only after confirmation`, async ({ page }) => {
   const root = await mkdtemp(join(tmpdir(), "revert-"));
   const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8" });
   try {
@@ -75,14 +82,26 @@ for (const surface of ["Changes", "Tree"]) test(`right-click in ${surface} rever
       await page.getByRole("menuitem", { name: "Show in tree", exact: true }).click();
       row = sidebar(page).getByRole("button", { name: "file.txt", exact: true });
     }
-    await row.click({ button: "right" });
-    await page.getByRole("menuitem", { name: "Revert changes" }).click();
+    if (surface === "Staged button") {
+      await pane.getByRole("button", { name: "Stage file.txt", exact: true }).click();
+      await expect(pane.getByRole("button", { name: "Unstage file.txt", exact: true })).toBeVisible();
+    }
+    const askRevert = async () => {
+      if (surface.endsWith("button")) {
+        const revert = pane.getByRole("button", { name: "Revert changes to file.txt", exact: true });
+        await expect(revert).toHaveAttribute("title", "Revert changes to file.txt");
+        await revert.click();
+      } else {
+        await row.click({ button: "right" });
+        await page.getByRole("menuitem", { name: "Revert changes" }).click();
+      }
+    };
+    await askRevert();
     const dialog = page.getByRole("dialog", { name: "Revert changes" });
     await expect(dialog).toBeVisible();
     await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
     expect(await readFile(join(root, "file.txt"), "utf8")).toBe("changed\n");
-    await row.click({ button: "right" });
-    await page.getByRole("menuitem", { name: "Revert changes" }).click();
+    await askRevert();
     await dialog.getByRole("button", { name: "Revert", exact: true }).click();
     await expect(dialog).toBeHidden();
     await expect(pane.getByText("No edited files.")).toBeVisible();

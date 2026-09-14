@@ -9,6 +9,7 @@ const emit = defineEmits(["show-in-tree"]);
 const props = defineProps({
   files: { type: Array, required: true }, // [{ path, status? }]
   allowRevert: { type: Boolean, default: false },
+  disabled: { type: Boolean, default: false },
   empty: { type: String, required: true },
 });
 
@@ -18,12 +19,17 @@ function aim(e) {
   aimed.value = e.target.closest("[data-path]")?.dataset.path || "";
 }
 
+function revert(path) {
+  action.value = { kind: "revert", path, projectID: currentProjectID(), repository: S.repository };
+}
+
 const menu = computed(() => [
   ...(props.allowRevert && S.changed.some((f) => f.path === aimed.value) ? [{
     label: "Revert changes…",
     icon: "i-lucide-undo-2",
     color: "error",
-    onSelect: () => { action.value = { kind: "revert", path: aimed.value, projectID: currentProjectID(), repository: S.repository }; },
+    disabled: props.disabled,
+    onSelect: () => revert(aimed.value),
   }] : []),
   {
     label: "Show in tree",
@@ -50,6 +56,7 @@ const menu = computed(() => [
             <span v-if="f.status" class="w-5 shrink-0 text-primary">{{ f.status }}</span>
             <span class="path-clip truncate"><span>{{ f.path }}</span></span>
           </button>
+          <UButton v-if="allowRevert" icon="i-lucide-undo-2" :aria-label="`Revert changes to ${f.path}`" :title="`Revert changes to ${f.path}`" size="xs" variant="ghost" color="neutral" :disabled="disabled" @click="revert(f.path)" />
           <slot name="actions" :file="f" />
         </div>
       </div>

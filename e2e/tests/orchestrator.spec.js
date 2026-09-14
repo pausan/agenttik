@@ -39,13 +39,17 @@ test("orchestrator stays pinned through dragging, API ordering and reload", asyn
   await rows.filter({ hasText: REPO + "/web" }).dragTo(rows.first());
   await expect(rows.first()).toContainText("Orchestrator");
 
+  // New projects are inserted at the top (017-general-settings.md), so web
+  // sits above app until the API reverses the whole list — orchestrator
+  // included, to prove the server pins it back to the front regardless.
+  await expect(rows.nth(1)).toContainText(REPO + "/web");
   const projects = await command(agenttik, "GET", "/api/projects");
   await command(agenttik, "POST", "/api/projects/order", { ids: projects.map((p) => p.id).reverse() });
-  await expect(rows.nth(1)).toContainText(REPO + "/web");
+  await expect(rows.nth(1)).toContainText(REPO + "/app");
   await page.reload();
   await expect(rows.first()).toContainText(cfg.path);
-  await expect(rows.nth(1)).toContainText(REPO + "/web");
-  await expect(rows.nth(2)).toContainText(REPO + "/app");
+  await expect(rows.nth(1)).toContainText(REPO + "/app");
+  await expect(rows.nth(2)).toContainText(REPO + "/web");
 });
 
 test("orchestrator prompt resets after a pending edit and from settings", async ({ page, agenttik }) => {

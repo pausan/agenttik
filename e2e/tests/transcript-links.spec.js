@@ -93,6 +93,8 @@ test("Markdown preview links resolve from their document and keep existing tabs"
     await addProject(page, dir);
     await openProject(page, dir);
     await sidebar(page).getByRole("tab", { name: "Tree" }).click();
+    // Folders start collapsed, so the document lives one click down.
+    await sidebar(page).getByRole("button", { name: "docs", exact: true }).click();
     await sidebar(page).getByRole("button", { name: "index.md", exact: true }).click();
     await page.getByRole("tab", { name: "Preview", exact: true }).click();
 

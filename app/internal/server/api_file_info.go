@@ -31,15 +31,7 @@ type imageInfo struct {
 // Metadata never inlines file content. A bounded header read is enough for
 // common raster formats; unknown formats still have an exact byte size.
 func (s *Server) projectFileInfo(c *fiber.Ctx) error {
-	root, err := s.repositoryRoot(c)
-	if err != nil {
-		return err
-	}
-	rel, err := s.repositoryFilePath(c, root)
-	if err != nil {
-		return err
-	}
-	abs, err := resolveInRoot(root, rel)
+	root, rel, abs, err := s.previewFilePath(c)
 	if err != nil {
 		return err
 	}

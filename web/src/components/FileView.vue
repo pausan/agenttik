@@ -13,7 +13,7 @@
    place. */
 import { computed, ref, watch } from "vue";
 
-import { canPreview, isDirty, isFont, isImage, saveFile, setFileMode } from "../store";
+import { canPreview, isDirty, isFont, isImage, isOutsideProject, saveFile, setFileMode } from "../store";
 import { langOf } from "../highlight";
 import { api, nf } from "../api";
 import { fileInfoLabel } from "../file-info";
@@ -28,6 +28,7 @@ const props = defineProps({ tab: { type: Object, required: true } });
 
 const image = computed(() => isImage(props.tab.path));
 const font = computed(() => isFont(props.tab.path));
+const outside = computed(() => isOutsideProject(props.tab.path));
 
 const info = ref(null);
 const dimensions = ref(null);
@@ -62,7 +63,8 @@ const modes = computed(() => {
   if (props.tab.commit) return [{ label: "Diff", value: "diff" }];
   // Images and fonts have no editable text.
   const items = image.value || font.value ? [] : [{ label: "Edit", value: "edit" }];
-  items.push({ label: "Diff", value: "diff" });
+  // A file outside the project is in no repository of it: there is no diff.
+  if (!outside.value) items.push({ label: "Diff", value: "diff" });
   if (canPreview(props.tab.path)) items.push({ label: "Preview", value: "preview" });
   return items;
 });

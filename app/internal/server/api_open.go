@@ -13,9 +13,11 @@ import (
 // offer it: a project's folder, or one file or folder inside it, opened by
 // whatever the machine opens that kind of thing with.
 
-// openEntry opens the project folder, or the path given inside it, with the
-// system's own handler. An empty path is the project itself, which is what a
-// right click on a sidebar project row sends.
+// openEntry opens the project folder, or the path given, with the system's
+// own handler. An empty path is the project itself, which is what a right
+// click on a sidebar project row sends. Handing a path to the desktop is a
+// read, so an absolute one outside the project opens like any other — the
+// same rule the preview reads by.
 func (s *Server) openEntry(c *fiber.Ctx) error {
 	root, err := s.projectRoot(c)
 	if err != nil {
@@ -29,7 +31,8 @@ func (s *Server) openEntry(c *fiber.Ctx) error {
 	}
 	rel, abs := "", root
 	if strings.TrimSpace(body.Path) != "" {
-		if rel, abs, err = resolveEntry(root, body.Path); err != nil {
+		rel = body.Path
+		if abs, err = resolveReadableFile(root, body.Path); err != nil {
 			return err
 		}
 	}

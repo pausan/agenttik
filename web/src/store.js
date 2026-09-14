@@ -1914,6 +1914,14 @@ export function isFont(path) {
   return FONT.test(String(path || ""));
 }
 
+/* A path still absolute here is outside the project: resolveFileRef trims the
+   project folder off the ones inside it. Such a file can be read and rendered
+   and nothing more — git has no diff for what it does not track, and the
+   server takes no write outside the project. */
+export function isOutsideProject(path) {
+  return String(path || "").startsWith("/");
+}
+
 /* rawURL is where a file's bytes are, for the views that render it instead of
    reading it. rev names a revision — the baseline side of a diff — in place
    of the working tree. */
@@ -1945,7 +1953,8 @@ export async function openFileForEdit(path) {
 }
 
 /* Markdown links resolve from the document's folder, or from the project
-   root in a transcript. The API bounds paths and checks that files exist. */
+   root in a transcript. What is left absolute is outside the project, and is
+   read where it lies. The API bounds what it writes and checks files exist. */
 export function resolveFileRef(path, basePath = "") {
   const root = S.projects.find((p) => p.id === currentProjectID())?.path || "";
   if (root && path.startsWith(root + "/")) path = path.slice(root.length + 1);
@@ -2006,9 +2015,12 @@ async function gotoLine(tab, line) {
    as nothing opens in the editor instead of on a blank pane — and an image,
    which has no editor at all, opens on its picture. */
 function openingMode(path, line) {
-  if (isImage(path) || isFont(path)) return S.fileMode === "diff" ? "diff" : "preview";
-  if (line || (S.fileMode === "preview" && !canPreview(path))) return "edit";
-  return S.fileMode;
+  // Diff is not on offer for a file outside the project, so a strip left in
+  // that view opens the next one in the view it does have.
+  const remembered = isOutsideProject(path) && S.fileMode === "diff" ? "edit" : S.fileMode;
+  if (isImage(path) || isFont(path)) return remembered === "diff" ? "diff" : "preview";
+  if (line || (remembered === "preview" && !canPreview(path))) return "edit";
+  return remembered;
 }
 
 /* openFileIn also rebuilds a saved tab, whose owner may be gone. A file
@@ -2049,9 +2061,10 @@ async function loadFileTabIn(projectID, ownerID, path, opts = {}) {
     content: null,
     diff: null,
     edited: null,
-    // What was not read whole must never be written back over its source, and
-    // images and fonts are never read as text at all.
-    readOnly: !!commit || isImage(path) || isFont(path),
+    // What was not read whole must never be written back over its source,
+    // images and fonts are never read as text at all, and a file outside the
+    // project is one the server reads but does not write.
+    readOnly: !!commit || isImage(path) || isFont(path) || isOutsideProject(path),
     saving: false,
     loadError: "",
   });
@@ -2106,7 +2119,7 @@ async function loadFileTab(tab) {
     return;
   }
   const f = await api("GET", `/api/projects/${id}/file?${query}`);
-  tab.readOnly = !!(f.binary || f.partial);
+  tab.readOnly = !!(f.binary || f.partial) || isOutsideProject(tab.path);
   tab.content = f.binary ? "(binary file)" : f.content + (f.partial ? "\n\n… truncated" : "");
 }
 

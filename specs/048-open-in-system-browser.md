@@ -21,10 +21,12 @@ not aimed at the project.
 |--------|------|---------|
 | POST | `/api/projects/:id/open` | `{path}` — empty is the project folder itself |
 
-The path is resolved through `resolveEntry` ([046](046-tree-file-actions.md)),
-so it carries the same rules the Tree's other three do: relative to the
-project, no traversal out of it, nothing under `.git`. The answer is that
-file's `{path, dir}`.
+The path is resolved through `resolveReadableFile`: a relative one is bounded
+by the project folder, with no traversal out of it, and an absolute one is
+opened where it is. Opening is a read, and a transcript link into another
+checkout is worth following ([022](022-transcript-file-links.md)) — the rules
+that keep to the project are the ones the Tree's three edits carry
+([046](046-tree-file-actions.md)). The answer is that file's `{path, dir}`.
 
 Then one command per platform, the same three Wails' own `BrowserOpenURL`
 runs: `xdg-open`, `open`, or `rundll32.exe url.dll,FileProtocolHandler`.

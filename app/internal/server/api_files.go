@@ -71,6 +71,39 @@ func resolveInRoot(root, rel string) (string, error) {
 	return abs, nil
 }
 
+// A path the client gives absolute names a file it found outside the project:
+// a transcript link into another checkout, a log under /tmp. Reading one is
+// allowed. Writing is not — saving, and the three entry edits, keep taking
+// the path relative and so keep the project boundary.
+func resolveReadableFile(root, path string) (string, error) {
+	if filepath.IsAbs(path) {
+		return filepath.Clean(path), nil
+	}
+	return resolveInRoot(root, path)
+}
+
+// previewFilePath resolves what the preview and its metadata read, and says
+// which root to read it against. A working copy may sit outside the project,
+// so root is then only the project the tab was opened from. A revision cannot:
+// git answers for the files of one repository, which is the root to find it in.
+func (s *Server) previewFilePath(c *fiber.Ctx) (root, rel, abs string, err error) {
+	if path := c.Query("path"); filepath.IsAbs(path) && c.Query("rev") == "" {
+		if root, err = s.projectRoot(c); err != nil {
+			return "", "", "", err
+		}
+		abs, err = resolveReadableFile(root, path)
+		return root, path, abs, err
+	}
+	if root, err = s.repositoryRoot(c); err != nil {
+		return "", "", "", err
+	}
+	if rel, err = s.repositoryFilePath(c, root); err != nil {
+		return "", "", "", err
+	}
+	abs, err = resolveInRoot(root, rel)
+	return root, rel, abs, err
+}
+
 type fileEntry struct {
 	Path string `json:"path"`
 	Size int64  `json:"size,omitempty"`
@@ -362,7 +395,7 @@ func (s *Server) projectFile(c *fiber.Ctx) error {
 		return err
 	}
 	rel := c.Query("path")
-	abs, err := resolveInRoot(root, rel)
+	abs, err := resolveReadableFile(root, rel)
 	if err != nil {
 		return err
 	}
@@ -548,15 +581,7 @@ var rawRev = regexp.MustCompile(`^(HEAD|[0-9a-f]{4,40})\^?$`)
 // rather than read it: the preview, and the two sides of an image diff. rev
 // names a revision to read it from instead of the working tree.
 func (s *Server) projectRawImage(c *fiber.Ctx) error {
-	root, err := s.repositoryRoot(c)
-	if err != nil {
-		return err
-	}
-	rel, err := s.repositoryFilePath(c, root)
-	if err != nil {
-		return err
-	}
-	abs, err := resolveInRoot(root, rel)
+	root, rel, abs, err := s.previewFilePath(c)
 	if err != nil {
 		return err
 	}

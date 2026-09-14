@@ -35,9 +35,17 @@ Document fragments are stripped; `:line` and `#Lline` retain line navigation.
 
 Transcript paths resolve from the project root. Markdown preview paths resolve
 from the displayed file's folder, including `./` and `../`. Absolute paths
-inside the project have the project folder trimmed off. Both open actions
-use the same resolved path; the server rejects paths outside the project and
-reports missing files without opening a tab.
+inside the project have the project folder trimmed off. Both open actions use
+the same resolved path, and a missing file is reported without opening a tab.
+
+A path that is still absolute after that trimming names a file outside the
+project — another checkout, a log under `/tmp` — and agents write them often
+enough that refusing to follow the link was the wrong answer. It opens, and
+opens read-only: the tab offers Edit and Preview but no Diff, because no
+repository of this project tracks that file, and the footer says `read only`.
+The boundary that remains is the one that matters: `GET` reads the file where
+it is, while saving and the Tree's create, rename and delete still take a
+path relative to the project and refuse anything else.
 
 `markdown.js` emits a `<button>`, not an `<a>`. The anchor would need an href
 that means "no navigation", and the transcript is not where navigation should
@@ -71,5 +79,5 @@ choice and not one a link should make for them.
 - A bare path in prose is not linked, only one in a code span or a link. In
   980 lines of real transcripts there was not one bare path, and linking them
   would mean guessing at prose.
-- A file that does not exist, or a path outside the project, opens no tab and
-  says why.
+- A file that does not exist opens no tab and says why. A file outside the
+  project opens read-only.

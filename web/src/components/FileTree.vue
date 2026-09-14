@@ -138,10 +138,21 @@ function ask(kind, node) {
   action.value = { kind, ...at };
 }
 
+/* Closing the menu hands focus back to the row it was opened from, which
+   would take it straight off the prompt this put the caret in. */
+const keepCaret = ref(false);
+
+function releaseFocus(e) {
+  if (keepCaret.value) e.preventDefault();
+  keepCaret.value = false;
+}
+
 async function sendPathToPrompt() {
   const path = aimed.value.path;
   const projectID = currentProjectID();
   if (!path) return;
+  // Set before the task is started, since the menu closes while that waits.
+  keepCaret.value = true;
   if (S.owner?.kind !== "session") await startCurrentTask();
   const owner = S.owner;
   if (owner?.kind !== "session" || currentProjectID() !== projectID) return;
@@ -267,7 +278,7 @@ const rows = computed(() => {
     <!-- The trigger is the pane itself, as-child so it adds no element: a
          right click that misses every row still offers New file, and the
          empty states are inside it for the same reason. -->
-    <UContextMenu :items="menu" :ui="{ content: 'w-56' }">
+    <UContextMenu :items="menu" :ui="{ content: 'w-56' }" :content="{ onCloseAutoFocus: releaseFocus }">
       <div class="min-h-0 flex-1" @contextmenu="aim">
         <p v-if="!S.tree.length && !S.treeDirs.length" class="px-3 py-5 text-center text-dimmed">
           {{ S.owner ? "No files." : "Pick a project or task to browse its files." }}

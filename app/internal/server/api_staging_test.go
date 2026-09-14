@@ -1,8 +1,13 @@
 package server
 
 import (
+	"context"
+	"github.com/pausan/agenttik/app/internal/agent"
+	"github.com/pausan/agenttik/app/internal/agent/fake"
+	"github.com/pausan/agenttik/app/internal/runner"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -46,6 +51,7 @@ func TestStagingAndCommit(t *testing.T) {
 		t.Fatal("unstaging removed working file", err)
 	}
 	request("stage", map[string]string{}, 204)
+	request("commit-message", map[string]string{}, 400) // no provider; index stays intact
 	request("commit", map[string]string{"message": " "}, 400)
 	request("commit", map[string]string{"message": "Initial"}, 204)
 	write(name, "second\n")
@@ -72,5 +78,68 @@ func TestStagingAndCommit(t *testing.T) {
 	request("unstage", map[string]string{"path": "renamed.txt"}, 204)
 	if got := git("diff", "--cached"); got != "" {
 		t.Fatalf("rename still staged: %s", got)
+	}
+}
+
+type commitMessageProvider struct {
+	fake.Provider
+	request agent.TurnRequest
+}
+
+func (p *commitMessageProvider) Run(_ context.Context, req agent.TurnRequest) (<-chan agent.Event, error) {
+	p.request = req
+	events := make(chan agent.Event, 1)
+	events <- agent.Event{Type: agent.EventText, Text: "Add staged text"}
+	close(events)
+	return events, nil
+}
+func TestGenerateCommitMessageUsesOnlyIndex(t *testing.T) {
+	s, st := newTestServer(t)
+	provider := &commitMessageProvider{}
+	s.registry = agent.NewRegistry(provider)
+	s.runner = runner.New(st, s.registry, runner.NewHub())
+	root := t.TempDir()
+	git := func(args ...string) string {
+		t.Helper()
+		out, err := runGit(root, args...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	git("init")
+	p, err := st.CreateProject("message", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpoint := "/api/projects/" + itoa(p.ID) + "/commit-message"
+	if res := do(t, s, "POST", endpoint, map[string]string{}); res.StatusCode != 400 {
+		t.Fatalf("empty index: %d", res.StatusCode)
+	}
+	path := filepath.Join(root, "file.txt")
+	if err := os.WriteFile(path, []byte("staged text\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	git("add", ".")
+	if err := os.WriteFile(path, []byte("unstaged secret\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	before := git("diff", "--cached")
+	res := do(t, s, "POST", endpoint, map[string]string{})
+	if res.StatusCode != 200 {
+		t.Fatalf("generation: %d", res.StatusCode)
+	}
+	result := decode[map[string]string](t, res)
+	if result["message"] != "Add staged text" {
+		t.Fatalf("response: %v", result)
+	}
+	if !strings.Contains(provider.request.Prompt, "+staged text") || strings.Contains(provider.request.Prompt, "unstaged secret") {
+		t.Fatalf("wrong diff: %s", provider.request.Prompt)
+	}
+	if git("diff", "--cached") != before {
+		t.Fatal("index changed")
+	}
+	if _, err := runGit(root, "rev-parse", "--verify", "HEAD"); err == nil {
+		t.Fatal("generation committed")
 	}
 }

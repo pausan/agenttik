@@ -11,10 +11,31 @@ const expanded = ref(true);
 const message = ref("");
 const busy = ref(false);
 const error = ref("");
+const generating = ref(false);
+let contextVersion = 0;
 watch(() => [currentProjectID(), S.repository], () => {
+  contextVersion++;
   message.value = "";
   error.value = "";
 });
+async function generateMessage() {
+  if (busy.value || !staged.value.length) return;
+  const version = contextVersion;
+  const session = S.detail?.session;
+  busy.value = generating.value = true;
+  error.value = "";
+  try {
+    const result = await api("POST", `/api/projects/${currentProjectID()}/commit-message?repo=${encodeURIComponent(S.repository)}`, {
+      provider: session?.provider,
+      account_id: session?.account_id,
+    });
+    if (version === contextVersion) message.value = result.message;
+  } catch (e) {
+    if (version === contextVersion) error.value = e.message;
+  } finally {
+    busy.value = generating.value = false;
+  }
+}
 async function act(action, path) {
   if (busy.value) return;
   const id = currentProjectID();
@@ -40,8 +61,11 @@ async function act(action, path) {
   <div class="space-y-3">
     <div class="space-y-2">
       <div class="flex flex-col items-end gap-2">
-        <textarea v-model="message" aria-label="Commit message" placeholder="Commit message" rows="2" class="w-full min-h-14 resize-y rounded-md border border-default bg-default p-2 font-mono text-xs" />
-        <UButton label="Commit" size="sm" class="shrink-0" :loading="busy" :disabled="busy || !staged.length || !message.trim()" @click="act('commit')" />
+        <textarea v-model="message" :disabled="generating" aria-label="Commit message" placeholder="Commit message" rows="2" class="w-full min-h-14 resize-y rounded-md border border-default bg-default p-2 font-mono text-xs" />
+        <div class="flex items-center gap-1">
+          <UButton icon="i-lucide-sparkle" aria-label="Generate commit message" title="Generate or rewrite the message from staged changes using a lightweight model. Does not commit." size="sm" variant="ghost" color="neutral" :loading="generating" :disabled="busy || !staged.length" @click="generateMessage" />
+          <UButton label="Commit" title="Commit staged changes with this message" size="sm" class="shrink-0" :loading="busy && !generating" :disabled="busy || !staged.length || !message.trim()" @click="act('commit')" />
+        </div>
       </div>
       <p v-if="error" role="alert" class="text-xs text-error">{{ error }}</p>
     </div>

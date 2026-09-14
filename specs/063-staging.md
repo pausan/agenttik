@@ -15,6 +15,18 @@ A vertically resizable commit message textarea sits above Staged, with the
 Commit button below it, aligned to the right. Editing stays inline. Switching project or
 repository clears the draft. Commit needs staged files
 and a nonblank message. Git errors keep the draft and display inline.
+A four-point star left of Commit generates or replaces the message from only
+staged changes. Both buttons have tooltips. Generation uses the task's provider
+and account (the first available provider and its default account outside a task),
+with its lightweight model in an isolated, read-only request outside the repository.
+It never commits. The composer and staging controls are disabled while generating;
+errors preserve the draft, and switching project or repository discards late answers.
+
+`POST /api/projects/:id/commit-message?repo=…` accepts optional `provider` and
+`account_id`, and returns `{message}`. It reads the index with external diffs and
+text conversion disabled, rejects empty diffs and diffs over 128 KiB, and allows
+one minute for generation. No task or conversation is created.
+
 Successful commits clear the message and refresh changes and history.
 
 `GET /api/projects/:id/changes?repo=…` returns project-relative paths, status,

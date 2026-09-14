@@ -830,12 +830,25 @@ func (r *Runner) askSmall(providerName string, accountID int64, question string,
 		return ""
 	}
 	var response strings.Builder
-	for event := range events {
-		if event.Type == agent.EventText {
-			response.WriteString(event.Text)
+	for {
+		select {
+		case <-ctx.Done():
+			return ""
+		case event, ok := <-events:
+			if !ok {
+				if ctx.Err() != nil {
+					return ""
+				}
+				return response.String()
+			}
+			if event.Type == agent.EventError {
+				return ""
+			}
+			if event.Type == agent.EventText {
+				response.WriteString(event.Text)
+			}
 		}
 	}
-	return response.String()
 }
 
 // askTitle asks that model to name a prompt. Nothing back leaves whatever

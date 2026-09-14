@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/pausan/agenttik/app/internal/store"
 )
 
 func (s *Server) projectStage(c *fiber.Ctx) error   { return s.changeIndex(c, true) }
@@ -79,4 +80,45 @@ func (s *Server) createCommit(c *fiber.Ctx) error {
 		return badRequest("%s", err.Error())
 	}
 	return c.SendStatus(fiber.StatusNoContent)
+}
+
+func (s *Server) generateCommitMessage(c *fiber.Ctx) error {
+	root, err := s.repositoryRoot(c)
+	if err != nil {
+		return err
+	}
+	var body struct {
+		Provider  string `json:"provider"`
+		AccountID *int64 `json:"account_id"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return badRequest("invalid request")
+	}
+	diff, err := runGit(root, "diff", "--cached", "--no-ext-diff", "--no-textconv", "--no-color")
+	if err != nil {
+		return badRequest("%s", err.Error())
+	}
+	if strings.TrimSpace(diff) == "" {
+		return badRequest("no staged changes")
+	}
+	if len(diff) > 128*1024 {
+		return badRequest("staged changes are too large to generate a message; write the message manually")
+	}
+	if body.Provider == "" {
+		for _, provider := range s.registry.All() {
+			if provider.Available() == nil {
+				body.Provider = provider.Name()
+				break
+			}
+		}
+	}
+	accountID, err := s.chooseAccount(body.Provider, body.AccountID, store.SystemAccount, true)
+	if err != nil {
+		return err
+	}
+	message := s.runner.CommitMessage(body.Provider, accountID, diff)
+	if message == "" {
+		return badRequest("could not generate a commit message; try again")
+	}
+	return c.JSON(fiber.Map{"message": message})
 }

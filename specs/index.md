@@ -9,7 +9,7 @@ screen, **session** for the row, the route or the CLI flag.
 
 | Doc | What it covers |
 |-----|----------------|
-| [063](063-staging.md) | Changed files, staging controls and commit composer |
+| [063](063-staging.md) | Changed files, staging controls and commit message generation |
 | [060](060-desktop-tray.md) | Close to tray, global show/hide shortcut, working pulse, native lifecycle |
 | [001](001-architecture.md) | Process model, packages, request flow |
 | [002](002-data-model.md) | SQLite schema, metrics, storage location |

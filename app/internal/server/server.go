@@ -191,6 +191,7 @@ func (s *Server) routes() {
 	api.Post("/projects/:id/unstage", s.projectUnstage)
 	api.Post("/projects/:id/revert", s.projectRevert)
 	api.Post("/projects/:id/commit", s.createCommit)
+	api.Post("/projects/:id/commit-message", s.generateCommitMessage)
 	api.Get("/projects/:id/log", s.projectLog)
 	api.Post("/projects/:id/branches/:action", s.branchAction)
 	api.Get("/projects/:id/commit", s.projectCommit)

@@ -44,7 +44,24 @@ test("stage, unstage and commit through the inline resizable composer", async ({
     await page.mouse.move(box.x + box.width - 3, box.y + box.height + 50, { steps: 5 });
     await page.mouse.up();
     expect((await field.boundingBox()).height).toBeGreaterThan(box.height + 30);
-    await field.fill("Add new file");
+    const generate = pane.getByRole("button", { name: "Generate commit message", exact: true });
+    await expect(generate).toHaveAttribute("title", /Does not commit/);
+    await expect(commit).toHaveAttribute("title", "Commit staged changes with this message");
+    expect((await generate.boundingBox()).x).toBeLessThan((await commit.boundingBox()).x);
+    await field.fill("Old draft");
+    await page.route("**/api/projects/*/commit-message?*", (route) => route.fulfill({
+      json: { message: "Add new file" },
+    }), { times: 1 });
+    await generate.click();
+    await expect(field).toHaveValue("Add new file");
+    expect(git("diff", "--cached", "--name-only").trim()).toBe("new.txt");
+    expect(() => git("rev-parse", "--verify", "HEAD")).toThrow();
+    await page.route("**/api/projects/*/commit-message?*", (route) => route.fulfill({
+      status: 400, json: { error: "Could not generate message" },
+    }), { times: 1 });
+    await generate.click();
+    await expect(pane.getByRole("alert")).toHaveText("Could not generate message");
+    await expect(field).toHaveValue("Add new file");
     await page.route("**/api/projects/*/commit?*", (route) => route.fulfill({
       status: 400, json: { error: "Commit hook rejected the message" },
     }), { times: 1 });

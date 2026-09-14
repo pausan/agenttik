@@ -15,9 +15,9 @@ import (
 	"math"
 )
 
-// Green is the logo's mark colour, used for the glow the pulse adds around it.
+// Blue is the working mark's colour and the halo around it.
 const (
-	glowR, glowG, glowB = 0x00, 0xdc, 0x82
+	glowR, glowG, glowB = 0x20, 0x80, 0xff
 )
 
 // The mark is the bright part of the icon: the green sparkle and the white
@@ -32,17 +32,7 @@ const (
 	glowLo = 0.22
 )
 
-// dim and bright are what the mark's brightness moves between. The resting
-// icon is 1.0, so the pulse dips a little below it and rises well above: a
-// tray icon caught at any point in the cycle should not look like the idle
-// one.
-const (
-	dim    = 0.85
-	bright = 1.30
-)
-
-// glowStrength is how much green the peak adds around the mark, as a fraction
-// of full intensity. Enough to read at 22px without turning the plate green.
+// glowStrength is how much blue the peak adds around the mark.
 const glowStrength = 0.55
 
 // glowRadius is the box blur's half-width, in pixels of the source icon.
@@ -81,25 +71,38 @@ func Frames(icon []byte, count int) ([][]byte, error) {
 }
 
 // render applies one point of the pulse: the mark changes brightness, and a
-// green halo grows around it. k is 0 at the dimmest and 1 at the brightest.
+// blue halo grows around it. k is 0 at the dimmest and 1 at the brightest.
 func render(base *image.RGBA, mark, glow []float32, k float64) *image.RGBA {
 	w, h := base.Rect.Dx(), base.Rect.Dy()
 	out := image.NewRGBA(image.Rect(0, 0, w, h))
-	level := float32(dim + (bright-dim)*k)
+	// Interpolate near-black -> blue -> white over the rising half.
+	lo, hi := [3]float32{8, 10, 16}, [3]float32{glowR, glowG, glowB}
+	t := float32(k * 2)
+	if k > 0.5 {
+		lo, hi = hi, [3]float32{255, 255, 255}
+		t = float32((k - 0.5) * 2)
+	}
+	var target [3]float32
+	for c := range target {
+		target[c] = lo[c] + (hi[c]-lo[c])*t
+	}
 	halo := float32(glowStrength * k)
 
 	for i := 0; i < w*h; i++ {
 		p := base.Pix[i*4 : i*4+4 : i*4+4]
-		// The export is not premultiplied in practice — the plate is opaque
-		// and the mark sits on it — so the channels are scaled directly.
-		gain := 1 + (level-1)*mark[i]
-		r := float32(p[0]) * gain
-		g := float32(p[1]) * gain
-		b := float32(p[2]) * gain
+		// Swap the green tint in the baked halo to blue, leaving the
+		// neutral plate untouched, then recolour the antialiased mark.
+		r, g, b := float32(p[0]), float32(p[1]), float32(p[2])
+		if g > r && g > b {
+			g, b = b, g
+		}
+		r += (target[0] - r) * mark[i]
+		g += (target[1] - g) * mark[i]
+		b += (target[2] - b) * mark[i]
 
 		// Screen blend, so the halo lightens the plate without washing out
 		// the mark it surrounds.
-		if a := halo * glow[i]; a > 0 {
+		if a := halo * glow[i] * (1 - mark[i]); a > 0 {
 			r = screen(r, glowR*a)
 			g = screen(g, glowG*a)
 			b = screen(b, glowB*a)

@@ -39,7 +39,7 @@ func markLight(t *testing.T, frame []byte) float32 {
 	return total
 }
 
-func TestFramesRiseFromRestingDimToBright(t *testing.T) {
+func TestFramesRiseFromDarkToBright(t *testing.T) {
 	icon := trayIcon(t)
 	frames, err := Frames(icon, 7)
 	if err != nil {
@@ -78,6 +78,50 @@ func TestFramesRiseFromRestingDimToBright(t *testing.T) {
 	}
 	if brightest := markLight(t, frames[len(frames)-1]); brightest <= resting*1.1 {
 		t.Fatalf("the brightest frame (%.0f) barely clears the resting icon (%.0f)", brightest, resting)
+	}
+}
+
+func TestFramesCycleThroughDarkBlueAndWhite(t *testing.T) {
+	icon := trayIcon(t)
+	frames, err := Frames(icon, 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src, err := png.Decode(bytes.NewReader(icon))
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := toRGBA(src)
+	for _, stage := range []struct {
+		index int
+		name  string
+		check func(r, g, b uint8) bool
+	}{
+		{0, "near-black", func(r, g, b uint8) bool { return r < 20 && g < 20 && b < 20 }},
+		{3, "blue", func(r, g, b uint8) bool { return b > 240 && g > 100 && g < 150 && r < 50 }},
+		{6, "white", func(r, g, b uint8) bool { return r > 250 && g > 250 && b > 250 }},
+	} {
+		img, err := png.Decode(bytes.NewReader(frames[stage.index]))
+		if err != nil {
+			t.Fatal(err)
+		}
+		frame := toRGBA(img)
+		checked := 0
+		for i := 0; i < len(base.Pix); i += 4 {
+			p := base.Pix[i : i+4]
+			// Check the solid green star in the original asset.
+			if p[3] != 255 || p[1] < 200 || p[0] > 100 || p[2] > 180 {
+				continue
+			}
+			q := frame.Pix[i : i+4]
+			if !stage.check(q[0], q[1], q[2]) {
+				t.Fatalf("%s star pixel = %v", stage.name, q)
+			}
+			checked++
+		}
+		if checked < 100 {
+			t.Fatalf("only checked %d star pixels", checked)
+		}
 	}
 }
 

@@ -37,17 +37,18 @@ reports an error in Settings and the process log; closing still exits normally.
 
 ## The working pulse
 
-While any turn is in flight the tray icon breathes: the sparkle dims a little
-below its resting brightness, rises well above it with a green halo around the
-mark, and falls back, over three seconds. It stops on the resting icon as the
-last turn finishes, so a window left in the tray still says whether the app is
+While any turn is in flight the tray icon breathes: the sparkle cycles from
+near-black through blue to white and back, with a blue halo, over three
+seconds. It returns to the green resting icon when all turns are waiting,
+paused, or finished, so a window left in the tray still says whether the app is
 working. Nothing else about the tray changes with it — no badge, no second
 icon, no menu entry.
 
 `app/internal/traypulse` renders the frames from `tray.png` when the tray
 starts rather than shipping them beside it, so the logo stays one asset: the
-bright pixels are found by luma, brightened per frame, and a blurred copy of
-them is screen-blended back as the halo. Seven frames cover the rise and are
+bright pixels are found by luma and recoloured per frame. The baked green
+halo is tinted blue, and a blurred copy of the mark is screen-blended around
+it as a blue halo. Seven frames cover the rise and are
 played forwards then backwards, which makes a twelve-step cycle out of half
 the images. On Windows each frame is wrapped as an ICO holding 16, 32 and 64
 px, because the notification area reads no other format; the resting icon is
@@ -109,7 +110,7 @@ appears in Settings.
 
 Store/API tests cover defaults, persistence, invalid chords, web mode and
 startup error reporting. `app/internal/traypulse` tests cover the frames
-rising monotonically from below the resting icon to well above it without the
+cycling through near-black, blue and white, rising monotonically in brightness without the
 glow reaching the plate, the ICO entries decoding at every size asked for, and
 the animator's cycle, its return to the resting icon when work stops and on
 shutdown, and its silence while idle. Runner tests cover the two edges of

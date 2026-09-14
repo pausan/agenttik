@@ -35,6 +35,40 @@ webview opens. Native registration checks availability on startup.
 A missing tray host or failed registration leaves close-to-tray inactive and
 reports an error in Settings and the process log; closing still exits normally.
 
+## The working pulse
+
+While any turn is in flight the tray icon breathes: the sparkle dims a little
+below its resting brightness, rises well above it with a green halo around the
+mark, and falls back, over 1.8 seconds. It stops on the resting icon as the
+last turn finishes, so a window left in the tray still says whether the app is
+working. Nothing else about the tray changes with it — no badge, no second
+icon, no menu entry.
+
+`app/internal/traypulse` renders the frames from `tray.png` when the tray
+starts rather than shipping them beside it, so the logo stays one asset: the
+bright pixels are found by luma, brightened per frame, and a blurred copy of
+them is screen-blended back as the halo. Seven frames cover the rise and are
+played forwards then backwards, which makes a twelve-step cycle out of half
+the images. On Windows each frame is wrapped as an ICO holding 16, 32 and 64
+px, because the notification area reads no other format; the resting icon is
+still the committed ICO with its fuller set of sizes.
+
+A step every 150ms is as fast as it goes. Every step is an icon the host has
+to be handed — a D-Bus property and a signal on Linux, a cached temp file on
+Windows — and a breath does not need more. Nothing is sent at all while the
+app is idle: the animator blocks until the runner says work started.
+
+`Runner.OnBusy` is that signal. It takes the one listener, and reports true
+when the first turn goes in flight and false when the last one finishes;
+overlapping turns are one spell of work, and a turn that fails to start
+reports both edges. It is called while the runner holds its lock, so the two
+edges cannot arrive out of order, and the animator's `SetBusy` only stores a
+flag and pokes a channel, so nothing the tray does can block a turn.
+
+A frame that fails to render is logged and leaves the tray static; the icon
+and the menu still work. The pulse only exists where the tray does, so
+turning off Close to tray removes it with everything else.
+
 ## Native integration
 
 Wails retains its event loop. `cardinalby/go-systray` uses its external-loop
@@ -43,7 +77,9 @@ does not replace Wails' delegate. The tray embeds PNG/ICO exports of
 `web/public/agenttik.svg` independently of the UI build. The PNG is an 8-bit
 RGBA browser rendering because simpler SVG rasterizers can discard the logo's
 filtered gradient marks and leave an apparently blank dark tile. The ICO
-contains 16, 24, 32, 48 and 64 px versions for Windows scaling.
+contains 16, 24, 32, 48 and 64 px versions for Windows scaling. The animator
+owns the icon from the moment the tray is up, and shutdown waits for it, so
+the tray is never left showing a frame from the middle of a breath.
 
 The shortcut asks the operating system which window is in front at the moment
 it fires, rather than mirroring focus events from the UI, because a webview
@@ -72,7 +108,12 @@ appears in Settings.
 ## Verification
 
 Store/API tests cover defaults, persistence, invalid chords, web mode and
-startup error reporting. Browser tests cover saving and reopening settings
+startup error reporting. `app/internal/traypulse` tests cover the frames
+rising monotonically from below the resting icon to well above it without the
+glow reaching the plate, the ICO entries decoding at every size asked for, and
+the animator's cycle, its return to the resting icon when work stops and on
+shutdown, and its silence while idle. Runner tests cover the two edges of
+`OnBusy` across overlapping turns and a provider that refuses to start. Browser tests cover saving and reopening settings
 and hiding the controls in web mode. The isolated Linux test exercises the
 default chord, auto-repeat, the reported foreground state, registration
 conflict and unregister/re-register:
@@ -80,6 +121,11 @@ conflict and unregister/re-register:
 ```sh
 AGENTTIK_TEST_HOTKEY=1 xvfb-run -a go test -race -tags 'desktop production webkit2_41' ./app/cmd/agenttik -run TestGlobalToggle -count=1
 ```
+
+The pulse was verified on a live XFCE panel by screenshotting the tray while
+it played: the mark brightens and dims on the panel at the frame rate, so the
+StatusNotifier host does repaint per frame rather than coalescing them. The
+same is unverified on GNOME's AppIndicator extension, on Windows and on macOS.
 
 A live Linux smoke check verifies that the shortcut hides the window it has in
 front and raises it from behind another application, from minimised and from

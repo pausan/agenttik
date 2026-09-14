@@ -80,6 +80,12 @@ type Runner struct {
 	// spends no counter when it finishes, since asking for an extra run by
 	// hand is not one of the runs that were asked for. See schedules.go.
 	forcedScheduleRuns map[string]bool
+
+	// onBusy is told when work starts and when it stops, and wasBusy is what
+	// it was last told. Both are under mu with the map they describe, so the
+	// listener cannot be handed the two edges out of order.
+	onBusy  func(bool)
+	wasBusy bool
 }
 
 func New(s *store.Store, reg *agent.Registry, hub *Hub) *Runner {
@@ -89,6 +95,39 @@ func New(s *store.Store, reg *agent.Registry, hub *Hub) *Runner {
 }
 
 func (r *Runner) Hub() *Hub { return r.hub }
+
+// OnBusy registers the single listener told when the first turn goes in
+// flight and when the last one finishes. The desktop tray pulses its icon
+// from it, so the app says it is working without a window open.
+//
+// fn is called while the runner's lock is held, which is what keeps the two
+// edges in the order they happened. It must not block or call back into the
+// runner: hand the change to a goroutine that already exists, as
+// traypulse.Animator does.
+func (r *Runner) OnBusy(fn func(busy bool)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.onBusy = fn
+}
+
+// Busy reports whether any turn is in flight.
+func (r *Runner) Busy() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.active) > 0
+}
+
+// busyChanged notifies the listener if the set of turns in flight just became
+// empty or stopped being empty. The caller holds the lock and has already
+// changed the map.
+func (r *Runner) busyChanged() {
+	busy := len(r.active) > 0
+	if r.onBusy == nil || busy == r.wasBusy {
+		return
+	}
+	r.wasBusy = busy
+	r.onBusy(busy)
+}
 
 // ProjectTopic is the hub topic that receives the done event of every turn
 // run in the project, so a project view can refresh its totals while several
@@ -233,6 +272,7 @@ func (r *Runner) send(queued store.QueuedMessage) (*store.Turn, error) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	r.active[sessionID] = activeTurn{projectID: sess.ProjectID, cancel: cancel}
+	r.busyChanged()
 	r.mu.Unlock()
 
 	release := func() {
@@ -242,6 +282,7 @@ func (r *Runner) send(queued store.QueuedMessage) (*store.Turn, error) {
 		// project: only this session's own turn could ever be in its way.
 		forcedID, forced := r.forced[sessionID]
 		delete(r.forced, sessionID)
+		r.busyChanged()
 		r.mu.Unlock()
 		cancel()
 		if forced {

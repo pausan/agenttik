@@ -2,7 +2,9 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,6 +17,7 @@ import (
 type fakeProvider struct {
 	script  []agent.Event
 	gate    chan struct{} // closed to let the script finish
+	runErr  error         // returned instead of starting, for the failure paths
 	lastReq agent.TurnRequest
 }
 
@@ -26,6 +29,9 @@ func (f *fakeProvider) Available() error      { return nil }
 
 func (f *fakeProvider) Run(ctx context.Context, req agent.TurnRequest) (<-chan agent.Event, error) {
 	f.lastReq = req
+	if f.runErr != nil {
+		return nil, f.runErr
+	}
 	ch := make(chan agent.Event)
 	go func() {
 		defer close(ch)
@@ -454,5 +460,107 @@ func TestHubDropsSlowSubscriberFromEveryTopic(t *testing.T) {
 	}
 	if drained > subscriberBuffer {
 		t.Errorf("drained %d, want at most %d", drained, subscriberBuffer)
+	}
+}
+
+// busyLog records what OnBusy was told, in order. The listener runs under the
+// runner's lock, so it does no more than append.
+type busyLog struct {
+	mu   sync.Mutex
+	seen []bool
+}
+
+func (b *busyLog) record(busy bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.seen = append(b.seen, busy)
+}
+
+func (b *busyLog) snapshot() []bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return append([]bool(nil), b.seen...)
+}
+
+func TestOnBusyMarksTheEdgesOfWork(t *testing.T) {
+	fp := &fakeProvider{
+		script: []agent.Event{{Type: agent.EventDone, Usage: &agent.Usage{}}},
+		gate:   make(chan struct{}),
+	}
+	r, _, sess := setup(t, fp)
+	log := &busyLog{}
+	r.OnBusy(log.record)
+
+	if r.Busy() {
+		t.Fatal("a runner with nothing in flight reports busy")
+	}
+	if _, err := r.Send(sess.ID, "hi"); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	waitFor(t, func() bool { return len(log.snapshot()) == 1 }, "work to start")
+	if !r.Busy() {
+		t.Fatal("a runner with a turn in flight reports idle")
+	}
+
+	close(fp.gate)
+	waitFor(t, func() bool { return !r.Running(sess.ID) }, "turn to finish")
+	waitFor(t, func() bool { return len(log.snapshot()) == 2 }, "work to stop")
+
+	if got := log.snapshot(); got[0] != true || got[1] != false {
+		t.Fatalf("OnBusy saw %v, want [true false]", got)
+	}
+	if r.Busy() {
+		t.Fatal("a finished turn left the runner busy")
+	}
+}
+
+// A second turn starting while the first still runs is not a new spell of
+// work, and neither is the first of the two finishing.
+func TestOnBusySpansOverlappingTurns(t *testing.T) {
+	fp := &fakeProvider{
+		script: []agent.Event{{Type: agent.EventDone, Usage: &agent.Usage{}}},
+		gate:   make(chan struct{}),
+	}
+	r, st, first := setup(t, fp)
+	second := &store.Session{ID: "sess-2", ProjectID: first.ProjectID, Provider: "fake",
+		Model: "m1", Effort: "high", Permission: "workspace"}
+	if err := st.CreateSession(second); err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	log := &busyLog{}
+	r.OnBusy(log.record)
+	for _, id := range []string{first.ID, second.ID} {
+		if _, err := r.Send(id, "hi"); err != nil {
+			t.Fatalf("send %s: %v", id, err)
+		}
+	}
+	waitFor(t, func() bool { return len(log.snapshot()) == 1 }, "work to start")
+
+	close(fp.gate)
+	waitFor(t, func() bool { return !r.Running(first.ID) && !r.Running(second.ID) }, "turns to finish")
+	waitFor(t, func() bool { return len(log.snapshot()) == 2 }, "work to stop")
+
+	if got := log.snapshot(); len(got) != 2 || got[0] != true || got[1] != false {
+		t.Fatalf("two overlapping turns reported %v, want one [true false]", got)
+	}
+}
+
+// A turn the provider refuses to start is still a turn the runner took in and
+// let go, so the tray has to end up at rest.
+func TestOnBusyClearsWhenTheProviderRefuses(t *testing.T) {
+	fp := &fakeProvider{runErr: errors.New("no such command")}
+	r, _, sess := setup(t, fp)
+	log := &busyLog{}
+	r.OnBusy(log.record)
+
+	if _, err := r.Send(sess.ID, "hi"); err == nil {
+		t.Fatal("send with a failing provider succeeded, want an error")
+	}
+	if got := log.snapshot(); len(got) == 0 || got[len(got)-1] != false {
+		t.Fatalf("OnBusy ended on %v, want it to finish reporting idle", got)
+	}
+	if r.Busy() {
+		t.Fatal("a failed send left the runner busy")
 	}
 }

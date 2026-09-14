@@ -40,6 +40,9 @@ ui-dev:
 ## build: desktop app (needs node, libwebkit2gtk-4.1-dev, libgtk-3-dev, gcc)
 build: ui
 	go build -ldflags "$(VERSION_LDFLAGS)" -tags "$(DESKTOP_TAGS)" -o $(BIN) $(PKG)
+ifeq ($(shell uname -s),Darwin)
+	bash scripts/package-macos.sh $(BIN) $(BIN).app "$(VERSION)" $(BIN)_darwin.app.zip
+endif
 
 ## build-web: web server only, no cgo and no system dependencies beyond node
 build-web: ui
@@ -50,10 +53,11 @@ build-windows-amd64: ui
 	mkdir -p $(DIST)
 	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-H=windowsgui $(VERSION_LDFLAGS)" -tags "desktop production" -o $(DIST)/agenttik_windows_amd64.exe $(PKG)
 
-## build-macos-arm64: macOS ARM64 desktop binary (run this target on macOS)
+## build-macos-arm64: macOS ARM64 binary, signed .app and ZIP (run on macOS)
 build-macos-arm64: ui
 	mkdir -p $(DIST)
 	GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 go build -trimpath -ldflags "$(VERSION_LDFLAGS)" -tags "desktop production" -o $(DIST)/agenttik_darwin_arm64 $(PKG)
+	bash scripts/package-macos.sh $(DIST)/agenttik_darwin_arm64 $(DIST)/agenttik.app "$(VERSION)" $(DIST)/agenttik_darwin_arm64.app.zip
 
 run: build
 	./$(BIN)

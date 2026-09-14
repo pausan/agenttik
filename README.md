@@ -37,7 +37,16 @@ what this build is.
 For the desktop app, install the native build dependencies (`make deps` on
 Debian/Ubuntu), then run `make run`. `make build-windows-amd64` cross-compiles
 the Windows x64 binary; build the macOS ARM64 target on macOS with
-`make build-macos-arm64`.
+`make build-macos-arm64`. macOS builds also create an ad-hoc-signed
+`agenttik.app` and a ZIP (`bin/` for `make build`, `dist/` for the ARM64 target).
+Extract the release ZIP and move the app to Applications. No Apple developer
+account is needed to build it. Downloaded builds are not notarized; after a
+blocked launch, use System Settings → Privacy & Security → Open Anyway.
+
+On macOS, Close to tray works even without Accessibility permission. The global
+show/hide shortcut needs that permission; grant it in System Settings → Privacy
+& Security → Accessibility, then restart agenttik. Shortcut failures appear in
+agenttik's desktop settings while the tray menu remains usable.
 
 **No authentication:** anyone who can reach agenttik's address has full control of it. It binds to
 loopback only by default; the desktop app's Settings › Server can expose it to the network instead,

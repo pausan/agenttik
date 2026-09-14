@@ -29,3 +29,24 @@ An untagged push names its binaries after the short commit instead.
 
 Every build links in the version the binary reports, on top of whatever
 `-ldflags` the matrix already carries; see 044 for what that version is.
+
+## macOS application bundle
+
+macOS builds retain the standalone executable and also produce `agenttik.app`
+and an `agenttik_<tag>_darwin_arm64.app.zip` release asset. `make build` on macOS
+creates `bin/agenttik.app` and `bin/agenttik_darwin.app.zip`;
+`make build-macos-arm64` creates `dist/agenttik.app` and
+`dist/agenttik_darwin_arm64.app.zip` alongside its executable.
+
+`scripts/package-macos.sh` supplies an Info.plist with stable bundle identifier
+`com.pausan.agenttik`, executable, icon and version metadata. Commit builds use
+numeric bundle version `0.0.0` and retain the commit in the informational string
+and `--version`. The bundle uses free ad-hoc signing (`codesign --sign -`), with
+no Apple account or signing secrets. It is not notarized: downloaded copies may
+require **System Settings → Privacy & Security → Open Anyway** after the first
+launch attempt. Extract the ZIP and move `agenttik.app` to Applications.
+
+The packager validates the plist and signature, archives with `ditto`, then
+extracts the ZIP and verifies the extracted signature and executable version.
+CI runs it on the native macOS runner, along with tray shortcut fallback tests.
+Finder launch and tray/Accessibility behavior still require a live Mac check.

@@ -25,7 +25,9 @@ either — it is the one way to put agenttik on a network without one.
 
 Once it is up, the pane says what to open: `Listening on` and the address as
 a link, which hands that page to the machine's own browser, with an icon
-beside it that copies the same URL.
+beside it that copies the same URL. A second line shows
+`agenttik --remote <URL>` with its own copy button, using the same reachable
+address as the link.
 
 ## The lock
 

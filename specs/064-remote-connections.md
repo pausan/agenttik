@@ -28,7 +28,8 @@ origin, so matching task IDs on different servers do not share drafts.
 Each server database receives a persistent generated name, `agenttik-` plus
 eight random hexadecimal digits. Settings → Server allows renaming in both
 desktop and web mode. Names are trimmed and must contain at least three
-Unicode code points. Invalid changes leave the saved name intact.
+Unicode code points. Invalid changes leave the saved name intact. Valid
+inputs use normal styling; editing clears previous validation feedback.
 `PUT /api/server/name` accepts `{"name":"My workstation"}` behind the normal
 access gate. Identity is independent of listener and authentication settings.
 Profiles served by one process share its server identity.

@@ -47,6 +47,8 @@ const nameError = ref("");
 const savingName = ref(false);
 watch(() => S.instanceInfo.name, (name) => { serverName.value = name || ""; }, { immediate: true });
 
+watch(serverName, () => { nameError.value = ""; });
+
 async function saveName() {
   nameError.value = "";
   const name = serverName.value.trim();
@@ -134,6 +136,14 @@ const url = computed(() => {
    Only the desktop window needs the click taken off it. */
 function follow(e) {
   if (openExternal(url.value)) e.preventDefault();
+}
+
+const remoteCommand = computed(() => `agenttik --remote ${url.value}`);
+const commandCopied = ref(false);
+async function copyCommand() {
+  if (!(await copyText(remoteCommand.value))) return;
+  commandCopied.value = true;
+  window.setTimeout(() => (commandCopied.value = false), 1200);
 }
 
 const copied = ref(false);
@@ -263,7 +273,7 @@ const qr = computed(() =>
     </p>
 
     <form class="mb-4" @submit.prevent="saveName">
-      <UFormField label="Server name" help="At least 3 characters. Shown to clients before they sign in." :error="nameError">
+      <UFormField label="Server name" help="At least 3 characters. Shown to clients before they sign in." :error="nameError || false">
         <div class="mt-1 flex items-center gap-2">
           <UInput v-model="serverName" aria-label="Server name" class="w-64" :disabled="savingName" />
           <UButton type="submit" label="Save" size="xs" color="neutral" variant="subtle" :loading="savingName" />
@@ -455,6 +465,18 @@ const qr = computed(() =>
         </template>
         <template v-else>Not listening{{ S.serverConfig.error ? ": " + S.serverConfig.error : "" }}.</template>
       </p>
+      <div v-if="enabled && S.serverConfig.listening" class="mt-2 flex items-center gap-1.5 text-xs text-dimmed">
+        <code class="select-text break-all">{{ remoteCommand }}</code>
+        <UButton
+          :icon="commandCopied ? 'i-lucide-check' : 'i-lucide-copy'"
+          size="xs"
+          color="neutral"
+          variant="ghost"
+          aria-label="Copy remote command"
+          title="Copy remote command"
+          @click="copyCommand"
+        />
+      </div>
     </template>
   </section>
 </template>

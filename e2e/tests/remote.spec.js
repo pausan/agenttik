@@ -91,12 +91,16 @@ test("server names validate and persist in settings and the sidebar", async ({ p
   await openSettings(page, "Server");
   const input = page.getByRole("textbox", { name: "Server name", exact: true });
   await expect(input).toHaveValue(/^agenttik-[a-f0-9]{8}$/);
+  await expect(input).toHaveAttribute("aria-invalid", "false");
   const form = page.locator("form").filter({ has: input });
   for (const name of ["", "  ab  "]) {
     await input.fill(name);
     await form.getByRole("button", { name: "Save", exact: true }).click();
     await expect(form.getByText("Server name must contain at least 3 characters.")).toBeVisible();
   }
+  await input.fill("abc");
+  await expect(input).toHaveAttribute("aria-invalid", "false");
+  await expect(form.getByText("Server name must contain at least 3 characters.")).toBeHidden();
   await input.fill("  Office workstation  ");
   await form.getByRole("button", { name: "Save", exact: true }).click();
   await expect(input).toHaveValue("Office workstation");
@@ -104,4 +108,17 @@ test("server names validate and persist in settings and the sidebar", async ({ p
   await expect(page.locator("aside").getByText("Office workstation", { exact: true })).toBeVisible();
   await openSettings(page, "Server");
   await expect(input).toHaveValue("Office workstation");
+});
+
+test("server settings offer a copyable remote command beside the URL", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.route("**/api/server", route => route.fulfill({ json: {
+    available: true, enabled: true, host: "0.0.0.0", port: 7717,
+    listening: true, addr: "[::]:7717", auth_enabled: false,
+  } }));
+  await openSettings(page, "Server");
+  await expect(page.getByRole("link", { name: "http://localhost:7717", exact: true })).toBeVisible();
+  await expect(page.getByText("agenttik --remote http://localhost:7717", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Copy remote command", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("agenttik --remote http://localhost:7717");
 });

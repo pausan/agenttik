@@ -179,6 +179,7 @@ const menu = computed(() => [
               size="sm" :loading="busy === operation" :disabled="!!busy || !target || target === S.log.branch"
               @click="act(operation)" />
           </div>
+          <p class="text-xs text-dimmed">Changed files will be stashed temporarily.</p>
           <p class="text-xs text-dimmed">If there are conflicts, AI will solve them using the model in Settings → Models.</p>
           <p v-if="target" class="text-xs text-dimmed">{{ operation === 'merge'
             ? `Merge ${S.log.branch} into ${target}. Updates and checks out ${target}.`

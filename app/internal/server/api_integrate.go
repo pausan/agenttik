@@ -50,7 +50,26 @@ func validLocalBranch(root, branch string) bool {
 	return err == nil
 }
 
-func (s *Server) integrateBranches(c *fiber.Ctx, root, action, branch, target string) error {
+func (s *Server) integrateBranches(c *fiber.Ctx, root, action, branch, target string) (result error) {
+	// Keep the stash identity in this checkout's Git directory across retries
+	// and server restarts. Never pop an unrelated user stash.
+	dir, err := runGit(root, "rev-parse", "--absolute-git-dir")
+	if err != nil {
+		return badRequest("%s", err)
+	}
+	stashFile := filepath.Join(strings.TrimSpace(dir), "agenttik-integration-stash")
+	defer func() {
+		if gitOperation(root) != "" {
+			return
+		}
+		if err := restoreIntegrationStash(root, stashFile); err != nil {
+			if result != nil {
+				result = badRequest("%v; restore local changes: %s", result, err)
+			} else {
+				result = badRequest("restore local changes: %s", err)
+			}
+		}
+	}()
 	operation := gitOperation(root)
 	if action == "abort" {
 		if operation == "" {
@@ -81,8 +100,24 @@ func (s *Server) integrateBranches(c *fiber.Ctx, root, action, branch, target st
 		if err != nil {
 			return badRequest("%s", err)
 		}
+		if _, err := os.Stat(stashFile); err == nil {
+			return badRequest("a previous integration stash still needs restoration")
+		}
 		if status != "" {
-			return badRequest("commit or stash changes before merging or rebasing")
+			if _, err := runGit(root, "add", "--all"); err != nil {
+				return badRequest("%s", err)
+			}
+			if _, err := runGit(root, "stash", "push", "--include-untracked", "-m", "Temporary integration changes"); err != nil {
+				return badRequest("%s", err)
+			}
+			oid, err := runGit(root, "rev-parse", "refs/stash")
+			if err != nil {
+				return badRequest("%s", err)
+			}
+			if err := os.WriteFile(stashFile, []byte(strings.TrimSpace(oid)), 0600); err != nil {
+				_, restoreErr := runGit(root, "stash", "pop", "--index")
+				return badRequest("save stash recovery state: %s (restore: %v)", err, restoreErr)
+			}
 		}
 		var args []string
 		if action == "merge" {
@@ -207,4 +242,37 @@ func integrationOutsideChanges(root string, paths []string) (string, error) {
 	}
 	untracked, err := runGit(root, "ls-files", "--others", "--exclude-standard", "-z")
 	return diff + "\x00" + untracked, err
+}
+
+// Apply before dropping so a restoration conflict keeps the saved changes.
+func restoreIntegrationStash(root, path string) error {
+	oid, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if _, err := runGit(root, "stash", "apply", "--index", string(oid)); err != nil {
+		// Do not automatically apply a partly restored stash a second time.
+		if removeErr := os.Remove(path); removeErr != nil {
+			return fmt.Errorf("%w; remove recovery state: %v", err, removeErr)
+		}
+		return fmt.Errorf("%w; changes remain saved in stash %s; resolve the restoration manually", err, oid)
+	}
+	if err := os.Remove(path); err != nil {
+		return err
+	}
+	stashes, err := runGit(root, "stash", "list", "--format=%H %gd")
+	if err != nil {
+		return err
+	}
+	for _, line := range strings.Split(stashes, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 2 && fields[0] == string(oid) {
+			_, err = runGit(root, "stash", "drop", fields[1])
+			return err
+		}
+	}
+	return nil
 }

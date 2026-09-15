@@ -26,8 +26,13 @@ explains that AI solves conflicts and identifies which branch changes.
 
 Merge checks out the destination and merges the selected source into it. Rebase
 keeps the source checked out and replays its commits onto the destination,
-rewriting the source only. Both require a clean index and working tree, including
-untracked files. Git refuses destinations checked out in another worktree.
+rewriting the source only. Both automatically stage and stash changed and untracked
+files, then restore them staged in the resulting checkout without confirmation.
+The button help reads “Changed files will be stashed temporarily.”
+Paused operations retain their stash across retries and app restarts; completion,
+abort, and failures before an operation starts restore it automatically. If
+restoration conflicts, the error identifies the retained stash for manual recovery.
+Existing user stashes are preserved. Git refuses destinations checked out in another worktree.
 Clean operations run without a model. Nothing pushes.
 
 Conflicts use the saved automatic-action model (see [069](069-automatic-action-models.md)).

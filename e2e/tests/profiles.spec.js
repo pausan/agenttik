@@ -1,0 +1,33 @@
+import { expect, openSettings, sidebar, test, REPO } from "../fixtures.js";
+
+test("profiles appear only when needed and isolate the same project", async ({ page, agenttik }) => {
+  await expect(page.getByRole("button", { name: /^Profile:/ })).toHaveCount(0);
+  await page.request.post(`${agenttik.url}/api/projects`, { data: { path: REPO, name: "Personal project" } });
+  await page.reload();
+  await expect(sidebar(page).getByText("Personal project", { exact: true })).toBeVisible();
+  await openSettings(page, "Profiles");
+  await page.getByRole("textbox", { name: "Profile name" }).fill("Work");
+  await page.getByRole("button", { name: "Add profile", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Switch to Work", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Switch to Work", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Profile: Work", exact: true })).toBeVisible();
+  await expect(sidebar(page).getByText("Personal project", { exact: true })).toHaveCount(0);
+  const id = new URL(page.url()).searchParams.get("profile");
+  const project = await (await page.request.post(`${agenttik.url}/api/projects?profile=${id}`, { data: { path: REPO, name: "Work project" } })).json();
+  const personal = await (await page.request.get(`${agenttik.url}/api/projects`)).json();
+  expect(personal).toHaveLength(1);
+  expect(personal[0].name).toBe("Personal project");
+  expect(project.name).toBe("Work project");
+  await page.reload();
+  await expect(sidebar(page).getByText("Work project", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Profile: Work", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Default", exact: true }).click();
+  await expect(sidebar(page).getByText("Personal project", { exact: true })).toBeVisible();
+  await expect(sidebar(page).getByText("Work project", { exact: true })).toHaveCount(0);
+  await openSettings(page, "Profiles");
+  await page.getByRole("button", { name: "Remove Work", exact: true }).click();
+  await page.getByRole("button", { name: "Remove profile", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Remove Work", exact: true })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: /^Profile:/ })).toHaveCount(0);
+});

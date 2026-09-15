@@ -1,3 +1,5 @@
+import { apiURL } from "./api.js";
+
 /* Markdown for the transcript. Agent replies are written in it, and reading
    raw ** and ``` is worse than reading the text.
 
@@ -261,7 +263,7 @@ function inline(src) {
 function link(url, text) {
   const href = url.trim().replace(/^<(.*)>$/, "$1");
   if (/^(?:https?:|mailto:|#)/i.test(href) || /^\/api\/attachments\/[a-f0-9]{64}\.(png|jpg|gif|webp)$/.test(href)) {
-    return `<a href="${esc(href)}" target="_blank" rel="noreferrer noopener">${text}</a>`;
+    return `<a href="${esc(apiURL(href))}" target="_blank" rel="noreferrer noopener">${text}</a>`;
   }
   return fileLink(href, text, true) || text;
 }

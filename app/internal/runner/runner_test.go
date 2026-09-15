@@ -564,3 +564,29 @@ func TestOnBusyClearsWhenTheProviderRefuses(t *testing.T) {
 		t.Fatal("a failed send left the runner busy")
 	}
 }
+
+func TestShutdownWaitsForTurnsAndRejectsNewWork(t *testing.T) {
+	r, _, sess := setup(t, &fakeProvider{gate: make(chan struct{})})
+	if _, err := r.Send(sess.ID, "keep running"); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() { r.Shutdown(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("shutdown did not cancel the provider")
+	}
+	if r.Running(sess.ID) {
+		t.Fatal("shutdown returned with an active turn")
+	}
+	if _, err := r.Send(sess.ID, "new work"); err == nil {
+		t.Fatal("accepted work after shutdown")
+	}
+	ran := false
+	r.background(func() { ran = true })
+	r.Shutdown()
+	if ran {
+		t.Fatal("accepted background work after shutdown")
+	}
+}

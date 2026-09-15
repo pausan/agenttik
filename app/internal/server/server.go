@@ -38,6 +38,7 @@ import (
 )
 
 type Server struct {
+	profiles *profileManager
 	app      *fiber.App
 	version  string
 	store    *store.Store
@@ -115,6 +116,7 @@ func New(s *store.Store, reg *agent.Registry, r *runner.Runner) *Server {
 	srv.search = smartsearch.New(filepath.Join(s.Dir(), "smart-search"), func() ([]store.Session, error) {
 		return s.ListSessions(store.SessionFilter{})
 	})
+	app.Use(srv.routeProfile)
 	srv.routes()
 
 	// The UI is a Vite build, so a binary made without it says so rather than
@@ -157,6 +159,9 @@ func (s *Server) routes() {
 	})
 	s.app.Post(remote.ConnectPath, adaptor.HTTPHandler(remote.ConnectHandler(func(u *url.URL) string { return u.String() + "/" })))
 	api := s.app.Group("/api")
+	api.Get("/profiles", s.listProfiles)
+	api.Post("/profiles", s.createProfile)
+	api.Delete("/profiles/:id", s.deleteProfile)
 	api.Get("/smart-search", s.smartSearchStatus)
 	api.Post("/smart-search/index", s.refreshSmartSearch)
 	api.Post("/smart-search/query", s.querySmartSearch)
@@ -268,6 +273,7 @@ func (s *Server) Listener(ln net.Listener) error { return s.app.Listener(ln) }
 // remaining connections. The timeout is a backstop: a stuck client must never
 // keep the app alive after the window is closed.
 func (s *Server) Shutdown() error {
+	s.CloseProfiles()
 	s.closeOnce.Do(func() { close(s.closing); s.search.Close() })
 	return s.app.ShutdownWithTimeout(shutdownTimeout)
 }

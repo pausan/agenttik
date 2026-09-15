@@ -71,10 +71,14 @@ type Runner struct {
 	registry *agent.Registry
 	hub      *Hub
 
-	mu     sync.Mutex
-	active map[string]activeTurn // session id -> turn in flight
-	sched  map[int64]*sync.Mutex // project id -> serializes queue dispatch
-	forced map[string]int64      // session id -> queued message to run next
+	lifetime       context.Context
+	cancelLifetime context.CancelFunc
+	stopping       bool
+	turns          sync.WaitGroup
+	mu             sync.Mutex
+	active         map[string]activeTurn // session id -> turn in flight
+	sched          map[int64]*sync.Mutex // project id -> serializes queue dispatch
+	forced         map[string]int64      // session id -> queued message to run next
 
 	// forcedScheduleRuns marks a session started by RunScheduleNow: its run
 	// spends no counter when it finishes, since asking for an extra run by
@@ -89,7 +93,8 @@ type Runner struct {
 }
 
 func New(s *store.Store, reg *agent.Registry, hub *Hub) *Runner {
-	return &Runner{store: s, registry: reg, hub: hub,
+	ctx, cancel := context.WithCancel(context.Background())
+	return &Runner{store: s, registry: reg, hub: hub, lifetime: ctx, cancelLifetime: cancel,
 		active: make(map[string]activeTurn), sched: make(map[int64]*sync.Mutex),
 		forced: make(map[string]int64), forcedScheduleRuns: make(map[string]bool)}
 }
@@ -266,16 +271,22 @@ func (r *Runner) send(queued store.QueuedMessage) (*store.Turn, error) {
 	}
 
 	r.mu.Lock()
+	if r.stopping {
+		r.mu.Unlock()
+		return nil, errors.New("runner is shutting down")
+	}
 	if _, busy := r.active[sessionID]; busy {
 		r.mu.Unlock()
 		return nil, ErrBusy
 	}
 	ctx, cancel := context.WithCancel(context.Background())
+	r.turns.Add(1)
 	r.active[sessionID] = activeTurn{projectID: sess.ProjectID, cancel: cancel}
 	r.busyChanged()
 	r.mu.Unlock()
 
 	release := func() {
+		defer r.turns.Done()
 		r.mu.Lock()
 		delete(r.active, sessionID)
 		// A forced prompt waits on the session it belongs to, not on the
@@ -283,8 +294,12 @@ func (r *Runner) send(queued store.QueuedMessage) (*store.Turn, error) {
 		forcedID, forced := r.forced[sessionID]
 		delete(r.forced, sessionID)
 		r.busyChanged()
+		stopping := r.stopping
 		r.mu.Unlock()
 		cancel()
+		if stopping {
+			return
+		}
 		if forced {
 			go r.runForced(sess.ProjectID, forcedID)
 		} else {
@@ -586,6 +601,29 @@ func (r *Runner) StopAll() {
 	}
 }
 
+// Shutdown prevents new turns and waits for cancelled turns to release their
+// stores and provider processes before a profile's data is removed.
+func (r *Runner) Shutdown() {
+	r.mu.Lock()
+	r.stopping = true
+	r.mu.Unlock()
+	r.cancelLifetime()
+	r.StopAll()
+	r.turns.Wait()
+}
+
+// background joins metadata requests to the same shutdown lifetime as turns.
+func (r *Runner) background(work func()) {
+	r.mu.Lock()
+	if r.stopping {
+		r.mu.Unlock()
+		return
+	}
+	r.turns.Add(1)
+	r.mu.Unlock()
+	go func() { defer r.turns.Done(); work() }()
+}
+
 func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.QueuedMessage, events <-chan agent.Event, release func()) {
 	defer release()
 
@@ -785,7 +823,8 @@ func (r *Runner) nameTask(sess *store.Session, prompt string) {
 	sess.Title = title
 	// The session is handed on by value: it is published in the started event
 	// and kept by the turn, and this outlives both.
-	go r.refineTitle(sess.ID, sess.Provider, sess.AccountID, title, prompt)
+	id, provider, account := sess.ID, sess.Provider, sess.AccountID
+	r.background(func() { r.refineTitle(id, provider, account, title, prompt) })
 }
 
 // askSmall puts one short question to the provider's lightest model and
@@ -815,7 +854,7 @@ func (r *Runner) askSmall(providerName string, accountID int64, question string,
 		return ""
 	}
 	model, effort := small.SmallModel()
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(r.lifetime, timeout)
 	defer cancel()
 	events, err := provider.Run(ctx, agent.TurnRequest{
 		WorkDir:     os.TempDir(),

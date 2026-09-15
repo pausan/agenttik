@@ -166,8 +166,11 @@ func run() error {
 	turns := runner.New(db, registry, runner.NewHub())
 	srv := server.New(db, registry, turns)
 	srv.SetVersion(version)
-
-	defer turns.StopAll()
+	defer turns.Shutdown()
+	defer srv.Shutdown()
+	if err := srv.EnableProfiles(*private); err != nil {
+		return err
+	}
 
 	// The clocks run for as long as the app does, in either shell: one fires
 	// due schedules, the other retries prompts whose provider was away.
@@ -221,6 +224,7 @@ func serveWeb(cfg config.Config, srv *server.Server, turns *runner.Runner, lock 
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(stop)
 	select {
 	case err := <-errs:
 		return err

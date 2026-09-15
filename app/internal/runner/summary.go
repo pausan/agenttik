@@ -29,7 +29,7 @@ const summaryMax = 160
 //
 // Both ways a task is archived come through here — the button, and a scheduled
 // run closing itself — since either one is a task finishing.
-func (r *Runner) SummarizeTask(sessionID string) { go r.summarize(sessionID) }
+func (r *Runner) SummarizeTask(sessionID string) { r.background(func() { r.summarize(sessionID) }) }
 
 // summarize asks for the summary and records it, or leaves the task blank.
 // Blank is the answer to every question it cannot settle: a task that never

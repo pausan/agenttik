@@ -3,6 +3,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -59,5 +60,9 @@ func (c *Config) UseTemporaryData() (func(), error) {
 		return nil, fmt.Errorf("create private data dir: %w", err)
 	}
 	c.DataDir = dir
-	return func() { os.RemoveAll(dir) }, nil
+	return func() {
+		if err := os.RemoveAll(dir); err != nil {
+			log.Printf("remove private data %s: %v", dir, err)
+		}
+	}, nil
 }

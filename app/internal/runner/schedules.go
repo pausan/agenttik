@@ -214,7 +214,10 @@ func (r *Runner) closeFailedForcedRun(sessionID string) {
 // was in flight keeps that name, and a job created with a title of its own is
 // never guessed at in the first place.
 func (r *Runner) NameSchedule(s *store.Schedule) {
-	go r.refineScheduleTitle(s.ID, s.ProjectID, s.Provider, s.AccountID, s.Title, s.Prompt)
+	job := *s
+	r.background(func() {
+		r.refineScheduleTitle(job.ID, job.ProjectID, job.Provider, job.AccountID, job.Title, job.Prompt)
+	})
 }
 
 func (r *Runner) refineScheduleTitle(id, projectID int64, providerName string, accountID int64, placeholder, prompt string) {

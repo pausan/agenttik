@@ -12,7 +12,7 @@
    project's work. */
 
 import { nextTick, reactive, watch } from "vue";
-import { api, instanceKey } from "./api";
+import { api, apiURL, storage } from "./api";
 import { debounce } from "./debounce";
 import { ACCENTS, DEFAULT_COLORS, NEUTRALS, applyColors } from "./theme";
 import { ACTIONS, matches } from "./shortcuts";
@@ -754,7 +754,7 @@ watch(() => S.activeProjectID, foldOtherProjects);
    how off was written before the default changed, and still reads as off. */
 function loadFoldOthers() {
   try {
-    const saved = localStorage.getItem(FOLD_KEY);
+    const saved = storage.getItem(FOLD_KEY);
     if (saved !== null) S.foldOthers = saved === "1";
   } catch {
     /* keep the default */
@@ -1237,7 +1237,7 @@ export const EVERY = [
 
 export function loadScheduleDefaults() {
   try {
-    const saved = JSON.parse(localStorage.getItem(SCHEDULE_KEY));
+    const saved = JSON.parse(storage.getItem(SCHEDULE_KEY));
     return saved ? { ...DEFAULT_SCHEDULE, ...saved } : { ...DEFAULT_SCHEDULE };
   } catch {
     return { ...DEFAULT_SCHEDULE };
@@ -1540,7 +1540,7 @@ export function setTaskPageSize(size) {
 
 function loadTaskPageSize() {
   try {
-    const saved = Number(localStorage.getItem(TASK_PAGE_KEY));
+    const saved = Number(storage.getItem(TASK_PAGE_KEY));
     if (TASK_PAGE_SIZES.includes(saved)) S.taskPageSize = saved;
   } catch {
     /* keep the default */
@@ -1551,7 +1551,7 @@ function loadTaskPageSize() {
    unknown one is a 400 and an empty Sessions tab. */
 function loadWindow() {
   try {
-    const saved = localStorage.getItem(WINDOW_KEY);
+    const saved = storage.getItem(WINDOW_KEY);
     if (TASK_WINDOWS.some((w) => w.value === saved)) S.window = saved;
   } catch {
     /* keep the default */
@@ -1580,7 +1580,7 @@ function tabLabel(session) {
    starred combination, then to whatever is installed. */
 export function loadLastUsed() {
   try {
-    S.lastUsed = JSON.parse(localStorage.getItem(LAST_USED_KEY));
+    S.lastUsed = JSON.parse(storage.getItem(LAST_USED_KEY));
   } catch {
     S.lastUsed = null;
   }
@@ -1595,7 +1595,7 @@ function rememberUsed(sess) {
     permission: sess.permission,
   };
   try {
-    localStorage.setItem(LAST_USED_KEY, JSON.stringify(S.lastUsed));
+    storage.setItem(LAST_USED_KEY, JSON.stringify(S.lastUsed));
   } catch {
     /* private mode, a full quota — not worth failing a session over */
   }
@@ -1928,7 +1928,7 @@ export function isOutsideProject(path) {
    of the working tree. */
 export function rawURL(tab, rev = "") {
   const at = rev ? `&rev=${encodeURIComponent(rev)}` : "";
-  return `/api/projects/${projectOfTab(tab)}/raw?path=${encodeURIComponent(tab.path)}${at}`;
+  return apiURL(`/api/projects/${projectOfTab(tab)}/raw?path=${encodeURIComponent(tab.path)}${at}`);
 }
 
 export function isDirty(tab) {
@@ -2223,7 +2223,7 @@ export async function resolveClosing(action) {
 /* Not named `remember`: closeTab already takes a parameter by that name. */
 function persist(key, value) {
   try {
-    localStorage.setItem(key, value);
+    storage.setItem(key, value);
   } catch {
     /* private mode or a full quota only costs the remembered choice */
   }
@@ -2231,10 +2231,10 @@ function persist(key, value) {
 
 function loadFileMode() {
   try {
-    const mode = localStorage.getItem(FILE_MODE_KEY);
+    const mode = storage.getItem(FILE_MODE_KEY);
     // "file" is what the editor used to be called.
     if (mode === "diff" || mode === "preview") S.fileMode = mode;
-    if (localStorage.getItem(DIFF_VIEW_KEY) === "split") S.diffView = "split";
+    if (storage.getItem(DIFF_VIEW_KEY) === "split") S.diffView = "split";
   } catch {
     /* keep the defaults */
   }
@@ -2278,12 +2278,12 @@ let restoringTabs = false;
 let initialized = false;
 
 /* Debounced because an unsent prompt is saved with the tabs, and a keystroke
-   is not worth a trip through JSON and localStorage. */
+   is not worth a trip through JSON and storage. */
 function writeOpenTabs() {
   if (restoringTabs) return;
   try {
-    localStorage.setItem(
-      instanceKey(OPEN_TABS_KEY),
+    storage.setItem(
+      OPEN_TABS_KEY,
       JSON.stringify({
         tabs: S.tabs.map(savedTab).filter(Boolean),
         // The drafts of conversations with no tab of their own; an open tab
@@ -2313,7 +2313,7 @@ const saveOpenTabs = debounce(writeOpenTabs, 300);
 async function restoreOpenTabs() {
   let saved;
   try {
-    saved = JSON.parse(localStorage.getItem(instanceKey(OPEN_TABS_KEY)));
+    saved = JSON.parse(storage.getItem(OPEN_TABS_KEY));
   } catch {
     return;
   }
@@ -2681,7 +2681,7 @@ function resubscribe() {
     stream = null;
   }
   if (!url) return;
-  const es = new EventSource(url);
+  const es = new EventSource(apiURL(url));
   stream = es;
   const refreshOnOpen = initialized;
   let opened = false;
@@ -3212,7 +3212,7 @@ export async function stopTask(sessionID) {
 
 export function loadLayout() {
   try {
-    const saved = JSON.parse(localStorage.getItem(LAYOUT_KEY));
+    const saved = JSON.parse(storage.getItem(LAYOUT_KEY));
     if (saved) {
       S.layout.left = clampWidth("left", saved.left);
       S.layout.right = clampWidth("right", saved.right);
@@ -3235,7 +3235,7 @@ export function setSidebarWidth(side, px) {
 
 export function saveLayout() {
   try {
-    localStorage.setItem(LAYOUT_KEY, JSON.stringify(S.layout));
+    storage.setItem(LAYOUT_KEY, JSON.stringify(S.layout));
   } catch {
     /* private mode, a full quota — the widths just do not persist */
   }
@@ -3249,7 +3249,7 @@ export function saveLayout() {
    palette resolves to no colour at all. */
 export function loadColors() {
   try {
-    const saved = JSON.parse(localStorage.getItem(COLORS_KEY));
+    const saved = JSON.parse(storage.getItem(COLORS_KEY));
     if (ACCENTS.some((c) => c.name === saved?.accent)) S.colors.accent = saved.accent;
     if (NEUTRALS.some((c) => c.name === saved?.neutral)) S.colors.neutral = saved.neutral;
   } catch {
@@ -3263,7 +3263,7 @@ export function setColor(key, name) {
   S.colors[key] = name;
   applyColors(S.colors);
   try {
-    localStorage.setItem(COLORS_KEY, JSON.stringify(S.colors));
+    storage.setItem(COLORS_KEY, JSON.stringify(S.colors));
   } catch {
     /* private mode, a full quota — the colours just do not persist */
   }
@@ -3290,7 +3290,7 @@ function defaultKeys() {
 export function loadKeys() {
   let saved = null;
   try {
-    saved = JSON.parse(localStorage.getItem(KEYS_KEY));
+    saved = JSON.parse(storage.getItem(KEYS_KEY));
   } catch {
     /* keep the defaults */
   }
@@ -3308,7 +3308,7 @@ function saveKeys() {
     if (!sameChords(S.keys[a.id], a.keys)) overrides[a.id] = S.keys[a.id];
   }
   try {
-    localStorage.setItem(KEYS_KEY, JSON.stringify(overrides));
+    storage.setItem(KEYS_KEY, JSON.stringify(overrides));
   } catch {
     /* private mode, a full quota — the chords just do not persist */
   }
@@ -3460,7 +3460,7 @@ export async function resetPreferences() {
   for (const [key, value] of Object.entries(DEFAULT_COLORS)) setColor(key, value);
   for (const key of [LAYOUT_KEY, LAST_USED_KEY, FILE_MODE_KEY, DIFF_VIEW_KEY,
     COLORS_KEY, KEYS_KEY, WINDOW_KEY, TASK_PAGE_KEY, SCHEDULE_KEY, FOLD_KEY,
-    "agenttik.smartSearch"]) localStorage.removeItem(key);
+    "agenttik.smartSearch"]) storage.removeItem(key);
   await loadProviders();
 }
 

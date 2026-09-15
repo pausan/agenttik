@@ -1,7 +1,9 @@
+import { apiURL } from "./api.js";
+
 const references = /!\[Attached image\]\((\/api\/attachments\/[a-f0-9]{64}\.(?:png|jpg|gif|webp))\)/g;
 
 export function promptImages(draft = "") {
-  return Array.from(draft.matchAll(references), (match) => ({ reference: match[0], url: match[1] }));
+  return Array.from(draft.matchAll(references), (match) => ({ reference: match[0], url: apiURL(match[1]) }));
 }
 
 export function promptText(draft = "") {
@@ -35,12 +37,12 @@ export async function uploadImage(file) {
   // Linux WebKit can crash in Wails' URI-scheme handler when its request
   // body is a Blob/File. Materialize the bounded image as bytes first.
   const body = await file.arrayBuffer();
-  const res = await fetch("/api/attachments", { method: "POST", body, headers: { "Content-Type": file.type || "application/octet-stream" } });
+  const res = await fetch(apiURL("/api/attachments"), { method: "POST", body, headers: { "Content-Type": file.type || "application/octet-stream" } });
   if (res.status === 401) {
     window.location.reload();
     throw new Error("Signed out");
   }
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Could not save image");
-  return { url: data.url, reference: `![Attached image](${data.url})` };
+  return { url: apiURL(data.url), reference: `![Attached image](${data.url})` };
 }

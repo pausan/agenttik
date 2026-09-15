@@ -9,6 +9,8 @@
 import { computed, reactive, ref, watch } from "vue";
 
 import { S, fail, loadArchivedProjects, loadOrchestratorConfig, loadProviders, loadServerConfig, openProject } from "../store";
+import { loadProfiles } from "../profiles";
+import ProfileSettings from "./settings/ProfileSettings.vue";
 import AppearanceSettings from "./settings/AppearanceSettings.vue";
 import GeneralSettings from "./settings/GeneralSettings.vue";
 import ModelSettings from "./settings/ModelSettings.vue";
@@ -24,6 +26,7 @@ const section = defineModel("section", { type: String, default: "general" });
 
 const SECTIONS = [
   { id: "general", label: "General", icon: "i-lucide-settings" },
+  { id: "profiles", label: "Profiles", icon: "i-lucide-users" },
   { id: "projects", label: "Projects", icon: "i-lucide-archive" },
   { id: "orchestrator", label: "Orchestrator", icon: "i-lucide-network" },
   { id: "appearance", label: "Appearance", icon: "i-lucide-palette" },
@@ -34,7 +37,7 @@ const SECTIONS = [
 ];
 
 const filter = ref("");
-const counts = reactive({ general: 0, projects: 0, orchestrator: 0, appearance: 0, models: 0, subscriptions: 0, server: 0, shortcuts: 0 });
+const counts = reactive({ general: 0, profiles: 0, projects: 0, orchestrator: 0, appearance: 0, models: 0, subscriptions: 0, server: 0, shortcuts: 0 });
 
 const shown = computed(() => (filter.value ? SECTIONS.filter((s) => counts[s.id]) : SECTIONS));
 
@@ -53,7 +56,7 @@ watch(open, async (on) => {
   if (!on) return;
   filter.value = "";
   try {
-    await Promise.all([loadProviders(), loadArchivedProjects(), loadOrchestratorConfig(), loadServerConfig()]);
+    await Promise.all([loadProfiles(), loadProviders(), loadArchivedProjects(), loadOrchestratorConfig(), loadServerConfig()]);
   } catch (e) {
     fail(e);
     open.value = false;
@@ -103,6 +106,9 @@ async function showOrchestrator() {
               :filter="filter"
               @count="counts.general = $event"
             />
+          </div>
+          <div v-show="section === 'profiles'">
+            <ProfileSettings :filter="filter" @count="counts.profiles = $event" />
           </div>
           <div v-show="section === 'projects'">
             <ProjectSettings

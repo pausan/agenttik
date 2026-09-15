@@ -36,6 +36,11 @@ URL), or choose **Connect to remote server** in the command palette. The
 client checks `/api/version` first, then shows the server’s login if needed.
 See [remote connections](specs/064-remote-connections.md).
 
+Start a temporary, separate instance with `agenttik --private`. Its app data is
+removed on exit; project files stay on disk. Manage local profiles in
+**Settings → Profiles**. With multiple profiles, the picker before Shortcuts
+switches between their isolated projects and tasks.
+
 `--addr` and `--data-dir` change where it listens and where it keeps its
 database, `--web` skips the desktop window, and `--help` and `--version` say
 what this build is.

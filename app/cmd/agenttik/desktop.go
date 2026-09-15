@@ -9,8 +9,11 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
+	"os/signal"
 	"strconv"
 	"sync"
+	"syscall"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -71,6 +74,11 @@ func runDesktop(srv *server.Server, turns *runner.Runner, lock *single.Lock, def
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.FlushInterval = -1 // flush immediately, so SSE streams
 
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(stop)
+	finished := make(chan struct{})
+	defer close(finished)
 	app := &options.App{
 		Title:            "agenttik",
 		Width:            1440,
@@ -79,9 +87,18 @@ func runDesktop(srv *server.Server, turns *runner.Runner, lock *single.Lock, def
 		MinHeight:        600,
 		AssetServer:      &assetserver.Options{Handler: quietAborts(remote.NewClient(proxy))},
 		BackgroundColour: &options.RGBA{R: 17, G: 18, B: 21, A: 255},
-		OnStartup:        win.opened,
-		OnShutdown:       func(ctx context.Context) { srv.Shutdown() },
-		OnBeforeClose:    win.beforeClose,
+		OnStartup: func(ctx context.Context) {
+			win.opened(ctx)
+			go func() {
+				select {
+				case <-stop:
+					win.quit()
+				case <-finished:
+				}
+			}()
+		},
+		OnShutdown:    func(ctx context.Context) { srv.Shutdown() },
+		OnBeforeClose: win.beforeClose,
 	}
 	configureDesktop(app)
 	stopTray := win.startTray(config, turns)

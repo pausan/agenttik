@@ -1,7 +1,7 @@
 # The command line, and the version a tag builds in
 
 `agenttik` takes long options: `--addr`, `--data-dir`, `--init`, `--web`,
-`--api`, `--body`, `--help` and `--version`. Go's `flag` package treats `-addr` and `--addr` as
+`--private`, `--remote`, `--api`, `--body`, `--help` and `--version`. Go's `flag` package treats `-addr` and `--addr` as
 the same option, so the single-dash form keeps working; only the double-dash
 one is documented. `--help` prints to stdout and exits 0, while an unknown
 option prints the same text to stderr and exits 2, which is `flag`'s own
@@ -12,6 +12,10 @@ appear with two dashes. It walks `flag.VisitAll`, so an option added later
 lists itself, with the placeholder taken from the backquoted word in its usage
 string (`--addr host:port`) and the default appended unless it is empty or
 `false`.
+
+Private instances use temporary storage and an independent lock; see
+[066](066-private-mode.md). Remote client launches are described in
+[064](064-remote-connections.md).
 
 ## `--init`: adding a project from the terminal
 

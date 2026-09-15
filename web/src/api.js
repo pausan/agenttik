@@ -3,16 +3,38 @@
 // Desktop windows share an origin across servers. Keep restored tabs and
 // drafts tied to the instance that owns their project and task IDs.
 let remoteInstance = "";
+let localInstance = "";
+let privateMode = false;
+export const profileID = new URLSearchParams(globalThis.location?.search || "").get("profile") || "default";
+
+export function apiURL(path) {
+  if (profileID === "default" || !path.startsWith("/api/")) return path;
+  return `${path}${path.includes("?") ? "&" : "?"}profile=${encodeURIComponent(profileID)}`;
+}
+
+export function setPrivateMode(value) { privateMode = value; }
+
+// Private UI state lasts only in memory, including drafts. A private window
+// never writes app state to the normal browser storage.
+const privateState = new Map();
+export const storage = {
+  getItem(key) { return privateMode ? privateState.get(key) ?? null : localStorage.getItem(instanceKey(key)); },
+  setItem(key, value) { if (privateMode) privateState.set(key, String(value)); else localStorage.setItem(instanceKey(key), value); },
+  removeItem(key) { if (privateMode) privateState.delete(key); else localStorage.removeItem(instanceKey(key)); },
+};
 export function instanceKey(key) {
-  return remoteInstance ? `${key}:${remoteInstance}` : key;
+  const scope = [remoteInstance, localInstance, profileID === "default" ? "" : profileID].filter(Boolean).join(":");
+  return scope ? `${key}:${scope}` : key;
 }
 
 export async function api(method, path, body) {
-  const res = await fetch(path, {
+  const res = await fetch(apiURL(path), {
     method,
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
+  const local = res.headers.get("X-Agenttik-Instance");
+  if (local !== null) localInstance = local;
   const instance = res.headers.get("X-Agenttik-Remote");
   if (instance !== null) remoteInstance = instance;
   if (res.status === 204) return null;

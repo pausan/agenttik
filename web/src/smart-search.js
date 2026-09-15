@@ -1,5 +1,5 @@
 import { reactive } from "vue";
-import { api } from "./api.js";
+import { api, storage } from "./api.js";
 
 const KEY = "agenttik.smartSearch";
 export const smartSearch = reactive({ enabled: false, phase: "idle", percent: 0,
@@ -50,7 +50,7 @@ export function refreshSmartIndex() {
 }
 
 export function setSmartSearch(enabled) {
-  localStorage.setItem(KEY, enabled ? "1" : "0");
+  storage.setItem(KEY, enabled ? "1" : "0");
   generation++;
   clearInterval(timer);
   cancelPoll?.();
@@ -65,7 +65,7 @@ export function setSmartSearch(enabled) {
 }
 
 export function initSmartSearch() {
-  if (localStorage.getItem(KEY) === "1") setSmartSearch(true);
+  if (storage.getItem(KEY) === "1") setSmartSearch(true);
 }
 
 export async function searchTasks(query, ids) {

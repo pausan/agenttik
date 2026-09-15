@@ -3,6 +3,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import { _api as iconApi } from "@iconify/vue";
 import ui from "@nuxt/ui/vue-plugin";
 
+import { loadProfiles } from "./profiles";
 import App from "./App.vue";
 import { loadColors } from "./store";
 import "./assets/main.css";
@@ -28,6 +29,9 @@ const router = createRouter({
 
 // The saved colours are applied before mounting, so the app is never painted
 // in the default palette first and repainted in the chosen one.
-loadColors();
-
-createApp(App).use(router).use(ui).mount("#app");
+loadProfiles().then(() => {
+  loadColors();
+  createApp(App).use(router).use(ui).mount("#app");
+}).catch((error) => {
+  document.getElementById("app").textContent = `Could not load profiles: ${error.message}. Reload to try again.`;
+});

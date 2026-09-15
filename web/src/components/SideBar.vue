@@ -24,6 +24,7 @@ import {
 import { isMobile, SEGMENTED } from "../ui";
 import { beginDrag } from "../drag";
 import FileTree from "./FileTree.vue";
+import ProfilePicker from "./ProfilePicker.vue";
 import HiddenProjectsMenu from "./HiddenProjectsMenu.vue";
 import ScheduleRow from "./ScheduleRow.vue";
 import TaskRow from "./TaskRow.vue";
@@ -372,6 +373,7 @@ function onTaskDrop(e) {
         class="min-w-0 flex-1"
         @click="$emit('setup')"
       />
+      <ProfilePicker />
       <UButton
         color="neutral"
         variant="ghost"

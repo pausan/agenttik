@@ -6,6 +6,7 @@ import { S, copyText, openCommitFile, toggleCommit, currentProjectID, refreshLog
 import { api } from "../api";
 import { fuzzy, segments } from "../fuzzy";
 import { commitGraph, graphColor, graphX, graphPath } from "../commitGraph";
+import { useCommitFiles } from "../commitFiles";
 
 watch(() => S.logGraph, () => refreshLog());
 
@@ -99,6 +100,9 @@ function subjectParts(commit) {
 }
 
 const filesOf = (hash) => S.logFiles[hash] || null;
+const { visible: visibleFiles, more: moreFiles, showMore } = useCommitFiles(
+  () => S.logOpen ? filesOf(S.logOpen) : null,
+);
 
 /* One menu for the whole list, aimed by the event on its way to the trigger,
    the way Message.vue answers its file links with a single listener: a menu
@@ -280,7 +284,7 @@ const menu = computed(() => [
               No files changed.
             </p>
             <button
-              v-for="file in filesOf(commit.hash) || []"
+              v-for="file in visibleFiles"
               :key="file.path"
               type="button"
               class="flex w-full select-none items-center gap-1.5 rounded-[var(--ui-radius)] px-1.5 py-0.5 text-left font-mono text-xs hover:bg-elevated hover:text-highlighted"
@@ -297,6 +301,12 @@ const menu = computed(() => [
                 <span class="shrink-0 text-error tabular-nums">−{{ file.deletions }}</span>
               </template>
             </button>
+            <button
+              v-if="moreFiles"
+              type="button"
+              class="w-full rounded-[var(--ui-radius)] px-1.5 py-1 text-left text-xs text-primary hover:bg-elevated"
+              @click="showMore"
+            >… See {{ moreFiles }} more …</button>
           </div>
         </div>
       </div>

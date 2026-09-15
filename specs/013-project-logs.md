@@ -99,6 +99,15 @@ Clicking a row expands the files that commit touched, each with its status
 letter and its own `+`/`−` counts. Clicking a file opens it as a tab, showing
 that commit's diff.
 
+Commits with more than 1,000 files initially render only the first 250 files.
+The **See 250 more** button adds 250, then offers 500 more, then 1,000 more
+per click until all files are visible. The last button shows the remaining
+count and disappears after those files are shown. File order is preserved.
+Reopening a commit starts from the initial batch; commits with at most 1,000
+files show the full list immediately. The full file response is still fetched
+and cached once; only the visible prefix is rendered to keep opening large
+commits responsive.
+
 Right-clicking a file in Changed or in an expanded commit offers **Show in
 tree**. That switches the left sidebar to Tree, clears any Tree filter, opens
 the folders above the file, selects and scrolls to its row, and opens the

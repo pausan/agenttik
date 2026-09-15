@@ -3,7 +3,11 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { addProject, expect, newTask, openProject, openSettings, pickModel, test } from "../fixtures.js";
 
-test.use({ showQuickStart: true });
+test.beforeEach(async ({ page }) => {
+  await expect(page.getByRole("button", { name: "Take the Quick Start Tour", exact: true })).toBeVisible();
+  await expect(tour(page)).toHaveCount(0);
+  await page.getByRole("button", { name: "Take the Quick Start Tour", exact: true }).click();
+});
 
 const tour = (page) => page.getByRole("region", { name: "Quick Start Tour", exact: true });
 async function goTo(page, title) {
@@ -14,7 +18,7 @@ async function goTo(page, title) {
   throw new Error(`Tour step not found: ${title}`);
 }
 
-test("first launch, free navigation, resume, dismissal and Help restart", async ({ page }) => {
+test("manual launch, free navigation, resume, dismissal and Help restart", async ({ page }) => {
   await expect(tour(page)).toBeVisible();
   await tour(page).getByRole("button", { name: "Next", exact: true }).click();
   await expect(tour(page)).toContainText("Already connected: Fake · System");

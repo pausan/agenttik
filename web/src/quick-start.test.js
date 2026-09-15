@@ -8,21 +8,20 @@ function memory() {
   return { getItem: (key) => data.get(key) ?? null, setItem: (key, value) => data.set(key, value) };
 }
 
-test("the first empty workspace opens the tour, existing workspaces opt in", () => {
-  assert.equal(readTour(memory(), true).open, true);
-  assert.equal(readTour(memory(), false).open, false);
+test("the tour stays closed until requested", () => {
+  assert.deepEqual(readTour(memory()), { open: false, step: "welcome" });
 });
 
 test("progress resumes and dismissal persists even in an empty workspace", () => {
   const storage = memory();
   saveTour(storage, { open: true, step: "divide" });
-  assert.deepEqual(readTour(storage, false), { open: true, step: "divide" });
+  assert.deepEqual(readTour(storage), { open: true, step: "divide" });
   saveTour(storage, { open: false, step: "divide" });
-  assert.equal(readTour(storage, true).open, false);
+  assert.equal(readTour(storage).open, false);
   storage.setItem(TOUR_KEY, "broken");
-  assert.deepEqual(readTour(storage, true), { open: true, step: "welcome" });
+  assert.deepEqual(readTour(storage), { open: false, step: "welcome" });
   const denied = { getItem() { throw new Error(); }, setItem() { throw new Error(); } };
-  assert.equal(readTour(denied, true).open, true);
+  assert.equal(readTour(denied).open, false);
   assert.doesNotThrow(() => saveTour(denied, { open: false }));
 });
 

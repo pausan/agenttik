@@ -14,6 +14,7 @@ import Message from "./Message.vue";
 import ModelSelection from "./ModelSelection.vue";
 import ToolGroup from "./ToolGroup.vue";
 
+const emit = defineEmits(["start-tour"]);
 const box = ref(null);
 const now = ref(Date.now());
 const fallbackStartedAt = ref(0);
@@ -257,9 +258,10 @@ watch(
 
 <template>
   <div ref="box" class="min-h-0 flex-1 overflow-auto">
-    <p v-if="!S.detail" class="pt-[18vh] text-center text-dimmed">
-      Pick a task, or a project to start one.
-    </p>
+    <div v-if="!S.detail" class="pt-[18vh] text-center text-dimmed">
+      <p>Pick a task, or a project to start one.</p>
+      <UButton class="mt-4" label="Take the Quick Start Tour" icon="i-lucide-graduation-cap" @click="emit('start-tour')" />
+    </div>
     <div v-else class="mx-auto max-w-[860px] px-6 pt-5 pb-2 max-md:px-3 max-md:pt-3">
       <!-- The project's own prompt went in ahead of the first thing asked
            here, so the conversation says so at the point it happened: what was

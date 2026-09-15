@@ -1,8 +1,9 @@
 # Quick Start Tour
 
-A first visit to an empty workspace opens a 12-step getting-started tour after
-initial workspace loading. Existing workspaces opt in through Settings → Help
-→ Start Quick Start Tour. Help participates in the settings filter.
+The 12-step getting-started tour starts when the user clicks Take the Quick
+Start Tour beneath “Pick a task, or a project to start one.” or opens Settings
+→ Help → Start Quick Start Tour. First visits never launch it automatically.
+Help participates in the settings filter.
 
 The tour is a nonmodal bottom-right panel, with a scrollable body, Previous,
 Next, Finish, minimize, and close controls. Navigation never requires completing
@@ -17,7 +18,7 @@ tour.
 Progress and dismissal use `agenttik.quickStart.v1` through the existing scoped
 storage wrapper: per browser, instance and profile, with memory-only state in
 private mode. Reload resumes an open tour. Closing or finishing keeps it closed;
-Help restarts at the beginning. No server-side onboarding record is stored.
+both entry points restart at the beginning. No server-side onboarding record is stored.
 
 ## Walkthrough
 
@@ -58,7 +59,7 @@ be uploaded before new installations can use the public clone URL. This tour
 ships no calculator solution and no advanced tour.
 
 Unit tests cover startup/dismissal storage, unavailable storage, connection
-status, and draft protection. Browser tests cover first launch, navigation,
+status, and draft protection. Browser tests cover manual launch, navigation,
 reload, Help restart, coexistence with setup dialogs, draft insertion without
 submission, local cloning and explicitly enqueuing all four prompts, and phone
 sizing. The fake provider verifies that a read-only question can start in a

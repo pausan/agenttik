@@ -206,7 +206,7 @@ onMounted(() => {
   init().finally(() => {
     clearTimeout(showSpinner);
     bootSpinner.value = false;
-    tour.value = readTour(storage, !S.projects.length && !S.sessions.length);
+    tour.value = readTour(storage);
   });
   window.addEventListener("keydown", onKey);
   media.addEventListener("change", changeLayout);
@@ -287,7 +287,7 @@ onUnmounted(() => {
       @remote="remoteConnect = true"
       />
       <Splitter v-if="!mobile" side="left" />
-      <MainPanel />
+      <MainPanel @start-tour="startTour" />
       <template v-if="!mobile && hasInspector()">
         <Splitter side="right" />
         <InspectorPanel @show-in-tree="showFileInTree" />

@@ -20,6 +20,8 @@ import Transcript from "./Transcript.vue";
 import PromptBar from "./PromptBar.vue";
 import StatusDot from "./StatusDot.vue";
 
+const emit = defineEmits(["start-tour"]);
+
 /* Everything below is reached by a click or a chord, never by the first
    paint, so its code is fetched from its own chunk the moment it is first
    needed instead of being parsed on the way in. The chunks are built into
@@ -215,7 +217,7 @@ const badge = computed(() => {
     <PinnedPromptView v-else-if="current?.kind === 'schedule' && current.data.schedule.every === 'pinned'" :key="current.id" :tab="current" />
     <ScheduleView v-else-if="current?.kind === 'schedule'" :tab="current" />
     <FileView v-else-if="current?.kind === 'file'" :tab="current" />
-    <Transcript v-else />
+    <Transcript v-else @start-tour="emit('start-tour')" />
 
     <!-- A file carries its own bar. The prompt box belongs to a conversation,
          and under a file it is only in the way. -->

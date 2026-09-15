@@ -9,7 +9,10 @@ behaviour and the menu's open action does the same.
 A file the agent names in its reply is clickable, and clicking it opens that
 file in a kept app tab. An already open file is selected and kept instead of
 creating a duplicate. Right-clicking a local link offers **Open in new tab**
-and **Open in system browser**. The latter uses the same system file opener
+and **Open in system browser**, plus **Copy path**. Copy uses the resolved
+project-relative path, or an absolute path for a target outside the project,
+without a line suffix. Directory links open the system file explorer without
+creating an editor tab. System opening uses the same file opener
 as the Tree ([048](048-open-in-system-browser.md)). A reference that names a
 line (`web/src/store.js:801`) opens the editor scrolled to that line, with the
 line selected.
@@ -35,7 +38,7 @@ Document fragments are stripped; `:line` and `#Lline` retain line navigation.
 
 Transcript paths resolve from the project root. Markdown preview paths resolve
 from the displayed file's folder, including `./` and `../`. Absolute paths
-inside the project have the project folder trimmed off. Both open actions use
+inside the project have the project folder trimmed off. Open and copy actions use
 the same resolved path, and a missing file is reported without opening a tab.
 
 A path that is still absolute after that trimming names a file outside the
@@ -53,6 +56,10 @@ be argued about; a button carries the path in a data attribute, is focusable
 and answers Enter for free. `MarkdownContent.vue` shares the rendering, click
 handler and context menu between message bubbles and file previews. A block
 naming forty files still costs one listener per event type.
+
+The file-info endpoint identifies directories before a local link opens,
+including folders whose names have file extensions. This adds one metadata
+request per local-link click.
 
 ## Finding the line
 

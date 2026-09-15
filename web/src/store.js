@@ -1970,8 +1970,18 @@ export function resolveFileRef(path, basePath = "") {
   return parts.join("/");
 }
 
-export function openFileRef(path, line = 0, basePath = "") {
-  return openFileIn(currentProjectID(), S.owner?.id || "", resolveFileRef(path, basePath), { line, pin: true });
+export async function openFileRef(path, line = 0, basePath = "") {
+  const projectID = currentProjectID();
+  const ownerID = S.owner?.id || "";
+  if (!projectID) return;
+  path = resolveFileRef(path, basePath) || ".";
+  try {
+    const info = await api("GET", `/api/projects/${projectID}/file-info?path=${encodeURIComponent(path)}`);
+    if (info.dir) return openInSystem(path, projectID);
+    return openFileIn(projectID, ownerID, path, { line, pin: true });
+  } catch (e) {
+    fail(e);
+  }
 }
 
 /* At most one temporary tab per project, because the strip is per project:

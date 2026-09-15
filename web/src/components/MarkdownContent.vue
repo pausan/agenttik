@@ -46,6 +46,7 @@ function openLink() {
 const menu = computed(() => aimedFile.value ? [
   { label: "Open in new tab", icon: "i-lucide-file-plus", onSelect: () => openFile(aimedFile.value) },
   { label: "Open in system browser", icon: "i-lucide-external-link", onSelect: () => openInSystem(resolveFileRef(aimedFile.value.path, props.basePath)) },
+  { label: "Copy path", icon: "i-lucide-copy", onSelect: () => copyText(resolveFileRef(aimedFile.value.path, props.basePath) || ".") },
 ] : [
   { label: "Open in browser", icon: "i-lucide-external-link", disabled: !aimedLink.value, onSelect: openLink },
   { label: "Copy link", icon: "i-lucide-copy", disabled: !aimedLink.value, onSelect: () => copyText(aimedLink.value) },

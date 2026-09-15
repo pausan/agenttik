@@ -43,12 +43,12 @@ test("a transcript web link can be copied or opened from its menu", async ({ pag
   await expect.poll(() => page.evaluate(() => window.openedLinks)).toEqual(["https://example.com/docs"]);
 });
 
-test("local transcript links open kept tabs and offer the system opener", async ({ page }) => {
+test("local transcript links open kept tabs and offer the system opener", async ({ page, context }) => {
   await addProject(page, REPO);
   await openProject(page, REPO);
   await newTask(page);
   await pickModel(page);
-  await sendPrompt(page, `[first](README.md) [second](Makefile) [absolute](${REPO}/README.md:3) [missing](no-such-file.md)`);
+  await sendPrompt(page, `[first](README.md) [second](Makefile) [absolute](${REPO}/README.md:3) [missing](no-such-file.md) [directory](web/) [root](.)`);
 
   const opened = [];
   await page.route("**/api/projects/*/open", async (route) => {
@@ -58,6 +58,19 @@ test("local transcript links open kept tabs and offer the system opener", async 
   await page.getByRole("button", { name: "absolute", exact: true }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Open in system browser" }).click();
   await expect.poll(() => opened).toEqual([{ path: "README.md" }]);
+
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], {
+    origin: new URL(page.url()).origin,
+  });
+  for (const [name, path] of [["absolute", "README.md"], ["directory", "web"], ["root", "."]]) {
+    await page.getByRole("button", { name, exact: true }).click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Copy path", exact: true }).click();
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(path);
+  }
+  await page.getByRole("button", { name: "directory", exact: true }).click();
+  await page.getByRole("button", { name: "root", exact: true }).click();
+  await expect.poll(() => opened).toEqual([{ path: "README.md" }, { path: "web" }, { path: "." }]);
+  await expect(page.locator('[role="tab"][title="web"]')).toHaveCount(0);
 
   // fail() logs handled API errors too; allow only this deliberate failure.
   await page.evaluate(() => {

@@ -18,6 +18,7 @@ import (
 )
 
 type fileInfo struct {
+	Dir   bool       `json:"dir,omitempty"`
 	Size  int64      `json:"size"`
 	Image *imageInfo `json:"image,omitempty"`
 }
@@ -58,6 +59,10 @@ func (s *Server) projectFileInfo(c *fiber.Ctx) error {
 		info, err := os.Stat(abs)
 		if err != nil {
 			return badRequest("cannot read %s: %v", rel, err)
+		}
+		if info.IsDir() {
+			c.Set(fiber.HeaderCacheControl, "no-store")
+			return c.JSON(fileInfo{Dir: true})
 		}
 		if !info.Mode().IsRegular() {
 			return badRequest("%s is not a regular file", rel)

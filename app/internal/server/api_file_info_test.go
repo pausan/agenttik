@@ -132,6 +132,9 @@ func TestFileInfoEndpoint(t *testing.T) {
 			t.Fatalf("%s has image metadata", name)
 		}
 	}
+	if got := decode[fileInfo](t, do(t, s, "GET", base+".", nil)); !got.Dir || got.Image != nil {
+		t.Fatalf("directory metadata = %+v", got)
+	}
 	// Text beyond the editor/preview limits still has an exact size.
 	f, err := os.Create(filepath.Join(dir, "large.bin"))
 	if err != nil {
@@ -144,7 +147,7 @@ func TestFileInfoEndpoint(t *testing.T) {
 	if got := decode[fileInfo](t, do(t, s, "GET", base+"large.bin", nil)); got.Size != 32<<20 {
 		t.Fatal(got)
 	}
-	for _, path := range []string{"../outside", ".", "photo.png&rev=--help"} {
+	for _, path := range []string{"../outside", "photo.png&rev=--help"} {
 		resp := do(t, s, "GET", base+path, nil)
 		resp.Body.Close()
 		if resp.StatusCode != 400 {

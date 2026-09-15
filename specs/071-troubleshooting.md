@@ -26,3 +26,41 @@ or copied. Storage failures never mask the original error.
 Validation: frontend unit tests cover privacy, duplicate capture, retention,
 corrupt storage and unavailable storage. The browser test covers capture,
 reload persistence, copying and clearing in Help.
+
+## Excessive desktop memory
+
+A report of 17 GB on macOS versus 60 MB on Linux has no confirmed cause yet.
+The Last Errors report does not measure memory. Compare the same workload and
+process scope: the Go application, WebKit's content/GPU processes, and running
+provider CLIs are separate allocations. A main-process number alone is not the
+whole desktop footprint ([WebKit process architecture](https://docs.webkit.org/Deep%20Dive/Architecture/WebKit2.html)).
+
+Current code keeps one event stream per window, with a 256-event subscriber
+queue and shared, refcounted project watches. Open task tabs retain their full
+transcripts; the selected transcript mounts all rows after its initial 40-row
+paint. Large histories and tool payloads can therefore cost memory even with
+few projects. Smart Search also retains its native model once loaded. None of
+these observations establishes the cause of the reported 17 GB.
+
+To narrow a recurrence down:
+
+1. In Activity Monitor's Memory view, record the growing process name and PID,
+   its Memory value, memory pressure and swap. Record the app version, macOS
+   version, time since launch, whether tasks are running, and whether growth
+   follows sleep/wake. Take a second reading after a few minutes.
+2. Close long transcript/file tabs and compare growth. Let active turns finish
+   to distinguish provider subprocess use from idle application use.
+3. Quit the app fully (closing to tray keeps it alive). Launch the same binary
+   with `--web`, open its printed URL in a browser, and repeat the workload with
+   the same tabs. Compare the server and browser separately. The instance lock
+   requires the desktop instance to exit first.
+4. If growth is confined to desktop WebKit, collect a native memory profile;
+   if the Go process grows in web mode too, collect a Go heap profile in a
+   diagnostic build. Keep profiles local until reviewed: they can contain
+   project and conversation data.
+
+An [older Wails report](https://github.com/wailsapp/wails/issues/2772) describes
+macOS WebKit growth after sleep on Wails 2.5.1. This app uses 2.15.0; that report
+is a diagnostic lead, not evidence that the same defect is present. A fix needs
+a repeated workload whose memory stops growing after the change. Native macOS
+and Windows memory behavior has not been validated by this investigation.

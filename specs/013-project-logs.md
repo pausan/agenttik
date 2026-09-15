@@ -21,14 +21,15 @@ Expanding it shows the operation and destination selectors, a right-aligned acti
 button, and the help text. The operation selector reads **merge into** or
 **rebase into**, followed by a destination autocomplete. Every other local branch
 is selectable; neither side is restricted to main/master. The four-point sparkle
-button reads **Merge & solve conflicts** or **Rebase & solve conflicts**. Help text
-explains that AI solves conflicts and identifies which branch changes.
+button reads **Merge & solve conflicts** or **Rebase & solve conflicts**. A tooltip on
+the button explains temporary stashing and AI conflict resolution using the model
+in Settings → Models. Help text below identifies which branch changes.
 
 Merge checks out the destination and merges the selected source into it. Rebase
 keeps the source checked out and replays its commits onto the destination,
 rewriting the source only. Both automatically stage and stash changed and untracked
 files, then restore them staged in the resulting checkout without confirmation.
-The button help reads “Changed files will be stashed temporarily.”
+The button tooltip includes “Changed files will be stashed temporarily.”
 Paused operations retain their stash across retries and app restarts; completion,
 abort, and failures before an operation starts restore it automatically. If
 restoration conflicts, the error identifies the retained stash for manual recovery.

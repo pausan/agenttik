@@ -204,7 +204,9 @@ test("merge and rebase choose a destination and show recovery", async ({ page })
   await pane.getByRole("button", { name: "Destination branch", exact: true }).click();
   await expect(page.getByRole("option", { name: "feature/search", exact: true })).toHaveCount(0);
   await page.getByRole("option", { name: "fix/colors", exact: true }).click();
-  await expect(pane.getByText("If there are conflicts, AI will solve them", { exact: false })).toBeVisible();
+  await expect(hints).toBeHidden();
+  await merge.hover();
+  await expect(page.getByText("Changed files will be stashed temporarily. If there are conflicts, AI will solve them using the model in Settings → Models.", { exact: true }).and(page.locator('[data-slot="text"]'))).toBeVisible();
   await merge.click();
   await expect(pane.getByRole("button", { name: "Current branch", exact: true })).toContainText("fix/colors");
   await pane.getByRole("combobox", { name: "Branch operation", exact: true }).click();

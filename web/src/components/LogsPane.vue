@@ -175,12 +175,12 @@ const menu = computed(() => [
         </div>
         <div class="shrink-0 space-y-1">
           <div class="flex justify-end">
-            <UButton icon="i-lucide-sparkle" :label="`${operation === 'merge' ? 'Merge' : 'Rebase'} & solve conflicts`"
-              size="sm" :loading="busy === operation" :disabled="!!busy || !target || target === S.log.branch"
-              @click="act(operation)" />
+            <UTooltip :ui="{ content: 'max-w-xs h-auto', text: 'whitespace-normal' }" text="Changed files will be stashed temporarily. If there are conflicts, AI will solve them using the model in Settings → Models.">
+              <UButton icon="i-lucide-sparkle" :label="`${operation === 'merge' ? 'Merge' : 'Rebase'} & solve conflicts`"
+                size="sm" :loading="busy === operation" :disabled="!!busy || !target || target === S.log.branch"
+                @click="act(operation)" />
+            </UTooltip>
           </div>
-          <p class="text-xs text-dimmed">Changed files will be stashed temporarily.</p>
-          <p class="text-xs text-dimmed">If there are conflicts, AI will solve them using the model in Settings → Models.</p>
           <p v-if="target" class="text-xs text-dimmed">{{ operation === 'merge'
             ? `Merge ${S.log.branch} into ${target}. Updates and checks out ${target}.`
             : `Replay ${S.log.branch} onto ${target}. Rewrites ${S.log.branch}; ${target} stays unchanged.` }}</p>

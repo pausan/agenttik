@@ -5,16 +5,19 @@ and removes profiles. The built-in Default profile holds existing data and canno
 be removed. Names are trimmed, unique ignoring case, and limited to 80 bytes.
 
 The sidebar footer shows a profile picker immediately before Shortcuts only when
-more than one profile exists. Switching reloads the window. Other profiles keep
+more than one profile exists. The command palette offers `Switch to profile: <name>`
+for every other profile and refreshes the list when opened. Switching reloads the window. Other profiles keep
 running tasks and schedules. Unsaved file edits use the existing browser unload
 warning. A profile in the window URL scopes each API request, stream, image, and
 saved tab; windows can use different profiles concurrently.
 
 Each added profile has its own SQLite database, provider accounts, attachments,
-search index, settings, projects, tasks, history, and schedules. The same folder
+search index, settings, model favourites and visibility, projects, tasks, history,
+and schedules. Subscription lists and default subscription choices are isolated. The same folder
 can be registered independently in multiple profiles. Working files are shared:
 profiles do not create copies of the project directory. Browser preferences are
-scoped too, except the existing browser-wide Light/Dark/System setting.
+scoped too, including Light/Dark/System mode and file-tree expansion. Default
+retains its existing browser keys; added profiles use separate keys.
 
 ## Storage and routing
 
@@ -39,6 +42,6 @@ Private tabs, drafts, and app preferences stay in memory and are lost on reload;
 they never enter the normal browser storage. The footer identifies private mode.
 
 Validation: Go tests cover isolation, same-folder projects, settings, persistence,
-CLI discovery, invalid names, deletion, and shutdown. Browser tests cover the
-picker, switching and removal; private tests cover concurrent instances and
+CLI discovery, favourites, subscriptions, invalid names, deletion, and shutdown.
+Browser tests cover the picker, palette switching, appearance, tree expansion, and removal; private tests cover concurrent instances and
 SIGTERM cleanup. Startup remains under the one-second budget.

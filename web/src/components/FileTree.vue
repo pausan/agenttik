@@ -4,6 +4,7 @@
 import { computed, nextTick, ref, watch } from "vue";
 
 import { S, copyText, currentProjectID, focusPrompt, openFile, openInSystem, selectTab, startCurrentTask } from "../store";
+import { storage } from "../api";
 import { buildTree, countFiles, filterTree } from "../tree";
 import { segments } from "../fuzzy";
 import { promptImages, promptText, withImages } from "../prompt-images";
@@ -28,7 +29,7 @@ watch(() => S.treeFilter, () => filterToggled.value.clear());
 
 function restoreExpansion() {
   try {
-    const saved = JSON.parse(localStorage.getItem(expansionKey()));
+    const saved = JSON.parse(storage.getItem(expansionKey()));
     expanded.value = new Set(Array.isArray(saved) ? saved.filter((p) => typeof p === "string") : []);
   } catch {
     expanded.value = new Set();
@@ -39,7 +40,7 @@ restoreExpansion();
 function saveExpansion() {
   if (!currentProjectID()) return;
   try {
-    localStorage.setItem(expansionKey(), JSON.stringify([...expanded.value]));
+    storage.setItem(expansionKey(), JSON.stringify([...expanded.value]));
   } catch { /* Tree navigation still works when storage is unavailable. */ }
 }
 

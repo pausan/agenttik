@@ -4,10 +4,13 @@
    the Tasks pane is time-windowed and also includes archived sessions. */
 import { computed, ref, watch } from "vue";
 
+import { profileID } from "../api";
+import { profiles, loadProfiles, switchProfile } from "../profiles";
 import { fuzzy, fuzzyAny, segments } from "../fuzzy";
 
 import {
   S,
+  fail,
   currentProjectID,
   isModelChoiceVisible,
   modelAccountLabel,
@@ -73,6 +76,15 @@ const activeTasks = computed(() =>
   ),
 );
 
+const profileItems = computed(() => profiles.items
+  .filter((profile) => profile.id !== profileID)
+  .map((profile) => ({
+    label: `Switch to profile: ${profile.name}`,
+    icon: "i-lucide-user-round",
+    onSelect: () => choose(() => switchProfile(profile.id)),
+  })),
+);
+
 const favourites = computed(() =>
   S.stars.flatMap((star) => {
     const provider = providerOf(star.provider);
@@ -126,7 +138,10 @@ const actions = computed(() => [
    the subsequence match the tree and the folder picker already use, so every
    list in the app narrows the same way and shows which letters matched. */
 const query = ref("");
-watch(open, (on) => on || (query.value = ""));
+watch(open, (on) => {
+  if (on) loadProfiles().catch(fail);
+  else query.value = "";
+}, { immediate: true });
 
 /* The label is highlighted on its own, so letters that only matched the
    description do not light up arbitrary characters in the title. */
@@ -145,6 +160,7 @@ function match(items, needle) {
 const groups = computed(() =>
   [
     { id: "navigation", label: "Go to", items: navigation.value },
+    { id: "profiles", label: "Profiles", items: profileItems.value },
     { id: "projects", label: "Projects", items: projectItems.value },
     { id: "tasks", label: "Active tasks", items: activeTasks.value },
     { id: "favourites", label: "Favourite models", items: favourites.value },

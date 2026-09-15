@@ -3,6 +3,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import { _api as iconApi } from "@iconify/vue";
 import ui from "@nuxt/ui/vue-plugin";
 
+import { loadColorMode } from "./color-mode";
 import { loadProfiles } from "./profiles";
 import App from "./App.vue";
 import { loadColors } from "./store";
@@ -30,6 +31,7 @@ const router = createRouter({
 // The saved colours are applied before mounting, so the app is never painted
 // in the default palette first and repainted in the chosen one.
 loadProfiles().then(() => {
+  loadColorMode();
   loadColors();
   createApp(App).use(router).use(ui).mount("#app");
 }).catch((error) => {

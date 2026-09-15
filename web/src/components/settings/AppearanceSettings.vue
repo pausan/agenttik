@@ -3,6 +3,7 @@
    button because seeing the colour is the only way to choose it. */
 import { computed, watchEffect } from "vue";
 
+import { colorPreference, COLOR_MODES } from "../../color-mode";
 import { S, setColor } from "../../store";
 import { ACCENTS, NEUTRALS } from "../../theme";
 import { fuzzyAny } from "../../fuzzy";
@@ -36,15 +37,15 @@ watchEffect(() => emit("count", rows.value.length + Number(showMode.value)));
     <label for="color-mode" class="mb-0.5 block font-semibold text-highlighted">Color mode</label>
     <p class="mb-2 text-xs text-dimmed">
       Choose Light, Dark, or System to follow your device’s appearance, including scheduled
-      changes. Takes effect immediately and is remembered per browser.
+      changes. Takes effect immediately and is remembered for this profile in this browser.
     </p>
-    <UColorModeSelect id="color-mode" aria-label="Color mode" class="w-40" />
+    <USelectMenu v-model="colorPreference" :items="COLOR_MODES" value-key="value" :search-input="false" id="color-mode" aria-label="Color mode" class="w-40" />
   </section>
   <section v-if="rows.length">
     <div class="mb-0.5 font-semibold text-highlighted">Colours</div>
     <p class="mb-2 text-xs text-dimmed">
       The accent every control is drawn in, and the grey behind it. Both take effect at once and
-      are remembered per browser.
+      are remembered for this profile in this browser.
     </p>
 
     <!-- py-1.5 leaves the selected swatch's ring room inside the scrolling

@@ -149,3 +149,44 @@ func TestDeletingProfileStopsOnlyItsRunner(t *testing.T) {
 		t.Fatal("deletion stopped another profile")
 	}
 }
+
+func TestProfilesPersistSeparateFavouritesAndSubscriptions(t *testing.T) {
+	s := profileServer(t)
+	p := decode[Profile](t, do(t, s, "POST", "/api/profiles", map[string]string{"name": "Work"}))
+	homes := make(map[string]string)
+	for _, id := range []string{"default", p.ID} {
+		query := "?profile=" + id
+		resp := do(t, s, "POST", "/api/providers/fake/accounts"+query, map[string]any{"alias": id, "default": true})
+		if resp.StatusCode != 201 {
+			t.Fatalf("create subscription: %d", resp.StatusCode)
+		}
+		account := decode[accountInfo](t, resp)
+		homes[id] = account.Home
+		resp = do(t, s, "POST", "/api/stars"+query, map[string]any{"provider": "fake", "account_id": account.ID, "model": id})
+		if resp.StatusCode != 204 {
+			t.Fatalf("add favourite: %d", resp.StatusCode)
+		}
+	}
+	if homes["default"] == homes[p.ID] {
+		t.Fatal("subscription directories overlap")
+	}
+	s.CloseProfiles()
+	if err := s.EnableProfiles(false); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"default", p.ID} {
+		query := "?profile=" + id
+		stars := decode[[]store.Star](t, do(t, s, "GET", "/api/stars"+query, nil))
+		if len(stars) != 1 || stars[0].Model != id {
+			t.Fatalf("profile %s favourites: %+v", id, stars)
+		}
+		providers := decode[[]providerInfo](t, do(t, s, "GET", "/api/providers"+query, nil))
+		if len(providers) != 1 || len(providers[0].Accounts) != 2 {
+			t.Fatalf("profile %s subscriptions: %+v", id, providers)
+		}
+		account := providers[0].Accounts[1]
+		if account.Alias != id || !account.IsDefault || account.Home != homes[id] {
+			t.Fatalf("profile %s subscription changed: %+v", id, account)
+		}
+	}
+}

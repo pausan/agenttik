@@ -31,3 +31,57 @@ test("profiles appear only when needed and isolate the same project", async ({ p
   await page.keyboard.press("Escape");
   await expect(page.getByRole("button", { name: /^Profile:/ })).toHaveCount(0);
 });
+
+async function paletteSwitch(page, name) {
+  await page.keyboard.press("Control+Shift+p");
+  await page.getByPlaceholder("Command Palette…").fill(`Switch to profile: ${name}`);
+  await page.getByText(`Switch to profile: ${name}`, { exact: true }).click();
+  await expect(page.getByRole("button", { name: `Profile: ${name}`, exact: true })).toBeVisible();
+}
+
+test("command palette refreshes profiles and appearance stays with each profile", async ({ page, agenttik }) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await openSettings(page, "Appearance");
+  const mode = page.getByRole("button", { name: "Color mode", exact: true });
+  await mode.click();
+  await page.getByRole("option", { name: "Dark", exact: true }).click();
+  await page.keyboard.press("Escape");
+  // Added externally after startup: opening the palette must refresh its list.
+  await page.request.post(`${agenttik.url}/api/profiles`, { data: { name: "Work" } });
+  await paletteSwitch(page, "Work");
+  await expect(page.locator("html")).not.toHaveClass(/dark/);
+  await openSettings(page, "Appearance");
+  await expect(mode).toContainText("System");
+  await mode.click();
+  await page.getByRole("option", { name: "Light", exact: true }).click();
+  await page.keyboard.press("Escape");
+  await paletteSwitch(page, "Default");
+  await expect(page.locator("html")).toHaveClass(/dark/);
+  await openSettings(page, "Appearance");
+  await expect(mode).toContainText("Dark");
+  await page.keyboard.press("Escape");
+  await paletteSwitch(page, "Work");
+  await page.reload();
+  await openSettings(page, "Appearance");
+  await expect(mode).toContainText("Light");
+});
+
+test("tree expansion stays with its profile even when project IDs match", async ({ page, agenttik }) => {
+  const work = await (await page.request.post(`${agenttik.url}/api/profiles`, { data: { name: "Work" } })).json();
+  for (const id of ["default", work.id]) {
+    await page.request.post(`${agenttik.url}/api/projects?profile=${id}`, { data: { path: REPO } });
+  }
+  await page.reload();
+  const tree = sidebar(page);
+  const showTree = () => tree.getByRole("tab", { name: "Tree", exact: true }).click();
+  const folder = tree.getByRole("button", { name: "app", exact: true });
+  await showTree();
+  await folder.click();
+  await expect(folder).toHaveAttribute("aria-expanded", "true");
+  await paletteSwitch(page, "Work");
+  await showTree();
+  await expect(folder).toHaveAttribute("aria-expanded", "false");
+  await paletteSwitch(page, "Default");
+  await showTree();
+  await expect(folder).toHaveAttribute("aria-expanded", "true");
+});

@@ -69,7 +69,9 @@ and it is now generated from the registry the handlers read, which is why it
 cannot disagree with them either.
 
 `Ctrl+Shift+P` opens **Command Palette**, the fuzzy launcher for navigation
-and actions. `Ctrl+P` opens **Go to file**, searching full relative paths in
+and actions. It includes `Switch to profile: <name>` for each other local profile,
+refreshing the profile list on open. Selecting one reloads the window in that
+profile; see [067](067-local-profiles.md). `Ctrl+P` opens **Go to file**, searching full relative paths in
 only the current project's live file listing, including ignored files.
 Matching is case-insensitive and accepts letters in order; the best 100
 matches are shown with matching letters highlighted. Arrow keys select a

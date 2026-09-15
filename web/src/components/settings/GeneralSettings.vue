@@ -5,7 +5,7 @@ import { PROMPT_CHORDS, S, copyText, enterDoes, fail, setEnterDoes, setFoldOther
 import { fuzzyAny } from "../../fuzzy";
 import { fileSize } from "../../file-info.js";
 import { api } from "../../api";
-import { useColorMode } from "@nuxt/ui/runtime/vue/stubs/base.js";
+import { colorPreference } from "../../color-mode";
 import Chord from "../Chord.vue";
 import { smartSearch, setSmartSearch } from "../../smart-search.js";
 import DesktopSettings from "./DesktopSettings.vue";
@@ -14,7 +14,6 @@ import SmartSearchProgress from "../SmartSearchProgress.vue";
 const props = defineProps({ filter: { type: String, default: "" } });
 const emit = defineEmits(["count"]);
 
-const colorMode = useColorMode();
 const confirmingReset = ref(false);
 const resetting = ref(false);
 const resetDone = ref(false);
@@ -24,7 +23,7 @@ async function resetDefaults() {
   resetting.value = true;
   try {
     await resetPreferences();
-    colorMode.preference = "system";
+    colorPreference.value = "auto";
     position.value = "top";
     desktopVersion.value++;
     confirmingReset.value = false;

@@ -9,7 +9,7 @@ screen, **session** for the row, the route or the CLI flag.
 
 | Doc | What it covers |
 |-----|----------------|
-| [067](067-local-profiles.md) | Local profiles, isolated stores, settings management and switching |
+| [067](067-local-profiles.md) | Local profiles, isolated preferences and subscriptions, palette switching |
 | [066](066-private-mode.md) | Temporary instances and cleanup on exit |
 | [065](065-opencode-subscription.md) | OpenCode Go, optional CLI, direct coding turns and provider policy review |
 | [064](064-remote-connections.md) | Remote CLI and palette connections, discovery and login |

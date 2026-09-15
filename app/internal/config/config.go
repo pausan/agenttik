@@ -50,3 +50,14 @@ func defaultDataDir() string {
 	}
 	return filepath.Join(dir, "agenttik")
 }
+
+// UseTemporaryData replaces the data root before opening any stores or locks.
+// The caller must defer cleanup until all users of the directory have stopped.
+func (c *Config) UseTemporaryData() (func(), error) {
+	dir, err := os.MkdirTemp("", "agenttik-private-")
+	if err != nil {
+		return nil, fmt.Errorf("create private data dir: %w", err)
+	}
+	c.DataDir = dir
+	return func() { os.RemoveAll(dir) }, nil
+}

@@ -50,6 +50,7 @@ func main() {
 func run() error {
 	cfg := config.Default()
 	remoteAddress := flag.String("remote", "", "connect to an agenttik server at `host:port or URL`")
+	private := flag.Bool("private", false, "start an isolated temporary instance and remove its data on exit")
 	webOnly := flag.Bool("web", false, "serve the web UI only, no desktop window")
 	flag.StringVar(&cfg.Addr, "addr", cfg.Addr, "`host:port` to listen on")
 	flag.StringVar(&cfg.DataDir, "data-dir", cfg.DataDir, "`directory` holding agenttik.db")
@@ -75,6 +76,9 @@ func run() error {
 		fmt.Println("agenttik", version)
 		return nil
 	}
+	if *private && (*remoteAddress != "" || *apiMethod != "" || *initProject) {
+		return errors.New("--private cannot be combined with --remote, --api, or --init")
+	}
 	if *remoteAddress != "" {
 		if *apiMethod != "" || *initProject || *apiBody != "" || flag.NArg() != 0 {
 			return errors.New("--remote cannot be combined with --api, --body, --init, or positional arguments")
@@ -89,6 +93,24 @@ func run() error {
 	}
 	if *apiBody != "" {
 		return errors.New("--body requires --api")
+	}
+
+	if *private {
+		cleanup, err := cfg.UseTemporaryData()
+		if err != nil {
+			return err
+		}
+		defer cleanup()
+		// Private instances must coexist with the regular web listener.
+		addrSet := false
+		flag.Visit(func(f *flag.Flag) {
+			if f.Name == "addr" {
+				addrSet = true
+			}
+		})
+		if !addrSet {
+			cfg.Addr = "127.0.0.1:0"
+		}
 	}
 
 	if err := cfg.EnsureDataDir(); err != nil {

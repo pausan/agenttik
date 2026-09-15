@@ -126,3 +126,5 @@ spends a real subscription.
 
 [review-notes.md](review-notes.md) lists what these specs and the code still
 disagree about, for a human to settle.
+
+- [066 — Private mode](066-private-mode.md)

@@ -360,6 +360,13 @@ CREATE TABLE action_models (
     effort TEXT NOT NULL DEFAULT ''
 );
 `,
+	`
+CREATE TABLE server_identity (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    name TEXT NOT NULL CHECK (length(trim(name)) >= 3)
+);
+INSERT INTO server_identity (id, name) VALUES (1, 'agenttik-' || lower(hex(randomblob(4))));
+`,
 }
 
 func migrate(db *sql.DB, path string) error {

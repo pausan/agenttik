@@ -21,7 +21,7 @@ func TestVersionBeforeLogin(t *testing.T) {
 		t.Fatalf("version: %d", rec.Code)
 	}
 	info := decode[remote.Info](t, rec.Result())
-	if info.Application != "agenttik" || info.Version != "1.2.3" {
+	if info.Application != "agenttik" || info.Version != "1.2.3" || len(info.Name) < 3 {
 		t.Fatalf("%+v", info)
 	}
 	if rec.Header().Get("Cache-Control") != "no-store" {
@@ -33,5 +33,28 @@ func TestVersionBeforeLogin(t *testing.T) {
 		if rec.Code != 401 {
 			t.Fatalf("%s bypassed login: %d", path, rec.Code)
 		}
+	}
+}
+
+func TestServerNameAPI(t *testing.T) {
+	srv, _ := newTestServer(t)
+	original := decode[remote.Info](t, do(t, srv, "GET", remote.VersionPath, nil)).Name
+	for _, name := range []string{"", " ", "ab", "  ab  ", "猫犬"} {
+		resp := do(t, srv, "PUT", "/api/server/name", map[string]string{"name": name})
+		resp.Body.Close()
+		if resp.StatusCode != 400 {
+			t.Fatalf("accepted %q: %d", name, resp.StatusCode)
+		}
+	}
+	if got := decode[remote.Info](t, do(t, srv, "GET", remote.VersionPath, nil)).Name; got != original {
+		t.Fatal("invalid request changed the name")
+	}
+	resp := do(t, srv, "PUT", "/api/server/name", map[string]string{"name": "  My server  "})
+	resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("rename: %d", resp.StatusCode)
+	}
+	if got := decode[remote.Info](t, do(t, srv, "GET", remote.VersionPath, nil)).Name; got != "My server" {
+		t.Fatalf("discovered name: %q", got)
 	}
 }

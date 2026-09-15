@@ -21,9 +21,13 @@ func runRemote(address string, webOnly bool) error {
 	}
 	client := remote.NewClient(http.NotFoundHandler())
 	client.Connect(target)
-	fmt.Printf("Connecting to agenttik %s at %s\n", info.Version, target)
+	name := info.Name
+	if name == "" {
+		name = target.Host
+	}
+	fmt.Printf("Connecting to %s (agenttik %s) at %s\n", name, info.Version, target)
 	if !webOnly {
-		err := runRemoteDesktop(client, "agenttik — "+target.Host)
+		err := runRemoteDesktop(client, "agenttik — "+name)
 		if !errors.Is(err, errNoDesktop) {
 			return err
 		}

@@ -13,8 +13,9 @@ client session. `--remote` cannot be combined with `--init`, `--api`, or
 `--body`. `--addr` and `--data-dir` are unused in remote mode.
 
 The command palette offers **Connect to remote server**. Its dialog accepts
-an address, checks it, and displays failures without leaving the current
-instance. Success reloads the desktop window against the remote server;
+an address and checks it without leaving the current instance. It previews
+the server name and build version; Connect then checks again and reloads
+the desktop window against the remote server;
 in a normal browser, it navigates to the checked remote origin. Local tasks
 keep running when a local desktop window switches to a remote. Restart
 without `--remote` to return to the local instance. Save or send drafts
@@ -22,12 +23,27 @@ before switching; unsaved file edits block the connection until saved or
 discarded. Restored desktop tabs and drafts are keyed by remote
 origin, so matching task IDs on different servers do not share drafts.
 
+## Server names
+
+Each server database receives a persistent generated name, `agenttik-` plus
+eight random hexadecimal digits. Settings → Server allows renaming in both
+desktop and web mode. Names are trimmed and must contain at least three
+Unicode code points. Invalid changes leave the saved name intact.
+`PUT /api/server/name` accepts `{"name":"My workstation"}` behind the normal
+access gate. Identity is independent of listener and authentication settings.
+Profiles served by one process share its server identity.
+
+The sidebar displays the current server name. Remote CLI startup reports the
+name and version and uses the name in the window title. Names are public
+discovery metadata, available before login. Older servers without a name
+remain supported; the connection preview uses their address.
+
 ## Discovery and authentication
 
 `GET /api/version` returns JSON:
 
 ```json
-{"application":"agenttik","version":"1.2.3"}
+{"application":"agenttik","version":"1.2.3","name":"agenttik-a1b2c3d4"}
 ```
 
 The version is the same build value as `--version` (`dev` in unversioned
@@ -57,6 +73,11 @@ handler requires JSON and rejects cross-origin requests. Failed checks
 leave the active proxy intact. A successful check stages the new target;
 the proxy changes when the window navigates, after saving its old state.
 
-Tests cover parsing, signature failures and redirects, public discovery
+`POST /api/remote/check` accepts the same body and returns the same metadata
+without staging or changing the active target. Both responses include
+`name` when supplied by the server.
+
+Tests cover name generation, persistence, validation, preview isolation,
+parsing, signature failures and redirects, public discovery
 behind the authentication gate, cookie isolation, switching failures, and
 password/TOTP login and revocation through the remote proxy.

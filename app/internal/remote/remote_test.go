@@ -68,7 +68,7 @@ func TestClientSwitchAndCookies(t *testing.T) {
 	newRemote := func(name string) *httptest.Server {
 		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path == VersionPath {
-				json.NewEncoder(w).Encode(Info{"agenttik", "1"})
+				json.NewEncoder(w).Encode(Info{Application: "agenttik", Version: "1", Name: name})
 				return
 			}
 			if r.Header.Get("Authorization") != "" {
@@ -148,5 +148,27 @@ func TestConnectRejectsCrossOriginAndForms(t *testing.T) {
 		if rec.Code != tc.status {
 			t.Fatalf("got %d", rec.Code)
 		}
+	}
+}
+
+func TestPreviewDoesNotSwitchClient(t *testing.T) {
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(Info{Application: "agenttik", Version: "1", Name: "My server"})
+	}))
+	defer target.Close()
+	client := NewClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, "local") }))
+	req := httptest.NewRequest("POST", CheckPath, strings.NewReader(fmt.Sprintf(`{"address":%q}`, target.URL)))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	client.ServeHTTP(rec, req)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"name":"My server"`) {
+		t.Fatalf("preview: %d %s", rec.Code, rec.Body.String())
+	}
+	req = httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Accept", "text/html")
+	rec = httptest.NewRecorder()
+	client.ServeHTTP(rec, req)
+	if rec.Body.String() != "local" {
+		t.Fatal("preview switched the active server")
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -249,4 +250,22 @@ func (s *Server) serverTOTPCode(c *fiber.Ctx) error {
 	}
 	c.Set("Cache-Control", "no-store")
 	return c.JSON(fiber.Map{"code": code, "refresh_after_ms": now.Truncate(netauth.Period).Add(netauth.Period).Sub(now).Milliseconds()})
+}
+
+// putServerName is also available in web mode; it does not change the listener.
+func (s *Server) putServerName(c *fiber.Ctx) error {
+	var body struct {
+		Name string `json:"name"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return badRequest("invalid body: %v", err)
+	}
+	name := strings.TrimSpace(body.Name)
+	if utf8.RuneCountInString(name) < 3 {
+		return badRequest("server name must contain at least 3 characters")
+	}
+	if err := s.store.SetServerName(name); err != nil {
+		return err
+	}
+	return c.JSON(fiber.Map{"name": name})
 }

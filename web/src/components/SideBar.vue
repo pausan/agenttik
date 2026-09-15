@@ -205,6 +205,9 @@ function onTaskDrop(e) {
 
 <template>
   <aside class="flex min-h-0 flex-col bg-muted">
+    <div v-if="S.instanceInfo.name" class="mx-3 mt-3 truncate text-xs text-muted" :title="S.instanceInfo.name + ' · agenttik ' + S.instanceInfo.version">
+      {{ S.instanceInfo.name }}
+    </div>
     <UTabs
       :model-value="tab"
       :items="tabs"

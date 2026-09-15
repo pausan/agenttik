@@ -15,9 +15,12 @@ import (
 )
 
 const VersionPath = "/api/version"
+const CheckPath = "/api/remote/check"
+
 const ConnectPath = "/api/remote/connect"
 
 type Info struct {
+	Name        string `json:"name,omitempty"`
 	Application string `json:"application"`
 	Version     string `json:"version"`
 }
@@ -112,6 +115,7 @@ func ConnectHandler(connect func(*url.URL) string) http.Handler {
 		json.NewEncoder(w).Encode(struct {
 			URL     string `json:"url"`
 			Version string `json:"version"`
-		}{connect(target), info.Version})
+			Name    string `json:"name,omitempty"`
+		}{connect(target), info.Version, info.Name})
 	})
 }

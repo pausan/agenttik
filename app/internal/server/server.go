@@ -156,10 +156,16 @@ func (s *Server) routes() {
 		if version == "" {
 			version = "dev"
 		}
-		return c.JSON(remote.Info{Application: "agenttik", Version: version})
+		name, err := s.store.ServerName()
+		if err != nil {
+			return err
+		}
+		return c.JSON(remote.Info{Application: "agenttik", Version: version, Name: name})
 	})
 	s.app.Post(remote.ConnectPath, adaptor.HTTPHandler(remote.ConnectHandler(func(u *url.URL) string { return u.String() + "/" })))
+	s.app.Post(remote.CheckPath, adaptor.HTTPHandler(remote.ConnectHandler(func(u *url.URL) string { return u.String() + "/" })))
 	api := s.app.Group("/api")
+	api.Put("/server/name", s.putServerName)
 	api.Get("/profiles", s.listProfiles)
 	api.Post("/profiles", s.createProfile)
 	api.Delete("/profiles/:id", s.deleteProfile)

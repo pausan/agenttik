@@ -7,6 +7,7 @@ import { computed, ref, watch, watchEffect } from "vue";
 
 import {
   S,
+  loadInstanceInfo,
   copyText,
   fail,
   openExternal,
@@ -25,7 +26,7 @@ const emit = defineEmits(["count"]);
 
 const rows = computed(() =>
   fuzzyAny(
-    ["Server", "network", "expose", "browser", "host", "port", "0.0.0.0", "127.0.0.1", "localhost", "lan",
+    ["Server", "name", "instance", "network", "expose", "browser", "host", "port", "0.0.0.0", "127.0.0.1", "localhost", "lan",
      "login", "password", "totp", "2fa", "authenticator", "qr", "seed", "secure"],
     props.filter,
   ) !== null
@@ -40,6 +41,29 @@ const HOSTS = [
   { value: "127.0.0.1", label: "localhost (127.0.0.1)" },
   { value: "custom", label: "Other" },
 ];
+
+const serverName = ref("");
+const nameError = ref("");
+const savingName = ref(false);
+watch(() => S.instanceInfo.name, (name) => { serverName.value = name || ""; }, { immediate: true });
+
+async function saveName() {
+  nameError.value = "";
+  const name = serverName.value.trim();
+  if ([...name].length < 3) {
+    nameError.value = "Server name must contain at least 3 characters.";
+    return;
+  }
+  savingName.value = true;
+  try {
+    await api("PUT", "/api/server/name", { name });
+    await loadInstanceInfo();
+  } catch (e) {
+    nameError.value = e.message;
+  } finally {
+    savingName.value = false;
+  }
+}
 
 const enabled = computed({
   get: () => S.serverConfig.enabled,
@@ -237,6 +261,15 @@ const qr = computed(() =>
       Whoever opens the address you pick gets the same access this window has, so put a login on it
       unless the address is one only you can reach.
     </p>
+
+    <form class="mb-4" @submit.prevent="saveName">
+      <UFormField label="Server name" help="At least 3 characters. Shown to clients before they sign in." :error="nameError">
+        <div class="mt-1 flex items-center gap-2">
+          <UInput v-model="serverName" aria-label="Server name" class="w-64" :disabled="savingName" />
+          <UButton type="submit" label="Save" size="xs" color="neutral" variant="subtle" :loading="savingName" />
+        </div>
+      </UFormField>
+    </form>
 
     <p v-if="!S.serverConfig.available" class="text-xs text-dimmed">
       Not available here — a web launch is already the server, on the address it was started with.

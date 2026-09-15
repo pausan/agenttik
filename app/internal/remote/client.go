@@ -64,6 +64,10 @@ func (c *Client) Connect(target *url.URL) string {
 }
 
 func (c *Client) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == CheckPath {
+		ConnectHandler(func(target *url.URL) string { return target.String() + "/" }).ServeHTTP(w, r)
+		return
+	}
 	if r.URL.Path == ConnectPath {
 		ConnectHandler(func(target *url.URL) string {
 			next := NewClient(http.NotFoundHandler())

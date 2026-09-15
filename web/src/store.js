@@ -79,6 +79,7 @@ export const S = reactive({
   // reach, read when Settings opens like the archived projects beside it.
   // available is false on a web launch, which already is the server. See
   // specs/043-exposed-server.md.
+  instanceInfo: { name: "", version: "" },
   serverConfig: { available: false, enabled: false, host: "", port: 0, listening: false,
     auth_enabled: false, has_password: false, totp_secret: "", totp_uri: "" },
   /* sessionID -> unsent prompt, for a conversation with no tab of its own.
@@ -3410,7 +3411,12 @@ export function keyConflicts() {
 
 /* ------------------------------------------------------------------ init */
 
+export async function loadInstanceInfo() {
+  S.instanceInfo = await api("GET", "/api/version");
+}
+
 export async function init() {
+  loadInstanceInfo().catch(fail);
   loadLastUsed();
   loadLayout();
   loadKeys();

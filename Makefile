@@ -69,6 +69,11 @@ test:
 	go test ./...
 	cd $(UI) && npm test
 
+## test-desktop-remote: native Wails/WebKit password/code login regression (needs Xvfb)
+.PHONY: test-desktop-remote
+test-desktop-remote:
+	xvfb-run -a go test -tags "$(DESKTOP_TAGS)" $(PKG) -run '^TestDesktopRemoteLogin$$' -count=1
+
 ## test-desktop-images: native Wails/WebKit image upload regression (needs Xvfb)
 .PHONY: test-desktop-images
 test-desktop-images:

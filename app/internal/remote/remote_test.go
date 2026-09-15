@@ -172,3 +172,54 @@ func TestPreviewDoesNotSwitchClient(t *testing.T) {
 		t.Fatal("preview switched the active server")
 	}
 }
+
+func TestDesktopLoginRedirect(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		desktop  bool
+		accept   string
+		location string
+		status   int
+	}{
+		{"desktop navigation", true, "text/html", "/?q=</script>", 200},
+		{"browser navigation", false, "text/html", "/", 303},
+		{"desktop fetch", true, "application/json", "/", 303},
+		{"foreign origin", true, "text/html", "https://other.example/", 502},
+		{"ambiguous path", true, "text/html", "//other.example/", 502},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				http.SetCookie(w, &http.Cookie{Name: "session", Value: "test", Path: "/"})
+				w.Header().Set("Location", tc.location)
+				w.WriteHeader(http.StatusSeeOther)
+				io.WriteString(w, "original redirect body")
+			}))
+			defer srv.Close()
+			target, _ := url.Parse(srv.URL)
+			client := NewClient(http.NotFoundHandler())
+			if tc.desktop {
+				client.UseDesktopNavigation()
+			}
+			client.Connect(target)
+			req := httptest.NewRequest("POST", "/__auth/login", nil)
+			req.Header.Set("Accept", tc.accept)
+			rec := httptest.NewRecorder()
+			client.ServeHTTP(rec, req)
+			if rec.Code != tc.status {
+				t.Fatalf("status: %d, want %d", rec.Code, tc.status)
+			}
+			if tc.status == 200 {
+				body := rec.Body.String()
+				if !strings.Contains(body, "window.location.replace(") || strings.Count(body, "</script>") != 1 {
+					t.Fatalf("unsafe or missing navigation: %s", body)
+				}
+				if rec.Header().Get("Location") != "" || rec.Header().Get("Set-Cookie") != "" || rec.Header().Get("Cache-Control") != "no-store" {
+					t.Fatalf("navigation headers: %v", rec.Header())
+				}
+				if rec.Header().Get("Content-Length") != fmt.Sprint(len(body)) {
+					t.Fatal("wrong replacement body length")
+				}
+			}
+		})
+	}
+}

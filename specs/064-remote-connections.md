@@ -67,6 +67,14 @@ strip local cookies and authorization headers, and keep login redirects
 within the checked origin. Login failure, expiry and revocation use the
 same server behavior as direct browser access. SSE flushes immediately.
 
+Native desktop clients translate HTTP 303 navigation responses into a small
+HTML page that navigates within the window. WebKit custom URI schemes do not
+follow HTTP redirects. Cookies are saved before navigation, so a successful
+password/code login opens the authenticated UI. Browser clients and fetch
+requests retain HTTP redirect behavior. The desktop setting survives switching
+servers through the palette; redirects outside the checked origin are refused.
+The native Linux regression test submits the real login form under Xvfb.
+
 `POST /api/remote/connect` accepts `{"address":"host:port"}` and returns
 `{"url":"…","version":"…"}` only after discovery succeeds. The desktop
 proxy handles this locally; browser servers return a navigation URL. The

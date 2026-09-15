@@ -79,13 +79,15 @@ func runDesktop(srv *server.Server, turns *runner.Runner, lock *single.Lock, def
 	defer signal.Stop(stop)
 	finished := make(chan struct{})
 	defer close(finished)
+	client := remote.NewClient(proxy)
+	client.UseDesktopNavigation()
 	app := &options.App{
 		Title:            "agenttik",
 		Width:            1440,
 		Height:           900,
 		MinWidth:         900,
 		MinHeight:        600,
-		AssetServer:      &assetserver.Options{Handler: quietAborts(remote.NewClient(proxy))},
+		AssetServer:      &assetserver.Options{Handler: quietAborts(client)},
 		BackgroundColour: &options.RGBA{R: 17, G: 18, B: 21, A: 255},
 		OnStartup: func(ctx context.Context) {
 			win.opened(ctx)
@@ -165,7 +167,8 @@ func quietAborts(h http.Handler) http.Handler {
 }
 
 // A remote window has no local database, runners, or tray to manage.
-func runRemoteDesktop(handler http.Handler, title string) error {
+func runRemoteDesktop(handler *remote.Client, title string) error {
+	handler.UseDesktopNavigation()
 	app := &options.App{
 		Title: title, Width: 1440, Height: 900, MinWidth: 900, MinHeight: 600,
 		AssetServer:      &assetserver.Options{Handler: quietAborts(handler)},

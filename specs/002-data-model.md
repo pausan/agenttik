@@ -146,6 +146,54 @@ waiting". One query over `turns` filtered by the project's session ids; the
 
 ## Migrations
 
-`PRAGMA user_version` plus an ordered `[]string` of DDL steps in
-`internal/store/migrate.go`. Each step runs in a transaction and bumps the
-version. Forward only; no down migrations.
+`PRAGMA user_version` records the number of completed SQL steps in the ordered
+`[]string` in `app/internal/store/migrate.go`. `store.Open` applies every missing
+step before returning a usable store. Installations can skip releases. Each step
+commits its SQL and version together; a failed step rolls back and stops startup.
+Earlier completed steps remain committed, so restarting retries the first
+unfinished step. Versions below zero or above the executable's supported version
+are rejected. Forward only; no down migrations.
+
+### Upgrade backups and recovery
+
+Before upgrading a versioned database, the app creates a backup beside it named
+`agenttik.db.before-v<old>-to-v<new>-<unique>.db`. Fresh databases (version 0) and
+already-current databases need no backup. A backup failure stops the upgrade
+before any migration runs. The directory must be writable and have space for a
+full database snapshot. Upgrades should run with other instances using that
+same database stopped.
+
+The backup uses SQLite's [VACUUM INTO](https://sqlite.org/lang_vacuum.html), which
+includes committed WAL contents in a consistent standalone database. It is
+created with owner-only file permissions on Unix, synced, and renamed from a
+`.pending` file only when complete. An interrupted backup may leave a `.pending`
+file; it is not a recovery backup. Successful backups are never automatically
+deleted or overwritten, including on retry. Ordinary launches do not copy the
+database. Backup cost scales with database size and is paid only on upgrades.
+
+A migration failure reports the failed step and the backup path. To restore:
+stop every instance using that database; move the current database and any
+matching `-wal` and `-shm` files aside together; copy the selected completed
+backup to the original database path. Use an executable compatible with that
+backup's schema. Opening it with a newer executable upgrades it again. Restoring
+loses changes made after the snapshot. Restore is manual, never automatic.
+
+### Maintaining the upgrade path
+
+Append migrations; never edit, reorder, or remove existing steps. Schema changes
+and stored-data conversions both belong in migrations. Include an upgrade test
+with representative old data for every new conversion.
+
+`testdata/migrations.json` freezes the existing SQL independently of production
+code. Store tests create and populate every historical schema, upgrade through
+`store.Open`, compare the final schema with a fresh database, check retained data
+and selected backfills, and check database integrity and foreign keys. New steps
+automatically join the version matrix. Tests also cover unsupported versions,
+backup contents with live WAL data, backup failure, rollback, retry, and reopening.
+
+The database CI job runs these tests and compares migration SQL against every
+`v[0-9]*` release tag and the pull request base or previous push revision using
+full Git history. This prevents changing the fixture alongside a historical
+migration to bypass the check. Releases depend on this job. Run locally with
+`go test ./app/internal/store`; with full history, additionally run
+`CHECK_MIGRATION_HISTORY=1 MIGRATION_BASE_REF=HEAD go test ./app/internal/store`.

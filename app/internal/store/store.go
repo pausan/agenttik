@@ -34,7 +34,7 @@ func Open(path string) (*Store, error) {
 	// modernc/sqlite is safe for concurrent use but a single writer avoids
 	// SQLITE_BUSY churn; reads are fast enough that this is not a bottleneck.
 	db.SetMaxOpenConns(1)
-	if err := migrate(db); err != nil {
+	if err := migrate(db, absolutePath); err != nil {
 		db.Close()
 		return nil, err
 	}

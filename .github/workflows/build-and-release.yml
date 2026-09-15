@@ -9,6 +9,22 @@ permissions:
   contents: read
 
 jobs:
+  database-upgrades:
+    name: Database upgrade compatibility
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Test upgrades and protect migration history
+        env:
+          CHECK_MIGRATION_HISTORY: '1'
+          MIGRATION_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: go test ./app/internal/store -count=1
+
   startup-budget:
     name: One-second UI startup budget
     runs-on: ubuntu-24.04
@@ -207,7 +223,7 @@ jobs:
           retention-days: 1
 
   release:
-    needs: [release-tag, build, startup-budget]
+    needs: [release-tag, build, startup-budget, database-upgrades]
     if: needs.release-tag.outputs.is_release == 'true'
     runs-on: ubuntu-24.04
     permissions:

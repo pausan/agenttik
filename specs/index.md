@@ -16,7 +16,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [063](063-staging.md) | Changed files, staging controls and commit message generation |
 | [060](060-desktop-tray.md) | Close to tray, global show/hide shortcut, working pulse, native lifecycle |
 | [001](001-architecture.md) | Process model, packages, request flow |
-| [002](002-data-model.md) | SQLite schema, metrics, storage location |
+| [002](002-data-model.md) | SQLite schema, upgrade safeguards, metrics, storage location |
 | [003](003-providers.md) | Provider interface, CLI invocation, event mapping |
 | [004](004-ui.md) | Layout, panels, appearance modes, persistent Tree navigation, shortcuts, HTTP API |
 | [056](056-pasted-images.md) | Clipboard images, previews, storage and agent file references |

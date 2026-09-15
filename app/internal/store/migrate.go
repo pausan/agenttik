@@ -3,6 +3,9 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 )
 
 // migrations run in order. Append only; never edit a released step.
@@ -350,17 +353,43 @@ CREATE TABLE hidden_model_choices (
 `,
 }
 
-func migrate(db *sql.DB) error {
+func migrate(db *sql.DB, path string) error {
 	var version int
 	if err := db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 		return fmt.Errorf("read schema version: %w", err)
 	}
-	for i := version; i < len(migrations); i++ {
+	if version < 0 || version > len(migrations) {
+		return fmt.Errorf("database schema version %d is unsupported (this executable supports 0–%d); use a newer Agenttik version or restore a compatible backup", version, len(migrations))
+	}
+	if version == len(migrations) {
+		return nil
+	}
+	backup := ""
+	if version > 0 {
+		var err error
+		backup, err = backupBeforeMigration(db, path, version)
+		if err != nil {
+			return fmt.Errorf("back up database before migration: %w", err)
+		}
+	}
+	if err := applyMigrations(db, version, migrations); err != nil {
+		if backup != "" {
+			return fmt.Errorf("%w (pre-upgrade backup: %s)", err, backup)
+		}
+		return err
+	}
+	return nil
+}
+
+// Each step commits its SQL and version together, so a restart resumes at the
+// first unfinished step. Keep the list explicit so failure/retry can be tested.
+func applyMigrations(db *sql.DB, version int, steps []string) error {
+	for i := version; i < len(steps); i++ {
 		tx, err := db.Begin()
 		if err != nil {
 			return fmt.Errorf("migration %d: %w", i+1, err)
 		}
-		if _, err := tx.Exec(migrations[i]); err != nil {
+		if _, err := tx.Exec(steps[i]); err != nil {
 			tx.Rollback()
 			return fmt.Errorf("migration %d: %w", i+1, err)
 		}
@@ -374,4 +403,38 @@ func migrate(db *sql.DB) error {
 		}
 	}
 	return nil
+}
+
+// VACUUM INTO includes committed WAL data; copying the database file does not.
+// Publish only a fully written, synced snapshot. Keep previous backups intact.
+func backupBeforeMigration(db *sql.DB, path string, version int) (string, error) {
+	f, err := os.CreateTemp(filepath.Dir(path), fmt.Sprintf("%s.before-v%d-to-v%d-*.pending", filepath.Base(path), version, len(migrations)))
+	if err != nil {
+		return "", err
+	}
+	pending := f.Name()
+	defer os.Remove(pending)
+	if err := f.Close(); err != nil {
+		return "", err
+	}
+	if _, err := db.Exec("VACUUM INTO ?", pending); err != nil {
+		return "", err
+	}
+	f, err = os.OpenFile(pending, os.O_RDWR, 0)
+	if err != nil {
+		return "", err
+	}
+	syncErr := f.Sync()
+	closeErr := f.Close()
+	if syncErr != nil {
+		return "", syncErr
+	}
+	if closeErr != nil {
+		return "", closeErr
+	}
+	backup := strings.TrimSuffix(pending, ".pending") + ".db"
+	if err := os.Rename(pending, backup); err != nil {
+		return "", err
+	}
+	return backup, nil
 }

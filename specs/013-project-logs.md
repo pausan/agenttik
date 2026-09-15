@@ -2,7 +2,8 @@
 
 The right-hand panel carries a **Commits** pane beside Changed for a task and
 beside Options for a project — the history of the branch the project is on.
-A branch autocomplete and the short head hash sit above a commit filter box.
+A branch autocomplete sits above a commit filter box. A reserved message area
+below the branch holds operation results and errors; it does not show the head hash.
 The autocomplete lists local branches, ranked by the same fuzzy subsequence
 search as the commit filter. Selecting a branch runs Git switch; checkout
 conflicts are reported in the pane.
@@ -19,10 +20,11 @@ and every branch checked out in another worktree. Remote branches are untouched.
 If neither base exists, nothing is deleted. The pane reports deleted names
 or that no branches qualified. Squash merges are not ancestry merges.
 
-A row is the commit subject, and under it, in grey, what identifies it:
+A row is the commit subject with a small `[N]` chip for affected files, and
+under it, in grey, what identifies it:
 
 ```
-Read the subscription allowance each CLI reports
+Read the subscription allowance each CLI reports [7]
 1323b7ae · Pau Sanchez · 2026-09-09 16:46
 ```
 
@@ -31,16 +33,28 @@ formatted by git in the zone the commit was made in — git knows that offset
 and the browser does not. That line wraps rather than truncating in a narrow
 panel; hiding half of it is worse than using two lines.
 
-How much a commit moved is not shown. It was, as `13 files · 408 changes`,
-but a size next to every subject reads as a ranking the pane does not mean,
-and it cost a `--shortstat` — git diffing all 500 commits — on a log that is
-re-read after every turn.
+The current checkout's commit has a primary background, left border, and branch
+name beside its metadata (HEAD when detached), in both views.
+
+The **Show commit graph** toggle beside the filter defaults off and stays selected
+while navigating within the app. Simple mode shows the current branch history.
+Graph mode includes local branches, remote branches and tags, ordered with children
+before parents. Colored lines and square nodes show ancestry, splits and merges;
+merge nodes are hollow. Lines continue beside expanded files. Branch heads and tags
+appear on a third line as small chips: branches use primary, tags secondary.
+Secondary uses violet, or pink when the primary accent is violet.
+Annotated and lightweight tags are supported; symbolic remote aliases are omitted.
+
+Counts include additions, modifications, deletions, renames and binary files.
+Merge counts, expanded files and diffs compare against the first parent. Empty
+commits show `[0]`. Counts come from a single batched log, without requests per row.
 
 Typing filters what has already been fetched, with the same subsequence match
 the Tree pane uses, against subject, author and hash as one string — so a hash
 prefix, a name, or the words of a message all reach the same commit. Only the
 subject is highlighted, so letters that matched the author do not light up
-arbitrary characters in the title.
+arbitrary characters in the title. Simple search ranks by match score; graph
+search preserves topology and connects visible ancestors through hidden commits.
 
 Clicking a row expands the files that commit touched, each with its status
 letter and its own `+`/`−` counts. Clicking a file opens it as a tab, showing
@@ -72,12 +86,15 @@ other, revision included.
 
 | Method | Path | Answers |
 |---|---|---|
-| GET | `/api/projects/:id/log?limit=` | `{branch, branches[], head, commits[]}` — up to 500 commits, newest first |
+| GET | `/api/projects/:id/log?limit=&graph=` | `{branch, branches[], head, commits[]}` — up to 500 commits in topological order; graph includes all branch/tag histories |
 | POST | `/api/projects/:id/branches/:action?repo=` | `{branch}`; action is switch, pull, push, or clean; clean returns `{deleted[]}`, others 204 |
 | GET | `/api/projects/:id/commit?hash=` | `{hash, files[{path,status,additions,deletions,binary}]}` |
 | GET | `/api/projects/:id/commit/diff?hash=&path=` | the same `{path, diff, partial}` a working-tree diff answers |
 
-The log is one `git log` with a record-separated pretty format; the file
+Each commit includes `hash`, `subject`, `author`, `date`, `parents[]`,
+`branches[]`, `tags[]` and `fileCount`. The log is one `git log --shortstat` with
+a record-separated pretty format and first-parent merge diffs. One
+`for-each-ref` call attaches branch and tag names. The file
 list is `git show --numstat` plus `--name-status`, which override each
 other and so cannot be one call. A commit's files are fetched once per commit
 — history does not change underneath — and the whole log is re-read when a

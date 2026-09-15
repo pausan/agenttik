@@ -32,7 +32,11 @@ type commitEntry struct {
 	// Date is already formatted as YYYY-MM-DD HH:MM in the committer's own
 	// zone: git knows the offset each commit was made in and the browser does
 	// not, so formatting it here is both cheaper and more truthful.
-	Date string `json:"date"`
+	Date      string   `json:"date"`
+	Parents   []string `json:"parents"`
+	Branches  []string `json:"branches"`
+	Tags      []string `json:"tags"`
+	FileCount int      `json:"fileCount"`
 }
 
 type projectLog struct {
@@ -70,13 +74,26 @@ func (s *Server) projectLog(c *fiber.Ctx) error {
 	if out, err := runGit(root, "rev-parse", "--short=8", "HEAD"); err == nil {
 		body.Head = strings.TrimSpace(out)
 	}
-	out, err := runGit(root, "log", "--no-color", "--max-count="+strconv.Itoa(limit),
-		"--pretty=format:"+logRecordSep+"%H"+logFieldSep+"%an"+logFieldSep+"%ad"+logFieldSep+"%s",
-		"--date=format:%Y-%m-%d %H:%M")
+	args := []string{"log", "--no-color", "--topo-order", "--shortstat", "--diff-merges=first-parent", "--max-count=" + strconv.Itoa(limit),
+		"--pretty=format:" + logRecordSep + "%H" + logFieldSep + "%an" + logFieldSep + "%ad" + logFieldSep + "%s" + logFieldSep + "%P",
+		"--date=format:%Y-%m-%d %H:%M"}
+	if c.QueryBool("graph") {
+		args = append(args, "--branches", "--remotes", "--tags")
+	}
+	if body.Head != "" {
+		args = append(args, "HEAD")
+	}
+	out, err := runGit(root, args...)
 	if err != nil {
 		return c.JSON(body)
 	}
 	body.Commits = parseLog(out)
+	// Enumerate refs separately: ref names may contain decoration delimiters,
+	// and annotated tags need their peeled commit ID.
+	refs, err := runGit(root, "for-each-ref", "--format=%(objectname)%1f%(*objectname)%1f%(refname)%1f%(symref)", "refs/heads/", "refs/remotes/", "refs/tags/")
+	if err == nil {
+		attachLogRefs(body.Commits, refs)
+	}
 	return c.JSON(body)
 }
 
@@ -89,19 +106,59 @@ func parseLog(out string) []commitEntry {
 		if strings.TrimSpace(record) == "" {
 			continue
 		}
-		header, _, _ := strings.Cut(record, "\n")
+		header, stats, _ := strings.Cut(record, "\n")
 		fields := strings.Split(header, logFieldSep)
 		if len(fields) < 4 {
 			continue
 		}
-		commits = append(commits, commitEntry{
+		entry := commitEntry{
 			Hash:    shortHash(fields[0]),
 			Author:  fields[1],
 			Date:    fields[2],
 			Subject: fields[3],
-		})
+			Parents: []string{}, Branches: []string{}, Tags: []string{},
+		}
+		if len(fields) > 4 {
+			for _, parent := range strings.Fields(fields[4]) {
+				entry.Parents = append(entry.Parents, shortHash(parent))
+			}
+		}
+		if match := logFileCount.FindStringSubmatch(stats); len(match) > 1 {
+			entry.FileCount, _ = strconv.Atoi(match[1])
+		}
+		commits = append(commits, entry)
 	}
 	return commits
+}
+
+var logFileCount = regexp.MustCompile(`(?m)^\s*(\d+) files? changed`)
+
+func attachLogRefs(commits []commitEntry, refs string) {
+	byHash := make(map[string]*commitEntry, len(commits))
+	for i := range commits {
+		byHash[commits[i].Hash] = &commits[i]
+	}
+	for _, line := range splitLines(refs) {
+		fields := strings.Split(line, logFieldSep)
+		if len(fields) != 4 || fields[3] != "" {
+			continue
+		}
+		hash := fields[0]
+		if fields[1] != "" {
+			hash = fields[1]
+		}
+		commit := byHash[shortHash(hash)]
+		if commit == nil {
+			continue
+		}
+		name := fields[2]
+		if strings.HasPrefix(name, "refs/tags/") {
+			commit.Tags = append(commit.Tags, strings.TrimPrefix(name, "refs/tags/"))
+		} else {
+			name = strings.TrimPrefix(strings.TrimPrefix(name, "refs/heads/"), "refs/remotes/")
+			commit.Branches = append(commit.Branches, name)
+		}
+	}
 }
 
 func shortHash(hash string) string {
@@ -134,7 +191,7 @@ func (s *Server) projectCommit(c *fiber.Ctx) error {
 	}
 	body := commitDetail{Hash: shortHash(hash), Files: []commitFile{}}
 	out, err := runGit(root, "-c", "core.quotePath=false", "show", "--no-color",
-		"--format=", "--numstat", hash)
+		"--format=", "--diff-merges=first-parent", "--numstat", hash)
 	if err != nil && out == "" {
 		return err
 	}
@@ -153,7 +210,7 @@ func (s *Server) projectCommit(c *fiber.Ctx) error {
 		body.Files = append(body.Files, file)
 	}
 	status, err := runGit(root, "-c", "core.quotePath=false", "show", "--no-color",
-		"--format=", "--name-status", hash)
+		"--format=", "--diff-merges=first-parent", "--name-status", hash)
 	if err == nil {
 		for _, line := range splitLines(status) {
 			cols := strings.Split(line, "\t")
@@ -189,7 +246,7 @@ func (s *Server) projectCommitDiff(c *fiber.Ctx) error {
 		return err
 	}
 	out, _ := gitDiff(root, "-c", "core.quotePath=false", "show", "--no-color",
-		"--format=", hash, "--", rel)
+		"--format=", "--diff-merges=first-parent", hash, "--", rel)
 	body := fileDiff{Path: rel, Partial: len(out) > maxFileBytes}
 	if body.Partial {
 		out = out[:maxFileBytes]

@@ -49,5 +49,6 @@ export const DEFAULT_COLORS = { accent: "blue", neutral: "zinc" };
 export function applyColors({ accent, neutral }) {
   const { colors } = useAppConfig().ui;
   colors.primary = accent;
+  colors.secondary = accent === "violet" ? "pink" : "violet";
   colors.neutral = neutral;
 }

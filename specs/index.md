@@ -61,7 +61,7 @@ screen, **session** for the row, the route or the CLI flag.
 
 | Doc | What it covers |
 |-----|----------------|
-| [013](013-project-logs.md) | Commits, branch actions, commit files and diffs |
+| [013](013-project-logs.md) | Commits, graph, branch actions, files and diffs |
 | [014](014-transcript-messages.md) | Copying messages, editing a prompt in place |
 | [016](016-file-tab-reuse.md) | The temporary file tab a click reuses |
 | [019](019-file-watching.md) | Tree and Changed following the disk as it moves |

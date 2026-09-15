@@ -1,20 +1,13 @@
 <script setup>
-/* The Logs pane: the history of the branch the project is on.
-
-   A row is a commit — its subject, then its identity underneath: short hash,
-   author and date. Clicking one expands the files it touched; clicking a file
-   opens it as that commit changed it. Right-clicking one offers its hash to
-   the clipboard.
-
-   Typing filters what has already been fetched, the same subsequence match
-   the Tree pane uses, against the subject, the author and the hash together —
-   so a hash prefix, a name, or the words of a message all reach the same
-   commit. */
+/* Commit history with an optional topology graph and branch/tag refs. */
 import { computed, ref, watch } from "vue";
 
 import { S, copyText, openCommitFile, toggleCommit, currentProjectID, refreshLog, refreshChanged, refreshTree } from "../store";
 import { api } from "../api";
 import { fuzzy, segments } from "../fuzzy";
+import { commitGraph, graphColor, graphX, graphPath } from "../commitGraph";
+
+watch(() => S.logGraph, () => refreshLog());
 
 const emit = defineEmits(["show-in-tree"]);
 
@@ -79,9 +72,13 @@ const rows = computed(() => {
     const m = fuzzy(`${commit.subject} ${commit.author} ${commit.hash}`, filter);
     if (m) out.push({ commit, score: m.score });
   }
-  if (filter) out.sort((a, b) => a.score - b.score);
+  if (filter && !S.logGraph) out.sort((a, b) => a.score - b.score);
   return out;
 });
+
+const graph = computed(() => S.logGraph
+  ? commitGraph(S.log.commits, new Set(rows.value.map(({ commit }) => commit.hash)))
+  : null);
 
 /* The subject is highlighted on its own, so the letters that matched the
    author or the hash do not light up arbitrary characters in the title. */
@@ -154,17 +151,31 @@ const menu = computed(() => [
         />
       </UTooltip>
     </div>
-    <span v-if="S.log.head" class="px-0.5 font-mono text-[11px] text-dimmed">{{ S.log.head }}</span>
-    <p v-if="error" role="alert" class="text-xs text-error">{{ error }}</p>
-    <p v-if="notice" role="status" class="text-xs text-dimmed">{{ notice }}</p>
+    <div class="min-h-4 shrink-0">
+      <p v-if="error" role="alert" class="text-xs text-error">{{ error }}</p>
+      <p v-if="notice" role="status" class="text-xs text-dimmed">{{ notice }}</p>
+    </div>
 
-    <UInput
-      v-model="S.logFilter"
-      icon="i-lucide-search"
-      placeholder="Filter commits"
-      class="w-full shrink-0"
-      :ui="{ base: 'text-xs' }"
-    />
+    <div class="flex shrink-0 items-center gap-1">
+      <UInput
+        v-model="S.logFilter"
+        icon="i-lucide-search"
+        placeholder="Filter commits"
+        class="min-w-0 flex-1"
+        :ui="{ base: 'text-xs' }"
+      />
+      <UTooltip text="Show commit graph">
+        <UButton
+          icon="i-lucide-git-fork"
+          aria-label="Show commit graph"
+          :aria-pressed="S.logGraph"
+          :color="S.logGraph ? 'primary' : 'neutral'"
+          :variant="S.logGraph ? 'soft' : 'ghost'"
+          size="xs"
+          @click="S.logGraph = !S.logGraph"
+        />
+      </UTooltip>
+    </div>
 
     <p v-if="!S.log.commits.length" class="px-3 py-5 text-center text-dimmed">
       No commits to show.
@@ -177,21 +188,43 @@ const menu = computed(() => [
          and the pane keeps its one flex column. -->
     <UContextMenu v-else :items="menu">
       <div class="min-h-0 flex-1 overflow-auto" @contextmenu="aim">
-        <div v-for="{ commit } in rows" :key="commit.hash" :data-hash="commit.hash">
+        <div v-for="{ commit } in rows" :key="commit.hash" :data-hash="commit.hash" class="relative"
+          :style="graph ? { paddingLeft: `${graph.width}px` } : undefined">
+          <svg v-if="graph" aria-hidden="true" class="pointer-events-none absolute left-0 top-0 h-full"
+            :width="graph.width" fill="none" stroke-width="1.5">
+            <g v-for="(edge, i) in graph.rows.get(commit.hash).edges" :key="i" :stroke="graphColor(edge.color)">
+              <path :d="graphPath(edge)" />
+              <line v-if="edge.kind !== 'in'" :x1="graphX(edge.to)" y1="32" :x2="graphX(edge.to)" y2="100%" />
+            </g>
+            <rect :x="graphX(graph.rows.get(commit.hash).column) - 3" y="13" width="6" height="6" rx="1"
+              :fill="commit.parents?.length > 1 ? 'var(--ui-bg)' : graphColor(graph.rows.get(commit.hash).color)"
+              :stroke="graphColor(graph.rows.get(commit.hash).color)" />
+          </svg>
           <button
             type="button"
             class="w-full rounded-[var(--ui-radius)] px-1.5 py-1 text-left hover:bg-elevated"
+            :class="commit.hash === S.log.head ? 'bg-primary/10 border-l-2 border-primary' : ''"
+            :aria-current="commit.hash === S.log.head ? 'true' : undefined"
             :aria-expanded="S.logOpen === commit.hash"
             @click="toggleCommit(commit.hash)"
           >
-            <span class="block truncate text-xs text-highlighted">
-              <span v-for="(part, i) in subjectParts(commit)" :key="i" :class="part.hit ? 'text-primary' : ''">{{ part.text }}</span>
+            <span class="flex items-center gap-1 text-xs text-highlighted">
+              <span class="min-w-0 truncate" :title="commit.subject">
+                <span v-for="(part, i) in subjectParts(commit)" :key="i" :class="part.hit ? 'text-primary' : ''">{{ part.text }}</span>
+              </span>
+              <span class="shrink-0 rounded bg-elevated px-1 text-[10px] text-muted tabular-nums"
+                :aria-label="`${commit.fileCount ?? 0} files affected`">[{{ commit.fileCount ?? 0 }}]</span>
             </span>
             <!-- Wraps rather than truncates: the hash, the author and the date
                  need not fit one narrow line, and a panel that hides half of
                  them is worse than one that uses two. -->
             <span class="block font-mono text-[11px] leading-snug text-dimmed tabular-nums">
               {{ commit.hash }} · {{ commit.author }} · {{ commit.date }}
+              <span v-if="commit.hash === S.log.head" class="text-primary"> · {{ S.log.branch || 'HEAD' }}</span>
+            </span>
+            <span v-if="S.logGraph && (commit.branches?.length || commit.tags?.length)" class="mt-1 flex flex-wrap gap-1">
+              <UBadge v-for="branch in commit.branches" :key="`branch:${branch}`" color="primary" variant="subtle" size="xs" icon="i-lucide-git-branch">{{ branch }}</UBadge>
+              <UBadge v-for="tag in commit.tags" :key="`tag:${tag}`" color="secondary" variant="subtle" size="xs" icon="i-lucide-tag">{{ tag }}</UBadge>
             </span>
           </button>
 
@@ -201,7 +234,7 @@ const menu = computed(() => [
               v-else-if="!filesOf(commit.hash).length"
               class="px-1.5 py-1 text-xs text-dimmed"
             >
-              No files — a merge commit.
+              No files changed.
             </p>
             <button
               v-for="file in filesOf(commit.hash) || []"

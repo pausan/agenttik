@@ -112,3 +112,47 @@ test("commits offers fuzzy branch selection and branch actions", async ({ page }
   await expect(inspector(page).getByRole("status")).toContainText("Removed: old-feature");
   expect(requests).toEqual(["switch", "pull", "push", "clean"].map((action) => ({ action, branch: "feature/search" })));
 });
+
+test("commit graph toggle, counts, checkout highlight and ref chips", async ({ page }) => {
+  const commits = [
+    { hash: "aaaaaaaa", subject: "Merge feature", author: "Test Author", date: "2026-09-15 12:00", parents: ["bbbbbbbb", "cccccccc"], branches: ["main"], tags: ["v1.0"], fileCount: 7 },
+    { hash: "cccccccc", subject: "Feature work", author: "Test Author", date: "2026-09-15 11:00", parents: ["dddddddd"], branches: ["feature", "origin/feature"], tags: [], fileCount: 32 },
+    { hash: "bbbbbbbb", subject: "Main work", author: "Test Author", date: "2026-09-15 10:00", parents: ["dddddddd"], branches: [], tags: [], fileCount: 1 },
+    { hash: "dddddddd", subject: "Initial commit", author: "Test Author", date: "2026-09-15 09:00", parents: [], branches: [], tags: [], fileCount: 2 },
+  ];
+  await page.route("**/api/projects/*/log?*", (route) => route.fulfill({
+    json: { branch: "main", branches: ["main", "feature"], head: "aaaaaaaa", commits },
+  }));
+  await page.route("**/api/projects/*/commit?*", (route) => route.fulfill({
+    json: { hash: "aaaaaaaa", files: [{ path: "file.txt", status: "M", additions: 2, deletions: 1 }] },
+  }));
+  await page.route("**/api/projects/*/branches/clean?*", (route) => route.fulfill({ json: { deleted: [] } }));
+  await page.reload();
+  await openProject(page);
+  const pane = inspector(page);
+  await pane.getByRole("tab", { name: "Commits" }).click();
+  const toggle = pane.getByRole("button", { name: "Show commit graph", exact: true });
+  const head = pane.locator('[data-hash="aaaaaaaa"]');
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await expect(head.locator("button[aria-current=true]")).toBeVisible();
+  await expect(head.getByLabel("7 files affected")).toHaveText("[7]");
+  await expect(pane.getByText("aaaaaaaa", { exact: true })).toHaveCount(0);
+  await expect(head.getByText("v1.0", { exact: true })).toHaveCount(0);
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await expect(head.locator(":scope > svg")).toBeVisible();
+  await expect(head.getByText("v1.0", { exact: true })).toBeVisible();
+  await expect(pane.getByText("origin/feature", { exact: true })).toBeVisible();
+  await head.getByRole("button").click();
+  await expect(head.getByRole("button", { name: /file.txt/ })).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath("commits-graph.png") });
+  await pane.getByPlaceholder("Filter commits").fill("work");
+  await expect(pane.locator("[data-hash]")).toHaveCount(2);
+  await expect(pane.locator("[data-hash]").first()).toHaveAttribute("data-hash", "cccccccc");
+  await pane.getByPlaceholder("Filter commits").clear();
+  await toggle.click();
+  await expect(head.locator(":scope > svg")).toHaveCount(0);
+  await expect(head.getByText("v1.0", { exact: true })).toHaveCount(0);
+  await pane.getByRole("button", { name: "Clean local branches merged into main or master", exact: true }).click();
+  await expect(pane.getByRole("status")).toHaveText("No merged local branches to remove.");
+});

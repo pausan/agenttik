@@ -111,6 +111,7 @@ export const S = reactive({
   repository: "",
   log: { branch: "", head: "", commits: [], branches: [] },
   logFilter: "",
+  logGraph: false,
   logOpen: "", // the commit whose file list is expanded
   logFiles: {}, // commit hash -> what it touched, fetched the first time it opens
   // Every path in the project, and the subset git ignores. The Tree draws
@@ -2431,14 +2432,15 @@ export async function refreshChanged() {
 export async function refreshLog() {
   const id = currentProjectID();
   const repo = S.repository;
+  const graph = S.logGraph;
   if (!id) return (S.log = EMPTY_LOG());
   try {
-    const log = await api("GET", `/api/projects/${id}/log?repo=${encodeURIComponent(repo)}`);
+    const log = await api("GET", `/api/projects/${id}/log?repo=${encodeURIComponent(repo)}&graph=${graph}`);
     // A slow request for the project we just left must not replace the log of
     // the one now in front.
-    if (currentProjectID() === id && S.repository === repo) S.log = log;
+    if (currentProjectID() === id && S.repository === repo && S.logGraph === graph) S.log = log;
   } catch {
-    if (currentProjectID() === id && S.repository === repo) S.log = EMPTY_LOG();
+    if (currentProjectID() === id && S.repository === repo && S.logGraph === graph) S.log = EMPTY_LOG();
   }
 }
 

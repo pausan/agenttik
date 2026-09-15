@@ -9,6 +9,7 @@ Tests cover logic, browser flows and the native desktop transport.
 | Startup budget | `e2e/tests/startup.spec.js` | `make test-startup` |
 | Browser tests | `e2e/tests/*.spec.js` (Playwright) | `make e2e` |
 | Linux desktop image uploads | `app/cmd/agenttik/desktop_images_linux_test.go` | `make test-desktop-images` |
+| Linux desktop scrollbar layers | `app/cmd/agenttik/desktop_scrollbars_linux_test.go` | `make test-desktop-scrollbars` |
 
 `make test` is the fast loop and runs the first two. `make e2e` builds the
 server and drives a real browser against it; it is the slower one, kept
@@ -21,6 +22,12 @@ with one worker and gates releases on the one-second requirement
 the actual image upload module inside Wails/WebKit in a subprocess, checking
 that Blob and File images arrive intact without a native crash. It stays
 separate from the fast loop because it requires a native display stack.
+
+`make test-desktop-scrollbars` additionally needs xdotool, ImageMagick, and a
+built UI (`cd web && npm run build`). It checks actual Wails/WebKit screenshot
+pixels where opaque popups cover active horizontal and vertical scrollbars,
+in light and dark themes and above a nested dialog. DOM hit testing alone
+cannot detect the native scrollbar paint-order bug.
 
 Tests are written with the change they guard, where writing one is reasonable
 — see rule 6 in `AGENTS.md`. What exists guards the logic that is hard to

@@ -74,6 +74,11 @@ test:
 test-desktop-images:
 	xvfb-run -a go test -tags "$(DESKTOP_TAGS)" $(PKG) -run '^TestDesktopImageUpload$$' -count=1
 
+## test-desktop-scrollbars: native scrollbar paint regression (needs Xvfb, xdotool, ImageMagick)
+.PHONY: test-desktop-scrollbars
+test-desktop-scrollbars:
+	xvfb-run -a go test -tags "$(DESKTOP_TAGS)" $(PKG) -run '^TestDesktopScrollbarLayers$$' -count=1
+
 ## e2e: browser tests against a real server. The first run downloads a
 ## chromium into ~/.cache/ms-playwright.
 e2e: build-web

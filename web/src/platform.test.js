@@ -1,8 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { desktopChord, isMacOS, platformChord, primaryChord } from "./platform.js";
+import { desktopChord, isMacOS, needsCSSScrollbars, platformChord, primaryChord } from "./platform.js";
 import { matches } from "./shortcuts.js";
+
+test("CSS scrollbars are limited to Linux desktop windows", () => {
+  assert.equal(needsCSSScrollbars("Linux x86_64", {}), true);
+  assert.equal(needsCSSScrollbars("Linux aarch64", {}), true);
+  assert.equal(needsCSSScrollbars("Linux x86_64", null), false);
+  assert.equal(needsCSSScrollbars("MacIntel", {}), false);
+  assert.equal(needsCSSScrollbars("Win32", {}), false);
+});
 
 test("macOS uses Cmd spelling for legacy Meta chords", () => {
   assert.equal(isMacOS("MacIntel"), true);

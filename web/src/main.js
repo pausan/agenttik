@@ -5,6 +5,7 @@ import ui from "@nuxt/ui/vue-plugin";
 
 import { loadColorMode } from "./color-mode";
 import { loadProfiles } from "./profiles";
+import { needsCSSScrollbars } from "./platform";
 import App from "./App.vue";
 import { loadColors } from "./store";
 import "./assets/main.css";
@@ -30,6 +31,7 @@ const router = createRouter({
 
 // The saved colours are applied before mounting, so the app is never painted
 // in the default palette first and repainted in the chosen one.
+document.documentElement.classList.toggle("desktop-linux", needsCSSScrollbars());
 loadProfiles().then(() => {
   loadColorMode();
   loadColors();

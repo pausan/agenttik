@@ -39,14 +39,35 @@ button[draggable="true"]:active { cursor: grabbing; }
 /* Contain pane resize handles and scrollbars below the portalled UI. */
 .app-shell { isolation: isolate; }
 
-/* Keep native overlay scrollbars, including their fade-out, in the
-   scroller's stacking context beneath portalled menus and dialogs. */
+/* Keep scrollable content in its own stacking context. */
 .overflow-auto,
 .overflow-x-auto,
 .overflow-y-auto,
 .markdown pre,
 .markdown table {
   isolation: isolate;
+}
+
+/* Wails disables GPU acceleration on Linux. WebKitGTK's native overlay
+   scrollbars then paint above opaque dialogs regardless of z-index. Styled
+   scrollbars follow CSS paint order and reserve a small gutter instead. */
+.desktop-linux::-webkit-scrollbar,
+.desktop-linux ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.desktop-linux::-webkit-scrollbar-thumb,
+.desktop-linux ::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--ui-text-dimmed);
+  background-clip: padding-box;
+}
+.desktop-linux::-webkit-scrollbar-track,
+.desktop-linux ::-webkit-scrollbar-track,
+.desktop-linux::-webkit-scrollbar-corner,
+.desktop-linux ::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 

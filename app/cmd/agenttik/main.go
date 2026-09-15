@@ -153,6 +153,10 @@ func run() error {
 		return err
 	}
 
+	if !*webOnly {
+		restoreDesktopPath()
+	}
+
 	github := copilot.New()
 	providers := []agent.Provider{claudecode.New(), codex.New(), github, opencode.New()}
 	// Registered only for the end-to-end suite, which sets this; a normal

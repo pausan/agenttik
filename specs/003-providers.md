@@ -1,5 +1,25 @@
 # Providers
 
+## CLI discovery
+
+Providers and the Subscriptions panel find CLIs through the server's `PATH`.
+Before starting providers, macOS and Linux desktop builds without a terminal
+environment (`TERM` unset, empty or `dumb`) recover additional search directories
+from the user's interactive login shell (`$SHELL`, defaulting to `/bin/zsh` on
+macOS and `/bin/sh` on Linux). This includes shell-configured Homebrew and
+version-manager paths when opened from Finder, the Dock or a desktop launcher.
+
+The shell runs once in the user's home directory, with a two-second timeout.
+Only `PATH` is imported; existing entries retain priority, new absolute entries
+are deduplicated, and shell banners are ignored. Lookup failure is logged and
+leaves the inherited path intact. CLI children inherit the recovered path too,
+so scripts can find runtimes such as `node`.
+
+Terminal environments, explicit `--web` launches, web-only builds and Windows
+keep their inherited path. Remote clients and command-only invocations do not
+start the shell. Tests simulate a desktop path, verify both discovery and CLI
+execution, and cover failed, incomplete and timed-out shell probes.
+
 ## Interface
 
 ```go

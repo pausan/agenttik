@@ -19,6 +19,7 @@ import {
   startCurrentTask,
   useErrors,
 } from "./store";
+import UpdateNotice from "./components/UpdateNotice.vue";
 import SideBar from "./components/SideBar.vue";
 import MainPanel from "./components/MainPanel.vue";
 import InspectorPanel from "./components/InspectorPanel.vue";
@@ -222,6 +223,7 @@ onUnmounted(() => {
 
 <template>
   <UApp>
+    <UpdateNotice />
     <div
       class="app-shell grid h-full bg-default text-default text-sm"
       :style="{

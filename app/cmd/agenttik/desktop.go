@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -43,6 +44,13 @@ func runDesktop(srv *server.Server, turns *runner.Runner, lock *single.Lock, def
 		return err
 	}
 
+	updatesCtx, stopUpdates := context.WithCancel(context.Background())
+	defer stopUpdates()
+	updateToken, err := srv.EnableUpdates(updatesCtx)
+	if err != nil {
+		log.Printf("automatic updates unavailable: %v", err)
+	}
+
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return fmt.Errorf("listen on loopback: %w", err)
@@ -73,6 +81,11 @@ func runDesktop(srv *server.Server, turns *runner.Runner, lock *single.Lock, def
 	}
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.FlushInterval = -1 // flush immediately, so SSE streams
+	director := proxy.Director
+	proxy.Director = func(r *http.Request) {
+		director(r)
+		r.Header.Set("X-Agenttik-Update-Token", updateToken)
+	}
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)

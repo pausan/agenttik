@@ -131,3 +131,5 @@ spends a real subscription.
 disagree about, for a human to settle.
 
 - [069 Automatic action models](069-automatic-action-models.md) — defaults and model overrides for conflicts and commit messages.
+
+- [070 Automatic updates](070-automatic-updates.md) — daily release checks, ignored versions and installation on quit.

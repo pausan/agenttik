@@ -30,6 +30,7 @@ import (
 	"github.com/pausan/agenttik/app/internal/server"
 	"github.com/pausan/agenttik/app/internal/single"
 	"github.com/pausan/agenttik/app/internal/store"
+	"github.com/pausan/agenttik/app/internal/update"
 )
 
 // errNoDesktop is returned by runDesktop in web-only builds.
@@ -48,6 +49,9 @@ func main() {
 }
 
 func run() error {
+	if len(os.Args) == 3 && os.Args[1] == "--internal-apply-update" {
+		return update.Helper(os.Args[2])
+	}
 	cfg := config.Default()
 	remoteAddress := flag.String("remote", "", "connect to an agenttik server at `host:port or URL`")
 	private := flag.Bool("private", false, "start an isolated temporary instance and remove its data on exit")

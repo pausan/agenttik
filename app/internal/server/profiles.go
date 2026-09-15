@@ -212,7 +212,7 @@ func (s *Server) routeProfile(c *fiber.Ctx) error {
 	if id != "default" && m.running[id] == nil {
 		return fiber.NewError(404, "Profile no longer exists")
 	}
-	if id == "default" || path == "/api/foreground" || path == "/api/desktop" || strings.HasPrefix(path, "/api/server") || strings.HasPrefix(path, "/api/remote/") || path == "/api/version" {
+	if id == "default" || strings.HasPrefix(path, "/api/updates") || path == "/api/foreground" || path == "/api/desktop" || strings.HasPrefix(path, "/api/server") || strings.HasPrefix(path, "/api/remote/") || path == "/api/version" {
 		return c.Next()
 	}
 	m.running[id].server.app.Handler()(c.Context())

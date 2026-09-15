@@ -50,3 +50,6 @@ The packager validates the plist and signature, archives with `ditto`, then
 extracts the ZIP and verifies the extracted signature and executable version.
 CI runs it on the native macOS runner, along with tray shortcut fallback tests.
 Finder launch and tray/Accessibility behavior still require a live Mac check.
+
+The local desktop app checks these release assets daily and can install a
+verified newer version on quit; see [070](070-automatic-updates.md).

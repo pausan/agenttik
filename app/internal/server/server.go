@@ -8,6 +8,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -34,10 +35,15 @@ import (
 	"github.com/pausan/agenttik/app/internal/runner"
 	"github.com/pausan/agenttik/app/internal/smartsearch"
 	"github.com/pausan/agenttik/app/internal/store"
+	"github.com/pausan/agenttik/app/internal/update"
 	"github.com/pausan/agenttik/web"
 )
 
 type Server struct {
+	updater       *update.Service
+	updateToken   string
+	updateContext context.Context
+
 	profiles *profileManager
 	app      *fiber.App
 	version  string
@@ -165,6 +171,9 @@ func (s *Server) routes() {
 	s.app.Post(remote.ConnectPath, adaptor.HTTPHandler(remote.ConnectHandler(func(u *url.URL) string { return u.String() + "/" })))
 	s.app.Post(remote.CheckPath, adaptor.HTTPHandler(remote.ConnectHandler(func(u *url.URL) string { return u.String() + "/" })))
 	api := s.app.Group("/api")
+	api.Get("/updates", s.getUpdate)
+	api.Post("/updates/ignore", s.ignoreUpdate)
+	api.Post("/updates/install", s.installUpdate)
 	api.Put("/server/name", s.putServerName)
 	api.Get("/profiles", s.listProfiles)
 	api.Post("/profiles", s.createProfile)

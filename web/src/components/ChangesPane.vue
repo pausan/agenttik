@@ -62,9 +62,10 @@ async function act(action, path) {
     <div class="space-y-2">
       <div class="flex flex-col items-end gap-2">
         <textarea v-model="message" :disabled="generating" aria-label="Commit message" placeholder="Commit message" rows="2" class="w-full min-h-14 resize-y rounded-md border border-default bg-default p-2 font-mono text-xs" />
-        <div class="flex items-center gap-1">
-          <UButton icon="i-lucide-sparkle" aria-label="Generate commit message" title="Generate or rewrite the message from staged changes using a lightweight model. Does not commit." size="sm" variant="ghost" color="neutral" :loading="generating" :disabled="busy || !staged.length" @click="generateMessage" />
-          <UButton label="Commit" title="Commit staged changes with this message" size="sm" class="shrink-0" :loading="busy && !generating" :disabled="busy || !staged.length || !message.trim()" @click="act('commit')" />
+        <div class="flex w-full items-center gap-1">
+          <span class="mr-auto min-w-0 truncate text-xs text-muted" aria-label="Current branch" :title="S.log.branch">{{ S.log.branch }}</span>
+          <UButton class="shrink-0" icon="i-lucide-sparkle" aria-label="Generate commit message" title="Generate or rewrite the message from staged changes using a lightweight model. Does not commit." size="sm" variant="ghost" color="neutral" :loading="generating" :disabled="busy || !staged.length" @click="generateMessage" />
+          <UButton icon="i-lucide-git-commit-horizontal" aria-label="Commit" title="Commit staged changes with this message" size="sm" class="shrink-0" :loading="busy && !generating" :disabled="busy || !staged.length || !message.trim()" @click="act('commit')" />
         </div>
       </div>
       <p v-if="error" role="alert" class="text-xs text-error">{{ error }}</p>

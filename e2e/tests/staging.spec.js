@@ -8,7 +8,7 @@ test("stage, unstage and commit through the inline resizable composer", async ({
   const root = await mkdtemp(join(tmpdir(), "staging-"));
   const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8" });
   try {
-    git("init", "-q");
+    git("init", "-q", "-b", "feature/commit-composer");
     git("config", "user.name", "Test");
     git("config", "user.email", "test@example.com");
     await writeFile(join(root, "new.txt"), "new file\n");
@@ -32,7 +32,15 @@ test("stage, unstage and commit through the inline resizable composer", async ({
     await expect(field).toBeFocused();
     await expect(page.getByRole("dialog")).toBeHidden();
     const box = await field.boundingBox();
+    const branch = pane.getByLabel("Current branch", { exact: true });
+    await expect(branch).toHaveText("feature/commit-composer");
+    await expect(branch).toHaveAttribute("title", "feature/commit-composer");
+    await expect(commit).toHaveText("");
+    const branchBox = await branch.boundingBox();
     const buttonBox = await commit.boundingBox();
+    expect(branchBox.x).toBeCloseTo(box.x, 0);
+    expect(branchBox.y).toBeGreaterThanOrEqual(box.y + box.height);
+    expect(branchBox.y + branchBox.height / 2).toBeCloseTo(buttonBox.y + buttonBox.height / 2, 0);
     const stagedBox = await pane.getByRole("button", { name: /^Staged/ }).boundingBox();
     expect(buttonBox.x + buttonBox.width).toBeCloseTo(box.x + box.width, 0);
     expect(buttonBox.y).toBeGreaterThanOrEqual(box.y + box.height);

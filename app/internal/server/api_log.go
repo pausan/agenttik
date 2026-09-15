@@ -66,10 +66,8 @@ func (s *Server) projectLog(c *fiber.Ctx) error {
 	if limit <= 0 || limit > maxLogCommits {
 		limit = maxLogCommits
 	}
-	if out, err := runGit(root, "rev-parse", "--abbrev-ref", "HEAD"); err == nil {
-		if name := strings.TrimSpace(out); name != "HEAD" {
-			body.Branch = name
-		}
+	if out, err := runGit(root, "symbolic-ref", "--quiet", "--short", "HEAD"); err == nil {
+		body.Branch = strings.TrimSpace(out)
 	}
 	if out, err := runGit(root, "rev-parse", "--short=8", "HEAD"); err == nil {
 		body.Head = strings.TrimSpace(out)

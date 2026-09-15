@@ -160,23 +160,33 @@ const menu = computed(() => [
         />
       </UTooltip>
     </div>
-    <div v-if="!S.log.operation" class="flex shrink-0 items-center gap-1">
-      <USelect v-model="operation" :items="[{ label: 'merge into', value: 'merge' }, { label: 'rebase into', value: 'rebase' }]"
-        aria-label="Branch operation" size="sm" :disabled="!!busy" class="shrink-0" />
-      <USelectMenu v-model="target" :items="targets" icon="i-lucide-git-branch"
-        aria-label="Destination branch" placeholder="Select branch" :search-input="{ placeholder: 'Search destination branches…' }"
-        :disabled="!!busy || !S.log.branch" class="min-w-0 flex-1" :ui="{ base: 'font-mono text-xs' }" />
-    </div>
-    <div v-if="!S.log.operation" class="shrink-0 space-y-1">
-      <UButton icon="i-lucide-sparkle" :label="`${operation === 'merge' ? 'Merge' : 'Rebase'} & solve conflicts`"
-        size="sm" :loading="busy === operation" :disabled="!!busy || !target || target === S.log.branch"
-        @click="act(operation)" />
-      <p class="text-xs text-dimmed">If there are conflicts, AI will solve them using the model in Settings → Models.</p>
-      <p v-if="target" class="text-xs text-dimmed">{{ operation === 'merge'
-        ? `Merge ${S.log.branch} into ${target}. Updates and checks out ${target}.`
-        : `Replay ${S.log.branch} onto ${target}. Rewrites ${S.log.branch}; ${target} stays unchanged.` }}</p>
-    </div>
-    <div v-else class="shrink-0 space-y-1">
+    <details v-show="!S.log.operation" class="group shrink-0">
+      <summary class="flex cursor-pointer list-none items-center gap-1 text-xs text-dimmed [&::-webkit-details-marker]:hidden">
+        <UIcon name="i-lucide-chevron-right" class="size-3 shrink-0 group-open:rotate-90" />
+        Merge / rebase
+      </summary>
+      <div class="mt-2 space-y-2">
+        <div class="flex shrink-0 items-center gap-1">
+          <USelect v-model="operation" :items="[{ label: 'merge into', value: 'merge' }, { label: 'rebase into', value: 'rebase' }]"
+            aria-label="Branch operation" size="sm" :disabled="!!busy" class="shrink-0" />
+          <USelectMenu v-model="target" :items="targets" icon="i-lucide-git-branch"
+            aria-label="Destination branch" placeholder="Select branch" :search-input="{ placeholder: 'Search destination branches…' }"
+            :disabled="!!busy || !S.log.branch" class="min-w-0 flex-1" :ui="{ base: 'font-mono text-xs' }" />
+        </div>
+        <div class="shrink-0 space-y-1">
+          <div class="flex justify-end">
+            <UButton icon="i-lucide-sparkle" :label="`${operation === 'merge' ? 'Merge' : 'Rebase'} & solve conflicts`"
+              size="sm" :loading="busy === operation" :disabled="!!busy || !target || target === S.log.branch"
+              @click="act(operation)" />
+          </div>
+          <p class="text-xs text-dimmed">If there are conflicts, AI will solve them using the model in Settings → Models.</p>
+          <p v-if="target" class="text-xs text-dimmed">{{ operation === 'merge'
+            ? `Merge ${S.log.branch} into ${target}. Updates and checks out ${target}.`
+            : `Replay ${S.log.branch} onto ${target}. Rewrites ${S.log.branch}; ${target} stays unchanged.` }}</p>
+        </div>
+      </div>
+    </details>
+    <div v-if="S.log.operation" class="shrink-0 space-y-1">
       <p role="status" class="text-xs text-dimmed">{{ S.log.operation === 'merge' ? 'Merge' : 'Rebase' }} in progress.</p>
       <div class="flex flex-wrap gap-1">
         <UButton icon="i-lucide-sparkle" label="Retry solving conflicts" size="xs" :loading="!!busy && busy !== 'abort'"

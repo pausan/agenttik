@@ -8,7 +8,7 @@
    the filter changes. They are small enough that this costs nothing. */
 import { computed, reactive, ref, watch } from "vue";
 
-import { S, fail, loadArchivedProjects, loadOrchestratorConfig, loadProviders, loadServerConfig, openProject } from "../store";
+import { S, fail, loadActionModels, loadArchivedProjects, loadOrchestratorConfig, loadProviders, loadServerConfig, openProject } from "../store";
 import { loadProfiles } from "../profiles";
 import ProfileSettings from "./settings/ProfileSettings.vue";
 import AppearanceSettings from "./settings/AppearanceSettings.vue";
@@ -60,7 +60,7 @@ watch(open, async (on) => {
   if (!on) return;
   filter.value = "";
   try {
-    await Promise.all([loadProfiles(), loadProviders(), loadArchivedProjects(), loadOrchestratorConfig(), loadServerConfig()]);
+    await Promise.all([loadActionModels(), loadProfiles(), loadProviders(), loadArchivedProjects(), loadOrchestratorConfig(), loadServerConfig()]);
   } catch (e) {
     fail(e);
     open.value = false;

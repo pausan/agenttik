@@ -843,24 +843,30 @@ func (r *Runner) askSmall(providerName string, accountID int64, question string,
 	if !ok {
 		return ""
 	}
-	// The same subscription as the task it is about: these are small charges,
-	// but they belong on the account that asked for the work.
-	home, err := r.accountHome(providerName, accountID)
-	if err != nil {
-		return ""
-	}
 	small, ok := provider.(agent.SmallModel)
 	if !ok {
 		return ""
 	}
 	model, effort := small.SmallModel()
+	return r.askModel(store.ActionModel{Provider: providerName, AccountID: accountID, Model: model, Effort: effort}, question, timeout)
+}
+
+func (r *Runner) askModel(choice store.ActionModel, question string, timeout time.Duration) string {
+	provider, ok := r.registry.Get(choice.Provider)
+	if !ok {
+		return ""
+	}
+	home, err := r.accountHome(choice.Provider, choice.AccountID)
+	if err != nil {
+		return ""
+	}
 	ctx, cancel := context.WithTimeout(r.lifetime, timeout)
 	defer cancel()
 	events, err := provider.Run(ctx, agent.TurnRequest{
 		WorkDir:     os.TempDir(),
 		Prompt:      question,
-		Model:       model,
-		Effort:      effort,
+		Model:       choice.Model,
+		Effort:      choice.Effort,
 		AccountHome: home,
 		Permission:  agent.PermissionPlan,
 		Isolated:    true,

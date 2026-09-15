@@ -351,6 +351,15 @@ CREATE TABLE hidden_model_choices (
     PRIMARY KEY (provider, account_id, model)
 );
 `,
+	`
+CREATE TABLE action_models (
+    action TEXT PRIMARY KEY,
+    provider TEXT NOT NULL,
+    account_id INTEGER NOT NULL DEFAULT 0,
+    model TEXT NOT NULL,
+    effort TEXT NOT NULL DEFAULT ''
+);
+`,
 }
 
 func migrate(db *sql.DB, path string) error {

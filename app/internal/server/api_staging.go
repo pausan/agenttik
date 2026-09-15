@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/pausan/agenttik/app/internal/store"
 )
 
 func (s *Server) projectStage(c *fiber.Ctx) error   { return s.changeIndex(c, true) }
@@ -104,19 +103,11 @@ func (s *Server) generateCommitMessage(c *fiber.Ctx) error {
 	if len(diff) > 128*1024 {
 		return badRequest("staged changes are too large to generate a message; write the message manually")
 	}
-	if body.Provider == "" {
-		for _, provider := range s.registry.All() {
-			if provider.Available() == nil {
-				body.Provider = provider.Name()
-				break
-			}
-		}
-	}
-	accountID, err := s.chooseAccount(body.Provider, body.AccountID, store.SystemAccount, true)
+	choice, err := s.actionModel("commit_message")
 	if err != nil {
 		return err
 	}
-	message := s.runner.CommitMessage(body.Provider, accountID, diff)
+	message := s.runner.CommitMessage(choice.Provider, choice.AccountID, diff, choice)
 	if message == "" {
 		return badRequest("could not generate a commit message; try again")
 	}

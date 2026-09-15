@@ -72,6 +72,7 @@ export const S = reactive({
   // project change arrives after that menu has been used. See specs/061.
   hiddenProjects: [],
   hiddenProjectsLoaded: false,
+  actionModels: [],
   orchestrator: null, // shared settings, loaded when Settings opens
   subscriptionLimits: {}, // "provider:account" -> its latest allowance buckets
   // Whether this desktop window's server is also exposed for a browser to
@@ -3471,10 +3472,20 @@ export async function resetPreferences() {
   for (const key of [LAYOUT_KEY, LAST_USED_KEY, FILE_MODE_KEY, DIFF_VIEW_KEY,
     COLORS_KEY, KEYS_KEY, WINDOW_KEY, TASK_PAGE_KEY, SCHEDULE_KEY, FOLD_KEY,
     "agenttik.smartSearch"]) storage.removeItem(key);
-  await loadProviders();
+  await Promise.all([loadProviders(), loadActionModels()]);
 }
 
 export async function configureAccount(provider, id, connection, key = "") {
   await api("PUT", `/api/providers/${encodeURIComponent(provider)}/accounts/${id}/connection`, { connection, key });
   await loadProviders();
+}
+
+export async function loadActionModels() {
+  S.actionModels = await api("GET", "/api/action-models");
+}
+
+export async function setActionModel(action, choice) {
+  S.actionModels = await api("PUT", `/api/action-models/${action}`, choice ? {
+    provider: choice.provider, account_id: choice.accountID, model: choice.model, effort: choice.effort,
+  } : {});
 }

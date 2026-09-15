@@ -5,6 +5,7 @@ import (
 	"github.com/pausan/agenttik/app/internal/agent"
 	"github.com/pausan/agenttik/app/internal/agent/fake"
 	"github.com/pausan/agenttik/app/internal/runner"
+	"github.com/pausan/agenttik/app/internal/store"
 	"os"
 	"path/filepath"
 	"strings"
@@ -124,12 +125,19 @@ func TestGenerateCommitMessageUsesOnlyIndex(t *testing.T) {
 	if err := os.WriteFile(path, []byte("unstaged secret\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
+	choice := store.ActionModel{Provider: "fake", Model: "fake-careful", Effort: "high"}
+	if err := st.SetActionModel("commit_message", &choice); err != nil {
+		t.Fatal(err)
+	}
 	before := git("diff", "--cached")
 	res := do(t, s, "POST", endpoint, map[string]string{})
 	if res.StatusCode != 200 {
 		t.Fatalf("generation: %d", res.StatusCode)
 	}
 	result := decode[map[string]string](t, res)
+	if provider.request.Model != "fake-careful" || provider.request.Effort != "high" {
+		t.Fatalf("ignored model override: %+v", provider.request)
+	}
 	if result["message"] != "Add staged text" {
 		t.Fatalf("response: %v", result)
 	}

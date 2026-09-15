@@ -4,6 +4,7 @@ import { computed, ref, watchEffect } from "vue";
 
 import {
   S,
+  setActionModel,
   fail,
   isModelChoiceHidden,
   modelAccountLabel,
@@ -14,6 +15,7 @@ import {
   toggleStar,
 } from "../../store";
 import { fuzzyAny } from "../../fuzzy";
+import ModelSelection from "../ModelSelection.vue";
 import StatusDot from "../StatusDot.vue";
 
 const props = defineProps({ filter: { type: String, default: "" } });
@@ -43,7 +45,15 @@ const favouriteRows = computed(() => S.stars.flatMap((star) => {
     : [];
 }));
 
-watchEffect(() => emit("count", groups.value.length + favouriteRows.value.length));
+const actionRows = computed(() => S.actionModels.filter((row) =>
+  fuzzyAny([row.label, row.description, "models", "automatic actions"], props.filter) !== null));
+watchEffect(() => emit("count", groups.value.length + favouriteRows.value.length + actionRows.value.length));
+const savingAction = ref("");
+async function saveAction(id, choice) {
+  savingAction.value = id;
+  try { await setActionModel(id, choice); } catch (error) { fail(error); }
+  finally { savingAction.value = ""; }
+}
 
 async function setHidden(group, model, hidden) {
   try {
@@ -102,12 +112,28 @@ async function removeFavourite(star) {
 </script>
 
 <template>
-  <section v-if="groups.length || favouriteRows.length">
+  <section v-if="groups.length || favouriteRows.length || actionRows.length">
     <div class="mb-0.5 font-semibold text-highlighted">Models</div>
     <p class="mb-3.5 text-xs text-dimmed">
       Hidden subscriptions and models stay out of every model picker. Add favourites from the
       main prompt, then set their order here.
     </p>
+
+    <section v-if="actionRows.length" aria-label="Automatic actions" class="mb-5">
+      <h3 class="mb-2 font-semibold text-highlighted">Automatic actions</h3>
+      <div v-for="row in actionRows" :key="row.id" class="mb-3">
+        <div class="text-sm font-medium">{{ row.label }}</div>
+        <p class="mb-1.5 text-xs text-dimmed">{{ row.description }}</p>
+        <div class="flex flex-wrap items-center gap-1.5">
+          <ModelSelection :provider="row.choice.provider" :account-id="row.choice.account_id"
+            :model="row.choice.model" :effort="row.choice.effort" :disabled="!!savingAction"
+            :aria-label="`${row.label} model`" @change="saveAction(row.id, $event)" />
+          <UButton v-if="row.custom" label="Use default" size="xs" variant="ghost" color="neutral"
+            :disabled="!!savingAction" @click="saveAction(row.id, null)" />
+          <span v-else class="text-xs text-dimmed">Default{{ row.choice.provider ? '' : ' · choose a model' }}</span>
+        </div>
+      </div>
+    </section>
 
     <section v-if="favouriteRows.length" role="group" aria-label="Favourite models" class="mb-4">
       <h3 class="mb-1 font-semibold text-highlighted">Favourites</h3>

@@ -21,13 +21,10 @@ watch(() => [currentProjectID(), S.repository], () => {
 async function generateMessage() {
   if (busy.value || !staged.value.length) return;
   const version = contextVersion;
-  const session = S.detail?.session;
   busy.value = generating.value = true;
   error.value = "";
   try {
     const result = await api("POST", `/api/projects/${currentProjectID()}/commit-message?repo=${encodeURIComponent(S.repository)}`, {
-      provider: session?.provider,
-      account_id: session?.account_id,
     });
     if (version === contextVersion) message.value = result.message;
   } catch (e) {
@@ -64,7 +61,7 @@ async function act(action, path) {
         <textarea v-model="message" :disabled="generating" aria-label="Commit message" placeholder="Commit message" rows="2" class="w-full min-h-14 resize-y rounded-md border border-default bg-default p-2 font-mono text-xs" />
         <div class="flex w-full items-center gap-1">
           <span class="mr-auto min-w-0 truncate text-xs text-muted" aria-label="Current branch" :title="S.log.branch">{{ S.log.branch }}</span>
-          <UButton class="shrink-0" icon="i-lucide-sparkle" aria-label="Generate commit message" title="Generate or rewrite the message from staged changes using a lightweight model. Does not commit." size="sm" variant="ghost" color="neutral" :loading="generating" :disabled="busy || !staged.length" @click="generateMessage" />
+          <UButton class="shrink-0" icon="i-lucide-sparkle" aria-label="Generate commit message" title="Generate or rewrite the message from staged changes using the model in Settings → Models → Automatic actions. Does not commit." size="sm" variant="ghost" color="neutral" :loading="generating" :disabled="busy || !staged.length" @click="generateMessage" />
           <UButton icon="i-lucide-git-commit-horizontal" aria-label="Commit" title="Commit staged changes with this message" size="sm" class="shrink-0" :loading="busy && !generating" :disabled="busy || !staged.length || !message.trim()" @click="act('commit')" />
         </div>
       </div>

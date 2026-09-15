@@ -184,6 +184,8 @@ func (s *Server) routes() {
 	api.Post("/foreground", s.raiseWindow)
 	api.Get("/desktop", s.getDesktopConfig)
 	api.Put("/desktop", s.putDesktopConfig)
+	api.Get("/action-models", s.getActionModels)
+	api.Put("/action-models/:action", s.putActionModel)
 	api.Get("/general", s.getGeneralConfig)
 	api.Put("/general", s.putGeneralConfig)
 	api.Post("/general/reset", s.resetPreferences)

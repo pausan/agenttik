@@ -129,3 +129,5 @@ spends a real subscription.
 
 [review-notes.md](review-notes.md) lists what these specs and the code still
 disagree about, for a human to settle.
+
+- [069 Automatic action models](069-automatic-action-models.md) — defaults and model overrides for conflicts and commit messages.

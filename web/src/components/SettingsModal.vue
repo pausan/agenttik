@@ -19,6 +19,7 @@ import ProjectSettings from "./settings/ProjectSettings.vue";
 import ServerSettings from "./settings/ServerSettings.vue";
 import ShortcutSettings from "./settings/ShortcutSettings.vue";
 import SubscriptionSettings from "./settings/SubscriptionSettings.vue";
+import AboutSettings from "./settings/AboutSettings.vue";
 import HelpSettings from "./settings/HelpSettings.vue";
 import { isMobile } from "../ui";
 
@@ -37,11 +38,12 @@ const SECTIONS = [
   { id: "subscriptions", label: "Subscriptions", icon: "i-lucide-id-card" },
   { id: "server", label: "Server", icon: "i-lucide-server" },
   { id: "shortcuts", label: "Shortcuts", icon: "i-lucide-keyboard" },
+  { id: "about", label: "About", icon: "i-lucide-info" },
   { id: "help", label: "Help", icon: "i-lucide-circle-help" },
 ];
 
 const filter = ref("");
-const counts = reactive({ general: 0, profiles: 0, projects: 0, orchestrator: 0, appearance: 0, models: 0, subscriptions: 0, server: 0, shortcuts: 0, help: 0 });
+const counts = reactive({ general: 0, profiles: 0, projects: 0, orchestrator: 0, appearance: 0, models: 0, subscriptions: 0, server: 0, shortcuts: 0, about: 0, help: 0 });
 
 const shown = computed(() => (filter.value ? SECTIONS.filter((s) => counts[s.id]) : SECTIONS));
 
@@ -105,6 +107,9 @@ async function showOrchestrator() {
         </nav>
 
         <div class="min-h-0 min-w-0 flex-1 overflow-auto pr-1">
+          <div v-show="section === 'about'">
+            <AboutSettings :filter="filter" @count="counts.about = $event" />
+          </div>
           <div v-show="section === 'help'">
             <HelpSettings :filter="filter" @count="counts.help = $event" @start-tour="emit('start-tour')" />
           </div>

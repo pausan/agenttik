@@ -83,6 +83,7 @@ screen, **session** for the row, the route or the CLI flag.
 
 | Doc | What it covers |
 |-----|----------------|
+| [072](072-about.md) | About: creator, running version, copyright and MIT license |
 | [015](015-settings-shortcuts.md) | Settings, editable chords, Command Palette and file search |
 | [017](017-general-settings.md) | General: prompt keys, project folding, insertion order, and database info |
 | [018](018-readme-icon.md) | The project overview, and the one SVG the README, favicon and window share |

@@ -53,6 +53,19 @@ func (s *Server) defaultActionModel(action string) store.ActionModel {
 		if err != nil {
 			continue
 		}
+		if multi, ok := p.(agent.MultiAccount); ok {
+			home := ""
+			if account != store.SystemAccount {
+				configured, err := s.store.GetAccount(account)
+				if err != nil {
+					continue
+				}
+				home = configured.Home
+			}
+			if !multi.AccountStatus(home).SignedIn {
+				continue
+			}
+		}
 		return store.ActionModel{Provider: p.Name(), AccountID: account, Model: model, Effort: effort}
 	}
 	return store.ActionModel{}

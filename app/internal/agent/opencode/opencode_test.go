@@ -298,3 +298,15 @@ func TestFragmentedToolCall(t *testing.T) {
 		t.Fatalf("fragmented call %+v", reply.Calls)
 	}
 }
+
+func TestIsolatedConflictResolutionPermissions(t *testing.T) {
+	for _, permission := range []agent.Permission{agent.PermissionPlan, agent.PermissionWorkspace} {
+		var got map[string]string
+		if err := json.Unmarshal([]byte(cliPermissions(agent.TurnRequest{Isolated: true, Permission: permission})), &got); err != nil {
+			t.Fatal(err)
+		}
+		if (got["edit"] == "allow") != (permission == agent.PermissionWorkspace) {
+			t.Fatal(got)
+		}
+	}
+}

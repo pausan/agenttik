@@ -15,6 +15,13 @@ const branchSearch = ref("");
 const busy = ref("");
 const error = ref("");
 const notice = ref("");
+const operation = ref("merge");
+const target = ref("");
+const targets = computed(() => (S.log.branches || []).filter((name) => name !== S.log.branch));
+const blocked = computed(() => !!busy.value || !!S.log.operation);
+watch(() => [S.log.branch, S.log.branches], () => {
+  if (!targets.value.includes(target.value)) target.value = "";
+});
 const branches = computed(() => {
   const names = S.log.branches || [];
   const query = branchSearch.value.trim();
@@ -26,6 +33,7 @@ const branches = computed(() => {
 });
 watch(() => [currentProjectID(), S.repository], () => {
   branchSearch.value = "";
+  target.value = "";
   error.value = "";
   notice.value = "";
 });
@@ -35,7 +43,7 @@ const actions = [
   { action: "clean", icon: "i-lucide-brush-cleaning", label: "Clean local branches merged into main or master" },
 ];
 async function act(action, branch = S.log.branch) {
-  if (busy.value || !branch) return;
+  if (busy.value || (!branch && !["continue", "abort"].includes(action))) return;
   const id = currentProjectID();
   const repo = S.repository;
   const stillHere = () => id === currentProjectID() && repo === S.repository;
@@ -43,9 +51,10 @@ async function act(action, branch = S.log.branch) {
   error.value = "";
   notice.value = "";
   try {
-    const result = await api("POST", `/api/projects/${id}/branches/${action}?repo=${encodeURIComponent(repo)}`, { branch });
+    const result = await api("POST", `/api/projects/${id}/branches/${action}?repo=${encodeURIComponent(repo)}`, { branch, ...(["merge", "rebase"].includes(action) ? { target: target.value } : {}) });
     if (stillHere()) {
       branchSearch.value = "";
+      if (result?.message) notice.value = result.message;
       if (action === "clean") notice.value = result.deleted.length
         ? `Removed: ${result.deleted.join(", ")}` : "No merged local branches to remove.";
     }
@@ -133,7 +142,7 @@ const menu = computed(() => [
         :placeholder="S.log.head ? 'detached' : 'no branch'"
         aria-label="Current branch"
         :search-input="{ placeholder: 'Search branches…' }"
-        :disabled="!!busy || !S.log.branches?.length"
+        :disabled="blocked || !S.log.branches?.length"
         class="min-w-0 flex-1"
         :ui="{ base: 'font-mono text-xs' }"
         @update:model-value="act('switch', $event)"
@@ -146,10 +155,34 @@ const menu = computed(() => [
           variant="ghost"
           color="neutral"
           :loading="busy === item.action"
-          :disabled="!!busy || !S.log.branch"
+          :disabled="blocked || !S.log.branch"
           @click="act(item.action)"
         />
       </UTooltip>
+    </div>
+    <div v-if="!S.log.operation" class="flex shrink-0 items-center gap-1">
+      <USelect v-model="operation" :items="[{ label: 'merge into', value: 'merge' }, { label: 'rebase into', value: 'rebase' }]"
+        aria-label="Branch operation" size="sm" :disabled="!!busy" class="shrink-0" />
+      <USelectMenu v-model="target" :items="targets" icon="i-lucide-git-branch"
+        aria-label="Destination branch" placeholder="Select branch" :search-input="{ placeholder: 'Search destination branches…' }"
+        :disabled="!!busy || !S.log.branch" class="min-w-0 flex-1" :ui="{ base: 'font-mono text-xs' }" />
+    </div>
+    <div v-if="!S.log.operation" class="shrink-0 space-y-1">
+      <UButton icon="i-lucide-sparkle" :label="`${operation === 'merge' ? 'Merge' : 'Rebase'} & solve conflicts`"
+        size="sm" :loading="busy === operation" :disabled="!!busy || !target || target === S.log.branch"
+        @click="act(operation)" />
+      <p class="text-xs text-dimmed">If there are conflicts, AI will solve them using the model in Settings → Models.</p>
+      <p v-if="target" class="text-xs text-dimmed">{{ operation === 'merge'
+        ? `Merge ${S.log.branch} into ${target}. Updates and checks out ${target}.`
+        : `Replay ${S.log.branch} onto ${target}. Rewrites ${S.log.branch}; ${target} stays unchanged.` }}</p>
+    </div>
+    <div v-else class="shrink-0 space-y-1">
+      <p role="status" class="text-xs text-dimmed">{{ S.log.operation === 'merge' ? 'Merge' : 'Rebase' }} in progress.</p>
+      <div class="flex flex-wrap gap-1">
+        <UButton icon="i-lucide-sparkle" label="Retry solving conflicts" size="xs" :loading="!!busy && busy !== 'abort'"
+          :disabled="!!busy" @click="act('continue')" />
+        <UButton label="Abort" color="neutral" variant="outline" size="xs" :disabled="!!busy" @click="act('abort')" />
+      </div>
     </div>
     <div class="min-h-4 shrink-0">
       <p v-if="error" role="alert" class="text-xs text-error">{{ error }}</p>

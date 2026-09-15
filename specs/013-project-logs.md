@@ -14,6 +14,35 @@ only HEAD to the current branch's configured upstream; a missing upstream is
 reported as an error. Controls are disabled while an action runs and remote
 actions have a two-minute timeout. The log, changes, and tree refresh afterward.
 
+## Merge and rebase
+
+Below the current branch selector, an operation selector reads **merge into** or
+**rebase into**, followed by a destination autocomplete. Every other local branch
+is selectable; neither side is restricted to main/master. The four-point sparkle
+button reads **Merge & solve conflicts** or **Rebase & solve conflicts**. Help text
+explains that AI solves conflicts and identifies which branch changes.
+
+Merge checks out the destination and merges the selected source into it. Rebase
+keeps the source checked out and replays its commits onto the destination,
+rewriting the source only. Both require a clean index and working tree, including
+untracked files. Git refuses destinations checked out in another worktree.
+Clean operations run without a model. Nothing pushes.
+
+Conflicts use the saved automatic-action model (see [069](069-automatic-action-models.md)).
+The model gets an isolated workspace request to inspect and edit conflict paths.
+The server stages those paths and continues Git itself. It verifies unchanged HEAD
+and operation metadata, no unrelated edits, no remaining conflict markers, and no
+unstaged edits before continuing. Rebases repeat this for each conflicted commit.
+Each request allows ten minutes of resolution and at most 100 conflict rounds;
+individual Git commands are bounded too. Model errors and timeouts leave Git's
+operation available for recovery instead of reporting success.
+
+An in-progress merge/rebase replaces the operation controls with **Retry solving
+conflicts** and **Abort**. These also appear after reopening the pane. Retry can
+continue a manually staged resolution; Abort uses Git's normal abort behavior.
+Controls are disabled while a request runs. Branch, staging and commit requests
+share a checkout lock across windows; this does not lock out external Git tools.
+
 Cleanup immediately deletes local branches whose tips are ancestors of either
 local main or local master. It preserves main, master, the current branch,
 and every branch checked out in another worktree. Remote branches are untouched.
@@ -88,8 +117,8 @@ other, revision included.
 
 | Method | Path | Answers |
 |---|---|---|
-| GET | `/api/projects/:id/log?limit=&graph=` | `{branch, branches[], head, commits[]}` — up to 500 commits in topological order; graph includes all branch/tag histories |
-| POST | `/api/projects/:id/branches/:action?repo=` | `{branch}`; action is switch, pull, push, or clean; clean returns `{deleted[]}`, others 204 |
+| GET | `/api/projects/:id/log?limit=&graph=` | `{branch, branches[], head, operation, commits[]}` — up to 500 commits in topological order; graph includes all branch/tag histories |
+| POST | `/api/projects/:id/branches/:action?repo=` | `{branch, target?}`; switch/pull/push return 204, clean returns `{deleted[]}`; merge/rebase/continue/abort return `{message}` |
 | GET | `/api/projects/:id/commit?hash=` | `{hash, files[{path,status,additions,deletions,binary}]}` |
 | GET | `/api/projects/:id/commit/diff?hash=&path=` | the same `{path, diff, partial}` a working-tree diff answers |
 

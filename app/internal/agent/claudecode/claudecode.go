@@ -91,10 +91,12 @@ func buildArgs(req agent.TurnRequest) []string {
 		"--verbose",
 	}
 	if req.Isolated {
-		// Title requests must not discover custom project context, use tools, or
-		// leave a disposable provider session behind.
-		args = append(args, "--no-session-persistence", "--safe-mode",
-			"--setting-sources", "user", "--tools", "")
+		args = append(args, "--no-session-persistence", "--safe-mode", "--setting-sources", "user")
+		// Metadata requests cannot use tools. Conflict resolution explicitly
+		// allows workspace edits while still avoiding session persistence.
+		if req.Permission != agent.PermissionWorkspace && req.Permission != agent.PermissionFull {
+			args = append(args, "--tools", "")
+		}
 	}
 	if req.Model != "" {
 		args = append(args, "--model", req.Model)

@@ -189,3 +189,22 @@ func TestParseSeparatesSubagentUsageFromMainContext(t *testing.T) {
 		t.Errorf("usage = %+v", u)
 	}
 }
+
+func TestIsolatedConflictResolutionAllowsTools(t *testing.T) {
+	for _, permission := range []agent.Permission{agent.PermissionPlan, agent.PermissionWorkspace} {
+		args := buildArgs(agent.TurnRequest{Isolated: true, Permission: permission})
+		joined := strings.Join(args, " ")
+		if !strings.Contains(joined, "--no-session-persistence") {
+			t.Fatal(args)
+		}
+		hasToolsFlag := false
+		for _, arg := range args {
+			if arg == "--tools" {
+				hasToolsFlag = true
+			}
+		}
+		if hasToolsFlag != (permission == agent.PermissionPlan) {
+			t.Fatal(args)
+		}
+	}
+}

@@ -15,14 +15,29 @@ func (s *Server) branchAction(c *fiber.Ctx) error {
 	if !isGitRepo(root) {
 		return badRequest("not a git repository")
 	}
+	unlock, err := s.lockRepository(root)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	var body struct {
 		Branch string `json:"branch"`
+		Target string `json:"target"`
 	}
-	if err := c.BodyParser(&body); err != nil || body.Branch == "" {
+	if err := c.BodyParser(&body); err != nil {
 		return badRequest("branch is required")
 	}
-	current, err := runGit(root, "symbolic-ref", "--quiet", "--short", "HEAD")
 	action := c.Params("action")
+	if action == "merge" || action == "rebase" || action == "continue" || action == "abort" {
+		return s.integrateBranches(c, root, action, body.Branch, body.Target)
+	}
+	if body.Branch == "" {
+		return badRequest("branch is required")
+	}
+	if operation := gitOperation(root); operation != "" {
+		return badRequest("finish or abort the existing %s first", operation)
+	}
+	current, err := runGit(root, "symbolic-ref", "--quiet", "--short", "HEAD")
 	if action != "switch" && (err != nil || strings.TrimSpace(current) != body.Branch) {
 		return badRequest("current branch changed; refresh and try again")
 	}

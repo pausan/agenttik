@@ -29,7 +29,7 @@ func cliPermissions(req agent.TurnRequest) string {
 	if req.Permission.Valid() == agent.PermissionFull {
 		permissions = map[string]string{"*": "allow", "question": "deny"}
 	}
-	if req.Isolated {
+	if req.Isolated && req.Permission != agent.PermissionWorkspace && req.Permission != agent.PermissionFull {
 		permissions = map[string]string{"*": "deny"}
 	}
 	b, _ := json.Marshal(permissions)

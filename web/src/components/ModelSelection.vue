@@ -50,7 +50,7 @@ const choiceLabel = (provider, accountID, model, effort) => [
 ].join(" · ");
 
 const currentLabel = computed(() =>
-  choiceLabel(props.provider, props.accountId, props.model),
+  props.provider && props.model ? choiceLabel(props.provider, props.accountId, props.model) : "Choose model",
 );
 const currentEfforts = computed(() => effortsFor(props.provider, props.model));
 const effortItems = computed(() => [

@@ -44,6 +44,7 @@ type Server struct {
 	store    *store.Store
 	runner   *runner.Runner
 	registry *agent.Registry
+	gitLocks sync.Map // canonical checkout path -> *sync.Mutex
 	watchers *watchers
 	search   *smartsearch.Service
 

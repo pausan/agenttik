@@ -196,3 +196,20 @@ test("reset defaults warns, cancels, and preserves browser data", async ({ page 
   await openSettings(page, "Appearance");
   await expect(page.getByRole("button", { name: "blue", exact: true })).toHaveAttribute("aria-pressed", "true");
 });
+
+test("automatic action models persist independently and reset", async ({ page }) => {
+  await openSettings(page, "Models");
+  const actions = page.getByLabel("Automatic actions", { exact: true });
+  const commit = actions.getByRole("button", { name: "Commit messages model", exact: true });
+  await expect(commit).toContainText("Fake Quick");
+  await commit.click();
+  await page.getByPlaceholder("Search models…").fill("Fake Careful");
+  await page.getByRole("option", { name: /Fake Careful/ }).click();
+  await expect(commit).toContainText("Fake Careful");
+  await expect(actions.getByRole("button", { name: "Merge and rebase conflicts model", exact: true })).not.toContainText("Fake Careful");
+  await page.reload();
+  await openSettings(page, "Models");
+  await expect(commit).toContainText("Fake Careful");
+  await actions.getByRole("button", { name: "Use default", exact: true }).click();
+  await expect(commit).toContainText("Fake Quick");
+});

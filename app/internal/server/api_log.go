@@ -40,7 +40,8 @@ type commitEntry struct {
 }
 
 type projectLog struct {
-	Branches []string `json:"branches"`
+	Branches  []string `json:"branches"`
+	Operation string   `json:"operation"`
 	// Branch is empty on a detached HEAD, where Head is all there is to say.
 	Branch  string        `json:"branch"`
 	Head    string        `json:"head"`
@@ -59,6 +60,7 @@ func (s *Server) projectLog(c *fiber.Ctx) error {
 	if !isGitRepo(root) {
 		return c.JSON(body)
 	}
+	body.Operation = gitOperation(root)
 	if out, err := runGit(root, "for-each-ref", "--format=%(refname:strip=2)", "refs/heads/"); err == nil {
 		body.Branches = strings.Fields(out)
 	}

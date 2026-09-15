@@ -162,3 +162,47 @@ test("commit graph toggle, counts, checkout highlight and ref chips", async ({ p
   await pane.getByRole("button", { name: "Clean local branches merged into main or master", exact: true }).click();
   await expect(pane.getByRole("status")).toHaveText("No merged local branches to remove.");
 });
+
+test("merge and rebase choose a destination and show recovery", async ({ page }) => {
+  let branch = "feature/search";
+  let operation = "";
+  const requests = [];
+  await page.route("**/api/projects/*/log?*", (route) => route.fulfill({
+    json: { branch, operation, branches: ["main", "feature/search", "fix/colors"], head: "12345678", commits: [] },
+  }));
+  await page.route("**/api/projects/*/branches/*", async (route) => {
+    const action = new URL(route.request().url()).pathname.split("/").pop();
+    const body = route.request().postDataJSON();
+    requests.push({ action, ...body });
+    if (action === "merge") branch = body.target;
+    if (action === "rebase") operation = "rebase";
+    if (action === "abort") operation = "";
+    await route.fulfill({ json: { message: action === "rebase" ? "Rebase paused." : "Completed." } });
+  });
+  await page.reload();
+  await openProject(page);
+  const pane = inspector(page);
+  await pane.getByRole("tab", { name: "Commits" }).click();
+  const merge = pane.getByRole("button", { name: "Merge & solve conflicts", exact: true });
+  await expect(merge).toBeDisabled();
+  await pane.getByRole("button", { name: "Destination branch", exact: true }).click();
+  await expect(page.getByRole("option", { name: "feature/search", exact: true })).toHaveCount(0);
+  await page.getByRole("option", { name: "fix/colors", exact: true }).click();
+  await expect(pane.getByText("If there are conflicts, AI will solve them", { exact: false })).toBeVisible();
+  await merge.click();
+  await expect(pane.getByRole("button", { name: "Current branch", exact: true })).toContainText("fix/colors");
+  await pane.getByRole("combobox", { name: "Branch operation", exact: true }).click();
+  await page.getByRole("option", { name: "rebase into", exact: true }).click();
+  await pane.getByRole("button", { name: "Destination branch", exact: true }).click();
+  await page.getByRole("option", { name: "main", exact: true }).click();
+  await pane.getByRole("button", { name: "Rebase & solve conflicts", exact: true }).click();
+  await expect(pane.getByRole("button", { name: "Retry solving conflicts", exact: true })).toBeVisible();
+  await expect(pane.getByRole("button", { name: "Current branch", exact: true })).toBeDisabled();
+  await pane.getByRole("button", { name: "Abort", exact: true }).click();
+  await expect(pane.getByRole("button", { name: "Rebase & solve conflicts", exact: true })).toBeVisible();
+  expect(requests).toEqual([
+    { action: "merge", branch: "feature/search", target: "fix/colors" },
+    { action: "rebase", branch: "fix/colors", target: "main" },
+    { action: "abort", branch: "fix/colors" },
+  ]);
+});

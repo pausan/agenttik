@@ -18,6 +18,11 @@ func (s *Server) changeIndex(c *fiber.Ctx, stage bool) error {
 	if !isGitRepo(root) {
 		return badRequest("not a git repository")
 	}
+	unlock, err := s.lockRepository(root)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	var body struct {
 		Path string `json:"path"`
 	}
@@ -66,6 +71,11 @@ func (s *Server) createCommit(c *fiber.Ctx) error {
 	if !isGitRepo(root) {
 		return badRequest("not a git repository")
 	}
+	unlock, err := s.lockRepository(root)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	var body struct {
 		Message string `json:"message"`
 	}

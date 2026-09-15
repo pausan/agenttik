@@ -70,3 +70,17 @@ func TestActionModelDefaultsAndOverrides(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+// A bundled direct provider may be available without any configured login.
+// It must not take precedence over a subscription that can actually run.
+type signedOutProvider struct{ fake.Provider }
+
+func (p signedOutProvider) Name() string                             { return "codex" }
+func (p signedOutProvider) AccountStatus(string) agent.AccountStatus { return agent.AccountStatus{} }
+func TestActionDefaultSkipsSignedOutSubscription(t *testing.T) {
+	s, _ := newTestServer(t)
+	s.registry = agent.NewRegistry(&signedOutProvider{}, fake.New())
+	if got := s.defaultActionModel("commit_message"); got.Provider != "fake" {
+		t.Fatal(got)
+	}
+}

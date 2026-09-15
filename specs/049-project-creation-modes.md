@@ -43,7 +43,7 @@ Checks for edited or deleted rows cannot replace the current result. Empty
 rows are ignored. Each row has a delete button beside its input; long URLs
 and error messages stay inside the dialog, and long lists scroll.
 
-GitHub and GitLab web links become their SSH remotes; ordinary HTTPS, git, and SSH remotes remain accepted. Add project stays disabled while a check is running or any non-empty row is invalid. It starts sequential clones for the checked rows and reports progress. A failed clone becomes a broken row and prevents adding the project until it is fixed or deleted. The dialog can be minimized during this work; its compact progress button restores it without interrupting the queue.
+GitHub and GitLab web links become their SSH remotes; ordinary HTTPS, git, and SSH remotes remain accepted. HTTPS clone URLs ending in `.git` stay HTTPS. Absolute paths to existing local directories are accepted too; Git verifies they are repositories. Relative paths and files are rejected. Add project stays disabled while a check is running or any non-empty row is invalid. It starts sequential clones for the checked rows and reports progress. A failed clone becomes a broken row and prevents adding the project until it is fixed or deleted. The dialog can be minimized during this work; its compact progress button restores it without interrupting the queue.
 
 At least one validated repository is required. Empty inputs do not count, so
 the mode cannot accidentally add a base folder with no repositories.
@@ -78,6 +78,8 @@ scp-like `user@host:path`, with an optional `user@` or `token@` before the
 host. The host must start with a word character for the same reason one step
 down: a host beginning with `-` is an option to whatever `ssh` git calls. The
 URL also reaches `git clone` after a `--`, so it cannot be read as a flag.
+Absolute local paths bypass the URL pattern only after a directory check; they
+also reach Git after `--`.
 
 **A clone never waits on a terminal this process does not have.**
 `GIT_TERMINAL_PROMPT=0` with empty `GIT_ASKPASS` and `SSH_ASKPASS` turns a

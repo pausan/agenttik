@@ -6,6 +6,7 @@ import { SEGMENTED } from "../ui";
 import FolderPicker from "./FolderPicker.vue";
 
 const open = defineModel("open", { type: Boolean, default: false });
+defineProps({ tourActive: Boolean });
 const MODES = [{ label: "Folder", value: "folder" }, { label: "Multiple Git Repos", value: "repos" }];
 const mode = ref("folder");
 const path = ref("");
@@ -79,7 +80,10 @@ async function check(row, remote, revision) {
 }
 
 function paste(row, event) {
-  const remotes = event.clipboardData?.getData("text").trim().split(/\s+/).filter(Boolean) || [];
+  const text = event.clipboardData?.getData("text").trim() || "";
+  // A local path can contain spaces; a single absolute path is one input.
+  if (!/[\r\n]/.test(text) && /^(?:\/|[a-z]:[\\/]|\\\\)/i.test(text)) return;
+  const remotes = text.split(/\s+/).filter(Boolean);
   if (remotes.length < 2) return;
   event.preventDefault();
   clearTimeout(row.timer);
@@ -143,6 +147,9 @@ function submit() {
   <UModal
     :open="open"
     title="Add project"
+    :modal="!tourActive"
+    :overlay="!tourActive"
+    :content="{ onInteractOutside: (e) => { if (tourActive) e.preventDefault(); } }"
     :close="cloning ? { icon: 'i-lucide-minus', title: 'Minimize cloning', 'aria-label': 'Minimize cloning' } : true"
     :ui="{ content: 'max-w-lg' }"
     @update:open="updateOpen"
@@ -160,7 +167,7 @@ function submit() {
                 :model-value="row.url"
                 :aria-label="'Repository ' + (i + 1)"
                 class="min-w-0 flex-1 font-normal"
-                placeholder="https://github.com/org/repo or git@github.com:org/repo.git"
+                placeholder="https://github.com/org/repo.git or /path/to/repo"
                 autocomplete="off"
                 :disabled="cloning || row.state === 'cloned'"
                 @update:model-value="scheduleCheck(row, $event)"
@@ -188,7 +195,7 @@ function submit() {
           </div>
         </div>
         <p class="mt-2 text-xs text-dimmed">
-          GitHub and GitLab web links use SSH automatically. Paste several URLs to add rows.
+          GitHub and GitLab web links use SSH. Use an HTTPS URL ending in .git or an absolute local repository path to clone without SSH. Paste several URLs to add rows.
         </p>
         <p v-if="cloning" class="mt-2 text-xs text-muted">
           Cloning {{ current + 1 }} of {{ total }} repositories

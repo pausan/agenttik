@@ -81,6 +81,7 @@ async function startServer() {
 }
 
 export const test = base.extend({
+  showQuickStart: [false, { option: true }],
   agenttik: async ({}, use) => {
     const server = await startServer();
     await use(server);
@@ -92,7 +93,7 @@ export const test = base.extend({
      exist to catch. A failed request is not one of those: the browser logs
      one for every 4xx, and some tests ask for a path on purpose to see the
      UI shrug it off. */
-  page: async ({ page, agenttik }, use) => {
+  page: async ({ page, agenttik, showQuickStart }, use) => {
     const errors = [];
     page.on("pageerror", (e) => errors.push("pageerror: " + e.message));
     page.on("console", (m) => {
@@ -102,6 +103,8 @@ export const test = base.extend({
     });
 
     await page.goto(agenttik.url);
+    // Most tests exercise ordinary use after onboarding. Tour tests opt in.
+    if (!showQuickStart) await page.getByRole("button", { name: "Close tour", exact: true }).click();
     await use(page);
 
     expect(errors, "the page logged errors").toEqual([]);
@@ -124,6 +127,7 @@ export async function addProject(page, path = REPO) {
   await expect(field).toHaveValue(/.+/); // the picker prefills it with $HOME
   await field.fill(path);
   await dialog.getByRole("button", { name: "Add project", exact: true }).click();
+  await expect(dialog).toBeHidden();
   await expect(sidebar(page).getByText(path)).toBeVisible();
 }
 

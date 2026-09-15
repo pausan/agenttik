@@ -25,6 +25,8 @@ import InspectorPanel from "./components/InspectorPanel.vue";
 import Splitter from "./components/Splitter.vue";
 import { MOBILE_QUERY } from "./ui";
 import { MACOS } from "./platform";
+import { storage } from "./api";
+import { readTour, saveTour } from "./quick-start-state";
 
 /* Everything below is reached by a click or a chord, never by the first
    paint, so its code is fetched from its own chunk the moment it is first
@@ -36,6 +38,13 @@ const SettingsModal = defineAsyncComponent(() => import("./components/SettingsMo
 const CommandPaletteModal = defineAsyncComponent(() => import("./components/CommandPaletteModal.vue"));
 const GoToFileModal = defineAsyncComponent(() => import("./components/GoToFileModal.vue"));
 const UnsavedModal = defineAsyncComponent(() => import("./components/UnsavedModal.vue"));
+const QuickStartTour = defineAsyncComponent(() => import("./components/QuickStartTour.vue"));
+const tour = ref({ open: false, step: "welcome" });
+function startTour() {
+  settings.value = false;
+  tour.value = { open: true, step: "welcome" };
+}
+watch(tour, (value) => saveTour(storage, value), { deep: true });
 
 const addProject = ref(false);
 // The add-project dialog can keep a clone going after it is minimized, so it
@@ -197,6 +206,7 @@ onMounted(() => {
   init().finally(() => {
     clearTimeout(showSpinner);
     bootSpinner.value = false;
+    tour.value = readTour(storage, !S.projects.length && !S.sessions.length);
   });
   window.addEventListener("keydown", onKey);
   media.addEventListener("change", changeLayout);
@@ -293,8 +303,9 @@ onUnmounted(() => {
     </div>
 
     <UnsavedModal v-if="S.closing" />
-    <AddProjectModal v-if="addProjectLoaded" v-model:open="addProject" />
-    <SettingsModal v-if="settings" v-model:open="settings" v-model:section="settingsSection" />
+    <AddProjectModal v-if="addProjectLoaded" v-model:open="addProject" :tour-active="tour.open" />
+    <SettingsModal v-if="settings" v-model:open="settings" v-model:section="settingsSection" :tour-active="tour.open" @start-tour="startTour" />
+    <QuickStartTour v-if="tour.open" v-model:step="tour.step" :setup-open="settings || addProject" :mobile="mobile" @close="tour.open = false" />
     <GoToFileModal v-if="goToFile" v-model:open="goToFile" />
     <RemoteConnectModal v-if="remoteConnect" v-model:open="remoteConnect" />
     <CommandPaletteModal

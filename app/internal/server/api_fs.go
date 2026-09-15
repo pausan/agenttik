@@ -273,9 +273,17 @@ func (s *Server) cloneRepo(c *fiber.Ctx) error {
 }
 
 // cloneRemote accepts ordinary git remotes and turns supported GitHub and
-// GitLab web pages into their SSH clone remotes.
+// GitLab web pages into their SSH clone remotes. An absolute local directory
+// is also a source; ls-remote checks that it is a repository before cloning.
 func cloneRemote(raw string) (string, error) {
 	remote := strings.TrimSpace(raw)
+	if filepath.IsAbs(remote) {
+		info, err := os.Stat(remote)
+		if err != nil || !info.IsDir() {
+			return "", fmt.Errorf("%s is not a local directory", remote)
+		}
+		return filepath.Clean(remote), nil
+	}
 	u, err := url.Parse(remote)
 	if err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Port() == "" {
 		host := strings.ToLower(u.Hostname())
@@ -303,7 +311,7 @@ func cloneRemote(raw string) (string, error) {
 		}
 	}
 	if !remoteURL.MatchString(remote) {
-		return "", fmt.Errorf("%s is not an https, ssh or git remote", remote)
+		return "", fmt.Errorf("%s is not an https, ssh or git remote, or an absolute local directory", remote)
 	}
 	return remote, nil
 }

@@ -368,7 +368,7 @@ function runMenuAction(action) {
           />
           <UFieldGroup size="sm">
             <UButton type="submit" :disabled="primary.disabled" :label="primary.label" :trailing-icon="primary.icon" />
-            <UPopover v-model:open="queueOpen">
+            <UPopover v-model:open="queueOpen" :ui="{ content: 'z-[110]' }">
               <UButton type="button" :disabled="empty || uploading" icon="i-lucide-chevron-down" aria-label="More prompt actions" />
               <template #content>
                 <div class="p-1">

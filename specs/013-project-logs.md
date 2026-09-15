@@ -27,8 +27,10 @@ in Settings → Models. Help text below identifies which branch changes.
 
 Merge checks out the destination and merges the selected source into it. Rebase
 keeps the source checked out and replays its commits onto the destination,
-rewriting the source only. Both automatically stage and stash changed and untracked
-files, then restore them staged in the resulting checkout without confirmation.
+rewriting the source only. Both automatically stash changed and untracked
+files, then restore them in the resulting checkout without confirmation. Staged
+and unstaged changes retain their original split, including partially staged
+files; untracked files remain untracked.
 The button tooltip includes “Changed files will be stashed temporarily.”
 Paused operations retain their stash across retries and app restarts; completion,
 abort, and failures before an operation starts restore it automatically. If

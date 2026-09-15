@@ -104,9 +104,7 @@ func (s *Server) integrateBranches(c *fiber.Ctx, root, action, branch, target st
 			return badRequest("a previous integration stash still needs restoration")
 		}
 		if status != "" {
-			if _, err := runGit(root, "add", "--all"); err != nil {
-				return badRequest("%s", err)
-			}
+			// Stash the original index so --index restores the staging split.
 			if _, err := runGit(root, "stash", "push", "--include-untracked", "-m", "Temporary integration changes"); err != nil {
 				return badRequest("%s", err)
 			}

@@ -84,11 +84,16 @@ func TestIntegrateBranches(t *testing.T) {
 						write("local.txt", "staged\n")
 						git("add", "local.txt")
 						write("local.txt", "working edit\n")
+						write("added.txt", "staged addition\n")
+						git("add", "added.txt")
 						write("new.txt", "untracked\n")
 						if err := os.Remove(filepath.Join(root, "deleted.txt")); err != nil {
 							t.Fatal(err)
 						}
 					}
+					staged := git("diff", "--cached", "--binary")
+					unstaged := git("diff", "--binary")
+					status := git("status", "--porcelain")
 					p, err := st.CreateProject("integrate", root)
 					if err != nil {
 						t.Fatal(err)
@@ -115,20 +120,18 @@ func TestIntegrateBranches(t *testing.T) {
 					if op := gitOperation(root); op != "" {
 						t.Fatalf("still %s", op)
 					}
+					if git("diff", "--cached", "--binary") != staged || git("diff", "--binary") != unstaged || git("status", "--porcelain") != status {
+						t.Fatal("integration changed staged or unstaged changes")
+					}
 					if dirty {
-						if git("show", ":local.txt") != "working edit" || git("show", ":new.txt") != "untracked" {
-							t.Fatal("local changes were not restored staged")
+						content, err := os.ReadFile(filepath.Join(root, "new.txt"))
+						if err != nil || string(content) != "untracked\n" {
+							t.Fatalf("untracked file not restored: %q, %v", content, err)
 						}
-						if git("diff", "--cached", "--name-status") != "D\tdeleted.txt\nM\tlocal.txt\nA\tnew.txt" {
-							t.Fatal("unexpected restored changes")
-						}
-					} else if git("status", "--porcelain") != "" {
-						t.Fatal("dirty after integration")
 					}
 					if git("rev-parse", "refs/stash") != existingStash {
 						t.Fatal("existing stash changed")
 					}
-					git("diff", "--quiet")
 					if conflict && provider.calls == 0 || !conflict && provider.calls != 0 {
 						t.Fatalf("model calls: %d", provider.calls)
 					}
@@ -222,7 +225,7 @@ func TestIntegrationFailureAndRecovery(t *testing.T) {
 	}
 	request("switch", "", 400)
 	request("abort", "", 200)
-	if git("show", ":local") != "local changes" {
+	if content, err := os.ReadFile(filepath.Join(root, "local")); err != nil || string(content) != "local changes" || git("status", "--porcelain") != "?? local" {
 		t.Fatal("abort did not restore local changes")
 	}
 	git("switch", "feature")
@@ -239,9 +242,10 @@ func TestIntegrationFailureAndRecovery(t *testing.T) {
 	}
 	provider.resolve = func(req agent.TurnRequest) error { write("resolved both\n"); return nil }
 	request("continue", "", 200)
-	if git("show", ":local") != "local changes" {
+	if content, err := os.ReadFile(filepath.Join(root, "local")); err != nil || string(content) != "local changes" || git("status", "--porcelain") != "?? local" {
 		t.Fatal("retry did not restore local changes")
 	}
+	git("add", "local")
 	git("commit", "-m", "local changes")
 	// Recreate divergence for the rebase timeout/retry case.
 	git("switch", "main")

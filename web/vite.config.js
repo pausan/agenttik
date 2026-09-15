@@ -30,7 +30,20 @@ export default defineConfig({
     // back to a live fetch against the Iconify API the first time it renders.
     ui({
       colorMode: false, // The app persists color mode within the selected profile.
-      ui: { colors: { primary: "blue", neutral: "zinc" } },
+      ui: {
+        colors: { primary: "blue", neutral: "zinc" },
+        // Portals must sit above pane scrollbars and resize handles. Keep
+        // the same level so later portals (including nested dialogs) win.
+        modal: { slots: { overlay: "z-50", content: "z-50" } },
+        slideover: { slots: { overlay: "z-50", content: "z-50" } },
+        popover: { slots: { content: "z-50" } },
+        tooltip: { slots: { content: "z-50" } },
+        dropdownMenu: { slots: { content: "z-50" } },
+        contextMenu: { slots: { content: "z-50" } },
+        select: { slots: { content: "z-50" } },
+        selectMenu: { slots: { content: "z-50" } },
+        inputMenu: { slots: { content: "z-50" } },
+      },
       icon: { clientBundle: { scan: true } },
     }),
     keepPlaceholder(),

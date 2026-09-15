@@ -36,6 +36,9 @@ button:not(:disabled) { cursor: pointer; }
 button[draggable="true"] { cursor: grab; }
 button[draggable="true"]:active { cursor: grabbing; }
 
+/* Contain pane resize handles and scrollbars below the portalled UI. */
+.app-shell { isolation: isolate; }
+
 /* Keep native overlay scrollbars, including their fade-out, in the
    scroller's stacking context beneath portalled menus and dialogs. */
 .overflow-auto,

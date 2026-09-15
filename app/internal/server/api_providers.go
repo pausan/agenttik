@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"os/exec"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -10,12 +11,17 @@ import (
 )
 
 type providerInfo struct {
-	Name        string        `json:"name"`
-	DisplayName string        `json:"display_name"`
-	Models      []agent.Model `json:"models"`
-	Efforts     []string      `json:"efforts"`
-	Available   bool          `json:"available"`
-	Reason      string        `json:"reason,omitempty"`
+	CLI            string        `json:"cli,omitempty"`
+	CLIInstalled   bool          `json:"cli_installed"`
+	CLIRequirement string        `json:"cli_requirement,omitempty"`
+	InstallURL     string        `json:"install_url,omitempty"`
+	DirectLogin    bool          `json:"direct_login"`
+	Name           string        `json:"name"`
+	DisplayName    string        `json:"display_name"`
+	Models         []agent.Model `json:"models"`
+	Efforts        []string      `json:"efforts"`
+	Available      bool          `json:"available"`
+	Reason         string        `json:"reason,omitempty"`
 
 	// Accounts are the subscriptions this provider can run under, the CLI's
 	// own login first and always present. MultiAccount says whether a second
@@ -46,6 +52,21 @@ func (s *Server) listProviders(c *fiber.Ctx) error {
 		if err := p.Available(); err != nil {
 			info.Available, info.Reason = false, err.Error()
 		}
+		switch p.Name() {
+		case "claude":
+			info.CLI, info.CLIRequirement, info.InstallURL = "claude", "Claude Code CLI is required. Install it to use a Claude subscription; subscription credentials cannot be used directly by agenttik.", "https://code.claude.com/docs/en/setup"
+		case "codex":
+			info.CLI, info.CLIRequirement, info.InstallURL = "codex", "Codex CLI is required for agenttik’s supported ChatGPT subscription integration. Install it, then sign in.", "https://developers.openai.com/codex/cli"
+		case "copilot":
+			info.CLI, info.CLIRequirement, info.InstallURL = "copilot", "GitHub Copilot CLI is required for the supported Copilot subscription integration. Install it, then sign in.", "https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli"
+		case "opencode":
+			info.CLI, info.CLIRequirement, info.InstallURL = "opencode", "OpenCode CLI is optional. Automatic uses it for new conversations when installed; choose Direct to use agenttik without it.", "https://opencode.ai/docs/"
+		}
+		if info.CLI != "" {
+			_, err := exec.LookPath(info.CLI)
+			info.CLIInstalled = err == nil
+		}
+		_, info.DirectLogin = p.(agent.DirectAccount)
 		out = append(out, info)
 	}
 	return c.JSON(out)

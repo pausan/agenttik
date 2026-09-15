@@ -1,17 +1,11 @@
 <script setup>
-/* Which subscriptions this machine can run each provider on, and which one a
-   new task starts with.
-
-   Every CLI here keeps its login in a directory, so a subscription is an
-   alias and that directory — nothing more. agenttik never sees the
-   credential: signing in is the CLI's own flow, opened in a terminal with
-   the directory preset. See specs/050-subscription-accounts.md. */
 import { computed, reactive, ref, watchEffect } from "vue";
 
 import {
   S,
   accountUsage,
   addAccount,
+  configureAccount,
   fail,
   removeAccount,
   setDefaultAccount,
@@ -46,8 +40,26 @@ watchEffect(() => emit("count", providers.value.length));
 const adding = reactive({}); // provider -> { alias, home } | undefined
 const editing = reactive({}); // account id -> { alias, home }
 const removing = reactive({}); // account id -> { sessions, schedules }
-const command = reactive({}); // account id -> { command, spawned }
+const command = reactive({}); // provider:account -> { command, spawned }
 const busy = ref(0);
+const connecting = reactive({});
+const rowKey = (provider, account) => `${provider}:${account.id}`;
+function startConnect(provider, account) {
+  connecting[rowKey(provider, account)] = { connection: account.connection || "auto", key: "" };
+}
+async function saveConnection(provider, account) {
+  const id = rowKey(provider, account);
+  const form = connecting[id];
+  busy.value += 1;
+  try {
+    await configureAccount(provider, account.id, form.connection, form.key);
+    delete connecting[id];
+  } catch (e) {
+    fail(e);
+  } finally {
+    busy.value -= 1;
+  }
+}
 
 function startAdd(provider) {
   adding[provider] = { alias: "", home: "" };
@@ -125,7 +137,7 @@ async function choose(provider, id) {
 async function signIn(provider, account) {
   busy.value += 1;
   try {
-    command[account.id] = await signInAccount(provider, account.id);
+    command[rowKey(provider, account)] = await signInAccount(provider, account.id);
   } catch (e) {
     fail(e);
   } finally {
@@ -143,8 +155,7 @@ function copy(text) {
     <div class="mb-0.5 font-semibold text-highlighted">Subscriptions</div>
     <p class="mb-3.5 text-xs text-dimmed">
       One machine can be signed in to more than one account per provider — a company
-      subscription and a personal one. Each is a name and the folder its CLI keeps that login in;
-      agenttik stores the folder and never the credential. The one marked default is what a new
+      subscription and a personal one. Each has its own login folder. The one marked default is what a new
       task starts on, and any task can be swapped to another from its model picker.
     </p>
 
@@ -164,6 +175,12 @@ function copy(text) {
           {{ p.available ? "ready" : "unavailable" }}
         </UBadge>
       </div>
+
+      <p v-if="p.cli_requirement" class="mb-2 text-xs text-dimmed">
+        {{ p.cli_requirement }}
+        <a :href="p.install_url" target="_blank" rel="noopener noreferrer" class="text-primary underline">Installation instructions</a>
+        <span> · {{ p.cli_installed ? "Installed" : "Not installed" }}</span>
+      </p>
 
       <div
         v-for="a in p.accounts"
@@ -202,10 +219,10 @@ function copy(text) {
             size="xs"
             color="neutral"
             variant="subtle"
-            :label="a.signed_in ? 'Sign in again' : 'Sign in'"
+            :label="p.direct_login && a.signed_in ? 'Connection' : a.signed_in ? 'Sign in again' : 'Sign in'"
             :disabled="!p.available || !!busy"
             :aria-label="`Sign in to ${a.alias} for ${p.display_name}`"
-            @click="signIn(p.name, a)"
+            @click="p.direct_login ? startConnect(p.name, a) : signIn(p.name, a)"
           />
           <UButton
             v-if="!a.system"
@@ -228,6 +245,31 @@ function copy(text) {
             @click="startRemove(p.name, a)"
           />
         </div>
+
+        <form v-if="connecting[rowKey(p.name, a)]" class="mt-2 space-y-2" @submit.prevent="saveConnection(p.name, a)">
+          <p class="text-xs text-dimmed">
+            Sign in at <a href="https://opencode.ai/auth" target="_blank" rel="noopener noreferrer" class="text-primary underline">OpenCode</a>,
+            subscribe to Go and paste its key here. The key is saved privately in this login folder.
+          </p>
+          <label class="block text-xs text-muted">
+            Run with
+            <select v-model="connecting[rowKey(p.name, a)].connection" class="ml-2 rounded border border-default bg-default p-1">
+              <option value="auto">Automatic (CLI when installed)</option>
+              <option value="direct">Direct (without CLI)</option>
+              <option value="cli">OpenCode CLI</option>
+            </select>
+          </label>
+          <label class="block text-xs text-muted">
+            OpenCode Go key {{ a.signed_in ? "(leave blank to keep it)" : "" }}
+            <UInput v-model="connecting[rowKey(p.name, a)].key" type="password" autocomplete="off" size="xs" class="mt-1 w-full" />
+          </label>
+          <p class="text-xs text-dimmed">Changing between CLI and Direct starts a new conversation on the next prompt. Direct supports file tools; shell commands require Full access.</p>
+          <div class="flex gap-2">
+            <UButton type="submit" size="xs" label="Save connection" :disabled="!!busy || (!a.signed_in && !connecting[rowKey(p.name, a)].key.trim())" />
+            <UButton size="xs" color="neutral" variant="ghost" label="Cancel" @click="delete connecting[rowKey(p.name, a)]" />
+            <UButton v-if="p.cli_installed" size="xs" color="neutral" variant="ghost" label="Sign in with CLI" @click="signIn(p.name, a)" />
+          </div>
+        </form>
 
         <!-- Renaming and repointing are one form: both describe the same
              subscription, and a login moved to another folder is usually
@@ -282,10 +324,10 @@ function copy(text) {
         <!-- What the sign-in actually ran, so it can be repeated by hand: a
              machine with no terminal to open, or a browser reading this from
              another one, still gets the command. -->
-        <div v-if="command[a.id]" class="mt-1.5">
+        <div v-if="command[rowKey(p.name, a)]" class="mt-1.5">
           <p class="m-0 text-[11px] text-dimmed">
             {{
-              command[a.id].spawned
+              command[rowKey(p.name, a)].spawned
                 ? "A terminal was opened. Finish the login there, then reopen Settings."
                 : "No terminal could be opened. Run this where the CLIs are installed:"
             }}
@@ -293,15 +335,15 @@ function copy(text) {
           <div class="mt-1 flex items-center gap-1.5">
             <code
               class="min-w-0 flex-1 truncate rounded bg-elevated px-1.5 py-1 text-[11px]"
-              :title="command[a.id].command"
-            >{{ command[a.id].command }}</code>
+              :title="command[rowKey(p.name, a)].command"
+            >{{ command[rowKey(p.name, a)].command }}</code>
             <UButton
               size="xs"
               color="neutral"
               variant="ghost"
               icon="i-lucide-copy"
               aria-label="Copy the login command"
-              @click="copy(command[a.id].command)"
+              @click="copy(command[rowKey(p.name, a)].command)"
             />
           </div>
         </div>

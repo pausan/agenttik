@@ -1,6 +1,5 @@
 // Package agent defines the provider-neutral contract for running one agent
-// turn. Implementations drive locally installed CLIs (Claude Code, Codex, GitHub Copilot) or,
-// later, key-based HTTP APIs. Nothing here knows about HTTP or SQL.
+// turn. Implementations drive locally installed CLIs or key-based HTTP APIs. Nothing here knows about HTTP or SQL.
 package agent
 
 import (
@@ -54,7 +53,7 @@ type TurnRequest struct {
 
 	// AccountHome is the directory holding the login this turn runs on, empty
 	// for the machine's own. The provider applies it the way its CLI expects;
-	// nothing here reads what is inside it. See 050-subscription-accounts.md.
+	// direct providers read their own key there. See 050-subscription-accounts.md.
 	AccountHome string
 
 	// Isolated marks a one-shot request that must not inherit or persist a

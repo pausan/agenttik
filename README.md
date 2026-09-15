@@ -17,11 +17,11 @@ and Windows x64.
 - **Usage tracking:** view tokens, context usage, subscription allowance, and costs where reported.
 - **Local state:** SQLite history, remembered tabs, customizable shortcuts, and color themes.
 
-Claude Code is working; Codex and GitHub Copilot are implemented, with live-turn validation still pending.
+Claude Code is working; Codex, GitHub Copilot and OpenCode Go are implemented, with live-turn validation still pending. OpenCode Go supports direct use with a subscription key and an optional CLI; Settings defaults to the CLI when installed.
 
 ## Quick start
 
-Use Go 1.25+, Node.js 22.12+ with npm, and a logged-in `claude`, `codex` or `copilot` CLI on `PATH`.
+Use Go 1.25+, Node.js 22.12+ with npm, and either a logged-in `claude`, `codex` or `copilot` CLI on `PATH`, or an OpenCode Go key configured in Settings → Subscriptions. The `opencode` CLI is optional.
 
 ```sh
 make run-web

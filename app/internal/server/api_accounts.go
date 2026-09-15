@@ -15,19 +15,20 @@ import (
 
 // Subscriptions, the selectable half. One machine can be signed in to a
 // company account and a personal one for the same provider; each is an alias
-// and the directory its CLI keeps that login in. What agenttik stores is the
-// alias and the path — never the credential, which stays where the CLI put
-// it. See 050-subscription-accounts.md.
+// and the directory holding that login. The database stores the alias and
+// path; direct providers may save a key in the login folder. See
+// 050-subscription-accounts.md.
 
 // accountInfo is one selectable subscription. System marks the account with
 // no row of its own: the CLI as the machine already has it, which is what
 // every task runs on until another is chosen.
 type accountInfo struct {
-	ID        int64  `json:"id"`
-	Alias     string `json:"alias"`
-	Home      string `json:"home"`
-	IsDefault bool   `json:"is_default"`
-	System    bool   `json:"system"`
+	Connection string `json:"connection,omitempty"`
+	ID         int64  `json:"id"`
+	Alias      string `json:"alias"`
+	Home       string `json:"home"`
+	IsDefault  bool   `json:"is_default"`
+	System     bool   `json:"system"`
 
 	// SignedIn and Detail are read from the login directory itself, so the
 	// list says which accounts are ready without asking a CLI to start.
@@ -50,6 +51,9 @@ func (s *Server) providerAccounts(p agent.Provider, rows []store.Account) []acco
 		return []accountInfo{system}
 	}
 	system.Home = multi.DefaultHome()
+	if direct, ok := p.(agent.DirectAccount); ok {
+		system.Connection = direct.ConnectionMode("")
+	}
 	status := multi.AccountStatus("")
 	system.SignedIn, system.Detail = status.SignedIn, status.Detail
 
@@ -62,8 +66,13 @@ func (s *Server) providerAccounts(p agent.Provider, rows []store.Account) []acco
 		if row.IsDefault {
 			out[0].IsDefault = false
 		}
+		connection := ""
+		if direct, ok := p.(agent.DirectAccount); ok {
+			connection = direct.ConnectionMode(row.Home)
+		}
 		out = append(out, accountInfo{
-			ID: row.ID, Alias: row.Alias, Home: row.Home, IsDefault: row.IsDefault,
+			Connection: connection,
+			ID:         row.ID, Alias: row.Alias, Home: row.Home, IsDefault: row.IsDefault,
 			SignedIn: status.SignedIn, Detail: status.Detail,
 		})
 	}
@@ -339,6 +348,9 @@ func (s *Server) loginAccount(c *fiber.Ctx) error {
 func (s *Server) accountResponse(p agent.Provider, account *store.Account) accountInfo {
 	info := accountInfo{ID: account.ID, Alias: account.Alias, Home: account.Home,
 		IsDefault: account.IsDefault}
+	if direct, ok := p.(agent.DirectAccount); ok {
+		info.Connection = direct.ConnectionMode(account.Home)
+	}
 	if multi, ok := p.(agent.MultiAccount); ok {
 		status := multi.AccountStatus(account.Home)
 		info.SignedIn, info.Detail = status.SignedIn, status.Detail
@@ -396,3 +408,26 @@ func shellQuote(s string) string {
 // loginHold keeps the terminal open after the CLI exits, so a login that
 // failed says why instead of vanishing with the window.
 const loginHold = `; printf '\nPress Enter to close…'; read _`
+
+// configureAccount stores a write-only provider key and execution preference.
+func (s *Server) configureAccount(c *fiber.Ctx) error {
+	provider, account, err := s.account(c)
+	if err != nil {
+		return err
+	}
+	direct, ok := provider.(agent.DirectAccount)
+	if !ok {
+		return badRequest("%s requires its CLI; direct subscription login is unavailable", provider.DisplayName())
+	}
+	var body struct {
+		Connection string `json:"connection"`
+		Key        string `json:"key"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return badRequest("invalid connection settings")
+	}
+	if err := direct.ConfigureAccount(accountHome(account), body.Connection, body.Key); err != nil {
+		return badRequest("%v", err)
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}

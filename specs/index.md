@@ -9,6 +9,7 @@ screen, **session** for the row, the route or the CLI flag.
 
 | Doc | What it covers |
 |-----|----------------|
+| [065](065-opencode-subscription.md) | OpenCode Go, optional CLI, direct coding turns and provider policy review |
 | [064](064-remote-connections.md) | Remote CLI and palette connections, discovery and login |
 | [063](063-staging.md) | Changed files, staging controls and commit message generation |
 | [060](060-desktop-tray.md) | Close to tray, global show/hide shortcut, working pulse, native lifecycle |

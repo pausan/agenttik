@@ -24,6 +24,7 @@ import (
 	"github.com/pausan/agenttik/app/internal/agent/codex"
 	"github.com/pausan/agenttik/app/internal/agent/copilot"
 	"github.com/pausan/agenttik/app/internal/agent/fake"
+	"github.com/pausan/agenttik/app/internal/agent/opencode"
 	"github.com/pausan/agenttik/app/internal/config"
 	"github.com/pausan/agenttik/app/internal/runner"
 	"github.com/pausan/agenttik/app/internal/server"
@@ -127,7 +128,7 @@ func run() error {
 	}
 
 	github := copilot.New()
-	providers := []agent.Provider{claudecode.New(), codex.New(), github}
+	providers := []agent.Provider{claudecode.New(), codex.New(), github, opencode.New()}
 	// Registered only for the end-to-end suite, which sets this; a normal
 	// launch never does, so it never appears in a release. See
 	// app/internal/agent/fake.

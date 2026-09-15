@@ -4,7 +4,7 @@
 
 ```go
 type Provider interface {
-    Name() string                  // "claude" | "codex" | "copilot"
+    Name() string                  // "claude" | "codex" | "copilot" | "opencode"
     DisplayName() string
     Models() []Model               // each may define its own efforts
     Efforts() []string             // fallback for models without their own list
@@ -13,7 +13,7 @@ type Provider interface {
 }
 ```
 
-Three halves are optional. `SmallModel` names the provider's lightest model,
+Additional interfaces are optional. `SmallModel` names the provider's lightest model,
 which agenttik puts its own short questions to: naming a task from its first
 prompt ([020](020-task-titles.md)) and saying what a finished one came to
 ([051](051-task-outcomes.md)). `Metered` answers one signed-in account's own
@@ -30,7 +30,10 @@ the machine's own. Each provider applies it the way its CLI expects —
 inherits this process's environment untouched, so a machine with a single
 subscription runs exactly the command it always ran.
 
-`Run` starts the CLI and returns a channel that closes when the turn is over. The
+`DirectAccount` exposes write-only key setup and execution preferences for
+providers supporting direct subscription use. Currently this is OpenCode Go.
+
+`Run` starts the CLI or direct HTTP tool loop and returns a channel that closes when the turn is over. The
 channel carries provider-neutral events:
 
 `session_started` (carries the provider session id), `text`, `thinking`,
@@ -164,14 +167,16 @@ entitlement change without a release — see [036](036-copilot-model-list.md).
 
 ## Fake, for the browser tests
 
-A fourth provider, `app/internal/agent/fake`, implements the same interface
+A test-only provider, `app/internal/agent/fake`, implements the same interface
 against no process and no account: a turn is scripted from directive lines in
 the prompt instead. It exists only for the end-to-end suite and is registered
 only when `AGENTTIK_FAKE_PROVIDER` is set, which nothing but
 `e2e/fixtures.js` does — see [005](005-testing.md).
 
-## Later: key-based providers
+## OpenCode Go
 
-OpenRouter and direct APIs implement the same interface but talk HTTP instead of
-spawning a process, and read keys from config. The `Provider` split above is
-where that lands; nothing else changes.
+The `opencode` provider offers the Go subscription with an optional CLI and a
+direct coding-agent path. New conversations prefer an installed CLI; users
+can force Direct in Settings. The account key, model set, event mapping,
+permissions, session persistence and provider policy review are documented in
+[065](065-opencode-subscription.md).

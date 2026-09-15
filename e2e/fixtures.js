@@ -12,9 +12,9 @@ const BIN = fileURLToPath(new URL("../bin/agenttik-web", import.meta.url));
    app probe a real CLI at startup — sometimes for seconds, once each for
    however many servers a parallel run has up at once — for a provider no test
    here ever asks for. computeTestPath drops whatever directory on PATH holds
-   one of those three, so the server this suite spawns only ever finds the
+   one of those CLIs, so the server this suite spawns only ever finds the
    fake provider ready, regardless of what the host otherwise has installed. */
-const REAL_PROVIDER_CLIS = ["claude", "codex", "copilot"];
+const REAL_PROVIDER_CLIS = ["claude", "codex", "copilot", "opencode"];
 
 let testPathPromise;
 function testPath() {
@@ -50,7 +50,7 @@ async function startServer() {
   // a real subscription. A normal launch never sets this, so it never shows
   // up outside this suite.
   const proc = spawn(BIN, ["--web", "--addr", "127.0.0.1:0", "--data-dir", dataDir], {
-    env: { ...process.env, AGENTTIK_FAKE_PROVIDER: "1", PATH: await testPath() },
+    env: { ...process.env, AGENTTIK_FAKE_PROVIDER: "1", PATH: await testPath(), XDG_DATA_HOME: join(dataDir, "xdg-data") },
   });
   const stderr = [];
   proc.stderr.on("data", (b) => stderr.push(String(b)));

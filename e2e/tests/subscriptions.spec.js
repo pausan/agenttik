@@ -149,3 +149,21 @@ test("new tasks preserve the last-used subscription, model and effort", async ({
   await page.reload();
   await expect(modelButton(page)).toContainText("Personal · Fake Quick");
 });
+
+test("OpenCode Go connects without a CLI and keeps its direct preference", async ({ page }) => {
+  await openSettings(page, "Subscriptions");
+  const go = page.getByRole("group", { name: "OpenCode Go subscriptions" });
+  await expect(go.getByText(/OpenCode CLI is optional/)).toBeVisible();
+  await go.getByRole("button", { name: "Add a OpenCode Go subscription" }).click();
+  await go.getByPlaceholder("Personal").fill("Go Work");
+  await go.getByRole("button", { name: "Add", exact: true }).click();
+  await go.getByRole("button", { name: "Sign in to Go Work for OpenCode Go" }).click();
+  await go.getByLabel("Run with").selectOption("direct");
+  await go.getByLabel(/OpenCode Go key/).fill("e2e-not-a-real-key");
+  await go.getByRole("button", { name: "Save connection" }).click();
+  await expect(go.getByText("Go key saved", { exact: true })).toBeVisible();
+  await go.getByRole("button", { name: "Sign in to Go Work for OpenCode Go" }).click();
+  await expect(go.getByLabel("Run with")).toHaveValue("direct");
+  await expect(go.getByLabel(/OpenCode Go key/)).toHaveValue("");
+  await expect(page.getByRole("group", { name: "Claude Code subscriptions" }).getByText(/Claude Code CLI is required/)).toBeVisible();
+});

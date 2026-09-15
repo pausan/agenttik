@@ -171,6 +171,7 @@ func (s *Server) routes() {
 	api.Delete("/providers/:provider/accounts/:account", s.deleteAccount)
 	api.Get("/providers/:provider/accounts/:account/usage", s.accountUsage)
 	api.Post("/providers/:provider/accounts/:account/login", s.loginAccount)
+	api.Put("/providers/:provider/accounts/:account/connection", s.configureAccount)
 	api.Get("/fs", s.browseDir)
 	api.Post("/fs/dir", s.makeDir)
 	api.Post("/fs/clone", s.cloneRepo)

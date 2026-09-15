@@ -2,18 +2,25 @@ package agent
 
 import "os"
 
+// DirectAccount is implemented only when a provider supports subscription use
+// without its CLI. Keys are write-only through the server API.
+type DirectAccount interface {
+	ConnectionMode(home string) string
+	ConfigureAccount(home, mode, key string) error
+}
+
 // One machine can be signed in to two subscriptions of the same provider — a
 // company account and a personal one — because every CLI here keeps its login
 // in a directory that can be pointed elsewhere: CLAUDE_CONFIG_DIR,
 // CODEX_HOME, `copilot --config-dir`. A turn names the directory it wants and
 // the provider applies it the way its own CLI expects.
 //
-// The credential boundary does not move. agenttik hands over a path, and the
-// CLI reads and signs with whatever is inside it, exactly as it does for the
-// account it was already using. See 050-subscription-accounts.md.
+// Claude, Codex and Copilot delegate credentials to their CLIs. OpenCode Go
+// also implements DirectAccount and can read its API key for direct requests.
+// See 050-subscription-accounts.md.
 
 // AccountStatus is what can be said about the login in one directory without
-// reading a secret out of it. Detail is a short, non-secret identity the CLI
+// returning any secret. Detail is a short, non-secret identity the CLI
 // happens to record beside the token — a plan name, a login, an auth mode —
 // and is empty when it records none.
 type AccountStatus struct {
@@ -40,8 +47,7 @@ type MultiAccount interface {
 	// somewhere else on purpose rather than by guessing.
 	DefaultHome() string
 	// AccountStatus reports whether the login in home is present, and names
-	// it if the CLI records a non-secret identity. An empty home is the
-	// CLI's own default directory. It never reads a token.
+	// it using non-secret metadata. An empty home is the provider default.
 	AccountStatus(home string) AccountStatus
 	// LoginCommand is the command that signs home in.
 	LoginCommand(home string) LoginCommand

@@ -1620,7 +1620,7 @@ function sessionDefaults() {
       permission: c.permission || "workspace",
     };
   }
-  const p = S.providers.find((x) => x.available && x.models.length);
+  const p = S.providers.find((x) => x.available && x.models.length && (!x.direct_login || x.accounts?.some((a) => a.is_default && a.signed_in)));
   if (!p) return null;
   return { provider: p.name, account_id: defaultAccountOf(p.name), model: p.models[0].id, effort: "", permission: "workspace" };
 }
@@ -1685,7 +1685,7 @@ export async function startTask(project) {
     await openTask(reusable);
     return reuse("session:" + reusable);
   }
-  if (!cfg) return fail(new Error("No agent CLI is available. Open Settings to see why."));
+  if (!cfg) return fail(new Error("No agent provider is ready. Open Settings to install a CLI or sign in."));
   try {
     const sess = await api("POST", "/api/sessions", { project_id: project.id, ...cfg });
     await Promise.all([refreshProjects(), refreshSessions()]);
@@ -3461,5 +3461,10 @@ export async function resetPreferences() {
   for (const key of [LAYOUT_KEY, LAST_USED_KEY, FILE_MODE_KEY, DIFF_VIEW_KEY,
     COLORS_KEY, KEYS_KEY, WINDOW_KEY, TASK_PAGE_KEY, SCHEDULE_KEY, FOLD_KEY,
     "agenttik.smartSearch"]) localStorage.removeItem(key);
+  await loadProviders();
+}
+
+export async function configureAccount(provider, id, connection, key = "") {
+  await api("PUT", `/api/providers/${encodeURIComponent(provider)}/accounts/${id}/connection`, { connection, key });
   await loadProviders();
 }

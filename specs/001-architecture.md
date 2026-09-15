@@ -5,12 +5,12 @@
 Run coding agents from one local web UI, against subscriptions you already pay
 for, without going outside their terms.
 
-The rule that shapes everything else: **agenttik never handles subscription
-credentials.** It shells out to the official CLIs (`claude`, `codex`), which
-authenticate with the accounts already configured on the machine
-(`~/.claude`, `~/.codex/auth.json`). No token extraction, no replaying a
-subscription session against the raw API. Key-based providers (OpenRouter,
-direct APIs) come later as a separate provider kind that does hold keys.
+Provider authentication follows each supported integration. Claude Code, Codex
+and Copilot run their official CLIs; agenttik does not extract or replay their
+subscription tokens. OpenCode Go explicitly supports other coding agents:
+agenttik can use its CLI or store a Go API key and call the documented API.
+See [065](065-opencode-subscription.md) for policy sources and the direct
+coding-agent implementation.
 
 The desktop shell supports Linux, macOS amd64, and Windows amd64.
 
@@ -78,6 +78,7 @@ Vue UI and its embed glue, `e2e/` the browser tests ([005](005-testing.md)).
 | `app/internal/agent` | provider-neutral `Event`/`TurnRequest` types, `Provider` interface, registry |
 | `app/internal/agent/claudecode` | Claude Code CLI adapter |
 | `app/internal/agent/codex` | Codex CLI adapter |
+| `app/internal/agent/opencode` | OpenCode Go CLI and direct coding-agent adapter ([065](065-opencode-subscription.md)) |
 | `app/internal/agent/copilot` | GitHub Copilot CLI adapter ([031](031-copilot-subscription.md)) |
 | `app/internal/process` | killing a child's whole process group, which is how stop works |
 | `app/internal/runner` | turn lifecycle: spawn, consume events, persist, fan out; the schedule and retry clocks |

@@ -30,3 +30,22 @@ test("usage rows keep main, subagent, and unscoped tokens distinct", () => {
 test("usage rows stay hidden when a provider cannot attribute agents", () => {
   strictEqual(usageBreakdownRows({ input_tokens: 10 }).length, 0);
 });
+
+test("remote tabs and drafts are scoped to their server across connection checks", async () => {
+  const { api, instanceKey } = await import("./api.js");
+  const original = globalThis.fetch;
+  try {
+    strictEqual(instanceKey("agenttik.openTabs"), "agenttik.openTabs");
+    globalThis.fetch = async () => new Response("{}", { headers: { "Content-Type": "application/json", "X-Agenttik-Remote": "https://one.example" } });
+    await api("GET", "/api/projects");
+    strictEqual(instanceKey("agenttik.openTabs"), "agenttik.openTabs:https://one.example");
+    globalThis.fetch = async () => new Response("{}", { headers: { "Content-Type": "application/json" } });
+    await api("POST", "/api/remote/connect", { address: "two.example" });
+    strictEqual(instanceKey("agenttik.openTabs"), "agenttik.openTabs:https://one.example");
+    globalThis.fetch = async () => new Response("{}", { headers: { "Content-Type": "application/json", "X-Agenttik-Remote": "https://two.example" } });
+    await api("GET", "/api/projects");
+    strictEqual(instanceKey("agenttik.openTabs"), "agenttik.openTabs:https://two.example");
+  } finally {
+    globalThis.fetch = original;
+  }
+});

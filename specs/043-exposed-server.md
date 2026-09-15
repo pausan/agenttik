@@ -169,7 +169,9 @@ setup state: the switch stays enabled while a password is being added.
 
 **A browser gets a page; everything else gets a status.** An unauthenticated
 navigation is answered with a self-contained login form and nothing else —
-not the UI bundle, not an asset, not a page title. Any request that is not a
+not the UI bundle, not an asset, not a page title. The public
+`GET /api/version` discovery endpoint is the sole exception; it identifies
+the application and build version before login (see [064](064-remote-connections.md)). Any request that is not a
 navigation, which is every fetch the UI makes and the SSE stream, gets a
 `401` with a JSON body instead, because handing those an HTML login page
 where they expect data only breaks them strangely. The UI treats any `401` as

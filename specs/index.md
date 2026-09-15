@@ -9,6 +9,7 @@ screen, **session** for the row, the route or the CLI flag.
 
 | Doc | What it covers |
 |-----|----------------|
+| [064](064-remote-connections.md) | Remote CLI and palette connections, discovery and login |
 | [063](063-staging.md) | Changed files, staging controls and commit message generation |
 | [060](060-desktop-tray.md) | Close to tray, global show/hide shortcut, working pulse, native lifecycle |
 | [001](001-architecture.md) | Process model, packages, request flow |

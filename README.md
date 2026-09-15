@@ -31,6 +31,11 @@ Open [localhost:7717](http://127.0.0.1:7717), add a project folder, and start a 
 Or add one from the terminal with `agenttik --init` in the folder you want —
 `agenttik --init path/to/repo` names another — which works whether or not the
 app is already open, and shows up in an open window straight away.
+Connect to another server with `agenttik --remote host:7717` (or an HTTPS
+URL), or choose **Connect to remote server** in the command palette. The
+client checks `/api/version` first, then shows the server’s login if needed.
+See [remote connections](specs/064-remote-connections.md).
+
 `--addr` and `--data-dir` change where it listens and where it keeps its
 database, `--web` skips the desktop window, and `--help` and `--version` say
 what this build is.

@@ -12,7 +12,7 @@
    project's work. */
 
 import { nextTick, reactive, watch } from "vue";
-import { api } from "./api";
+import { api, instanceKey } from "./api";
 import { debounce } from "./debounce";
 import { ACCENTS, DEFAULT_COLORS, NEUTRALS, applyColors } from "./theme";
 import { ACTIONS, matches } from "./shortcuts";
@@ -2283,7 +2283,7 @@ function writeOpenTabs() {
   if (restoringTabs) return;
   try {
     localStorage.setItem(
-      OPEN_TABS_KEY,
+      instanceKey(OPEN_TABS_KEY),
       JSON.stringify({
         tabs: S.tabs.map(savedTab).filter(Boolean),
         // The drafts of conversations with no tab of their own; an open tab
@@ -2313,7 +2313,7 @@ const saveOpenTabs = debounce(writeOpenTabs, 300);
 async function restoreOpenTabs() {
   let saved;
   try {
-    saved = JSON.parse(localStorage.getItem(OPEN_TABS_KEY));
+    saved = JSON.parse(localStorage.getItem(instanceKey(OPEN_TABS_KEY)));
   } catch {
     return;
   }

@@ -1,11 +1,20 @@
 /* The HTTP API and the few formatters the panels share. */
 
+// Desktop windows share an origin across servers. Keep restored tabs and
+// drafts tied to the instance that owns their project and task IDs.
+let remoteInstance = "";
+export function instanceKey(key) {
+  return remoteInstance ? `${key}:${remoteInstance}` : key;
+}
+
 export async function api(method, path, body) {
   const res = await fetch(path, {
     method,
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
+  const instance = res.headers.get("X-Agenttik-Remote");
+  if (instance !== null) remoteInstance = instance;
   if (res.status === 204) return null;
   const text = await res.text();
   // Endpoints that only accept work answer with a bare status, whose body is

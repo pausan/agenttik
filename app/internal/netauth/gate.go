@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pausan/agenttik/app/internal/remote"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -86,6 +87,10 @@ func New(read func() Credentials) *Gate {
 // and off take effect without rebinding the listener.
 func (g *Gate) Wrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == remote.VersionPath {
+			next.ServeHTTP(w, r)
+			return
+		}
 		creds := g.read()
 		if !creds.Enabled {
 			next.ServeHTTP(w, r)

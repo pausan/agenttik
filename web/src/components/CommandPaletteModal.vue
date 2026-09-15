@@ -19,7 +19,7 @@ import {
 } from "../store";
 
 const open = defineModel("open", { type: Boolean, default: false });
-const emit = defineEmits(["projects", "tree", "add-project", "settings", "shortcuts"]);
+const emit = defineEmits(["projects", "tree", "add-project", "settings", "shortcuts", "remote"]);
 
 function choose(action) {
   open.value = false;
@@ -91,6 +91,12 @@ const favourites = computed(() =>
 );
 
 const actions = computed(() => [
+  {
+    label: "Connect to remote server",
+    description: "Open an agenttik instance by host and port",
+    icon: "i-lucide-network",
+    onSelect: () => choose(() => emit("remote")),
+  },
   {
     label: "New task",
     description: "In the current project",

@@ -18,6 +18,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"github.com/pausan/agenttik/app/internal/netserver"
+	"github.com/pausan/agenttik/app/internal/remote"
 	"github.com/pausan/agenttik/app/internal/runner"
 	"github.com/pausan/agenttik/app/internal/server"
 	"github.com/pausan/agenttik/app/internal/single"
@@ -76,7 +77,7 @@ func runDesktop(srv *server.Server, turns *runner.Runner, lock *single.Lock, def
 		Height:           900,
 		MinWidth:         900,
 		MinHeight:        600,
-		AssetServer:      &assetserver.Options{Handler: quietAborts(proxy)},
+		AssetServer:      &assetserver.Options{Handler: quietAborts(remote.NewClient(proxy))},
 		BackgroundColour: &options.RGBA{R: 17, G: 18, B: 21, A: 255},
 		OnStartup:        win.opened,
 		OnShutdown:       func(ctx context.Context) { srv.Shutdown() },
@@ -144,4 +145,15 @@ func quietAborts(h http.Handler) http.Handler {
 		ctx := context.WithValue(r.Context(), http.ServerContextKey, srv)
 		h.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// A remote window has no local database, runners, or tray to manage.
+func runRemoteDesktop(handler http.Handler, title string) error {
+	app := &options.App{
+		Title: title, Width: 1440, Height: 900, MinWidth: 900, MinHeight: 600,
+		AssetServer:      &assetserver.Options{Handler: quietAborts(handler)},
+		BackgroundColour: &options.RGBA{R: 17, G: 18, B: 21, A: 255},
+	}
+	configureDesktop(app)
+	return wails.Run(app)
 }

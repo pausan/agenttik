@@ -13,6 +13,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -29,6 +30,7 @@ import (
 	"github.com/pausan/agenttik/app/internal/agent"
 	"github.com/pausan/agenttik/app/internal/netauth"
 	"github.com/pausan/agenttik/app/internal/netserver"
+	"github.com/pausan/agenttik/app/internal/remote"
 	"github.com/pausan/agenttik/app/internal/runner"
 	"github.com/pausan/agenttik/app/internal/smartsearch"
 	"github.com/pausan/agenttik/app/internal/store"
@@ -37,6 +39,7 @@ import (
 
 type Server struct {
 	app      *fiber.App
+	version  string
 	store    *store.Store
 	runner   *runner.Runner
 	registry *agent.Registry
@@ -140,7 +143,19 @@ func uiMissing(c *fiber.Ctx) error {
 		"The web UI is not built into this binary. Run `make ui`, rebuild, and start agenttik again.\n")
 }
 
+// SetVersion supplies the build version before the server starts listening.
+func (s *Server) SetVersion(version string) { s.version = version }
+
 func (s *Server) routes() {
+	s.app.Get(remote.VersionPath, func(c *fiber.Ctx) error {
+		c.Set("Cache-Control", "no-store")
+		version := s.version
+		if version == "" {
+			version = "dev"
+		}
+		return c.JSON(remote.Info{Application: "agenttik", Version: version})
+	})
+	s.app.Post(remote.ConnectPath, adaptor.HTTPHandler(remote.ConnectHandler(func(u *url.URL) string { return u.String() + "/" })))
 	api := s.app.Group("/api")
 	api.Get("/smart-search", s.smartSearchStatus)
 	api.Post("/smart-search/index", s.refreshSmartSearch)

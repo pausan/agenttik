@@ -45,6 +45,8 @@ const addProjectLoaded = ref(false);
 const settings = ref(false);
 const settingsSection = ref("general");
 const commandPalette = ref(false);
+const remoteConnect = ref(false);
+const RemoteConnectModal = defineAsyncComponent(() => import("./components/RemoteConnectModal.vue"));
 const goToFile = ref(false);
 const sideBar = ref(null);
 const mobileSideBar = ref(null);
@@ -237,6 +239,7 @@ onUnmounted(() => {
               @add-project="openAddProject"
               @setup="openSettings('general')"
               @shortcuts="openSettings('shortcuts')"
+      @remote="remoteConnect = true"
             />
           </template>
         </USlideover>
@@ -271,6 +274,7 @@ onUnmounted(() => {
         @add-project="openAddProject"
         @setup="openSettings('general')"
         @shortcuts="openSettings('shortcuts')"
+      @remote="remoteConnect = true"
       />
       <Splitter v-if="!mobile" side="left" />
       <MainPanel />
@@ -292,6 +296,7 @@ onUnmounted(() => {
     <AddProjectModal v-if="addProjectLoaded" v-model:open="addProject" />
     <SettingsModal v-if="settings" v-model:open="settings" v-model:section="settingsSection" />
     <GoToFileModal v-if="goToFile" v-model:open="goToFile" />
+    <RemoteConnectModal v-if="remoteConnect" v-model:open="remoteConnect" />
     <CommandPaletteModal
       v-if="commandPalette"
       v-model:open="commandPalette"
@@ -300,6 +305,7 @@ onUnmounted(() => {
       @add-project="openAddProject"
       @settings="openSettings('general')"
       @shortcuts="openSettings('shortcuts')"
+      @remote="remoteConnect = true"
     />
   </UApp>
 </template>

@@ -48,6 +48,7 @@ func main() {
 
 func run() error {
 	cfg := config.Default()
+	remoteAddress := flag.String("remote", "", "connect to an agenttik server at `host:port or URL`")
 	webOnly := flag.Bool("web", false, "serve the web UI only, no desktop window")
 	flag.StringVar(&cfg.Addr, "addr", cfg.Addr, "`host:port` to listen on")
 	flag.StringVar(&cfg.DataDir, "data-dir", cfg.DataDir, "`directory` holding agenttik.db")
@@ -72,6 +73,12 @@ func run() error {
 	if *showVersion {
 		fmt.Println("agenttik", version)
 		return nil
+	}
+	if *remoteAddress != "" {
+		if *apiMethod != "" || *initProject || *apiBody != "" || flag.NArg() != 0 {
+			return errors.New("--remote cannot be combined with --api, --body, --init, or positional arguments")
+		}
+		return runRemote(*remoteAddress, *webOnly)
 	}
 	if *apiMethod != "" {
 		if *initProject || flag.NArg() != 1 {
@@ -135,6 +142,7 @@ func run() error {
 
 	turns := runner.New(db, registry, runner.NewHub())
 	srv := server.New(db, registry, turns)
+	srv.SetVersion(version)
 
 	defer turns.StopAll()
 

@@ -133,7 +133,7 @@ export async function addProject(page, path = REPO) {
 
 export async function openProject(page, path = REPO) {
   await sidebar(page).getByText(path).click();
-  await expect(inspector(page).getByRole("tab", { name: "Options" })).toBeVisible();
+  await inspector(page).getByRole("tab", { name: "Project Options", exact: true }).click();
 }
 
 /* The scriptable provider from app/internal/agent/fake, enabled above. Tests

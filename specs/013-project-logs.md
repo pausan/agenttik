@@ -1,7 +1,7 @@
 # Project logs
 
 The right-hand panel carries a **Commits** pane beside Changed for a task and
-beside Options for a project — the history of the branch the project is on.
+beside Project Options and Changed for a project — the history of the branch the project is on.
 A branch autocomplete sits above a commit filter box. A reserved message area
 below the branch holds operation results and errors; it does not show the head hash.
 The autocomplete lists local branches, ranked by the same fuzzy subsequence

@@ -15,7 +15,7 @@ const emit = defineEmits(["show-in-tree"]);
 const LogsPane = defineAsyncComponent(() => import("./LogsPane.vue"));
 const OptionsPane = defineAsyncComponent(() => import("./OptionsPane.vue"));
 
-const LABELS = { changed: "Changed", options: "Options", logs: "Commits" };
+const LABELS = { changed: "Changed", options: "Project Options", logs: "Commits" };
 
 const items = computed(() => S.inspector.panes.map((p) => ({ label: LABELS[p], value: p })));
 

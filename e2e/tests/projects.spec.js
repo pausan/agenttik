@@ -162,10 +162,17 @@ test("opening a project puts its panes on the right and Tree on the left", async
   await expect(page.getByRole("heading", { name: "agenttik" })).toBeVisible();
   await expect(page.getByText("No tasks in this project yet.")).toBeVisible();
 
-  for (const pane of ["Options", "Commits"]) {
+  for (const pane of ["Project Options", "Changed", "Commits"]) {
     await expect(inspector(page).getByRole("tab", { name: pane })).toBeVisible();
   }
   await expect(inspector(page).getByText("The folder on disk is untouched.")).toBeVisible();
+  await inspector(page).getByRole("tab", { name: "Changed", exact: true }).click();
+  await expect(inspector(page).getByText("No edited files.")
+    .or(inspector(page).locator("button.font-mono").first())).toBeVisible();
+  await inspector(page).getByRole("tab", { name: "Commits", exact: true }).click();
+  await expect(inspector(page).getByPlaceholder("Filter commits")).toBeVisible();
+  await inspector(page).getByRole("tab", { name: "Project Options", exact: true }).click();
+  await expect(inspector(page).getByRole("textbox", { name: "Name", exact: true })).toBeVisible();
   await expect(sidebar(page).getByRole("tab", { name: "Tree" })).toBeVisible();
   // A project has no prompt bar: there is no conversation to prompt.
   await expect(page.getByPlaceholder("Ask the agent…")).toBeHidden();

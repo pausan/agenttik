@@ -107,7 +107,7 @@ test.describe("phone", () => {
     await seed(page, agenttik);
     await selectProject(page, "Website");
     await workspaceButton(page).tap();
-    await expect(workspaceDrawer(page).getByRole("tab", { name: "Options" })).toBeVisible();
+    await expect(workspaceDrawer(page).getByRole("tab", { name: "Project Options" })).toBeVisible();
     await workspaceDrawer(page).getByRole("tab", { name: "Commits" }).tap();
     await page.keyboard.press("Escape");
     await expect(workspaceDrawer(page)).toBeHidden();
@@ -210,7 +210,7 @@ test("tablet and desktop keep the three panels and saved widths after phone navi
     await expect(projectsButton(page)).toHaveCount(0);
     await expect(page.getByRole("separator")).toHaveCount(2);
     await expect(page.getByRole("separator", { name: "Resize the left panel" })).toHaveAttribute("aria-valuenow", "288");
-    await expect(page.locator("aside").last().getByRole("tab", { name: "Options" })).toBeVisible();
+    await expect(page.locator("aside").last().getByRole("tab", { name: "Project Options" })).toBeVisible();
   }
   await page.setViewportSize({ width: 390, height: 844 });
   await projectsButton(page).click();

@@ -14,8 +14,8 @@ project selected, that button is **Add project**.
   same projects, tasks, Tree, Add project, and Settings controls as the desktop
   sidebar. Choosing a project, task or job dismisses it, including reselecting
   the current row.
-- The workspace button opens the right panel on demand. Projects offer Options
-  and Commits; tasks offer Changed and Commits. Scheduled jobs have no workspace
+- The workspace button opens the right panel on demand. Projects offer Project Options,
+  Changed and Commits; tasks offer Changed and Commits. Scheduled jobs have no workspace
   button. Repository selection remains available for multi-repository projects.
 - Drawers cover the working pane, trap focus, and close through their close
   button, the backdrop, or Escape. Dismissal restores focus to the trigger.

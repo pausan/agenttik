@@ -13,7 +13,7 @@ Tree always uses the project that owns the active tab — a task, a project page
 or a file opened from either — and falls back to the selected project when
 nothing is open in it. With no project at all it asks the user to pick one.
 
-The right strip is `Changed | Commits` for a task and `Options | Commits`
+The right strip is `Changed | Commits` for a task and `Project Options | Changed | Commits`
 for a project. Task Stats opens from the pie-chart button after model effort in
 the centre header; see [004](004-ui.md#tabs).
 

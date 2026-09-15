@@ -42,7 +42,7 @@ test("a task's inspector keeps workspace panes and puts Stats in its header", as
   await expect(inspector(page).getByRole("tab", { name: "Changed" })).toBeVisible();
   await expect(inspector(page).getByRole("tab", { name: "Commits" })).toBeVisible();
   await expect(inspector(page).getByRole("tab", { name: "Stats" })).toHaveCount(0);
-  await expect(inspector(page).getByRole("tab", { name: "Options" })).toHaveCount(0);
+  await expect(inspector(page).getByRole("tab", { name: "Project Options" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Task stats" })).toBeVisible();
 
   // A clean checkout has nothing changed, an edited one does; either is a
@@ -54,13 +54,13 @@ test("a task's inspector keeps workspace panes and puts Stats in its header", as
 });
 
 test("the pane in use survives switching from a project to a task", async ({ page }) => {
-  // Commits is the one pane both a project and a task offer.
+  // Shared panes keep their selection when switching to a task.
   await inspector(page).getByRole("tab", { name: "Commits" }).click();
 
   await newTask(page);
   await pickModel(page);
 
-  await expect(inspector(page).getByRole("tab", { name: "Options" })).toHaveCount(0);
+  await expect(inspector(page).getByRole("tab", { name: "Project Options" })).toHaveCount(0);
   await expect(inspector(page).getByRole("tab", { name: "Commits" })).toHaveAttribute(
     "data-state",
     "active",

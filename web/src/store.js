@@ -2615,7 +2615,7 @@ export function openInSystem(path = "", projectID = currentProjectID()) {
 watch(
   () => S.owner?.kind || "",
   (kind) =>
-    setInspectorPanes(kind === "project" ? ["options", "logs"] : ["changed", "logs"]),
+    setInspectorPanes(kind === "project" ? ["options", "changed", "logs"] : ["changed", "logs"]),
   { immediate: true },
 );
 

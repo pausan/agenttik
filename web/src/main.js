@@ -1,3 +1,5 @@
+import { recordError } from "./diagnostics.js";
+import { diagnosticStorage } from "./api";
 import { createApp } from "vue";
 import { createRouter, createWebHistory } from "vue-router";
 import { _api as iconApi } from "@iconify/vue";
@@ -32,10 +34,18 @@ const router = createRouter({
 // The saved colours are applied before mounting, so the app is never painted
 // in the default palette first and repainted in the chosen one.
 document.documentElement.classList.toggle("desktop-linux", needsCSSScrollbars());
+window.addEventListener("error", event => recordError(event.error, { source: "runtime" }, diagnosticStorage));
+window.addEventListener("unhandledrejection", event => recordError(event.reason, { source: "promise" }, diagnosticStorage));
 loadProfiles().then(() => {
   loadColorMode();
   loadColors();
-  createApp(App).use(router).use(ui).mount("#app");
+  const app = createApp(App).use(router).use(ui);
+  app.config.errorHandler = (error) => {
+    recordError(error, { source: "vue" }, diagnosticStorage);
+    console.error(error);
+  };
+  app.mount("#app");
 }).catch((error) => {
+  recordError(error, { source: "startup" }, diagnosticStorage);
   document.getElementById("app").textContent = `Could not load profiles: ${error.message}. Reload to try again.`;
 });

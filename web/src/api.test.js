@@ -49,3 +49,22 @@ test("remote tabs and drafts are scoped to their server across connection checks
     globalThis.fetch = original;
   }
 });
+
+test("diagnostics never write browser storage before privacy is known or in private mode", async () => {
+  const { diagnosticStorage, setPrivateMode } = await import("./api.js?diagnostic-privacy");
+  const original = globalThis.localStorage;
+  let writes = 0;
+  globalThis.localStorage = { setItem() { writes++; }, getItem() { return null; } };
+  try {
+    diagnosticStorage.setItem("errors", "startup");
+    strictEqual(diagnosticStorage.getItem("errors"), "startup");
+    strictEqual(writes, 0);
+    setPrivateMode(true);
+    diagnosticStorage.setItem("errors", "private");
+    strictEqual(diagnosticStorage.getItem("errors"), "private");
+    strictEqual(writes, 0);
+    setPrivateMode(false);
+    diagnosticStorage.setItem("errors", "normal");
+    strictEqual(writes, 1);
+  } finally { globalThis.localStorage = original; }
+});

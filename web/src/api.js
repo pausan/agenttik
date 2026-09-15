@@ -1,3 +1,5 @@
+import { recordError } from "./diagnostics.js";
+
 /* The HTTP API and the few formatters the panels share. */
 
 // Desktop windows share an origin across servers. Keep restored tabs and
@@ -5,6 +7,7 @@
 let remoteInstance = "";
 let localInstance = "";
 let privateMode = false;
+let privacyKnown = false;
 export const profileID = new URLSearchParams(globalThis.location?.search || "").get("profile") || "default";
 
 export function apiURL(path) {
@@ -12,7 +15,7 @@ export function apiURL(path) {
   return `${path}${path.includes("?") ? "&" : "?"}profile=${encodeURIComponent(profileID)}`;
 }
 
-export function setPrivateMode(value) { privateMode = value; }
+export function setPrivateMode(value) { privateMode = value; privacyKnown = true; }
 
 // Private UI state lasts only in memory, including drafts. A private window
 // never writes app state to the normal browser storage.
@@ -22,37 +25,52 @@ export const storage = {
   setItem(key, value) { if (privateMode) privateState.set(key, String(value)); else localStorage.setItem(instanceKey(key), value); },
   removeItem(key) { if (privateMode) privateState.delete(key); else localStorage.removeItem(instanceKey(key)); },
 };
+// Startup failures stay in memory until the server identifies private mode.
+const startupDiagnostics = new Map();
+export const diagnosticStorage = {
+  getItem(key) { return privacyKnown ? storage.getItem(key) : startupDiagnostics.get(key) ?? null; },
+  setItem(key, value) { if (privacyKnown) storage.setItem(key, value); else startupDiagnostics.set(key, value); },
+  removeItem(key) { if (privacyKnown) storage.removeItem(key); else startupDiagnostics.delete(key); },
+};
+
 export function instanceKey(key) {
   const scope = [remoteInstance, localInstance, profileID === "default" ? "" : profileID].filter(Boolean).join(":");
   return scope ? `${key}:${scope}` : key;
 }
 
 export async function api(method, path, body) {
-  const res = await fetch(apiURL(path), {
-    method,
-    headers: body ? { "Content-Type": "application/json" } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const local = res.headers.get("X-Agenttik-Instance");
-  if (local !== null) localInstance = local;
-  const instance = res.headers.get("X-Agenttik-Remote");
-  if (instance !== null) remoteInstance = instance;
-  if (res.status === 204) return null;
-  const text = await res.text();
-  // Endpoints that only accept work answer with a bare status, whose body is
-  // the reason phrase rather than JSON. Failures are always JSON.
-  const isJSON = res.headers.get("content-type")?.includes("json");
-  const data = text && isJSON ? JSON.parse(text) : null;
-  // A 401 can only be the lock on the exposed server: agenttik's own API
-  // never asks for one. The session has lapsed mid-use, so the page is
-  // reloaded into the login form rather than left showing a toast on a UI
-  // that can no longer load anything. See specs/043-exposed-server.md.
-  if (res.status === 401) {
-    window.location.reload();
-    throw new Error("Signed out");
+  let status = 0;
+  try {
+    const res = await fetch(apiURL(path), {
+      method,
+      headers: body ? { "Content-Type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    status = res.status;
+    const local = res.headers.get("X-Agenttik-Instance");
+    if (local !== null) localInstance = local;
+    const instance = res.headers.get("X-Agenttik-Remote");
+    if (instance !== null) remoteInstance = instance;
+    if (res.status === 204) return null;
+    const text = await res.text();
+    // Endpoints that only accept work answer with a bare status, whose body is
+    // the reason phrase rather than JSON. Failures are always JSON.
+    const isJSON = res.headers.get("content-type")?.includes("json");
+    const data = text && isJSON ? JSON.parse(text) : null;
+    // A 401 can only be the lock on the exposed server: agenttik's own API
+    // never asks for one. The session has lapsed mid-use, so the page is
+    // reloaded into the login form rather than left showing a toast on a UI
+    // that can no longer load anything. See specs/043-exposed-server.md.
+    if (res.status === 401) {
+      window.location.reload();
+      throw new Error("Signed out");
+    }
+    if (!res.ok) throw new Error((data && data.error) || res.statusText);
+    return data;
+  } catch (error) {
+    recordError(error, { source: "api", method, resource: path.split("?")[0].split("/")[2], status }, diagnosticStorage);
+    throw error;
   }
-  if (!res.ok) throw new Error((data && data.error) || res.statusText);
-  return data;
 }
 
 export const nf = new Intl.NumberFormat();

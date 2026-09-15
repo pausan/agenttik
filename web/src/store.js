@@ -12,7 +12,8 @@
    project's work. */
 
 import { nextTick, reactive, watch } from "vue";
-import { api, apiURL, storage } from "./api";
+import { recordError } from "./diagnostics.js";
+import { api, apiURL, storage, diagnosticStorage } from "./api";
 import { debounce } from "./debounce";
 import { ACCENTS, DEFAULT_COLORS, NEUTRALS, applyColors } from "./theme";
 import { ACTIONS, matches } from "./shortcuts";
@@ -163,6 +164,7 @@ export function useErrors(handle) {
 }
 
 export function fail(err) {
+  recordError(err, { source: "notification" }, diagnosticStorage);
   console.error(err);
   const description = err?.message || String(err);
   if (toast) toast.add({ title: "Something went wrong", description, color: "error" });

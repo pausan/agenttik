@@ -4,7 +4,7 @@
    The strip is the active project's tabs only. Each kind has its own colour,
    tabs can be dragged within their kind. Session shortcuts use the sidebar
    order, so file tabs never consume an Alt number. */
-import { computed, defineAsyncComponent, ref, watch } from "vue";
+import { computed, defineAsyncComponent, inject, ref, watch } from "vue";
 
 import {
   S,
@@ -19,6 +19,8 @@ import { primaryChord } from "../platform";
 import Transcript from "./Transcript.vue";
 import PromptBar from "./PromptBar.vue";
 import StatusDot from "./StatusDot.vue";
+
+const diffExpanded = inject("diffExpanded");
 
 const emit = defineEmits(["start-tour"]);
 
@@ -114,7 +116,7 @@ const badge = computed(() => {
 
 <template>
   <main class="flex min-h-0 min-w-0 flex-col">
-    <div class="main-tab-bar flex shrink-0 items-center gap-2.5 border-b border-default pr-3">
+    <div v-show="!diffExpanded" class="main-tab-bar flex shrink-0 items-center gap-2.5 border-b border-default pr-3">
       <div role="tablist" class="flex min-w-0 flex-1 items-center overflow-x-auto">
         <div
           v-for="item in items"

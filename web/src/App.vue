@@ -1,5 +1,5 @@
 <script setup>
-import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, provide, ref, watch } from "vue";
 import { useToast } from "@nuxt/ui/composables";
 
 import {
@@ -46,6 +46,10 @@ function startTour() {
   tour.value = { open: true, step: "welcome" };
 }
 watch(tour, (value) => saveTour(storage, value), { deep: true });
+
+const diffExpanded = ref(false);
+provide("diffExpanded", diffExpanded);
+watch([() => S.activeTab, () => S.activeProjectID], () => { diffExpanded.value = false; });
 
 const addProject = ref(false);
 // The add-project dialog can keep a clone going after it is minimized, so it
@@ -228,13 +232,13 @@ onUnmounted(() => {
       class="app-shell grid h-full bg-default text-default text-sm"
       :style="{
         '--mobile-height': viewportHeight,
-        gridTemplateRows: mobile ? 'auto minmax(0,1fr)' : undefined,
-        gridTemplateColumns: mobile ? 'minmax(0,1fr)' : hasInspector()
+        gridTemplateRows: mobile && !diffExpanded ? 'auto minmax(0,1fr)' : undefined,
+        gridTemplateColumns: mobile || diffExpanded ? 'minmax(0,1fr)' : hasInspector()
           ? `${S.layout.left}px 1px minmax(0,1fr) 1px ${S.layout.right}px`
           : `${S.layout.left}px 1px minmax(0,1fr)`,
       }"
     >
-      <header v-if="mobile" class="mobile-header flex min-w-0 items-center gap-2 border-b border-default bg-muted p-2">
+      <header v-if="mobile" v-show="!diffExpanded" class="mobile-header flex min-w-0 items-center gap-2 border-b border-default bg-muted p-2">
         <USlideover v-model:open="projectsOpen" side="left" title="Projects and tasks" :ui="drawerUI" :content="{ style: { height: viewportHeight } }">
           <UButton
             icon="i-lucide-menu"
@@ -282,17 +286,18 @@ onUnmounted(() => {
       </header>
       <SideBar
         v-if="!mobile"
+        v-show="!diffExpanded"
         ref="sideBar"
         @add-project="openAddProject"
         @setup="openSettings('general')"
         @shortcuts="openSettings('shortcuts')"
       @remote="remoteConnect = true"
       />
-      <Splitter v-if="!mobile" side="left" />
+      <Splitter v-if="!mobile" v-show="!diffExpanded" side="left" />
       <MainPanel @start-tour="startTour" />
       <template v-if="!mobile && hasInspector()">
-        <Splitter side="right" />
-        <InspectorPanel @show-in-tree="showFileInTree" />
+        <Splitter v-show="!diffExpanded" side="right" />
+        <InspectorPanel v-show="!diffExpanded" @show-in-tree="showFileInTree" />
       </template>
     </div>
 

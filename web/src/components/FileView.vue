@@ -11,7 +11,7 @@
    The bar underneath is the file's own: a conversation's prompt box has no
    business under a file, so MainPanel leaves it out and this takes its
    place. */
-import { computed, ref, watch } from "vue";
+import { computed, inject, onMounted, onUnmounted, ref, watch } from "vue";
 
 import { canPreview, isDirty, isFont, isImage, isOutsideProject, saveFile, setFileMode } from "../store";
 import { langOf } from "../highlight";
@@ -25,6 +25,20 @@ import FilePreview from "./FilePreview.vue";
 import ImageDiff from "./ImageDiff.vue";
 
 const props = defineProps({ tab: { type: Object, required: true } });
+
+const diffExpanded = inject("diffExpanded");
+watch(() => props.tab.mode, () => { diffExpanded.value = false; });
+function onExpandKey(event) {
+  if (event.key !== "Escape" || !diffExpanded.value) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  diffExpanded.value = false;
+}
+onMounted(() => window.addEventListener("keydown", onExpandKey, true));
+onUnmounted(() => {
+  window.removeEventListener("keydown", onExpandKey, true);
+  diffExpanded.value = false;
+});
 
 const image = computed(() => isImage(props.tab.path));
 const font = computed(() => isFont(props.tab.path));
@@ -142,6 +156,17 @@ const stat = computed(() => {
         @click="saveFile(tab)"
         >Save</UButton
       >
+      <UButton
+        v-if="tab.mode === 'diff'"
+        :icon="diffExpanded ? 'i-lucide-minimize' : 'i-lucide-maximize'"
+        size="xs"
+        color="neutral"
+        variant="ghost"
+        :aria-label="diffExpanded ? 'Restore diff' : 'Expand diff'"
+        :title="diffExpanded ? 'Restore diff (Escape)' : 'Expand diff'"
+        :aria-pressed="diffExpanded"
+        @click="diffExpanded = !diffExpanded"
+      />
       <UTabs
         :model-value="tab.mode"
         :items="modes"

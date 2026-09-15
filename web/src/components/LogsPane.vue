@@ -220,11 +220,10 @@ const menu = computed(() => [
                  them is worse than one that uses two. -->
             <span class="block font-mono text-[11px] leading-snug text-dimmed tabular-nums">
               {{ commit.hash }} · {{ commit.author }} · {{ commit.date }}
-              <span v-if="commit.hash === S.log.head" class="text-primary"> · {{ S.log.branch || 'HEAD' }}</span>
             </span>
-            <span v-if="S.logGraph && (commit.branches?.length || commit.tags?.length)" class="mt-1 flex flex-wrap gap-1">
+            <span v-if="commit.branches?.length || (S.logGraph && commit.tags?.length)" class="mt-1 flex flex-wrap gap-1">
               <UBadge v-for="branch in commit.branches" :key="`branch:${branch}`" color="primary" variant="subtle" size="xs" icon="i-lucide-git-branch">{{ branch }}</UBadge>
-              <UBadge v-for="tag in commit.tags" :key="`tag:${tag}`" color="secondary" variant="subtle" size="xs" icon="i-lucide-tag">{{ tag }}</UBadge>
+              <UBadge v-for="tag in (S.logGraph ? commit.tags : [])" :key="`tag:${tag}`" color="secondary" variant="subtle" size="xs" icon="i-lucide-tag">{{ tag }}</UBadge>
             </span>
           </button>
 

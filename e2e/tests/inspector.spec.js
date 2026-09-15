@@ -138,9 +138,13 @@ test("commit graph toggle, counts, checkout highlight and ref chips", async ({ p
   await expect(head.getByLabel("7 files affected")).toHaveText("[7]");
   await expect(pane.getByText("aaaaaaaa", { exact: true })).toHaveCount(0);
   await expect(head.getByText("v1.0", { exact: true })).toHaveCount(0);
+  await expect(head.getByText("main", { exact: true })).toBeVisible();
+  await expect(head.locator("span.font-mono")).toHaveText("aaaaaaaa · Test Author · 2026-09-15 12:00");
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-pressed", "true");
   await expect(head.locator(":scope > svg")).toBeVisible();
+  await expect(head.getByText("main", { exact: true })).toBeVisible();
+  await expect(head.locator("span.font-mono")).toHaveText("aaaaaaaa · Test Author · 2026-09-15 12:00");
   await expect(head.getByText("v1.0", { exact: true })).toBeVisible();
   await expect(pane.getByText("origin/feature", { exact: true })).toBeVisible();
   await head.getByRole("button").click();
@@ -153,6 +157,8 @@ test("commit graph toggle, counts, checkout highlight and ref chips", async ({ p
   await toggle.click();
   await expect(head.locator(":scope > svg")).toHaveCount(0);
   await expect(head.getByText("v1.0", { exact: true })).toHaveCount(0);
+  await expect(head.getByText("main", { exact: true })).toBeVisible();
+  await expect(head.locator("span.font-mono")).toHaveText("aaaaaaaa · Test Author · 2026-09-15 12:00");
   await pane.getByRole("button", { name: "Clean local branches merged into main or master", exact: true }).click();
   await expect(pane.getByRole("status")).toHaveText("No merged local branches to remove.");
 });

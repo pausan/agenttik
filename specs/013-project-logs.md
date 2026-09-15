@@ -33,15 +33,17 @@ formatted by git in the zone the commit was made in — git knows that offset
 and the browser does not. That line wraps rather than truncating in a narrow
 panel; hiding half of it is worse than using two lines.
 
-The current checkout's commit has a primary background, left border, and branch
-name beside its metadata (HEAD when detached), in both views.
+The current checkout's commit has a primary background and left border in both
+views. Branch names appear as primary chips on a separate, wrapping line below
+the metadata in both views; no branch name appears beside the date.
 
 The **Show commit graph** toggle beside the filter defaults off and stays selected
 while navigating within the app. Simple mode shows the current branch history.
 Graph mode includes local branches, remote branches and tags, ordered with children
 before parents. Colored lines and square nodes show ancestry, splits and merges;
 merge nodes are hollow. Lines continue beside expanded files. Branch heads and tags
-appear on a third line as small chips: branches use primary, tags secondary.
+appear on the chip line: branches use primary, tags secondary. Tags are shown
+only in graph mode.
 Secondary uses violet, or pink when the primary accent is violet.
 Annotated and lightweight tags are supported; symbolic remote aliases are omitted.
 

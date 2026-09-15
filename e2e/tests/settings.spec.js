@@ -67,7 +67,10 @@ test("authentication enables before a password and the current code refreshes", 
   await page.route("**/api/server", (route) => route.fulfill({ json: config }));
   await page.route("**/api/server/auth", async (route) => {
     const body = route.request().postDataJSON();
-    expect(body.password).toBe("");
+    if (body.password) {
+      expect(body.password).toBe("a-new-password");
+      config.has_password = true;
+    }
     config.auth_enabled = body.enabled;
     config.totp_secret = "GEZDGNBVGY3TQOJQ";
     await route.fulfill({ json: config });
@@ -86,6 +89,18 @@ test("authentication enables before a password and the current code refreshes", 
   await expect(dialog.getByText("Browser access is blocked", { exact: false })).toBeVisible();
   await expect(dialog.getByLabel("Authenticator seed")).toHaveValue(config.totp_secret);
   await expect(dialog.getByLabel("Current code")).toHaveText("123456");
+  await page.evaluate(() => {
+    window.copiedCode = "";
+    Object.defineProperty(navigator, "clipboard", { configurable: true,
+      value: { writeText: async (text) => { window.copiedCode = text; } } });
+  });
+  await dialog.getByRole("button", { name: "Copy the code", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.copiedCode)).toBe("123456");
+  await expect(dialog.locator('input[type="password"]')).toHaveCount(1);
+  await dialog.getByPlaceholder("At least 8 characters").fill("a-new-password");
+  await dialog.getByPlaceholder("At least 8 characters").press("Enter");
+  await expect(dialog.getByText("Change the password", { exact: true })).toBeVisible();
+  await expect(dialog.getByPlaceholder("At least 8 characters")).toHaveValue("");
   await page.clock.fastForward(30000);
   await expect(dialog.getByLabel("Current code")).toHaveText("654321");
   await dialog.getByRole("button", { name: "General", exact: true }).click();

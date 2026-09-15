@@ -121,7 +121,6 @@ async function copyLink() {
 
 /* Enabling the lock takes effect even before a password is saved. */
 const password = ref("");
-const confirm = ref("");
 const busy = ref(false);
 
 function toggleAuth(on) {
@@ -139,17 +138,11 @@ async function apply(patch) {
   }
 }
 
-/* Saving a password is the one thing here with two fields to agree, and the
-   one thing the server cannot tell you it got wrong after the fact — so the
-   match is checked before it is sent, and the boxes are emptied either way
-   rather than left holding a password on screen. */
+// Clear the password field after submitting it.
 async function savePassword() {
-  if (password.value !== confirm.value) {
-    fail(new Error("The two passwords are different"));
-    return;
-  }
+  if (!password.value || busy.value) return;
   const pw = password.value;
-  password.value = confirm.value = "";
+  password.value = "";
   await apply({ enabled: true, password: pw });
 }
 
@@ -192,6 +185,12 @@ async function copySeed() {
 
 // Only poll while this pane is visible. Cleanup also discards old seed responses.
 const currentCode = ref("");
+const codeCopied = ref(false);
+async function copyCode() {
+  if (!currentCode.value || !(await copyText(currentCode.value))) return;
+  codeCopied.value = true;
+  window.setTimeout(() => (codeCopied.value = false), 1200);
+}
 watch(
   () => [props.active, rows.value.length, S.serverConfig.auth_enabled, S.serverConfig.totp_secret],
   ([active, visible, enabled, secret], _, onCleanup) => {
@@ -316,13 +315,6 @@ const qr = computed(() =>
               autocomplete="new-password"
               :placeholder="`At least 8 characters`"
               class="w-44 font-normal"
-            />
-            <UInput
-              v-model="confirm"
-              type="password"
-              autocomplete="new-password"
-              placeholder="Again"
-              class="w-32 font-normal"
               @keydown.enter="savePassword"
             />
             <UButton
@@ -371,7 +363,19 @@ const qr = computed(() =>
               </div>
               <div class="mt-2">
                 <div class="text-xs text-muted">Current code</div>
-                <output aria-label="Current code" class="font-mono text-lg tracking-widest">{{ currentCode || "------" }}</output>
+                <div class="flex items-center gap-1">
+                  <output aria-label="Current code" class="font-mono text-lg tracking-widest">{{ currentCode || "------" }}</output>
+                  <UButton
+                    :icon="codeCopied ? 'i-lucide-check' : 'i-lucide-copy'"
+                    size="xs"
+                    color="neutral"
+                    variant="ghost"
+                    aria-label="Copy the code"
+                    title="Copy the code"
+                    :disabled="!currentCode"
+                    @click="copyCode"
+                  />
+                </div>
                 <p class="text-xs text-dimmed">Refreshes every 30 seconds.</p>
               </div>
               <UButton

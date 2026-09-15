@@ -123,8 +123,9 @@ host has actually been typed. The port field validates its range client-side
 before ever calling `PUT`. The lock switch applies in both directions immediately.
 Enabling it generates a random TOTP seed if none exists. Without a saved
 password, browser access is blocked and the pane explains how to unlock it.
-The current six-digit code appears beside the seed and QR. While the Server
-pane is visible, `GET /api/server/auth/code` returns the server-clock code and
+Passwords are entered once and saved with Save or Enter.
+The current six-digit code appears beside the seed and QR, with a copy button.
+While the Server pane is visible, `GET /api/server/auth/code` returns the server-clock code and
 milliseconds until the next 30-second boundary, when the pane refreshes it.
 The endpoint uses `Cache-Control: no-store` and the same access gate as settings.
 Polling stops when the pane or dialog closes; failed refreshes clear the code.
@@ -134,16 +135,16 @@ Polling stops when the pane or dialog closes; failed refreshes clear the code.
 `app/internal/netauth` is the whole of it.
 
 **TOTP is RFC 6238 on the standard library.** HMAC-SHA1 over a 30-second
-counter, six digits, one step of drift accepted either way — no other digest
-or length is offered, because no widely used authenticator app offers one in
+counter, six digits, only the current and immediately previous steps accepted.
+No other digest or length is offered, because no widely used authenticator app offers one in
 a QR, so offering them here would only be a way to pair with nothing. The
 generator is checked against the RFC's own published vectors. `rsc.io/qr`
 draws the `otpauth://` URI; it is the only dependency the feature added.
 
-**A code is spent once.** The gate remembers the last counter it accepted and
-refuses anything at or below it. Six digits are good for a minute and a half
-either side of their own step, which is a long while for somebody who read
-them off a screen to type them in as well.
+**A code is spent once.** The gate tracks the two accepted counters independently
+for the seed. An unused previous code works even after a current-code login;
+older and future codes are rejected. Changing the seed permits its new codes
+immediately. Reusing a code shows a message to wait for the next code.
 
 **Passwords are bcrypt, and guessing is throttled.** Each stored bcrypt string
 contains its random salt, cost, and hash; plaintext passwords are never stored

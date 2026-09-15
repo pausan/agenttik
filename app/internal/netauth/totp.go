@@ -26,11 +26,6 @@ const (
 	Period = 30 * time.Second
 	digits = 6
 
-	// skew is how many steps either side of now are still accepted, for a
-	// phone whose clock has drifted. One step each way is what Google
-	// Authenticator and Authy themselves allow.
-	skew = 1
-
 	// secretBytes is the length of a generated secret: 160 bits, the size
 	// RFC 4226 recommends and the size every authenticator expects.
 	secretBytes = 20
@@ -98,11 +93,8 @@ func Code(secret string, t time.Time) (string, error) {
 	return code(key, uint64(t.Unix())/uint64(Period.Seconds())), nil
 }
 
-// Verify reports whether entered is the code for secret at time t, allowing
-// one step of clock drift either way, and returns the counter it matched.
-// The caller uses that counter to refuse a code a second time: a six-digit
-// number is good for a whole minute here, which is a whole minute for
-// somebody reading it over a shoulder to type it in too.
+// Verify accepts only the current or immediately previous 30-second step.
+// It returns the matched counter so the caller can prevent reuse.
 //
 // The comparison is constant-time. Only 10^6 codes exist, so a timing
 // channel on the digits is worth rather more than usual.
@@ -116,8 +108,8 @@ func Verify(secret, entered string, t time.Time) (uint64, bool) {
 		return 0, false
 	}
 	now := uint64(t.Unix()) / uint64(Period.Seconds())
-	for i := -skew; i <= skew; i++ {
-		counter := now + uint64(i)
+	for offset := uint64(0); offset <= 1 && offset <= now; offset++ {
+		counter := now - offset
 		if subtle.ConstantTimeCompare([]byte(code(key, counter)), []byte(entered)) == 1 {
 			return counter, true
 		}

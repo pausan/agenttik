@@ -182,6 +182,8 @@ func TestCodeIsSpentOnce(t *testing.T) {
 	}
 	if w := attempt(h, testPassword, code); w.Code != http.StatusUnauthorized {
 		t.Errorf("replay: status = %d, want %d", w.Code, http.StatusUnauthorized)
+	} else if !strings.Contains(w.Body.String(), "already been used") {
+		t.Fatal("missing explanation for a spent code")
 	}
 }
 
@@ -295,5 +297,33 @@ func TestFormRemembersWhereYouWereGoing(t *testing.T) {
 	body := get(h, "/projects/3?tab=files").Body.String()
 	if !strings.Contains(body, `value="/projects/3?tab=files"`) {
 		t.Errorf("body = %q, want the asked-for path in the next field", body)
+	}
+}
+
+// Both valid windows can be claimed in either order, but never twice.
+func TestClaimStepWindows(t *testing.T) {
+	for _, steps := range [][2]uint64{{100, 101}, {101, 100}} {
+		g := New(testCreds)
+		for _, step := range steps {
+			if !g.claimStep(rfcSecret, step) {
+				t.Fatalf("unused step %d rejected", step)
+			}
+		}
+		for _, step := range steps {
+			if g.claimStep(rfcSecret, step) {
+				t.Fatalf("used step %d accepted", step)
+			}
+		}
+		if !g.claimStep("new-seed", 101) {
+			t.Fatal("new seed rejected in the same window")
+		}
+		for step := uint64(102); step < 200; step++ {
+			if !g.claimStep("new-seed", step) || len(g.usedSteps) > 2 {
+				t.Fatal("step tracking must stay bounded")
+			}
+		}
+		if g.claimStep("new-seed", 100) {
+			t.Fatal("stale claim accepted")
+		}
 	}
 }

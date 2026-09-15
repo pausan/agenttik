@@ -61,10 +61,11 @@ func (c Credentials) ready() bool {
 type Gate struct {
 	read func() Credentials
 
-	mu       sync.Mutex
-	sessions map[string]time.Time // token -> when it goes stale
-	failures map[string]*failure  // client address -> recent bad attempts
-	usedStep uint64               // the last TOTP step accepted, never accepted twice
+	mu         sync.Mutex
+	sessions   map[string]time.Time // token -> when it goes stale
+	failures   map[string]*failure  // client address -> recent bad attempts
+	usedSteps  map[uint64]bool      // accepted counters for the current seed
+	usedSecret string
 }
 
 type failure struct {
@@ -175,8 +176,13 @@ func (g *Gate) login(w http.ResponseWriter, r *http.Request, creds Credentials) 
 	// say so.
 	passOK := bcrypt.CompareHashAndPassword([]byte(creds.PasswordHash), []byte(r.FormValue("password"))) == nil
 	step, codeOK := Verify(creds.Secret, r.FormValue("code"), time.Now())
-	if !passOK || !codeOK || !g.claimStep(step) {
+	if !passOK || !codeOK {
 		g.deny(w, r, creds, "Wrong password or code.")
+		return
+	}
+
+	if !g.claimStep(creds.Secret, step) {
+		g.deny(w, r, creds, "That code has already been used. Wait for the next code and try again.")
 		return
 	}
 
@@ -212,16 +218,27 @@ func (g *Gate) logout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-// claimStep accepts a TOTP step once and once only. The same six digits are
-// good for a minute and a half either side of their own, which is a long
-// while for someone who read them off a screen to type them in as well.
-func (g *Gate) claimStep(step uint64) bool {
+// claimStep tracks both accepted windows independently, so an unused previous
+// code still works after the current one. Keep at most two counters per seed.
+func (g *Gate) claimStep(secret string, step uint64) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if step <= g.usedStep {
+	if g.usedSecret != secret {
+		g.usedSecret = secret
+		g.usedSteps = map[uint64]bool{}
+	}
+	if g.usedSteps[step] {
 		return false
 	}
-	g.usedStep = step
+	for used := range g.usedSteps {
+		if used > step && used-step > 1 {
+			return false
+		}
+		if used < step && step-used > 1 {
+			delete(g.usedSteps, used)
+		}
+	}
+	g.usedSteps[step] = true
 	return true
 }
 

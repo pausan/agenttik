@@ -33,11 +33,10 @@ func TestCodeMatchesRFC6238(t *testing.T) {
 	}
 }
 
-// TestVerifyAcceptsDrift checks that a phone one step fast or slow still gets
-// in, and that two steps out does not.
-func TestVerifyAcceptsDrift(t *testing.T) {
+// TestVerifyAcceptedWindows checks the exact two-window validity range.
+func TestVerifyAcceptedWindows(t *testing.T) {
 	now := time.Unix(1234567890, 0)
-	for _, offset := range []time.Duration{-Period, 0, Period} {
+	for _, offset := range []time.Duration{-Period, 0} {
 		code, err := Code(rfcSecret, now.Add(offset))
 		if err != nil {
 			t.Fatal(err)
@@ -46,7 +45,7 @@ func TestVerifyAcceptsDrift(t *testing.T) {
 			t.Errorf("code %s from %v away was rejected", code, offset)
 		}
 	}
-	for _, offset := range []time.Duration{-2 * Period, 2 * Period} {
+	for _, offset := range []time.Duration{-2 * Period, Period, 2 * Period} {
 		code, _ := Code(rfcSecret, now.Add(offset))
 		if _, ok := Verify(rfcSecret, code, now); ok {
 			t.Errorf("code %s from %v away was accepted", code, offset)

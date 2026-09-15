@@ -86,7 +86,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [072](072-about.md) | About: creator, running version, copyright and MIT license |
 | [015](015-settings-shortcuts.md) | Settings, editable chords, Command Palette and file search |
 | [017](017-general-settings.md) | General: prompt keys, project folding, insertion order, and database info |
-| [018](018-readme-icon.md) | The project overview, and the one SVG the README, favicon and window share |
+| [018](018-readme-icon.md) | README, private demo screenshots, and the shared app icon |
 | [029](029-desktop-proxy-logging.md) | Why the window logged broken pipes, and the abort it recovers instead |
 | [032](032-single-tab-close-shortcut.md) | Ctrl+W closes one active tab, including when held |
 | [037](037-cross-platform-releases.md) | Cross-platform releases, macOS app bundles, stripping and UPX compression |

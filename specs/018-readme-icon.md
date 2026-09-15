@@ -5,6 +5,34 @@ features, and keeps a short quick start. The existing MIT license is linked once
 at the end. Codex's pending live-turn validation and the local-only server warning
 remain explicit.
 
+## Screenshots
+
+The README embeds three PNGs from `docs/screenshots/`: a task conversation,
+a code diff with staging controls, and a recurring review schedule. The images
+show fictional projects and a seeded demo transcript in the real UI. They do
+not represent live provider validation.
+
+Regenerate on Linux with Node.js 22.13+ (for `node:sqlite`), Git, and the normal
+build prerequisites:
+
+```sh
+make build-web
+cd e2e
+npm ci
+npx playwright install chromium
+node screenshots.mjs
+```
+
+The script starts `--web --private`, creates temporary Git projects, and opens
+a fresh Chromium context at 1440 × 820 in dark mode. Only Git is on the server's
+PATH; the fake provider supplies model choices without a paid turn. Demo
+messages are seeded directly into the temporary database. Captures keep the
+Private badge and demo labels visible. Browser checks verify the featured views,
+no page errors, no saved app state in localStorage, and private-directory cleanup.
+The browser, server, and temporary project files are removed after capture.
+
+## Shared icon
+
 `web/public/agenttik.svg` is the one logo: the README, the browser favicon and
 the desktop window all read the same file. It has an accessible title and
 description, with no fonts, scripts, external assets, or new dependencies. Vite

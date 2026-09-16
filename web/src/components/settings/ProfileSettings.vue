@@ -10,8 +10,29 @@ const emit = defineEmits(["count"]);
 const name = ref("");
 const busy = ref(false);
 const removing = ref(null);
-const show = computed(() => fuzzyAny(["profiles", "local", "add", "remove", ...profiles.items.map(p => p.name)], props.filter) !== null);
+const editing = ref(null);
+const draft = ref("");
+const show = computed(() => fuzzyAny(["profiles", "local", "add", "rename", "edit", "remove", ...profiles.items.map(p => p.name)], props.filter) !== null);
 watchEffect(() => emit("count", show.value ? 1 : 0));
+
+function startEdit(p) {
+  editing.value = p.id;
+  draft.value = p.name;
+}
+function cancelEdit() {
+  editing.value = null;
+  draft.value = "";
+}
+async function saveEdit(p) {
+  if (!draft.value.trim() || busy.value) return;
+  busy.value = true;
+  try {
+    await api("PATCH", `/api/profiles/${p.id}`, { name: draft.value });
+    cancelEdit();
+    await loadProfiles();
+  } catch (e) { fail(e); }
+  finally { busy.value = false; }
+}
 
 async function add() {
   busy.value = true;
@@ -44,12 +65,34 @@ async function remove() {
       <UButton type="submit" label="Add profile" :disabled="!name.trim() || busy" :loading="busy" />
     </form>
     <div v-for="p in profiles.items" :key="p.id" class="flex items-center gap-2 border-t border-default py-2">
-      <span class="min-w-0 flex-1 truncate">{{ p.name }}</span>
+      <form v-if="editing === p.id" class="flex min-w-0 flex-1 items-center gap-2" @submit.prevent="saveEdit(p)">
+        <UInput
+          v-model="draft"
+          :aria-label="`Rename ${p.name}`"
+          maxlength="80"
+          autofocus
+          class="min-w-0 flex-1"
+          @keydown.esc.prevent="cancelEdit"
+        />
+        <UButton type="submit" label="Save" :disabled="!draft.trim() || busy" :loading="busy" />
+        <UButton type="button" color="neutral" variant="ghost" label="Cancel" :disabled="busy" @click="cancelEdit" />
+      </form>
+      <template v-else>
+        <span class="min-w-0 flex-1 truncate">{{ p.name }}</span>
+        <UButton
+          color="neutral"
+          variant="ghost"
+          icon="i-lucide-pencil"
+          :aria-label="`Rename ${p.name}`"
+          :disabled="busy"
+          @click="startEdit(p)"
+        />
+      </template>
       <span v-if="p.id === profileID" class="text-xs text-dimmed">Current</span>
       <UButton v-else color="neutral" variant="ghost" label="Switch" :aria-label="`Switch to ${p.name}`" @click="switchProfile(p.id)" />
       <UButton v-if="p.id !== 'default'" color="error" variant="ghost" icon="i-lucide-trash-2" :aria-label="`Remove ${p.name}`" :disabled="busy" @click="removing = p" />
     </div>
-    <p class="mt-2 text-xs text-dimmed">The built-in Default profile cannot be removed.</p>
+    <p class="mt-2 text-xs text-dimmed">The built-in profile cannot be removed.</p>
     <UModal :open="!!removing" title="Remove profile?" @update:open="v => { if (!v && !busy) removing = null; }">
       <template #body><p>Remove {{ removing?.name }} and all its tasks, history, settings, and subscriptions? Running tasks will stop. Project files stay on disk. This cannot be undone.</p></template>
       <template #footer>

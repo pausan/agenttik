@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/pausan/agenttik/app/internal/agent"
@@ -115,6 +116,47 @@ func TestProfilesValidateNamesAndProtectDefault(t *testing.T) {
 	}
 	if resp := do(t, s, "DELETE", "/api/profiles/missing", nil); resp.StatusCode != 404 {
 		t.Fatalf("delete missing: %d", resp.StatusCode)
+	}
+}
+
+func TestProfilesRenameAndPersist(t *testing.T) {
+	s := profileServer(t)
+	work := decode[Profile](t, do(t, s, "POST", "/api/profiles", map[string]string{"name": "Work"}))
+	resp := do(t, s, "PATCH", "/api/profiles/"+work.ID, map[string]string{"name": "  Office  "})
+	if resp.StatusCode != 200 {
+		t.Fatalf("rename: %d", resp.StatusCode)
+	}
+	renamed := decode[Profile](t, resp)
+	if renamed.ID != work.ID || renamed.Name != "Office" {
+		t.Fatalf("renamed profile: %+v", renamed)
+	}
+	other := decode[Profile](t, do(t, s, "POST", "/api/profiles", map[string]string{"name": "Personal"}))
+	for _, name := range []string{"", "  ", "personal", strings.Repeat("x", 81)} {
+		if resp := do(t, s, "PATCH", "/api/profiles/"+work.ID, map[string]string{"name": name}); resp.StatusCode < 400 {
+			t.Fatalf("accepted rename %q", name)
+		}
+	}
+	if resp := do(t, s, "PATCH", "/api/profiles/missing", map[string]string{"name": "Missing"}); resp.StatusCode != 404 {
+		t.Fatalf("rename missing: %d", resp.StatusCode)
+	}
+	resp = do(t, s, "PATCH", "/api/profiles/default", map[string]string{"name": "Personal Default"})
+	if resp.StatusCode != 200 {
+		t.Fatalf("rename Default: %d", resp.StatusCode)
+	}
+	s.CloseProfiles()
+	if err := s.EnableProfiles(false); err != nil {
+		t.Fatal(err)
+	}
+	listing := decode[struct {
+		Profiles []Profile `json:"profiles"`
+	}](t, do(t, s, "GET", "/api/profiles", nil))
+	got := listing.Profiles
+	byID := make(map[string]Profile, len(got))
+	for _, p := range got {
+		byID[p.ID] = p
+	}
+	if byID[work.ID].Name != "Office" || byID[other.ID].Name != "Personal" || byID["default"].Name != "Personal Default" {
+		t.Fatalf("renames did not persist: %+v", got)
 	}
 }
 

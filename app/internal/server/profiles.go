@@ -234,9 +234,9 @@ func (s *Server) createProfile(c *fiber.Ctx) error {
 	if err := c.BodyParser(&body); err != nil {
 		return fiber.NewError(400, "Invalid profile")
 	}
-	body.Name = strings.TrimSpace(body.Name)
-	if body.Name == "" || len(body.Name) > 80 {
-		return fiber.NewError(400, "Profile name must be 1–80 bytes")
+	name, err := validateProfileName(body.Name)
+	if err != nil {
+		return err
 	}
 	m := s.profiles
 	if m == nil {
@@ -248,11 +248,11 @@ func (s *Server) createProfile(c *fiber.Ctx) error {
 		return fiber.NewError(503, "Instance is shutting down")
 	}
 	for _, p := range m.profiles {
-		if strings.EqualFold(p.Name, body.Name) {
+		if strings.EqualFold(p.Name, name) {
 			return fiber.NewError(409, "A profile with that name already exists")
 		}
 	}
-	p := Profile{ID: uuid.NewString(), Name: body.Name}
+	p := Profile{ID: uuid.NewString(), Name: name}
 	rt, err := m.open(p.ID)
 	if err != nil {
 		return err
@@ -266,6 +266,57 @@ func (s *Server) createProfile(c *fiber.Ctx) error {
 	m.profiles = next
 	m.running[p.ID] = rt
 	return c.Status(201).JSON(p)
+}
+
+func validateProfileName(raw string) (string, error) {
+	name := strings.TrimSpace(raw)
+	if name == "" || len(name) > 80 {
+		return "", fiber.NewError(400, "Profile name must be 1–80 bytes")
+	}
+	return name, nil
+}
+
+func (s *Server) renameProfile(c *fiber.Ctx) error {
+	m := s.profiles
+	if m == nil {
+		return fiber.NewError(503, "Profiles are unavailable")
+	}
+	var body struct {
+		Name string `json:"name"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return fiber.NewError(400, "Invalid profile")
+	}
+	name, err := validateProfileName(body.Name)
+	if err != nil {
+		return err
+	}
+	id := c.Params("id")
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closed {
+		return fiber.NewError(503, "Instance is shutting down")
+	}
+	index := -1
+	for i, p := range m.profiles {
+		if p.ID == id {
+			index = i
+			continue
+		}
+		if strings.EqualFold(p.Name, name) {
+			return fiber.NewError(409, "A profile with that name already exists")
+		}
+	}
+	if index < 0 {
+		return fiber.NewError(404, "Profile not found")
+	}
+	next := append([]Profile{}, m.profiles...)
+	next[index].Name = name
+	if err := m.save(next); err != nil {
+		return err
+	}
+	m.profiles = next
+	return c.JSON(next[index])
 }
 
 func (s *Server) deleteProfile(c *fiber.Ctx) error {

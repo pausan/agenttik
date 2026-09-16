@@ -1,8 +1,12 @@
 # Local profiles
 
-Profiles are local to a data directory on this computer. Settings → Profiles adds
-and removes profiles. The built-in Default profile holds existing data and cannot
-be removed. Names are trimmed, unique ignoring case, and limited to 80 bytes.
+Profiles are local to a data directory on this computer. Settings → Profiles adds,
+renames, and removes profiles. The built-in profile, initially named Default,
+holds existing data and cannot be removed. Names are trimmed, unique ignoring
+case, and limited to 80 bytes.
+Renaming changes the display name only: the stable ID, data, running work, and
+open profile remain unchanged. A pencil button beside each name opens the inline
+editor.
 
 The sidebar footer shows a profile picker immediately before Shortcuts only when
 more than one profile exists. The command palette offers `Switch to profile: <name>`
@@ -26,7 +30,8 @@ retains its existing browser keys; added profiles use separate keys.
 - Added profiles live under `<data-dir>/profiles/<uuid>/`, each with a database,
   instance lock, runner, and clocks. They reopen at startup, so schedules resume
   even when another profile is being viewed.
-- `GET/POST /api/profiles` lists/creates; `DELETE /api/profiles/:id` removes.
+- `GET/POST /api/profiles` lists/creates; `PATCH /api/profiles/:id` renames;
+  `DELETE /api/profiles/:id` removes.
 - API URLs carry `?profile=<uuid>`; missing means Default and unknown IDs return
   404. Native desktop, network-server, and remote-connection controls remain at
   instance scope. Profile management is shared across the instance.
@@ -43,5 +48,6 @@ they never enter the normal browser storage. The footer identifies private mode.
 
 Validation: Go tests cover isolation, same-folder projects, settings, persistence,
 CLI discovery, favourites, subscriptions, invalid names, deletion, and shutdown.
-Browser tests cover the picker, palette switching, appearance, tree expansion, and removal; private tests cover concurrent instances and
+Browser tests cover the picker, palette switching, appearance, tree expansion,
+renaming, and removal; private tests cover concurrent instances and
 SIGTERM cleanup. Startup remains under the one-second budget.

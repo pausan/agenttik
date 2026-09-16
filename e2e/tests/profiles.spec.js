@@ -1,5 +1,18 @@
 import { expect, openSettings, sidebar, test, REPO } from "../fixtures.js";
 
+test("profiles can be renamed from settings", async ({ page, agenttik }) => {
+  await page.request.post(`${agenttik.url}/api/profiles`, { data: { name: "Work" } });
+  await page.reload();
+  await openSettings(page, "Profiles");
+  await page.getByRole("button", { name: "Rename Work", exact: true }).click();
+  await page.getByRole("textbox", { name: "Rename Work", exact: true }).fill("Office");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Rename Office", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await page.getByRole("button", { name: "Profile: Default", exact: true }).click();
+  await expect(page.getByRole("menuitem", { name: "Office", exact: true })).toBeVisible();
+});
+
 test("profiles appear only when needed and isolate the same project", async ({ page, agenttik }) => {
   await expect(page.getByRole("button", { name: /^Profile:/ })).toHaveCount(0);
   await page.request.post(`${agenttik.url}/api/projects`, { data: { path: REPO, name: "Personal project" } });

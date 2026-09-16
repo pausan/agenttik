@@ -177,6 +177,7 @@ func (s *Server) routes() {
 	api.Put("/server/name", s.putServerName)
 	api.Get("/profiles", s.listProfiles)
 	api.Post("/profiles", s.createProfile)
+	api.Patch("/profiles/:id", s.renameProfile)
 	api.Delete("/profiles/:id", s.deleteProfile)
 	api.Get("/smart-search", s.smartSearchStatus)
 	api.Post("/smart-search/index", s.refreshSmartSearch)

@@ -14,7 +14,7 @@ require (
 	github.com/gofiber/fiber/v2 v2.52.15
 	github.com/google/uuid v1.6.0
 	github.com/valyala/fasthttp v1.51.0
-	github.com/wailsapp/wails/v2 v2.15.0
+	github.com/wailsapp/wails/v2 v2.16.0
 	golang.design/x/hotkey v0.6.1
 	golang.org/x/crypto v0.53.0
 	golang.org/x/sys v0.46.0

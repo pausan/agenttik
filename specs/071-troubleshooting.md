@@ -60,7 +60,7 @@ To narrow a recurrence down:
    project and conversation data.
 
 An [older Wails report](https://github.com/wailsapp/wails/issues/2772) describes
-macOS WebKit growth after sleep on Wails 2.5.1. This app uses 2.15.0; that report
+macOS WebKit growth after sleep on Wails 2.5.1. This app uses 2.16.0; that report
 is a diagnostic lead, not evidence that the same defect is present. A fix needs
 a repeated workload whose memory stops growing after the change. Native macOS
 and Windows memory behavior has not been validated by this investigation.

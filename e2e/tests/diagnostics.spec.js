@@ -1,7 +1,7 @@
 import { expect, openSettings, test } from "../fixtures.js";
 
-test("Help keeps safe errors across reloads and copies and clears reports", async ({ page, context }) => {
-  await openSettings(page, "Help");
+test("About keeps safe errors across reloads and copies and clears reports", async ({ page, context }) => {
+  await openSettings(page, "About");
   await expect(page.getByText("No errors recorded.")).toBeVisible();
   await page.evaluate(() => {
     const error = new TypeError("secret prompt person@example.com");
@@ -9,7 +9,7 @@ test("Help keeps safe errors across reloads and copies and clears reports", asyn
   });
   await expect(page.getByText("TypeError · runtime")).toBeVisible();
   await page.reload();
-  await openSettings(page, "Help");
+  await openSettings(page, "About");
   await expect(page.getByText("TypeError · runtime")).toBeVisible();
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.getByRole("button", { name: "Copy all errors", exact: true }).click();

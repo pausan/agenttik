@@ -38,8 +38,8 @@ const SECTIONS = [
   { id: "subscriptions", label: "Subscriptions", icon: "i-lucide-id-card" },
   { id: "server", label: "Server", icon: "i-lucide-server" },
   { id: "shortcuts", label: "Shortcuts", icon: "i-lucide-keyboard" },
-  { id: "about", label: "About", icon: "i-lucide-info" },
   { id: "help", label: "Help", icon: "i-lucide-circle-help" },
+  { id: "about", label: "About", icon: "i-lucide-info" },
 ];
 
 const filter = ref("");
@@ -107,11 +107,11 @@ async function showOrchestrator() {
         </nav>
 
         <div class="min-h-0 min-w-0 flex-1 overflow-auto pr-1">
-          <div v-show="section === 'about'">
-            <AboutSettings :filter="filter" @count="counts.about = $event" />
-          </div>
           <div v-show="section === 'help'">
             <HelpSettings :filter="filter" @count="counts.help = $event" @start-tour="emit('start-tour')" />
+          </div>
+          <div v-show="section === 'about'">
+            <AboutSettings :filter="filter" @count="counts.about = $event" />
           </div>
           <div v-show="section === 'general'">
             <GeneralSettings

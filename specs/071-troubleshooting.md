@@ -1,9 +1,9 @@
 # Troubleshooting
 
-Help → Troubleshooting → Last Errors lists up to 100 errors, newest first,
-from the last five app launches that recorded errors. A launch is a page load,
-not a conversation. Copy report and Copy all errors produce JSON bug reports;
-Clear errors removes the history. Nothing is sent automatically.
+Settings → About → Troubleshooting → Last Errors lists up to 100 errors, newest
+first, from the last five app launches that recorded errors. A launch is a page
+load, not a conversation. Copy report and Copy all errors produce JSON bug
+reports; Clear errors removes the history. Nothing is sent automatically.
 
 The frontend records failed API requests (including network and JSON errors),
 the shared Something went wrong handler, Vue errors, uncaught browser errors,
@@ -25,7 +25,7 @@ or copied. Storage failures never mask the original error.
 
 Validation: frontend unit tests cover privacy, duplicate capture, retention,
 corrupt storage and unavailable storage. The browser test covers capture,
-reload persistence, copying and clearing in Help.
+reload persistence, copying and clearing in About.
 
 ## Excessive desktop memory
 

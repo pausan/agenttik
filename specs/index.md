@@ -83,7 +83,7 @@ screen, **session** for the row, the route or the CLI flag.
 
 | Doc | What it covers |
 |-----|----------------|
-| [072](072-about.md) | About: creator, running version, copyright and MIT license |
+| [072](072-about.md) | About and Troubleshooting: identity, license and local error reports |
 | [015](015-settings-shortcuts.md) | Settings, editable chords, Command Palette and file search |
 | [017](017-general-settings.md) | General: prompt keys, project folding, insertion order, and database info |
 | [018](018-readme-icon.md) | README, private demo screenshots, and the shared app icon |
@@ -135,4 +135,4 @@ disagree about, for a human to settle.
 
 - [070 Automatic updates](070-automatic-updates.md) — daily release checks, ignored versions and installation on quit.
 
-- [071 Troubleshooting](071-troubleshooting.md) — local error reports and desktop memory diagnosis.
+- [071 Troubleshooting](071-troubleshooting.md) — local error reports in About and desktop memory diagnosis.

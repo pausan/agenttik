@@ -51,7 +51,7 @@ test("General disappears when another settings section is selected", async ({ pa
   const folding = dialog.getByText("What selecting a project does", { exact: false });
   await expect(prompt).toBeVisible();
   await expect(folding).toBeVisible();
-  for (const section of ["Projects", "Orchestrator", "Appearance", "Models", "Subscriptions", "Server", "Shortcuts"]) {
+  for (const section of ["Projects", "Orchestrator", "Appearance", "Models", "Subscriptions", "Server", "Shortcuts", "Help", "About"]) {
     await dialog.getByRole("button", { name: section, exact: true }).click();
     await expect(prompt).toBeHidden();
     await expect(folding).toBeHidden();

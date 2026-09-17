@@ -33,6 +33,7 @@ const ProjectView = defineAsyncComponent(() => import("./ProjectView.vue"));
 const PinnedPromptView = defineAsyncComponent(() => import("./PinnedPromptView.vue"));
 const ScheduleView = defineAsyncComponent(() => import("./ScheduleView.vue"));
 const FileView = defineAsyncComponent(() => import("./FileView.vue"));
+const TerminalView = defineAsyncComponent(() => import("./TerminalView.vue"));
 const StatsPane = defineAsyncComponent(() => import("./StatsPane.vue"));
 
 /* A session title can be a whole sentence, and a job names itself exactly as
@@ -50,6 +51,7 @@ const KINDS = {
   session: { text: "text-primary", edge: "border-primary" },
   file: { text: "text-amber-500", edge: "border-amber-500" },
   schedule: { text: "text-violet-500", edge: "border-violet-500" },
+  terminal: { text: "text-emerald-500", edge: "border-emerald-500" },
 };
 
 const items = computed(() =>
@@ -219,10 +221,14 @@ const badge = computed(() => {
     <PinnedPromptView v-else-if="current?.kind === 'schedule' && current.data.schedule.every === 'pinned'" :key="current.id" :tab="current" />
     <ScheduleView v-else-if="current?.kind === 'schedule'" :tab="current" />
     <FileView v-else-if="current?.kind === 'file'" :tab="current" />
+    <!-- Keyed by the tab, so switching between two terminals builds the one
+         in front rather than rewriting the last one's screen. -->
+    <TerminalView v-else-if="current?.kind === 'terminal'" :key="current.id" :tab="current" />
     <Transcript v-else @start-tour="emit('start-tour')" />
 
-    <!-- A file carries its own bar. The prompt box belongs to a conversation,
-         and under a file it is only in the way. -->
-    <PromptBar v-if="S.detail && current?.kind !== 'file'" />
+    <!-- A file carries its own bar, and a terminal is one. The prompt box
+         belongs to a conversation, and under either of those it is only in
+         the way. -->
+    <PromptBar v-if="S.detail && current?.kind !== 'file' && current?.kind !== 'terminal'" />
   </main>
 </template>

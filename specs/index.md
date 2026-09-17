@@ -20,6 +20,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [002](002-data-model.md) | SQLite schema, upgrade safeguards, metrics, storage location |
 | [003](003-providers.md) | Provider interface, desktop CLI discovery, invocation, event mapping |
 | [004](004-ui.md) | Layout, panels, appearance modes, persistent Tree navigation, shortcuts, HTTP API |
+| [073](073-terminals.md) | Shells in the project folder, per-project terminal tabs, and how they stream |
 | [056](056-pasted-images.md) | Clipboard images, previews, storage and agent file references |
 | [055](055-mobile-layout.md) | Phone navigation, drawers, touch controls and viewport sizing |
 | [005](005-testing.md) | The three test layers and how they are isolated |
@@ -119,9 +120,15 @@ mechanism was verified on the machine this was built on, but no live turn has
 been run on a *second* real subscription — doing so needs a second paid
 account.
 
-`go test ./...`, `go vet ./...`, the UI build and the 35 web unit tests pass.
-All 73 browser tests pass, including phone and desktop coverage. The queue
-test is sensitive to timing under load. See [005](005-testing.md).
+`go test ./...`, `go vet ./...`, the UI build and the web unit tests pass, and
+the browser suite covers phone and desktop. The queue test is sensitive to
+timing under load, and so is the cold-startup budget when the whole suite runs
+in parallel. See [005](005-testing.md).
+
+Terminals ([073](073-terminals.md)) are exercised against real shells in the Go
+tests and in a browser. Only the Unix pseudo-terminal has been run: the Windows
+ConPTY path is implemented and compiles, but no terminal has been opened on
+Windows.
 
 Task outcomes ([051](051-task-outcomes.md)) are exercised against the fake
 provider — the archive writes the line, a restore drops an answer still in

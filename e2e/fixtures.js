@@ -50,7 +50,10 @@ async function startServer() {
   // a real subscription. A normal launch never sets this, so it never shows
   // up outside this suite.
   const proc = spawn(BIN, ["--web", "--addr", "127.0.0.1:0", "--data-dir", dataDir], {
-    env: { ...process.env, AGENTTIK_FAKE_PROVIDER: "1", PATH: await testPath(), XDG_DATA_HOME: join(dataDir, "xdg-data") },
+    // SHELL is what a terminal tab runs (see app/internal/terminals), and it
+    // names the tab as well. Pinning it keeps terminals.spec.js reading the
+    // same screen and the same tab labels on every machine.
+    env: { ...process.env, AGENTTIK_FAKE_PROVIDER: "1", SHELL: "/bin/sh", PATH: await testPath(), XDG_DATA_HOME: join(dataDir, "xdg-data") },
   });
   const stderr = [];
   proc.stderr.on("data", (b) => stderr.push(String(b)));

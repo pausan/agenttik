@@ -1,7 +1,7 @@
 <script setup>
 import { computed, defineAsyncComponent, nextTick, ref, watch } from "vue";
 
-import { S, createSchedule, contextWindow, enqueue, enterDoes, fail, hit, limitsKey, refreshSubscriptionLimits, send, setModel, stopTurn } from "../store";
+import { S, createSchedule, contextWindow, enqueue, enterDoes, fail, hit, limitsKey, openTerminal, refreshSubscriptionLimits, send, setModel, stopTurn } from "../store";
 import { ago } from "../api";
 import Chord from "./Chord.vue";
 import ContextPane from "./ContextPane.vue";
@@ -393,12 +393,32 @@ function runMenuAction(action) {
       </div>
     </div>
     <ScheduleModal v-if="scheduling" v-model:open="scheduling" />
-    <p class="mx-auto mt-1.5 flex max-w-[860px] flex-wrap items-center gap-x-1.5 px-1 text-xs text-dimmed max-md:hidden">
-      <template v-for="(hint, i) in hints" :key="hint.what">
-        <span v-if="i">·</span>
-        <Chord :chord="hint.chord" />
-        <span>{{ hint.what }}</span>
-      </template>
-    </p>
+    <!-- The chords the box answers to, and at the other end of their line the
+         one thing here that is not about the box: a shell in the project's
+         folder. It sits with the hints because that line is already the
+         quiet one under the prompt, and a terminal is not a prompt action —
+         putting it in the Send menu would say it was. Hidden on a phone, like
+         the other controls a pointer is assumed for. See specs/073. -->
+    <div class="mx-auto mt-1.5 flex max-w-[860px] items-center gap-2 px-1 max-md:hidden">
+      <p class="m-0 flex flex-1 flex-wrap items-center gap-x-1.5 text-xs text-dimmed">
+        <template v-for="(hint, i) in hints" :key="hint.what">
+          <span v-if="i">·</span>
+          <Chord :chord="hint.chord" />
+          <span>{{ hint.what }}</span>
+        </template>
+      </p>
+      <UButton
+        type="button"
+        icon="i-lucide-square-terminal"
+        color="neutral"
+        variant="ghost"
+        size="xs"
+        label="Terminal"
+        class="shrink-0"
+        title="Open a terminal in the project folder"
+        aria-label="Open a terminal in the project folder"
+        @click="openTerminal()"
+      />
+    </div>
   </form>
 </template>

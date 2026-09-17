@@ -798,6 +798,9 @@ export async function closeTab(id, remember = true, force = false, cascade = tru
   // tabs that are not on screen.
   const at = S.tabs.filter((t) => projectOfTab(t) === projectID).findIndex((t) => t.id === id);
   S.tabs = S.tabs.filter((t) => t.id !== id && (!cascade || t.owner !== id));
+  // The tab was the shell. A terminal whose tab has gone has nothing left to
+  // draw it, so it is ended rather than left running unseen.
+  if (tab.kind === "terminal") endTerminal(tab.terminalID);
   if (S.activeTab === id || !S.tabs.some((t) => t.id === S.activeTab)) {
     const left = S.tabs.filter((t) => projectOfTab(t) === projectID);
     const next = left[Math.min(at, left.length - 1)];
@@ -817,9 +820,14 @@ export async function closeTab(id, remember = true, force = false, cascade = tru
 
 function rememberClosedTab(projectID, tab, dependents = [], archived = false) {
   if (!projectID) return;
+  const saved = savedTab(tab);
+  // A terminal is a running shell rather than a view of something that is
+  // still there, so closing one ends it and Ctrl+Shift+T has nothing to bring
+  // back. Remembering a blank entry would stall the stack on it.
+  if (!saved) return;
   const closed = S.closedTabs[projectID] || [];
   S.closedTabs[projectID] = [{
-    tab: savedTab(tab),
+    tab: saved,
     dependents: dependents.map(savedTab).filter(Boolean),
     archived,
   }, ...closed];
@@ -873,6 +881,83 @@ export function currentProjectID() {
   if (S.project) return S.project.project.id;
   return S.activeProjectID;
 }
+
+/* -------------------------------------------------------------- terminals */
+
+/* A terminal is a shell running in the project's folder, drawn in a tab of its
+   own. The shell lives in the server for as long as the app does and the tab
+   is only a view of it: switching project hides that tab with the rest of the
+   project's strip and leaves the shell running, and coming back shows it
+   again, in the order the terminals were opened. Which task is in front never
+   enters into it — a terminal belongs to the project, not to a conversation.
+   See specs/073-terminals.md.
+
+   Terminal tabs are not saved with the rest — savedTab answers null for one —
+   because a shell does not outlive the app that started it, and a restored tab
+   pointing at a dead one would be a window of nothing. A reloaded window asks
+   the server which terminals its project still has instead, which is the same
+   question that brings a project's terminals back when it is selected. */
+
+function terminalTab(info) {
+  return {
+    id: "terminal:" + info.id,
+    kind: "terminal",
+    terminalID: info.id,
+    projectID: info.project_id,
+    label: info.title,
+    dir: info.dir,
+  };
+}
+
+/* The button under the prompt. The shell starts in the folder of whichever
+   project the view in front belongs to, which is the folder the agent is
+   working in. */
+export async function openTerminal() {
+  const projectID = currentProjectID();
+  if (!projectID) return;
+  try {
+    addTab(terminalTab(await api("POST", `/api/projects/${projectID}/terminals`, {})));
+  } catch (error) {
+    fail(error);
+  }
+}
+
+/* endTerminal is the other half of closing a terminal tab: the tab has gone
+   from the strip, and this ends the shell it stood for. One the server has
+   already forgotten — a shell that exited on its own — is not worth a
+   complaint. */
+function endTerminal(id) {
+  api("DELETE", "/api/terminals/" + id).catch(() => {});
+}
+
+/* syncTerminals brings one project's terminal tabs into line with the shells
+   the server actually has: it adds a tab for each shell with none, and drops
+   any tab whose shell has gone. */
+export async function syncTerminals(projectID) {
+  if (!projectID) return;
+  let open;
+  try {
+    open = await api("GET", `/api/projects/${projectID}/terminals`);
+  } catch {
+    return; /* A project that cannot be asked keeps the tabs it has. */
+  }
+  const live = new Set(open.map((info) => info.id));
+  for (const tab of [...S.tabs]) {
+    if (tab.kind === "terminal" && tab.projectID === projectID && !live.has(tab.terminalID)) {
+      closeTab(tab.id, false);
+    }
+  }
+  /* In the server's order, which is the order they were opened in, so a
+     project's terminals come back arranged the way they were left. */
+  for (const info of open) {
+    if (!S.tabs.some((tab) => tab.id === "terminal:" + info.id)) insertTab(terminalTab(info));
+  }
+}
+
+/* Asked for one project at a time, as it is selected, rather than for all of
+   them at once: a window with eight projects should not spend eight requests
+   at launch on shells it is not showing. */
+watch(() => S.activeProjectID, syncTerminals);
 
 /* -------------------------------------------------------------- projects */
 

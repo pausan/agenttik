@@ -42,6 +42,17 @@ selected, and reconciles its tabs with the answer.
 
 Deleting a project ends its terminals, beside stopping its tasks.
 
+## Clipboard
+
+Right-click the terminal for **Copy** and **Paste**. Copy uses the terminal's
+selected text and is disabled without a selection. Paste reads clipboard text
+and passes it through xterm.js, preserving newline handling and bracketed paste
+for programs that enable it. Closing the menu returns focus to the terminal.
+Clipboard access failures use the app's error notification.
+
+`Ctrl+Shift+C` copies and `Ctrl+Shift+V` pastes. Native keyboard copy/paste
+continues to work; `Ctrl+C` still goes to the shell to interrupt a command.
+
 ## The shell
 
 `$SHELL`, or the first of `/bin/bash` and `/bin/sh` that exists; on Windows the
@@ -153,11 +164,12 @@ under the prompt, and the right-hand end of it is empty. A terminal is not a
 prompt action, so putting it in the Send menu ([012](012-task-queue.md)) would
 say that it was.
 
-**The new-terminal chord is the one key the shell does not get.** xterm.js
+**The new-terminal and clipboard chords are handled by the UI.** xterm.js
 turns `Ctrl+Alt+T` into an escape sequence and then stops the event, so the
 window's handler would never see it from inside a terminal — which is where it
 is wanted most, the button not being drawn there. A custom key event handler
-runs before any of that and hands just that chord back to the page. Everything
+runs before any of that and hands the new-terminal chord back to the page. Clipboard chords copy or paste
+in the view. Everything
 else typed at a terminal is the shell's: `Ctrl+W` there erases a word rather
 than closing the tab.
 
@@ -187,5 +199,7 @@ running in the project's folder, closing a terminal, switching project and back
 to find the same two in the same order still holding what was typed, a second
 task leaving them alone, `exit` taking a tab with it, and the chord opening one
 from the prompt box and then a second from inside the terminal it just opened.
+It also checks clipboard menu actions, disabled Copy without a selection,
+focus after menu dismissal, and the copy/paste keyboard shortcuts.
 The fixture pins `SHELL` to `/bin/sh` so the tab names and the screen read the
 same on every machine.

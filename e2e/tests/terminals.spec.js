@@ -158,3 +158,45 @@ test("Ctrl+Alt+T opens a terminal, from the prompt and from a terminal alike", a
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("terminal clipboard menu and shortcuts copy selection and paste into the shell", async ({ page, context }) => {
+  const root = await mkdtemp(join(tmpdir(), "agenttik-terminal-clipboard-"));
+  try {
+    await addProject(page, root);
+    await openProject(page, root);
+    await newTask(page);
+    await newTerminal(page).click();
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+
+    const screen = pane(page).locator(".xterm-screen");
+    await screen.click({ button: "right" });
+    await expect(page.getByRole("menuitem", { name: "Copy", exact: true })).toHaveAttribute("data-disabled", "");
+    await page.keyboard.press("Escape");
+
+    await page.evaluate(() => navigator.clipboard.writeText("printf 'clipboard-%s\\n' menu"));
+    await screen.click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Paste", exact: true }).click();
+    await expect(page.getByRole("menu")).toHaveCount(0);
+    await expect(pane(page).locator("textarea")).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expectScreen(page, "clipboard-menu");
+
+    await pane(page).locator(".xterm-rows").getByText("clipboard-menu", { exact: true }).dblclick();
+    await screen.click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Copy", exact: true }).click();
+    await expect(page.getByRole("menu")).toHaveCount(0);
+    await expect(pane(page).locator("textarea")).toBeFocused();
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("clipboard-menu");
+
+    await page.evaluate(() => navigator.clipboard.writeText("printf 'clipboard-%s\\n' shortcut"));
+    await page.keyboard.press("Control+Shift+V");
+    await expectScreen(page, "shortcut");
+    await page.keyboard.press("Enter");
+    await expectScreen(page, "clipboard-shortcut");
+    await pane(page).locator(".xterm-rows").getByText("clipboard-shortcut", { exact: true }).dblclick();
+    await page.keyboard.press("Control+Shift+C");
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("clipboard-shortcut");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

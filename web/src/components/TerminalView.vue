@@ -6,13 +6,13 @@
    arrives the other. It is loaded from its own chunk — the emulator is a
    couple of hundred kilobytes and no launch that never opens a terminal
    should pay for it. See specs/073-terminals.md and specs/052-launch-budget.md. */
-import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 
 import { resizeTerminal, sendTerminalBinary, sendTerminalInput, watchTerminal } from "../terminals";
-import { S, closeTab, hit } from "../store";
+import { S, closeTab, copyText, fail, hit } from "../store";
 import { colorPreference } from "../color-mode";
 
 const props = defineProps({ tab: { type: Object, required: true } });
@@ -22,6 +22,35 @@ let term = null;
 let fit = null;
 let unwatch = null;
 let observer = null;
+const selection = ref("");
+
+function copy() {
+  const text = term?.getSelection();
+  if (text) void copyText(text);
+}
+
+async function paste() {
+  const target = term;
+  try {
+    const text = await navigator.clipboard.readText();
+    if (target && target === term) {
+      target.paste(text);
+      target.focus();
+    }
+  } catch (error) {
+    fail(error);
+  }
+}
+
+function restoreFocus(event) {
+  event.preventDefault();
+  term?.focus();
+}
+
+const menu = computed(() => [
+  { label: "Copy", icon: "i-lucide-copy", disabled: !selection.value, onSelect: copy },
+  { label: "Paste", icon: "i-lucide-clipboard-paste", onSelect: paste },
+]);
 
 /* The emulator needs its colours as values, so they are read off the panel it
    is drawn in rather than named again here: recolouring the app in Settings
@@ -64,12 +93,23 @@ onMounted(() => {
   term.open(host.value);
   refit();
 
-  /* The shell gets every chord except the one that opens another terminal.
-     xterm.js turns Ctrl+Alt+T into an escape sequence and then stops the
-     event, so without this the window's handler never sees it — and a
-     terminal is the likeliest place to want a second one. The custom handler
-     runs before any of that, and returning false leaves the event to bubble. */
-  term.attachCustomKeyEventHandler((e) => !(e.type === "keydown" && hit(e, "terminal.new")));
+  // Clipboard chords belong to the UI; Ctrl+C still interrupts the shell.
+  term.attachCustomKeyEventHandler((e) => {
+    const clipboardKey = e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey
+      && ["c", "v"].includes(e.key.toLowerCase());
+    if (clipboardKey) {
+      if (e.type === "keydown") {
+        e.preventDefault();
+        if (!e.repeat) {
+          if (e.key.toLowerCase() === "c") copy();
+          else void paste();
+        }
+      }
+      return false;
+    }
+    return !(e.type === "keydown" && hit(e, "terminal.new"));
+  });
+  term.onSelectionChange(() => { selection.value = term.getSelection(); });
 
   term.onData((data) => sendTerminalInput(props.tab.terminalID, data));
   term.onBinary((data) => sendTerminalBinary(props.tab.terminalID, data));
@@ -109,9 +149,11 @@ onBeforeUnmount(() => {
 <template>
   <!-- The emulator measures itself against this element, so it owns the whole
        pane and the padding is inside it rather than around it. -->
-  <div class="terminal-pane min-h-0 flex-1 overflow-hidden bg-default p-2">
-    <div ref="host" class="size-full" />
-  </div>
+  <UContextMenu :items="menu" :content="{ onCloseAutoFocus: restoreFocus }">
+    <div class="terminal-pane min-h-0 flex-1 overflow-hidden bg-default p-2">
+      <div ref="host" class="size-full" />
+    </div>
+  </UContextMenu>
 </template>
 
 <style>

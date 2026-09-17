@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -74,6 +75,9 @@ func settle(t *testing.T, want func(int) bool, what string) int {
 // kqueue opens a descriptor per watched *file*, so a cycle that does not give
 // them back exhausts the process's allowance rather than its memory.
 func TestWatcherReleasesDescriptors(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("checks macOS kqueue's per-file descriptors")
+	}
 	root := t.TempDir()
 	const dirs, perDir = 8, 40
 	for d := range dirs {
@@ -93,6 +97,7 @@ func TestWatcherReleasesDescriptors(t *testing.T) {
 
 	for cycle := range 5 {
 		release := w.acquire(1, root)
+		t.Cleanup(release)
 		// Wait for the walk to actually take descriptors, so the release
 		// below is giving something back.
 		settle(t, func(n int) bool { return n > baseline+dirs }, fmt.Sprintf("cycle %d to start watching", cycle))

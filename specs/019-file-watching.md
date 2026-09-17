@@ -50,6 +50,8 @@ the allowance is shared with the user's editor. The cap bounds the walk rather
 than the descriptors on macOS, where kqueue opens one per file in every watched
 directory rather than one for the lot as inotify does — fsnotify must be v1.10.1
 or newer, which is the first release whose `Close` hands those back.
+The descriptor-release regression test runs on macOS, where kqueue allocates
+per-file descriptors; the event-filter tests run on every platform.
 
 **`.git` is watched one level deep.** Staging, committing and switching
 branches move `index` or `HEAD` without touching the working tree. It is not

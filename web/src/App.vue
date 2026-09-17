@@ -10,6 +10,7 @@ import {
   hit,
   init,
   openFile,
+  openTerminal,
   reopenClosedTab,
   selectAdjacentSidebarRow,
   selectAdjacentTab,
@@ -166,6 +167,13 @@ function onKey(e) {
   if (hit(e, "goto")) return run(e, () => (commandPalette.value = true));
   if (hit(e, "panel.tree")) return run(e, () => showSidebar("tree"));
   if (hit(e, "panel.projects")) return run(e, () => showSidebar("projects"));
+  if (hit(e, "terminal.new")) {
+    // Each press starts a real shell in the current project's folder, so a
+    // held chord must not start thirty of them.
+    e.preventDefault();
+    if (!e.repeat) openTerminal();
+    return;
+  }
   if (hit(e, "file.save")) {
     // The editor handles its own save; this is the same chord with the caret
     // anywhere else on a file tab.

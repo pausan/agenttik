@@ -24,6 +24,7 @@ export const ACTIONS = [
   { id: "task.next", group: "Tasks", what: "Next project or task in the sidebar", keys: [primaryChord("PageDown")] },
   { id: "task.at", group: "Tasks", what: "Go straight to one of the first nine tasks", keys: ["Alt+1…9"], fixed: true },
   { id: "project.at", group: "Tabs", what: "Switch to one of the first eight projects, again to fold its tasks", keys: ["Alt+A…H"], fixed: true },
+  { id: "terminal.new", group: "Tabs", what: "New terminal in the project folder", keys: [primaryChord("Alt+T")] },
 
   { id: "goto", group: "Panels", what: "Command Palette", keys: [primaryChord("Shift+P")] },
   { id: "panel.projects", group: "Panels", what: "Projects", keys: ["Alt+P"] },

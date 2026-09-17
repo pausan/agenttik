@@ -133,3 +133,28 @@ test("a shell that exits takes its tab with it", async ({ page }) => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("Ctrl+Alt+T opens a terminal, from the prompt and from a terminal alike", async ({ page }) => {
+  const root = await mkdtemp(join(tmpdir(), "agenttik-terminal-chord-"));
+  try {
+    await writeFile(join(root, "in-this-project.txt"), "hello");
+    await addProject(page, root);
+    await openProject(page, root);
+    await newTask(page);
+
+    // From the prompt box, where the chord's own button sits.
+    await page.keyboard.press("Control+Alt+t");
+    await expect(terminalTabs(page)).toHaveCount(1);
+    await run(page, "ls");
+    await expectScreen(page, "in-this-project.txt");
+
+    // And from inside the terminal it just opened, which is the likeliest
+    // place to want a second one. xterm.js would otherwise turn the chord
+    // into an escape sequence and stop the event before the window saw it.
+    await page.keyboard.press("Control+Alt+t");
+    await expect(terminalTabs(page)).toHaveCount(2);
+    await expect(terminalTabs(page).nth(1)).toHaveAttribute("aria-label", "sh 2");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

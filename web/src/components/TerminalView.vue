@@ -12,7 +12,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 
 import { resizeTerminal, sendTerminalBinary, sendTerminalInput, watchTerminal } from "../terminals";
-import { S, closeTab } from "../store";
+import { S, closeTab, hit } from "../store";
 import { colorPreference } from "../color-mode";
 
 const props = defineProps({ tab: { type: Object, required: true } });
@@ -63,6 +63,13 @@ onMounted(() => {
   term.loadAddon(fit);
   term.open(host.value);
   refit();
+
+  /* The shell gets every chord except the one that opens another terminal.
+     xterm.js turns Ctrl+Alt+T into an escape sequence and then stops the
+     event, so without this the window's handler never sees it — and a
+     terminal is the likeliest place to want a second one. The custom handler
+     runs before any of that, and returning false leaves the event to bubble. */
+  term.attachCustomKeyEventHandler((e) => !(e.type === "keydown" && hit(e, "terminal.new")));
 
   term.onData((data) => sendTerminalInput(props.tab.terminalID, data));
   term.onBinary((data) => sendTerminalBinary(props.tab.terminalID, data));

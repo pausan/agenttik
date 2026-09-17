@@ -7,16 +7,21 @@ window and no second way of finding the checkout.
 
 ## What is on screen
 
-The button is at the right-hand end of the line of chord hints under the prompt
-box: **Terminal**. Each press opens another shell in the current project's
-folder, as a tab in that project's strip named after the shell and numbered —
-`fish 1`, `fish 2`. The tab's `×` closes the terminal, which ends the shell and
-everything it started. A shell that ends itself — `exit`, or Ctrl+D — takes its
-tab with it.
+Two things open one: the button at the right-hand end of the line of chord
+hints under the prompt box, **Terminal**, and `Ctrl+Alt+T` — `Cmd+Alt+T` on
+macOS, and rebindable in Settings like the rest
+([015](015-settings-shortcuts.md)). Each press opens another shell in the
+current project's folder, as a tab in that project's strip named after the
+shell and numbered — `fish 1`, `fish 2`. The tab's `×` closes the terminal,
+which ends the shell and everything it started. A shell that ends itself —
+`exit`, or Ctrl+D — takes its tab with it.
 
 The button is not drawn on a phone, and is not drawn over a terminal or a file,
 which have no prompt bar. It needs a task open, since that is what puts the
-prompt bar on screen.
+prompt bar on screen. The chord asks for less — a selected project and nothing
+else — so it is what opens a second terminal from the first, and what opens
+one over a file or over a project with no task yet. Held down it opens one
+terminal rather than one per repeat, since each is a process.
 
 Terminals belong to the project, not to a conversation:
 
@@ -148,6 +153,14 @@ under the prompt, and the right-hand end of it is empty. A terminal is not a
 prompt action, so putting it in the Send menu ([012](012-task-queue.md)) would
 say that it was.
 
+**The new-terminal chord is the one key the shell does not get.** xterm.js
+turns `Ctrl+Alt+T` into an escape sequence and then stops the event, so the
+window's handler would never see it from inside a terminal — which is where it
+is wanted most, the button not being drawn there. A custom key event handler
+runs before any of that and hands just that chord back to the page. Everything
+else typed at a terminal is the shell's: `Ctrl+W` there erases a word rather
+than closing the tab.
+
 ## Validation
 
 `app/internal/terminals` is tested against real shells: a command runs in the
@@ -155,6 +168,10 @@ project's folder, a late watcher is handed the screen, one stream carries
 several terminals, a resize reaches the shell, a shell that exits reaches its
 watcher, and the scrollback stays capped. `api_terminals_test.go` covers the
 routes and the 404 a terminal that has gone answers with.
+
+`web/src/shortcuts.test.js` holds the chord apart from the three other things
+`T` is bound to — the Tree panel, a new task, a reopened tab — which only
+exact-modifier matching separates.
 
 `web/src/terminals.test.js` covers the two careful parts of the client:
 keystrokes keep their order across an in-flight request, report-mode bytes are
@@ -168,6 +185,7 @@ where a `Blob` body is a native crash rather than a failed assertion
 `e2e/tests/terminals.spec.js` drives the whole thing in a browser — a command
 running in the project's folder, closing a terminal, switching project and back
 to find the same two in the same order still holding what was typed, a second
-task leaving them alone, and `exit` taking a tab with it. The fixture pins
-`SHELL` to `/bin/sh` so the tab names and the screen read the same on every
-machine.
+task leaving them alone, `exit` taking a tab with it, and the chord opening one
+from the prompt box and then a second from inside the terminal it just opened.
+The fixture pins `SHELL` to `/bin/sh` so the tab names and the screen read the
+same on every machine.

@@ -27,40 +27,46 @@ Validation: frontend unit tests cover privacy, duplicate capture, retention,
 corrupt storage and unavailable storage. The browser test covers capture,
 reload persistence, copying and clearing in About.
 
-## Excessive desktop memory
+## Idle CPU and desktop memory on macOS
 
-A report of 17 GB on macOS versus 60 MB on Linux has no confirmed cause yet.
-The Last Errors report does not measure memory. Compare the same workload and
-process scope: the Go application, WebKit's content/GPU processes, and running
-provider CLIs are separate allocations. A main-process number alone is not the
-whole desktop footprint ([WebKit process architecture](https://docs.webkit.org/Deep%20Dive/Architecture/WebKit2.html)).
+An idle macOS window used to hold about a third of a core and climb in memory
+for as long as it was open, while the same build on Linux sat still. The cause
+was a refresh loop between the file watcher and git, described in
+[019](019-file-watching.md): reading `.git/index` bumps its access time, kqueue
+reports `NOTE_ATTRIB`, fsnotify delivers `Chmod`, and the refresh that answered
+it ran `git status`, which read the index again. `--no-optional-locks` stops
+git writing the index but not the access-time bump, so the flag alone did not
+break the cycle. inotify does not raise the matching event for a plain read,
+which is why only macOS spun.
 
-Current code keeps one event stream per window, with a 256-event subscriber
-queue and shared, refcounted project watches. Open task tabs retain their full
-transcripts; the selected transcript mounts all rows after its initial 40-row
-paint. Large histories and tool payloads can therefore cost memory even with
-few projects. Smart Search also retains its native model once loaded. None of
-these observations establishes the cause of the reported 17 GB.
+Measured on a 15k-file project with one window open and nobody touching it:
 
-To narrow a recurrence down:
+| | before | after |
+|-----|-----|-----|
+| `files_changed` in 60 s | 148 | 0 |
+| main process CPU | ~33% of a core | ~0.05% |
+| WebKit content process CPU | ~5.5% | ~0.03% |
+| main process footprint | 119–133 MB, sawtoothing | ~101 MB, flat |
 
-1. In Activity Monitor's Memory view, record the growing process name and PID,
-   its Memory value, memory pressure and swap. Record the app version, macOS
-   version, time since launch, whether tasks are running, and whether growth
-   follows sleep/wake. Take a second reading after a few minutes.
-2. Close long transcript/file tabs and compare growth. Let active turns finish
-   to distinguish provider subprocess use from idle application use.
-3. Quit the app fully (closing to tray keeps it alive). Launch the same binary
-   with `--web`, open its printed URL in a browser, and repeat the workload with
-   the same tabs. Compare the server and browser separately. The instance lock
-   requires the desktop instance to exit first.
-4. If growth is confined to desktop WebKit, collect a native memory profile;
-   if the Go process grows in web mode too, collect a Go heap profile in a
-   diagnostic build. Keep profiles local until reviewed: they can contain
-   project and conversation data.
+Each turn of the loop walked the whole tree, serialized it to JSON, compressed
+it and pushed it through the macOS `WKURLSchemeTask` bridge, so the cost grew
+with the size of the project rather than with anything the user did.
 
-An [older Wails report](https://github.com/wailsapp/wails/issues/2772) describes
-macOS WebKit growth after sleep on Wails 2.5.1. This app uses 2.16.0; that report
-is a diagnostic lead, not evidence that the same defect is present. A fix needs
-a repeated workload whose memory stops growing after the change. Native macOS
-and Windows memory behavior has not been validated by this investigation.
+A separate macOS-only defect remains open: fsnotify's kqueue backend opens a
+descriptor per watched *file*, not per directory, and `Watcher.Close()` does
+not release them. One project of this size costs about 15k descriptors, and
+each watcher restart — a project switch, or the stream re-subscribing — leaks
+that many again. It is bounded by the descriptor limit rather than by memory
+(about 6 MB per 42k descriptors), so it is a resource leak, not the growth
+above. `maxWatchDirs` caps directories, which bounds nothing on macOS.
+
+Measuring memory here needs process scope kept straight: the Go application,
+WebKit's content and GPU processes and any running provider CLI are separate
+allocations, and `ps` RSS counts shared pages. `vmmap -summary`'s
+`Physical footprint` is the number Activity Monitor shows
+([WebKit process architecture](https://docs.webkit.org/Deep%20Dive/Architecture/WebKit2.html)).
+
+Open task tabs still retain their full transcripts, the selected transcript
+mounts all rows after its initial 40-row paint, and Smart Search retains its
+native model once loaded. Large histories and tool payloads therefore still
+cost memory, independently of the loop above.

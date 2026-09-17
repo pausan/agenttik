@@ -62,7 +62,7 @@ async function act(action, path) {
         <div class="flex w-full items-center gap-1">
           <span class="mr-auto min-w-0 truncate text-xs text-muted" aria-label="Current branch" :title="S.log.branch">{{ S.log.branch }}</span>
           <UButton class="shrink-0" icon="i-lucide-sparkle" aria-label="Generate commit message" title="Generate or rewrite the message from staged changes using the model in Settings → Models → Automatic actions. Does not commit." size="sm" variant="ghost" color="neutral" :loading="generating" :disabled="busy || !staged.length" @click="generateMessage" />
-          <UButton icon="i-lucide-git-commit-horizontal" aria-label="Commit" title="Commit staged changes with this message" size="sm" class="shrink-0" :loading="busy && !generating" :disabled="busy || !staged.length || !message.trim()" @click="act('commit')" />
+          <UButton icon="i-lucide-git-commit-horizontal" label="Commit" title="Commit staged changes with this message" size="sm" class="shrink-0" :loading="busy && !generating" :disabled="busy || !staged.length || !message.trim()" @click="act('commit')" />
         </div>
       </div>
       <p v-if="error" role="alert" class="text-xs text-error">{{ error }}</p>

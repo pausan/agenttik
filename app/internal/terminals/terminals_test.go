@@ -67,7 +67,7 @@ func TestTerminalRunsCommandsInTheProjectFolder(t *testing.T) {
 
 	m := NewManager()
 	info := open(t, m, dir)
-	frames, stop := m.SubscribeMany([]string{info.ID})
+	frames, stop := m.SubscribeMany([]Watch{{ID: info.ID}})
 	defer stop()
 
 	if err := m.Write(info.ID, []byte("ls\n")); err != nil {
@@ -83,14 +83,14 @@ func TestLateWatcherIsHandedTheScrollback(t *testing.T) {
 	m := NewManager()
 	info := open(t, m, t.TempDir())
 
-	first, stop := m.SubscribeMany([]string{info.ID})
+	first, stop := m.SubscribeMany([]Watch{{ID: info.ID}})
 	if err := m.Write(info.ID, []byte("echo written-before-watching\n")); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	await(t, first, "written-before-watching")
 	stop()
 
-	later, stopLater := m.SubscribeMany([]string{info.ID})
+	later, stopLater := m.SubscribeMany([]Watch{{ID: info.ID}})
 	defer stopLater()
 	await(t, later, "written-before-watching")
 }
@@ -102,7 +102,7 @@ func TestOneStreamCarriesSeveralTerminals(t *testing.T) {
 	one := open(t, m, t.TempDir())
 	two := open(t, m, t.TempDir())
 
-	frames, stop := m.SubscribeMany([]string{one.ID, two.ID})
+	frames, stop := m.SubscribeMany([]Watch{{ID: one.ID}, {ID: two.ID}})
 	defer stop()
 
 	if err := m.Write(two.ID, []byte("echo from-the-second\n")); err != nil {
@@ -129,7 +129,7 @@ func TestResizeReachesTheShell(t *testing.T) {
 	useSh(t)
 	m := NewManager()
 	info := open(t, m, t.TempDir())
-	frames, stop := m.SubscribeMany([]string{info.ID})
+	frames, stop := m.SubscribeMany([]Watch{{ID: info.ID}})
 	defer stop()
 
 	if err := m.Resize(info.ID, 132, 43); err != nil {
@@ -151,7 +151,7 @@ func TestCloseEndsTheShellAndSaysSo(t *testing.T) {
 	if err != nil {
 		t.Skipf("no pseudo-terminal available here: %v", err)
 	}
-	frames, stop := m.SubscribeMany([]string{info.ID})
+	frames, stop := m.SubscribeMany([]Watch{{ID: info.ID}})
 	defer stop()
 
 	if err := m.Close(info.ID); err != nil {
@@ -171,6 +171,40 @@ func TestCloseEndsTheShellAndSaysSo(t *testing.T) {
 			}
 		case <-deadline:
 			t.Fatal("closing never reached the watcher")
+		}
+	}
+}
+
+// A shell the user ends themselves reaches the end of its output, so the tab
+// can go with it rather than sitting on a dead screen. This works only because
+// Open lets go of its copy of the slave end once the shell has started.
+func TestShellExitingOnItsOwnReachesTheWatcher(t *testing.T) {
+	useSh(t)
+	m := NewManager()
+	defer m.Shutdown()
+
+	info, err := m.Open(1, t.TempDir(), 80, 24)
+	if err != nil {
+		t.Skipf("no pseudo-terminal available here: %v", err)
+	}
+	frames, stop := m.SubscribeMany([]Watch{{ID: info.ID}})
+	defer stop()
+
+	if err := m.Write(info.ID, []byte("exit\n")); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	deadline := time.After(10 * time.Second)
+	for {
+		select {
+		case frame, ok := <-frames:
+			if !ok {
+				t.Fatal("the stream ended without saying the shell had")
+			}
+			if frame.Exit {
+				return
+			}
+		case <-deadline:
+			t.Fatal("a shell that exited never reached its watcher")
 		}
 	}
 }
@@ -322,5 +356,62 @@ func TestSizeDefaults(t *testing.T) {
 	}
 	if cols, rows := size(-5, 100000); cols != 80 || rows != 1000 {
 		t.Errorf("nonsense size = %dx%d, want 80x1000", cols, rows)
+	}
+}
+
+// A stream is reopened whenever the set of terminals on it changes, so a
+// watcher that says where it got to is sent only what it missed rather than
+// the whole screen again over the top of what it is already showing.
+func TestWatcherResumesWhereItLeftOff(t *testing.T) {
+	useSh(t)
+	m := NewManager()
+	info := open(t, m, t.TempDir())
+
+	first, stop := m.SubscribeMany([]Watch{{ID: info.ID}})
+	if err := m.Write(info.ID, []byte("echo before-the-gap\n")); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	seen := await(t, first, "before-the-gap")
+	stop()
+
+	if err := m.Write(info.ID, []byte("echo after-the-gap\n")); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	// Resume from exactly what the first watcher consumed. The catch-up
+	// frame must carry what came after it and nothing before it.
+	again, stopAgain := m.SubscribeMany([]Watch{{ID: info.ID, From: int64(len(seen))}})
+	defer stopAgain()
+	caught := await(t, again, "after-the-gap")
+	if strings.Contains(caught, "before-the-gap") {
+		t.Errorf("a resumed watcher was sent output it already had: %q", caught)
+	}
+}
+
+// A watcher level with the shell has missed nothing, and a watcher that has
+// fallen out of the scrollback is started over rather than left with a hole.
+func TestSince(t *testing.T) {
+	term := &Terminal{back: []byte("abcdefghij"), written: 10}
+
+	if missed, reset := term.since(10); len(missed) != 0 || reset {
+		t.Errorf("a watcher that is level should be sent nothing, got %q reset=%v", missed, reset)
+	}
+	if missed, reset := term.since(7); string(missed) != "hij" || reset {
+		t.Errorf("a watcher part-way should be sent the rest, got %q reset=%v", missed, reset)
+	}
+	if missed, reset := term.since(0); string(missed) != "abcdefghij" || reset {
+		t.Errorf("a new watcher of an untrimmed terminal should be sent all of it, got %q reset=%v", missed, reset)
+	}
+
+	// The same terminal after the scrollback has been trimmed: only the last
+	// ten of a thousand bytes are still here.
+	term = &Terminal{back: []byte("abcdefghij"), written: 1000}
+	if missed, reset := term.since(5); string(missed) != "abcdefghij" || !reset {
+		t.Errorf("a watcher that fell out of the scrollback should be redrawn, got %q reset=%v", missed, reset)
+	}
+	if missed, reset := term.since(995); string(missed) != "fghij" || reset {
+		t.Errorf("a watcher inside the trimmed window should be sent the rest, got %q reset=%v", missed, reset)
+	}
+	if missed, reset := term.since(4000); string(missed) != "abcdefghij" || !reset {
+		t.Errorf("a watcher claiming more than was ever written should be redrawn, got %q reset=%v", missed, reset)
 	}
 }

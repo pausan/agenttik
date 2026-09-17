@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -97,9 +98,14 @@ func (s *Server) resizeTerminal(c *fiber.Ctx) error {
 }
 
 // streamTerminals serves every open terminal's output over one connection,
-// `?ids=<id>,<id>`, each frame naming the terminal it belongs to. One
-// connection for all of them for the same reason streamAll carries every
-// session: a browser holds only a handful to one origin.
+// `?ids=<id>:<from>,<id>:<from>`, each frame naming the terminal it belongs
+// to. One connection for all of them for the same reason streamAll carries
+// every session: a browser holds only a handful to one origin.
+//
+// `from` is how many bytes of that terminal the client already has, so a
+// stream reopened because a *different* terminal was opened does not repeat
+// this one's output into a view still showing it. A client with nothing sends
+// zero, or leaves the count off entirely.
 //
 // It is a second connection rather than part of streamAll because the two
 // carry different things. A busy terminal writes faster than anything a turn
@@ -110,7 +116,7 @@ func (s *Server) resizeTerminal(c *fiber.Ctx) error {
 // Unknown ids are skipped rather than refused, so a tab whose shell has
 // already gone does not break the stream for the others.
 func (s *Server) streamTerminals(c *fiber.Ctx) error {
-	frames, unsubscribe := s.terminals.SubscribeMany(splitList(c.Query("ids")))
+	frames, unsubscribe := s.terminals.SubscribeMany(parseWatches(c.Query("ids")))
 
 	c.Set(fiber.HeaderContentType, "text/event-stream")
 	c.Set(fiber.HeaderCacheControl, "no-cache")
@@ -161,6 +167,26 @@ func (s *Server) streamTerminals(c *fiber.Ctx) error {
 		}
 	}))
 	return nil
+}
+
+// parseWatches reads the stream's `ids` query. A malformed count is read as
+// zero — the whole screen — rather than refused: the worst it costs is a
+// redraw, and failing the stream over it would cost every terminal on it.
+func parseWatches(query string) []terminals.Watch {
+	parts := splitList(query)
+	watches := make([]terminals.Watch, 0, len(parts))
+	for _, part := range parts {
+		id, count, _ := strings.Cut(part, ":")
+		if id = strings.TrimSpace(id); id == "" {
+			continue
+		}
+		from, err := strconv.ParseInt(count, 10, 64)
+		if err != nil || from < 0 {
+			from = 0
+		}
+		watches = append(watches, terminals.Watch{ID: id, From: from})
+	}
+	return watches
 }
 
 // Terminals is how the shell and the tests reach the manager.

@@ -60,10 +60,28 @@ var ErrNotFound = errors.New("terminal not found")
 // Frame is one piece of news about one terminal: output, or the shell ending.
 // Data is base64 because a terminal's output is bytes, not text, and this
 // travels as JSON over SSE.
+//
+// Reset says the frame is a whole screen rather than the next piece of one,
+// so the watcher clears what it has before writing it. See SubscribeMany.
+//
+// At is the shell's byte count once this frame has been applied, and is what
+// the watcher sends back as Watch.From. It is carried rather than counted by
+// the watcher because a reset frame is the tail of a longer history: the bytes
+// in it say how much was sent, not how much has happened.
 type Frame struct {
-	ID   string `json:"id"`
-	Data string `json:"data,omitempty"`
-	Exit bool   `json:"exit,omitempty"`
+	ID    string `json:"id"`
+	Data  string `json:"data,omitempty"`
+	At    int64  `json:"at"`
+	Exit  bool   `json:"exit,omitempty"`
+	Reset bool   `json:"reset,omitempty"`
+}
+
+// Watch is one terminal a stream wants, and how much of its output the watcher
+// already has. From counts bytes since the shell started, which is what each
+// Frame.Data advances; a watcher with nothing sends zero.
+type Watch struct {
+	ID   string
+	From int64
 }
 
 // Info is a terminal as the UI lists it.
@@ -102,8 +120,12 @@ type Terminal struct {
 	pty xpty.Pty
 	cmd *xpty.Cmd
 
-	mu      sync.Mutex
-	back    []byte
+	mu   sync.Mutex
+	back []byte
+	// written is every byte the shell has ever produced, of which back holds
+	// the tail. The two together let a watcher say where it got to and be
+	// given only what it missed.
+	written int64
 	streams map[*stream]struct{}
 	exited  bool
 	closed  bool
@@ -153,6 +175,14 @@ func (m *Manager) Open(projectID int64, dir string, cols, rows int) (Info, error
 	if err := cmd.Start(); err != nil {
 		p.Close()
 		return Info{}, fmt.Errorf("cannot start %s: %w", name, err)
+	}
+	// Start has handed the slave end to the child, and this process holding a
+	// copy of it open is what would keep the master readable forever: a shell
+	// that exited on its own would never reach the end of its output, so the
+	// tab would sit there on a dead screen waiting for more. Windows has no
+	// second end to let go of — its output pipe closes with the process.
+	if unix, ok := p.(xpty.UnixPty); ok {
+		unix.Slave().Close()
 	}
 
 	m.mu.Lock()
@@ -223,11 +253,12 @@ func (t *Terminal) pump() {
 
 // publish appends to the scrollback and sends one frame to each watcher.
 func (t *Terminal) publish(b []byte) {
-	frame := Frame{ID: t.id, Data: base64.StdEncoding.EncodeToString(b)}
+	data := base64.StdEncoding.EncodeToString(b)
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.remember(b)
+	frame := Frame{ID: t.id, Data: data, At: t.written}
 	for s := range t.streams {
 		if !s.send(frame) {
 			delete(t.streams, s)
@@ -239,6 +270,7 @@ func (t *Terminal) publish(b []byte) {
 // the limit before it is cut back to it, so the copy that cuts it happens once
 // per scrollback's worth of output rather than once per read.
 func (t *Terminal) remember(b []byte) {
+	t.written += int64(len(b))
 	t.back = append(t.back, b...)
 	if len(t.back) <= 2*scrollback {
 		return
@@ -255,7 +287,7 @@ func (t *Terminal) finish() {
 	}
 	t.exited = true
 	for s := range t.streams {
-		s.send(Frame{ID: t.id, Exit: true})
+		s.send(Frame{ID: t.id, At: t.written, Exit: true})
 		delete(t.streams, s)
 	}
 }
@@ -394,25 +426,26 @@ func (t *Terminal) stop() {
 // open watches them over one connection, because a browser will not hold a
 // connection per tab.
 //
-// Each terminal's scrollback is delivered first, so a watcher starts with the
-// screen as it stands. The channel closes when the watcher falls too far
-// behind, and reconnecting starts that replay again.
-func (m *Manager) SubscribeMany(ids []string) (<-chan Frame, func()) {
+// Each watcher says how much of each terminal it already has, and is sent only
+// what it missed. That matters because the stream is reopened whenever the set
+// of terminals on it changes: opening a second terminal must not repeat the
+// first one's output into a view already showing it. A watcher with nothing,
+// or one so far behind that what it missed has been trimmed away, is handed
+// the scrollback as a fresh screen instead.
+func (m *Manager) SubscribeMany(watches []Watch) (<-chan Frame, func()) {
 	s := &stream{ch: make(chan Frame, streamBuffer)}
 
 	var watched []*Terminal
-	seen := make(map[string]bool, len(ids))
-	for _, id := range ids {
-		if seen[id] {
+	seen := make(map[string]bool, len(watches))
+	for _, w := range watches {
+		if seen[w.ID] {
 			continue
 		}
-		seen[id] = true
-		if t := m.find(id); t != nil {
+		seen[w.ID] = true
+		if t := m.find(w.ID); t != nil {
 			watched = append(watched, t)
+			t.attach(s, w.From)
 		}
-	}
-	for _, t := range watched {
-		t.attach(s)
 	}
 
 	return s.ch, func() {
@@ -423,20 +456,38 @@ func (m *Manager) SubscribeMany(ids []string) (<-chan Frame, func()) {
 	}
 }
 
-// attach hands over the scrollback and then registers for what comes next,
-// both under the lock publish takes, so nothing arrives between the two and
-// nothing arrives out of order.
-func (t *Terminal) attach(s *stream) {
+// attach hands over what the watcher missed and then registers it for what
+// comes next, both under the lock publish takes, so nothing arrives between
+// the two and nothing arrives out of order.
+func (t *Terminal) attach(s *stream, from int64) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if len(t.back) > 0 {
-		s.send(Frame{ID: t.id, Data: base64.StdEncoding.EncodeToString(t.back)})
+	missed, reset := t.since(from)
+	if len(missed) > 0 {
+		s.send(Frame{ID: t.id, Data: base64.StdEncoding.EncodeToString(missed), At: t.written, Reset: reset})
 	}
 	if t.exited {
-		s.send(Frame{ID: t.id, Exit: true})
+		s.send(Frame{ID: t.id, At: t.written, Exit: true})
 		return
 	}
 	t.streams[s] = struct{}{}
+}
+
+// since is the output produced after the watcher's byte count, and whether
+// that is a whole screen rather than a continuation of one. The caller holds
+// the lock.
+func (t *Terminal) since(from int64) (missed []byte, reset bool) {
+	// A count level with everything written has missed nothing. One past the
+	// end is a client holding a number from some other terminal's life, and
+	// starting it over is the honest answer to that.
+	if from == t.written {
+		return nil, false
+	}
+	oldest := t.written - int64(len(t.back))
+	if from >= oldest && from < t.written {
+		return t.back[from-oldest:], false
+	}
+	return t.back, true
 }
 
 func (t *Terminal) detach(s *stream) {

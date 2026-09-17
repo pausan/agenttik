@@ -331,6 +331,7 @@ function onTaskDrop(e) {
               :title="s.title"
               :prompt="s.prompt"
               :status="s.status"
+              :unread="!!S.unreadTasks[s.id]"
               :queued="s.queue_count"
               :active="S.detail?.session.id === s.id"
               :number="taskNumber(p, s)"

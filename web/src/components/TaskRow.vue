@@ -10,6 +10,7 @@
    to tell two tasks apart, so hovering the row shows its opening prompt. */
 import { nextTick, ref } from "vue";
 
+import { taskDot } from "../task-attention.js";
 import StatusDot from "./StatusDot.vue";
 
 const props = defineProps({
@@ -29,6 +30,7 @@ const props = defineProps({
   // Forty runs of a job share a name, so the number is what says which job
   // this is a run of. See specs/028-scheduled-jobs.md.
   job: { type: Number, default: 0 },
+  unread: Boolean,
   active: Boolean,
   archived: Boolean,
   archive: Boolean,
@@ -113,9 +115,9 @@ defineExpose({ edit });
               aria-hidden="true"
               >{{ number || "" }}</span
             >
-            <StatusDot :status="status" />
+            <StatusDot :status="taskDot(status, unread)" />
             <span v-if="queued" class="shrink-0" title="Queued prompt">🕒</span>
-            <span class="task-title truncate">{{ title || "Untitled task" }}</span>
+            <span class="task-title truncate" :class="{ 'font-bold': unread }">{{ title || "Untitled task" }}</span>
           </span>
           <!-- The outcome reads in the same lighter voice the transcript
                gives thinking: it is the row's own note on itself, not part of

@@ -7,6 +7,7 @@ const props = defineProps({ status: { type: String, default: "idle" } });
 const colors = {
   running: "bg-primary animate-pulse",
   error: "bg-error",
+  unread: "bg-warning",
   waiting: "bg-warning animate-pulse [animation-duration:2.5s]",
   ok: "bg-success",
   idle: "bg-accented",
@@ -14,5 +15,5 @@ const colors = {
 </script>
 
 <template>
-  <span class="size-1.5 shrink-0 rounded-full" :class="colors[props.status] || colors.idle" />
+  <span :title="status === 'unread' ? 'Unread completion' : status === 'error' ? 'Task failed' : undefined" class="size-1.5 shrink-0 rounded-full" :class="colors[props.status] || colors.idle" />
 </template>

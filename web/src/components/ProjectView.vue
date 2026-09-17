@@ -343,6 +343,7 @@ async function doDelete() {
             :title="row.task.title"
             :prompt="row.task.prompt"
             :status="row.task.status"
+            :unread="!!S.unreadTasks[row.task.id]"
             :queued="row.task.queue_count"
             :sub="subtitle(row.task)"
             :outcome="row.archived ? row.task.summary : ''"

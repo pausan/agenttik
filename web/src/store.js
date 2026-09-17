@@ -11,7 +11,8 @@
    S.activeProjectID — so switching project switches the whole centre to that
    project's work. */
 
-import { nextTick, reactive, watch } from "vue";
+import { nextTick, reactive, ref, watch } from "vue";
+import { trackTaskAttention } from "./task-attention.js";
 import { recordError } from "./diagnostics.js";
 import { api, apiURL, storage, diagnosticStorage } from "./api";
 import { debounce } from "./debounce";
@@ -88,6 +89,7 @@ export const S = reactive({
      session tab the text was typed into; the text is the user's and outlives
      that tab. */
   drafts: {},
+  unreadTasks: {},
   sessions: [],
   schedules: [], // repeating prompts, drawn above the sessions in both lists
   tabs: [], // every open view, of every project
@@ -474,6 +476,15 @@ export async function reorderStars(stars) {
   })));
   S.stars = stars.map((star, index) => ({ ...star, position: index + 1 }));
 }
+
+const attentionVisible = ref(!document.hidden);
+document.addEventListener("visibilitychange", () => { attentionVisible.value = !document.hidden; });
+function saveTaskAttention() {
+  try { storage.setItem("agenttik.unreadTasks", JSON.stringify(S.unreadTasks)); } catch { /* memory still works */ }
+}
+trackTaskAttention(S.unreadTasks,
+  () => S.tab?.kind === "session" ? S.tab.sessionID : null,
+  () => attentionVisible.value, saveTaskAttention);
 
 /* ------------------------------------------------------------------ tabs */
 
@@ -2906,6 +2917,13 @@ function onEvent(msg) {
     if (seen === lastTurnEvent) return;
     lastTurnEvent = seen;
   }
+  if (msg.event?.type === "done" && msg.stats) {
+    S.unreadTasks[msg.session_id] = msg.turn_id;
+    saveTaskAttention();
+  } else if (msg.event?.type === "started") {
+    delete S.unreadTasks[msg.session_id];
+    saveTaskAttention();
+  }
   const tab = S.tabs.find((t) => t.kind === "session" && t.sessionID === msg.session_id);
   if (tab) onSessionEvent(tab, msg);
   // A turn starting or ending anywhere in a project moves its totals, its
@@ -3548,6 +3566,12 @@ export async function init() {
     // can cost a CLI probe of a second or more, and the model it names is
     // worth showing late rather than holding an otherwise ready window on.
     await Promise.all([refreshProjects(), refreshSessions()]);
+    try {
+      const unread = JSON.parse(storage.getItem("agenttik.unreadTasks") || "{}");
+      for (const [id, turn] of Object.entries(unread || {})) {
+        if (Number.isSafeInteger(turn) && turn > 0) S.unreadTasks[id] = turn;
+      }
+    } catch { /* Ignore invalid saved state. */ }
     await restoreOpenTabs();
     // A first launch has no tabs to say which project is selected, and the
     // sidebar, the Tree and Ctrl+N all want one.

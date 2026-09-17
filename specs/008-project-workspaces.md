@@ -2,6 +2,8 @@
 
 Each project has one leading context tab in its own strip. The context tab shows the project page, the selected task or the selected scheduled job. Opening any of the three replaces that context tab; it never adds a second one. A context tab is inserted before every independent view in the project strip.
 
+Adding the first project selects it and opens its project page, so `Ctrl+N` and `Ctrl+T` can immediately start a task. Adding another project keeps the current project selected.
+
 Files, commit diffs, schedules, and other independent views remain ordinary tabs. A single click still uses the temporary file tab, and a double click keeps a file tab. `Ctrl+W` still removes only the active tab, so closing a context tab does not close its independent files.
 
 The sidebar owns active-task order. Its first nine tasks in the selected project carry numbers 1 through 9 from top to bottom. `Alt+1` through `Alt+9` select those tasks and put the cursor in their prompt. `Ctrl+PageUp` and `Ctrl+PageDown` wrap through every project, scheduled job and task in the sidebar, top to bottom across all of them rather than only the selected project's, so they reach jobs and the tasks past nine too. `Ctrl+Tab` and `Ctrl+Shift+Tab` wrap right and left through every visible tab in the project strip.

@@ -1132,6 +1132,7 @@ const reloadLists = debounce(() => {
 export async function addProject(path, name) {
   await api("POST", "/api/projects", { path, name });
   await refreshProjects();
+  if (!S.activeProjectID && S.projects.length) await switchProject(S.projects[0].id);
 }
 
 export async function removeProject(p) {

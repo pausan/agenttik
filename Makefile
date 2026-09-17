@@ -79,6 +79,11 @@ test-desktop-remote:
 test-desktop-images:
 	xvfb-run -a go test -tags "$(DESKTOP_TAGS)" $(PKG) -run '^TestDesktopImageUpload$$' -count=1
 
+## test-desktop-terminal: native Wails/WebKit terminal input regression (needs Xvfb)
+.PHONY: test-desktop-terminal
+test-desktop-terminal:
+	xvfb-run -a go test -tags "$(DESKTOP_TAGS)" $(PKG) -run '^TestDesktopTerminalInput$$' -count=1
+
 ## test-desktop-scrollbars: native scrollbar paint regression (needs Xvfb, xdotool, ImageMagick)
 .PHONY: test-desktop-scrollbars
 test-desktop-scrollbars:

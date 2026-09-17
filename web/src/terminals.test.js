@@ -27,6 +27,16 @@ globalThis.EventSource = FakeEventSource;
 const { resizeTerminal, sendTerminalBinary, sendTerminalInput, watchTerminal } =
   await import("./terminals.js");
 
+/* A sent body as one character per byte, so a test can count the bytes that
+   actually went out rather than the characters they would decode to. */
+function latin1(body) {
+  if (!body) return "";
+  const bytes = ArrayBuffer.isView(body)
+    ? new Uint8Array(body.buffer, body.byteOffset, body.byteLength)
+    : new Uint8Array(body);
+  return String.fromCharCode(...bytes);
+}
+
 /* calls collects every request, and lets a test hold one open so it can type
    while a POST is still in flight. */
 function captureFetch() {
@@ -35,8 +45,7 @@ function captureFetch() {
   const held = new Promise((resolve) => (release = resolve));
   globalThis.fetch = async (url, options) => {
     const body = options?.body;
-    const text = body instanceof Blob ? await body.text() : String(body ?? "");
-    calls.push({ url: String(url), body: text });
+    calls.push({ url: String(url), body: typeof body === "string" ? body : latin1(body), raw: body });
     if (calls.length === 1) await held;
     return new Response("", { status: 204 });
   };
@@ -64,6 +73,19 @@ test("keystrokes reach the shell in the order they were typed", async () => {
   strictEqual(calls.length, 2, "what was typed during the flight is one request");
   strictEqual(calls[1].body, "bcd");
   ok(calls[1].url.includes("/api/terminals/order/input"));
+});
+
+test("keystrokes travel as bytes rather than as a Blob", async () => {
+  const { calls, release } = captureFetch();
+  release();
+
+  // Linux WebKit segfaults inside Wails' URI-scheme handler when it has to
+  // read a request body that is a Blob, taking the whole app with it.
+  sendTerminalInput("shape", "x");
+  await new Promise((r) => setTimeout(r, 10));
+  strictEqual(calls.length, 1);
+  ok(!(calls[0].raw instanceof Blob), "a Blob body crashes the desktop app");
+  ok(ArrayBuffer.isView(calls[0].raw), "the body should be a byte array");
 });
 
 test("report-mode bytes are not widened into text", async () => {

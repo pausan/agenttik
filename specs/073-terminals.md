@@ -103,6 +103,11 @@ either order, and a shell given its input out of order is a shell given
 different input. Anything typed while one is in flight joins the next, so
 holding a key down costs one request rather than thirty.
 
+The joined keystrokes go out as one flat byte array, never as a `Blob`. Linux
+WebKit segfaults inside Wails' URI-scheme handler when it reads a `Blob` body,
+which took the whole app down on the first character typed — the same crash
+pasted images avoid ([056](056-pasted-images.md)).
+
 A resize is sent as soon as the pane has been measured — until the shell is
 told, it is drawing its prompt for a window it is not in — and every resize
 after that waits for the dragging to stop, since a full-screen program redraws
@@ -153,8 +158,12 @@ routes and the 404 a terminal that has gone answers with.
 
 `web/src/terminals.test.js` covers the two careful parts of the client:
 keystrokes keep their order across an in-flight request, report-mode bytes are
-not widened into text, and a reopened stream resumes each terminal where its
-view got to.
+not widened into text, keystrokes travel as bytes rather than as a `Blob`, and
+a reopened stream resumes each terminal where its view got to.
+
+`make test-desktop-terminal` types through the real module inside Wails/WebKit,
+where a `Blob` body is a native crash rather than a failed assertion
+([005](005-testing.md)).
 
 `e2e/tests/terminals.spec.js` drives the whole thing in a browser — a command
 running in the project's folder, closing a terminal, switching project and back

@@ -9,6 +9,7 @@ Tests cover logic, browser flows and the native desktop transport.
 | Startup budget | `e2e/tests/startup.spec.js` | `make test-startup` |
 | Browser tests | `e2e/tests/*.spec.js` (Playwright) | `make e2e` |
 | Linux desktop image uploads | `app/cmd/agenttik/desktop_images_linux_test.go` | `make test-desktop-images` |
+| Linux desktop terminal input | `app/cmd/agenttik/desktop_terminal_linux_test.go` | `make test-desktop-terminal` |
 | Linux desktop scrollbar layers | `app/cmd/agenttik/desktop_scrollbars_linux_test.go` | `make test-desktop-scrollbars` |
 
 `make test` is the fast loop and runs the first two. `make e2e` builds the
@@ -22,6 +23,11 @@ with one worker and gates releases on the one-second requirement
 the actual image upload module inside Wails/WebKit in a subprocess, checking
 that Blob and File images arrive intact without a native crash. It stays
 separate from the fast loop because it requires a native display stack.
+
+`make test-desktop-terminal` has the same requirements and types through the
+actual terminal client, checking that the keystrokes arrive byte for byte
+without a native crash. Both guard the same rule: a `Blob` or `File` fetch body
+segfaults Linux WebKit's URI-scheme handler.
 
 `make test-desktop-scrollbars` additionally needs xdotool, ImageMagick, and a
 built UI (`cd web && npm run build`). It checks actual Wails/WebKit screenshot

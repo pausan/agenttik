@@ -129,6 +129,22 @@ export function sendTerminalBinary(id, data) {
   queue(id, out);
 }
 
+/* The queued chunks as one byte array. Linux WebKit can crash in Wails'
+   URI-scheme handler when a request body is a Blob, so the keystrokes are
+   flattened here rather than handed over as one. */
+function join(chunks) {
+  if (chunks.length === 1) return chunks[0];
+  let total = 0;
+  for (const chunk of chunks) total += chunk.length;
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, at);
+    at += chunk.length;
+  }
+  return out;
+}
+
 function queue(id, chunk) {
   const waiting = pending.get(id);
   if (waiting) waiting.push(chunk);
@@ -145,7 +161,8 @@ async function flush(id) {
   try {
     await fetch(apiURL(`/api/terminals/${encodeURIComponent(id)}/input`), {
       method: "POST",
-      body: new Blob(chunks, { type: "application/octet-stream" }),
+      headers: { "Content-Type": "application/octet-stream" },
+      body: join(chunks),
     });
   } catch {
     /* A shell that has gone announces itself on the stream, which is where

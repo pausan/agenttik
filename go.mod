@@ -10,7 +10,7 @@ require (
 	github.com/amikos-tech/pure-tokenizers v0.1.4
 	github.com/aymanbagabas/go-pty v0.2.3
 	github.com/cardinalby/go-systray v1.0.2
-	github.com/fsnotify/fsnotify v1.9.0
+	github.com/fsnotify/fsnotify v1.10.1
 	github.com/godbus/dbus/v5 v5.1.0
 	github.com/gofiber/fiber/v2 v2.52.15
 	github.com/google/uuid v1.6.0

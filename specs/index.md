@@ -142,4 +142,4 @@ disagree about, for a human to settle.
 
 - [070 Automatic updates](070-automatic-updates.md) — daily release checks, ignored versions and installation on quit.
 
-- [071 Troubleshooting](071-troubleshooting.md) — local error reports in About and desktop memory diagnosis.
+- [071 Troubleshooting](071-troubleshooting.md) — local error reports in About, and the macOS idle CPU/memory loop and its measurements.

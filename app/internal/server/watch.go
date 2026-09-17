@@ -23,9 +23,12 @@ const (
 	// fsMaxWait bounds that settling: a build that keeps writing must still
 	// reach the UI instead of being pushed back for as long as it runs.
 	fsMaxWait = 2 * time.Second
-	// maxWatchDirs caps the watch descriptors one project may take. A
-	// descriptor per directory is cheap, but the user's inotify allowance is
-	// shared with their editor and is not ours to exhaust.
+	// maxWatchDirs caps the directories one project may watch. inotify spends
+	// one descriptor on the lot, but kqueue spends one per file in every
+	// watched directory, so on macOS this bounds the walk rather than the
+	// descriptors — a large project still costs tens of thousands of them.
+	// Either allowance is shared with the user's editor and is not ours to
+	// exhaust.
 	maxWatchDirs = 4096
 )
 
@@ -112,7 +115,7 @@ func (w *watchers) run(projectID int64, root string, stop <-chan struct{}) {
 			if !ok {
 				return
 			}
-			if !interesting(ev.Name) {
+			if !interesting(ev) {
 				continue
 			}
 			// A directory can already hold files by the time we hear it was
@@ -155,13 +158,23 @@ func (w *watchers) run(projectID int64, root string, stop <-chan struct{}) {
 // its own entries are exactly what tells us that a commit or a staging has
 // changed what the Changed pane should say. The lock file git holds while it
 // writes is left out — the index it then writes is the event that matters.
-func watchFilter(root string, skip func(path string) bool) func(path string) bool {
+func watchFilter(root string, skip func(path string) bool) func(ev fsnotify.Event) bool {
 	gitDir := filepath.Join(root, ".git")
-	return func(path string) bool {
-		if filepath.Dir(path) == gitDir {
-			return filepath.Base(path) != "index.lock"
+	return func(ev fsnotify.Event) bool {
+		if filepath.Dir(ev.Name) == gitDir {
+			// Every `git status` refreshes the index's stat cache, which
+			// arrives as an attribute-only change to .git/index. Answering
+			// that with a refresh runs `git status` again, and the two never
+			// settle: on macOS the pair spins several times a second forever,
+			// walking the whole tree each time. Staging and committing write
+			// the index rather than only touching it, so what the Changed
+			// pane actually needs still gets through.
+			if ev.Op == fsnotify.Chmod {
+				return false
+			}
+			return filepath.Base(ev.Name) != "index.lock"
 		}
-		return !skip(path)
+		return !skip(ev.Name)
 	}
 }
 

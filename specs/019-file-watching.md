@@ -46,13 +46,29 @@ a build that writes for a minute still reports every two seconds.
 listing already skips. A `target/` or `dist/` can hold more files than the
 project and none of them ever reach either pane, so watching one would spend
 descriptors to wake the UI for nothing. Watches are capped at 4096 directories:
-the user's inotify allowance is shared with their editor.
+the allowance is shared with the user's editor. The cap bounds the walk rather
+than the descriptors on macOS, where kqueue opens one per file in every watched
+directory rather than one for the lot as inotify does — fsnotify must be v1.10.1
+or newer, which is the first release whose `Close` hands those back.
 
 **`.git` is watched one level deep.** Staging, committing and switching
 branches move `index` or `HEAD` without touching the working tree. It is not
 walked — refs and objects are noise — and `index.lock` is filtered out, because
 the `index` that follows it is the event that matters.
 
+**Attribute-only events on `.git` are dropped.** Reading `.git/index` bumps its
+access time, and on macOS kqueue reports that as `NOTE_ATTRIB`, which fsnotify
+delivers as `Chmod`. Refreshing on it runs `git status`, which reads the index
+again: the pair never settles. Measured on a 15k-file project, it spun at about
+2.5 refreshes a second with nobody touching the app, walking and serializing
+the whole tree each time and holding a third of a core. `watchFilter` therefore
+takes the event rather than the path and drops a `.git` entry whose op is only
+`Chmod`. Staging and committing write the index, so the Changed pane still
+hears what it needs, and a mode change in the working tree still counts.
+
 **`git --no-optional-locks`.** Plain `git status` rewrites the index to cache
-what it stat'd, which the watcher sees as a change, refreshes for, and sees
-again. Every git call here is a read, so the flag is set for all of them.
+what it stat'd, which the watcher sees as a change. Every git call here is a
+read, so the flag is set for all of them. The flag stops the write; it does not
+stop the access-time bump a read leaves behind, which is why the op filter
+above is needed as well. Linux needs neither half of this as visibly: inotify
+does not raise `IN_ATTRIB` for a plain read, so the loop is macOS-only.

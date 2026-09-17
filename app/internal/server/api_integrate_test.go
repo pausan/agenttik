@@ -37,6 +37,7 @@ func TestIntegrateBranches(t *testing.T) {
 				t.Run(action+map[bool]string{true: " conflicts", false: " clean"}[conflict]+map[bool]string{true: " dirty", false: " pristine"}[dirty], func(t *testing.T) {
 					s, st := newTestServer(t)
 					root := t.TempDir()
+					root, _ = filepath.EvalSymlinks(root)
 					git := func(args ...string) string {
 						t.Helper()
 						out, err := runGit(root, args...)

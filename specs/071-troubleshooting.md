@@ -52,13 +52,17 @@ Each turn of the loop walked the whole tree, serialized it to JSON, compressed
 it and pushed it through the macOS `WKURLSchemeTask` bridge, so the cost grew
 with the size of the project rather than with anything the user did.
 
-A separate macOS-only defect remains open: fsnotify's kqueue backend opens a
-descriptor per watched *file*, not per directory, and `Watcher.Close()` does
-not release them. One project of this size costs about 15k descriptors, and
-each watcher restart — a project switch, or the stream re-subscribing — leaks
-that many again. It is bounded by the descriptor limit rather than by memory
-(about 6 MB per 42k descriptors), so it is a resource leak, not the growth
-above. `maxWatchDirs` caps directories, which bounds nothing on macOS.
+A second macOS-only defect was fixed alongside it. fsnotify's kqueue backend
+opens a descriptor per watched *file*, not per directory, and in v1.9.0
+`Watcher.Close()` gave none of them back: it marked the watcher closed before
+removing the paths, so every `Remove` it then called returned early. A project
+of this size costs about 15k descriptors, and each watcher restart — a project
+switch, or the stream re-subscribing — leaked that many again, ending in
+`EMFILE` rather than in memory (about 6 MB per 42k descriptors). fsnotify
+v1.10.1 drops the watches directly in `Close`; measured over five create/close
+cycles, descriptors return to the baseline every time instead of climbing from
+8.5k to 42k. `maxWatchDirs` bounds the walk, not the descriptor count, on
+macOS.
 
 Measuring memory here needs process scope kept straight: the Go application,
 WebKit's content and GPU processes and any running provider CLI are separate

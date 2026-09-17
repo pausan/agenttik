@@ -46,7 +46,10 @@ a build that writes for a minute still reports every two seconds.
 listing already skips. A `target/` or `dist/` can hold more files than the
 project and none of them ever reach either pane, so watching one would spend
 descriptors to wake the UI for nothing. Watches are capped at 4096 directories:
-the user's inotify allowance is shared with their editor.
+the allowance is shared with the user's editor. The cap bounds the walk rather
+than the descriptors on macOS, where kqueue opens one per file in every watched
+directory rather than one for the lot as inotify does — fsnotify must be v1.10.1
+or newer, which is the first release whose `Close` hands those back.
 
 **`.git` is watched one level deep.** Staging, committing and switching
 branches move `index` or `HEAD` without touching the working tree. It is not

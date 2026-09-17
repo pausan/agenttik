@@ -23,9 +23,12 @@ const (
 	// fsMaxWait bounds that settling: a build that keeps writing must still
 	// reach the UI instead of being pushed back for as long as it runs.
 	fsMaxWait = 2 * time.Second
-	// maxWatchDirs caps the watch descriptors one project may take. A
-	// descriptor per directory is cheap, but the user's inotify allowance is
-	// shared with their editor and is not ours to exhaust.
+	// maxWatchDirs caps the directories one project may watch. inotify spends
+	// one descriptor on the lot, but kqueue spends one per file in every
+	// watched directory, so on macOS this bounds the walk rather than the
+	// descriptors — a large project still costs tens of thousands of them.
+	// Either allowance is shared with the user's editor and is not ours to
+	// exhaust.
 	maxWatchDirs = 4096
 )
 

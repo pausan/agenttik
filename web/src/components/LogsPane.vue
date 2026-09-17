@@ -17,6 +17,7 @@ const busy = ref("");
 const error = ref("");
 const notice = ref("");
 const operation = ref("merge");
+const remoteCleanup = ref(null);
 const target = ref("");
 const targets = computed(() => (S.log.branches || []).filter((name) => name !== S.log.branch));
 const blocked = computed(() => !!busy.value || !!S.log.operation);
@@ -33,6 +34,7 @@ const branches = computed(() => {
     .map((item) => item.name);
 });
 watch(() => [currentProjectID(), S.repository], () => {
+  remoteCleanup.value = null;
   branchSearch.value = "";
   target.value = "";
   error.value = "";
@@ -41,9 +43,9 @@ watch(() => [currentProjectID(), S.repository], () => {
 const actions = [
   { action: "pull", icon: "i-lucide-arrow-down", label: "Pull current branch" },
   { action: "push", icon: "i-lucide-arrow-up", label: "Push current branch" },
-  { action: "clean", icon: "i-lucide-brush-cleaning", label: "Clean local branches merged into main or master" },
+  { action: "clean", icon: "i-lucide-brush-cleaning", label: "Clean branches merged into main or master" },
 ];
-async function act(action, branch = S.log.branch) {
+async function act(action, branch = S.log.branch, remotes = []) {
   if (busy.value || (!branch && !["continue", "abort"].includes(action))) return;
   const id = currentProjectID();
   const repo = S.repository;
@@ -52,15 +54,28 @@ async function act(action, branch = S.log.branch) {
   error.value = "";
   notice.value = "";
   try {
-    const result = await api("POST", `/api/projects/${id}/branches/${action}?repo=${encodeURIComponent(repo)}`, { branch, ...(["merge", "rebase"].includes(action) ? { target: target.value } : {}) });
+    const result = await api("POST", `/api/projects/${id}/branches/${action}?repo=${encodeURIComponent(repo)}`, { branch, ...(action === "clean-remote" ? { remotes } : {}), ...(["merge", "rebase"].includes(action) ? { target: target.value } : {}) });
     if (stillHere()) {
       branchSearch.value = "";
       if (result?.message) notice.value = result.message;
+      if (action === "clean-remote") {
+        remoteCleanup.value = null;
+        notice.value = `Removed remote branches: ${result.deleted.join(", ") || "none"}`;
+        if (result.error) error.value = result.error;
+      }
       if (action === "clean") notice.value = result.deleted.length
         ? `Removed: ${result.deleted.join(", ")}` : "No merged local branches to remove.";
     }
+    if (action === "clean" && stillHere()) {
+      await Promise.all([refreshLog(), refreshChanged(), refreshTree()]);
+      const checked = await api("POST", `/api/projects/${id}/branches/check-remote?repo=${encodeURIComponent(repo)}`, { branch });
+      if (stillHere() && checked.remotes.length) remoteCleanup.value = { branch, remotes: checked.remotes };
+    }
   } catch (e) {
-    if (stillHere()) error.value = e.message;
+    if (stillHere()) {
+      if (action === "clean-remote") remoteCleanup.value = null;
+      error.value = e.message;
+    }
   } finally {
     // Refresh failures too: Git may have completed part of an operation.
     if (stillHere()) await Promise.all([refreshLog(), refreshChanged(), refreshTree()]);
@@ -164,6 +179,18 @@ const menu = computed(() => [
         />
       </UTooltip>
     </div>
+    <UModal :open="!!remoteCleanup" title="Delete merged remote branches?" @update:open="(open) => { if (!open) remoteCleanup = null; }">
+      <template #body>
+        <p class="text-sm">Local cleanup is complete. These branches are merged into their remote's main or master. Delete them from the remote?</p>
+        <ul class="mt-3 max-h-64 overflow-auto font-mono text-xs">
+          <li v-for="item in remoteCleanup?.remotes || []" :key="`${item.remote}/${item.branch}`">{{ item.remote }}/{{ item.branch }}</li>
+        </ul>
+      </template>
+      <template #footer>
+        <UButton color="neutral" variant="ghost" label="No, keep remote branches" :disabled="!!busy" @click="remoteCleanup = null" />
+        <UButton color="error" label="Yes, delete all listed branches" :loading="busy === 'clean-remote'" :disabled="!!busy" @click="act('clean-remote', remoteCleanup.branch, remoteCleanup.remotes)" />
+      </template>
+    </UModal>
     <details v-show="!S.log.operation" class="group shrink-0">
       <summary class="flex cursor-pointer list-none items-center gap-1 text-xs text-dimmed [&::-webkit-details-marker]:hidden">
         <UIcon name="i-lucide-chevron-right" class="size-3 shrink-0 group-open:rotate-90" />

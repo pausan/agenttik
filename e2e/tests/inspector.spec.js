@@ -93,7 +93,7 @@ test("commits offers fuzzy branch selection and branch actions", async ({ page }
     const body = route.request().postDataJSON();
     requests.push({ action, ...body });
     if (action === "switch") branch = body.branch;
-    await route.fulfill(action === "clean" ? { json: { deleted: ["old-feature"] } } : { status: 204 });
+    await route.fulfill(action === "clean" ? { json: { deleted: ["old-feature"] } } : action === "check-remote" ? { json: { remotes: [] } } : { status: 204 });
   });
   // Reload so the initial log request uses the fixture.
   await page.reload();
@@ -106,11 +106,11 @@ test("commits offers fuzzy branch selection and branch actions", async ({ page }
   await expect(page.getByRole("option", { name: "fix/colors" })).toHaveCount(0);
   await page.getByRole("option", { name: "feature/search" }).click();
   await expect(select).toContainText("feature/search");
-  for (const name of ["Pull current branch", "Push current branch", "Clean local branches merged into main or master"]) {
+  for (const name of ["Pull current branch", "Push current branch", "Clean branches merged into main or master"]) {
     await inspector(page).getByRole("button", { name, exact: true }).click();
   }
   await expect(inspector(page).getByRole("status")).toContainText("Removed: old-feature");
-  expect(requests).toEqual(["switch", "pull", "push", "clean"].map((action) => ({ action, branch: "feature/search" })));
+  await expect.poll(() => requests).toEqual(["switch", "pull", "push", "clean", "check-remote"].map((action) => ({ action, branch: "feature/search" })));
 });
 
 test("commit graph toggle, counts, checkout highlight and ref chips", async ({ page }) => {
@@ -126,6 +126,7 @@ test("commit graph toggle, counts, checkout highlight and ref chips", async ({ p
   await page.route("**/api/projects/*/commit?*", (route) => route.fulfill({
     json: { hash: "aaaaaaaa", files: [{ path: "file.txt", status: "M", additions: 2, deletions: 1 }] },
   }));
+  await page.route("**/api/projects/*/branches/check-remote?*", (route) => route.fulfill({ json: { remotes: [] } }));
   await page.route("**/api/projects/*/branches/clean?*", (route) => route.fulfill({ json: { deleted: [] } }));
   await page.reload();
   await openProject(page);
@@ -159,7 +160,7 @@ test("commit graph toggle, counts, checkout highlight and ref chips", async ({ p
   await expect(head.getByText("v1.0", { exact: true })).toHaveCount(0);
   await expect(head.getByText("main", { exact: true })).toBeVisible();
   await expect(head.locator("span.font-mono")).toHaveText("aaaaaaaa · Test Author · 2026-09-15 12:00");
-  await pane.getByRole("button", { name: "Clean local branches merged into main or master", exact: true }).click();
+  await pane.getByRole("button", { name: "Clean branches merged into main or master", exact: true }).click();
   await expect(pane.getByRole("status")).toHaveText("No merged local branches to remove.");
 });
 
@@ -223,4 +224,35 @@ test("merge and rebase choose a destination and show recovery", async ({ page })
     { action: "rebase", branch: "fix/colors", target: "main" },
     { action: "abort", branch: "fix/colors" },
   ]);
+});
+
+
+test("cleanup lists remote branches and deletes only after confirmation", async ({ page }) => {
+  const requests = [];
+  const remotes = [{ remote: "origin", branch: "merged-feature", tip: "a".repeat(40) }];
+  await page.route("**/api/projects/*/log?*", (route) => route.fulfill({
+    json: { branch: "main", branches: ["main"], head: "12345678", commits: [] },
+  }));
+  await page.route("**/api/projects/*/branches/*", async (route) => {
+    const action = new URL(route.request().url()).pathname.split("/").pop();
+    requests.push({ action, ...route.request().postDataJSON() });
+    await route.fulfill({ json: action === "check-remote" ? { remotes }
+      : { deleted: action === "clean" ? ["local-feature"] : ["origin/merged-feature"] } });
+  });
+  await page.reload();
+  await openProject(page);
+  await inspector(page).getByRole("tab", { name: "Commits" }).click();
+  const clean = inspector(page).getByRole("button", { name: "Clean branches merged into main or master", exact: true });
+  await clean.click();
+  const dialog = page.getByRole("dialog", { name: "Delete merged remote branches?" });
+  await expect(dialog.getByText("origin/merged-feature", { exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "No, keep remote branches" }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(inspector(page).getByRole("status")).toContainText("Removed: local-feature");
+  expect(requests.map((r) => r.action)).toEqual(["clean", "check-remote"]);
+  await clean.click();
+  await dialog.getByRole("button", { name: "Yes, delete all listed branches" }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(inspector(page).getByRole("status")).toContainText("Removed remote branches: origin/merged-feature");
+  expect(requests.at(-1)).toEqual({ action: "clean-remote", branch: "main", remotes });
 });

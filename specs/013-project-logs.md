@@ -9,7 +9,7 @@ search as the commit filter. Selecting a branch runs Git switch; checkout
 conflicts are reported in the pane.
 
 To its right, buttons with tooltips pull (down arrow), push (up arrow), and
-clean merged local branches (brush). Pull is fast-forward only. Push sends
+clean merged branches (brush). Pull is fast-forward only. Push sends
 only HEAD to the current branch's configured upstream; a missing upstream is
 reported as an error. Controls are disabled while an action runs and remote
 actions have a two-minute timeout. The log, changes, and tree refresh afterward.
@@ -55,9 +55,20 @@ share a checkout lock across windows; this does not lock out external Git tools.
 
 Cleanup immediately deletes local branches whose tips are ancestors of either
 local main or local master. It preserves main, master, the current branch,
-and every branch checked out in another worktree. Remote branches are untouched.
-If neither base exists, nothing is deleted. The pane reports deleted names
-or that no branches qualified. Squash merges are not ancestry merges.
+and every branch checked out in another worktree. If neither local base exists,
+no local branches are deleted. The pane reports deleted names or that no local
+branches qualified. Squash merges are not ancestry merges.
+
+After local cleanup, Git fetches and prunes heads from each configured remote.
+Branches merged into that same remote's main or master appear in a confirmation
+dialog. Remote main, master, and HEAD are excluded. Cancel or dismiss keeps all
+remote branches; local cleanup has already completed. Confirm deletes all listed
+branches from their remotes. The server fetches and validates the entire selection
+again before deletion, and explicit tip leases reject concurrent branch updates.
+Newly eligible branches require another confirmation. Deletion errors report any
+branches already removed. Fetch failures leave local cleanup intact and show an
+error. Remotes with different fetch and push destinations are rejected because
+the fetched history cannot safely establish eligibility at the push destination.
 
 A row is the commit subject with a small `[N]` chip for affected files, and
 under it, in grey, what identifies it:
@@ -137,7 +148,7 @@ other, revision included.
 | Method | Path | Answers |
 |---|---|---|
 | GET | `/api/projects/:id/log?limit=&graph=` | `{branch, branches[], head, operation, commits[]}` — up to 500 commits in topological order; graph includes all branch/tag histories |
-| POST | `/api/projects/:id/branches/:action?repo=` | `{branch, target?}`; switch/pull/push return 204, clean returns `{deleted[]}`; merge/rebase/continue/abort return `{message}` |
+| POST | `/api/projects/:id/branches/:action?repo=` | `{branch, target?}`; switch/pull/push return 204, clean returns `{deleted[]}`; check-remote returns `{remotes[{remote,branch,tip}]}`; clean-remote accepts `{branch,remotes[]}` and returns `{deleted[],error?}`; merge/rebase/continue/abort return `{message}` |
 | GET | `/api/projects/:id/commit?hash=` | `{hash, files[{path,status,additions,deletions,binary}]}` |
 | GET | `/api/projects/:id/commit/diff?hash=&path=` | the same `{path, diff, partial}` a working-tree diff answers |
 

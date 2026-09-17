@@ -21,8 +21,9 @@ func (s *Server) branchAction(c *fiber.Ctx) error {
 	}
 	defer unlock()
 	var body struct {
-		Branch string `json:"branch"`
-		Target string `json:"target"`
+		Branch  string         `json:"branch"`
+		Target  string         `json:"target"`
+		Remotes []remoteBranch `json:"remotes"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return badRequest("branch is required")
@@ -65,6 +66,14 @@ func (s *Server) branchAction(c *fiber.Ctx) error {
 			return badRequest("current branch has no upstream branch")
 		}
 		args = []string{"push", "--", strings.TrimSpace(remote), "HEAD:" + strings.TrimSpace(target)}
+	case "clean-remote":
+		return cleanRemoteBranches(c, root, body.Remotes)
+	case "check-remote":
+		candidates, err := mergedRemoteBranches(root)
+		if err != nil {
+			return badRequest("%s", err)
+		}
+		return c.JSON(fiber.Map{"remotes": candidates})
 	case "clean":
 		deleted := []string{}
 		for _, base := range []string{"main", "master"} {

@@ -40,10 +40,7 @@ func TestDesktopImageUpload(t *testing.T) {
 		return
 	}
 
-	module, err := os.ReadFile("../../../web/src/prompt-images.js")
-	if err != nil {
-		t.Fatal(err)
-	}
+	sources := webModules(t, "prompt-images.js")
 	const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aL1sAAAAASUVORK5CYII="
 	want, err := base64.StdEncoding.DecodeString(png)
 	if err != nil {
@@ -51,7 +48,8 @@ func TestDesktopImageUpload(t *testing.T) {
 	}
 	// Both ClipboardItem.getType() and DataTransferItem.getAsFile() reach
 	// uploadImage. Test their Blob and File shapes through the actual module.
-	html := fmt.Sprintf(`<script type="module">
+	html := fmt.Sprintf(`<script type="importmap">{"imports":{"vue":"/vue.js"}}</script>
+<script type="module">
 import { uploadImage } from '/prompt-images.js';
 try {
   const bytes = Uint8Array.from(atob('%s'), c => c.charCodeAt(0));
@@ -62,6 +60,8 @@ try {
   await fetch('/result');
 } catch (e) { await fetch('/result?error=' + encodeURIComponent(e.message)); }
 </script>`, png)
+	sources["index.html"] = &fstest.MapFile{Data: []byte(html)}
+
 	started := make(chan context.Context, 1)
 	var uploads atomic.Int32
 	app := &options.App{
@@ -69,10 +69,7 @@ try {
 		Width: 400, Height: 300,
 		OnStartup: func(ctx context.Context) { started <- ctx },
 		AssetServer: &assetserver.Options{
-			Assets: fstest.MapFS{
-				"index.html":       &fstest.MapFile{Data: []byte(html)},
-				"prompt-images.js": &fstest.MapFile{Data: module},
-			},
+			Assets: sources,
 			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				switch r.URL.Path {
 				case "/api/attachments":

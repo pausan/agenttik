@@ -77,5 +77,5 @@ Matching is case-insensitive and accepts letters in order; the best 100
 matches are shown with matching letters highlighted. Arrow keys select a
 result, Enter or a click opens it, and Escape dismisses the dialog.
 Text opens in Edit; images and fonts open in Preview. This also applies to
-existing tabs and does not change the remembered mode for Tree selections.
+existing tabs and uses the same editor-first default as Tree selections.
 File search uses the usual temporary file tab and preserves unsaved edits.

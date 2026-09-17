@@ -102,7 +102,7 @@ export const S = reactive({
   // tasks rather than eight projects' at once. From Settings, and unlike the
   // fold state above it is remembered.
   foldOthers: true,
-  fileMode: "edit", // "edit", "diff" or "preview", carried to the next file
+  fileMode: "edit", // default for file links without a line number
   diffView: "unified", // "unified" or "split", likewise
   closing: null, // a close waiting on what to do with unsaved edits
   promptFocus: 0,
@@ -2039,19 +2039,18 @@ export function isDirty(tab) {
 /* One click opens a file in the project's temporary tab, which the next file
    clicked takes over. Reading through a tree then leaves one tab behind
    rather than twenty. A double click pins the tab instead, and so does typing
-   in it; a pinned tab is only closed by hand. */
-export function openFile(path, pin = false) {
-  return openFileIn(currentProjectID(), S.owner?.id || "", path, { pin });
-}
-
-/* File search always chooses the editor, or the native preview for media,
-   without changing the user's remembered mode for Tree selections. */
-export async function openFileForEdit(path) {
+   in it; a pinned tab is only closed by hand. The Tree prefers Edit, with
+   Preview for media; Changes explicitly requests Diff, even for an open tab. */
+export async function openFile(path, pin = false, mode = isImage(path) || isFont(path) ? "preview" : "edit") {
   const projectID = currentProjectID();
-  const mode = isImage(path) || isFont(path) ? "preview" : "edit";
-  await openFileIn(projectID, S.owner?.id || "", path, { mode });
+  await openFileIn(projectID, S.owner?.id || "", path, { pin, mode });
   const tab = S.tabs.find((t) => t.id === `file:${projectID}:${path}`);
   if (tab) await setFileMode(tab, mode, false);
+}
+
+/* File search uses the same editor-first default as the Tree. */
+export function openFileForEdit(path) {
+  return openFile(path);
 }
 
 /* Markdown links resolve from the document's folder, or from the project
@@ -2121,7 +2120,7 @@ async function gotoLine(tab, line) {
   tab.goto = line;
 }
 
-/* openingMode is the view a file opens in: whichever was read last, mostly.
+/* openingMode is the fallback for file links: whichever was read last, mostly.
    A file opened at a line opens in the editor, the one view a line can be
    shown in. Preview is remembered like the other two, but a file that renders
    as nothing opens in the editor instead of on a blank pane — and an image,
@@ -2235,7 +2234,7 @@ async function loadFileTab(tab) {
   tab.content = f.binary ? "(binary file)" : f.content + (f.partial ? "\n\n… truncated" : "");
 }
 
-/* setFileMode switches one tab and remembers the choice for the next file —
+/* setFileMode switches one tab and remembers the choice for file links —
    but only once the switch has worked, so a view that cannot be fetched puts
    the tab back rather than leaving it on an empty pane. */
 export async function setFileMode(tab, mode, remember = true) {

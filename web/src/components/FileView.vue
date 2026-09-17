@@ -3,10 +3,8 @@
    text, so it offers only the last two, and its diff is the two pictures
    rather than two columns of lines.
 
-   The view is remembered rather than reset per file — reading one diff
-   usually means the next changed file wants one too — so the next file opens
-   the way this one was left. A file that renders as nothing has no Preview to
-   offer and falls back to the editor.
+   Tree selections prefer Edit, with Preview for images and fonts. Changes
+   and commit file lists open Diff. The toggle changes the current tab's view.
 
    The bar underneath is the file's own: a conversation's prompt box has no
    business under a file, so MainPanel leaves it out and this takes its

@@ -51,8 +51,8 @@ const menu = computed(() => [
             type="button"
             class="flex min-w-0 flex-1 select-none items-center gap-1.5 rounded-[var(--ui-radius)] px-1.5 py-0.5 text-left font-mono text-xs hover:bg-elevated hover:text-highlighted"
             :data-path="f.path"
-            @click="openFile(f.path)"
-            @dblclick="openFile(f.path, true)"
+            @click="openFile(f.path, false, 'diff')"
+            @dblclick="openFile(f.path, true, 'diff')"
           >
             <span v-if="f.status" class="w-5 shrink-0 text-primary">{{ f.status }}</span>
             <span class="path-clip truncate"><span>{{ f.path }}</span></span>

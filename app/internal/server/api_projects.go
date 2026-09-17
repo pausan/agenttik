@@ -191,6 +191,9 @@ func (s *Server) deleteProject(c *fiber.Ctx) error {
 	for _, session := range sessions {
 		s.runner.Stop(session.ID)
 	}
+	// Its terminals go the same way, and for the same reason: a shell sitting
+	// in a folder no project points at any more has nothing left to show it.
+	s.terminals.CloseProject(id)
 	if err := s.store.DeleteProject(id); err != nil {
 		return err
 	}

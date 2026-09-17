@@ -35,6 +35,7 @@ import (
 	"github.com/pausan/agenttik/app/internal/runner"
 	"github.com/pausan/agenttik/app/internal/smartsearch"
 	"github.com/pausan/agenttik/app/internal/store"
+	"github.com/pausan/agenttik/app/internal/terminals"
 	"github.com/pausan/agenttik/app/internal/update"
 	"github.com/pausan/agenttik/web"
 )
@@ -53,6 +54,11 @@ type Server struct {
 	gitLocks sync.Map // canonical checkout path -> *sync.Mutex
 	watchers *watchers
 	search   *smartsearch.Service
+
+	// terminals are the shells behind the terminal tabs, held here rather
+	// than in the store because a shell only exists while this process does.
+	// See specs/073-terminals.md.
+	terminals *terminals.Manager
 
 	// closing is closed by Shutdown to release the SSE handlers. Fiber waits
 	// for every open connection, and a live stream never ends on its own, so
@@ -118,7 +124,8 @@ func New(s *store.Store, reg *agent.Registry, r *runner.Runner) *Server {
 	}))
 
 	srv := &Server{app: app, store: s, runner: r, registry: reg,
-		watchers: newWatchers(r.Hub()), closing: make(chan struct{})}
+		watchers: newWatchers(r.Hub()), terminals: terminals.NewManager(),
+		closing: make(chan struct{})}
 	srv.auth = netauth.New(srv.credentials)
 	srv.search = smartsearch.New(filepath.Join(s.Dir(), "smart-search"), func() ([]store.Session, error) {
 		return s.ListSessions(store.SessionFilter{})
@@ -245,6 +252,8 @@ func (s *Server) routes() {
 	api.Post("/projects/:id/open", s.openEntry)
 	api.Get("/projects/:id/diff", s.projectDiff)
 	api.Get("/projects/:id/raw", s.projectRawImage)
+	api.Get("/projects/:id/terminals", s.listTerminals)
+	api.Post("/projects/:id/terminals", s.openTerminalTab)
 	api.Post("/projects/:id/sessions/order", s.reorderSessions)
 	api.Post("/projects/:id/schedules/order", s.reorderSchedules)
 
@@ -267,8 +276,14 @@ func (s *Server) routes() {
 	api.Delete("/schedules/:id", s.deleteSchedule)
 	api.Post("/schedules/:id/run", s.runScheduleNow)
 
+	api.Delete("/terminals/:id", s.closeTerminalTab)
+	api.Post("/terminals/:id/input", s.writeTerminal)
+	api.Post("/terminals/:id/resize", s.resizeTerminal)
+
 	// One stream for every open tab. See streamAll.
 	api.Get("/stream", s.streamAll)
+	// Terminal output has a stream of its own. See streamTerminals.
+	api.Get("/stream/terminals", s.streamTerminals)
 
 	api.Get("/stars", s.listStars)
 	api.Post("/stars", s.addStar)
@@ -293,6 +308,7 @@ func (s *Server) Listener(ln net.Listener) error { return s.app.Listener(ln) }
 // keep the app alive after the window is closed.
 func (s *Server) Shutdown() error {
 	s.CloseProfiles()
+	s.terminals.Shutdown()
 	s.closeOnce.Do(func() { close(s.closing); s.search.Close() })
 	return s.app.ShutdownWithTimeout(shutdownTimeout)
 }
@@ -407,6 +423,8 @@ func errorHandler(c *fiber.Ctx, err error) error {
 		// removed, or one nothing has signed into yet. Signing in, or picking
 		// another subscription for the task, is the fix.
 		code = fiber.StatusBadRequest
+	case errors.Is(err, terminals.ErrNotFound):
+		code = fiber.StatusNotFound
 	case errors.Is(err, agent.ErrNotImplemented):
 		code = fiber.StatusNotImplemented
 	default:

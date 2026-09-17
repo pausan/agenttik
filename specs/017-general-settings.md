@@ -103,6 +103,18 @@ are scoped to their project; archived items count toward both bounds.
 Sidebar and project task lists share these positions. Schedule rows and
 archive history keep their own ordering.
 
+## Task sounds
+
+**Play task sounds** is off by default. When enabled, this window plays a short
+synthesized ding on a live final turn completion or error, including tasks without
+an open tab. An error and its completion sound only once per turn; duplicate
+project/session deliveries are ignored. Loading history does not play sounds.
+The choice is stored as `agenttik.taskSounds` in browser/profile preferences and
+Reset defaults turns it off. The filter matches sound, ding, notifications,
+completion, attention, and error. Audio is initialized only when enabled and
+unlocked by a click or key press; browser autoplay restrictions can keep it silent
+until that interaction. There is no interactive approval bridge in the task runner.
+
 ## Database
 
 Database appears in General. It shows the absolute database path

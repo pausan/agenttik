@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watchEffect } from "vue";
 
-import { PROMPT_CHORDS, S, copyText, enterDoes, fail, setEnterDoes, setFoldOthers, resetPreferences } from "../../store";
+import { PROMPT_CHORDS, S, taskSounds, copyText, enterDoes, fail, setEnterDoes, setFoldOthers, resetPreferences } from "../../store";
 import { fuzzyAny } from "../../fuzzy";
 import { fileSize } from "../../file-info.js";
 import { api } from "../../api";
@@ -37,6 +37,9 @@ async function copyDatabasePath() {
   copied.value = await copyText(database.value.database_path);
 }
 const showDatabase = computed(() => fuzzyAny(["general", "database", "path", "size", "storage", "copy"], props.filter) !== null);
+
+const soundEnabled = taskSounds.enabled;
+const showSounds = computed(() => fuzzyAny(["general", "sound", "ding", "notifications", "done", "completion", "attention", "error"], props.filter) !== null);
 
 const desktopCount = ref(0);
 const position = ref("top");
@@ -112,7 +115,7 @@ const searchRows = computed(() => fuzzyAny(["general", "project", "tasks", "smar
   { value: false, label: "Fuzzy Search (default)", description: "Match task titles as you type" },
   { value: true, label: "Smart Search", description: "Find related tasks by meaning, across languages" },
 ] : []);
-watchEffect(() => emit("count", Number(showReset.value) + Number(showDatabase.value) + desktopCount.value + promptRows.value.length + foldRows.value.length + positionRows.value.length + searchRows.value.length));
+watchEffect(() => emit("count", Number(showSounds.value) + Number(showReset.value) + Number(showDatabase.value) + desktopCount.value + promptRows.value.length + foldRows.value.length + positionRows.value.length + searchRows.value.length));
 
 const chosen = computed({
   get: () => enterDoes(),
@@ -188,6 +191,11 @@ const folding = computed({
     </p>
     <URadioGroup :model-value="smartSearch.enabled" :items="searchRows" size="sm" @update:model-value="setSmartSearch" />
     <SmartSearchProgress />
+  </section>
+  <section v-if="showSounds" class="mt-5">
+    <div class="mb-0.5 font-semibold text-highlighted">Task sounds</div>
+    <p class="mb-2 text-xs text-dimmed">Play a ding when a task finishes or reports an error. Off by default. Applies to this browser/profile.</p>
+    <USwitch :model-value="soundEnabled" label="Play task sounds" @update:model-value="taskSounds.setEnabled" />
   </section>
   <section v-if="showDatabase" class="mt-5">
     <div class="mb-0.5 font-semibold text-highlighted">Database</div>

@@ -12,6 +12,7 @@
    project's work. */
 
 import { nextTick, reactive, ref, watch } from "vue";
+import { createTaskSounds, TASK_SOUNDS_KEY } from "./task-sounds.js";
 import { trackTaskAttention } from "./task-attention.js";
 import { recordError } from "./diagnostics.js";
 import { api, apiURL, storage, diagnosticStorage } from "./api";
@@ -476,6 +477,10 @@ export async function reorderStars(stars) {
   })));
   S.stars = stars.map((star, index) => ({ ...star, position: index + 1 }));
 }
+
+export const taskSounds = createTaskSounds(storage);
+document.addEventListener("pointerdown", taskSounds.unlock);
+document.addEventListener("keydown", taskSounds.unlock);
 
 const attentionVisible = ref(!document.hidden);
 document.addEventListener("visibilitychange", () => { attentionVisible.value = !document.hidden; });
@@ -2853,6 +2858,7 @@ function resubscribe() {
 let lastTurnEvent = "";
 
 function onEvent(msg) {
+  taskSounds.onEvent(msg);
   // The working tree moved on disk: from a turn, an editor, or a git command
   // in a terminal. Either way what is on screen is now out of date.
   if (msg.event?.type === "files_changed") {
@@ -3552,6 +3558,7 @@ export async function init() {
   loadWindow();
   loadTaskPageSize();
   loadFoldOthers();
+  taskSounds.load();
   // Open tabs are saved, but an edited file is not — it would put a whole
   // working copy in localStorage — so the browser's own warning is what
   // stands between unsaved edits and a reload.
@@ -3608,10 +3615,11 @@ export async function resetPreferences() {
   setTaskPageSize(25);
   resetAllKeys();
   setSmartSearch(false);
+  taskSounds.setEnabled(false);
   for (const [key, value] of Object.entries(DEFAULT_COLORS)) setColor(key, value);
   for (const key of [LAYOUT_KEY, LAST_USED_KEY, FILE_MODE_KEY, DIFF_VIEW_KEY,
     COLORS_KEY, KEYS_KEY, WINDOW_KEY, TASK_PAGE_KEY, SCHEDULE_KEY, FOLD_KEY,
-    "agenttik.smartSearch"]) storage.removeItem(key);
+    "agenttik.smartSearch", TASK_SOUNDS_KEY]) storage.removeItem(key);
   await Promise.all([loadProviders(), loadActionModels()]);
 }
 

@@ -213,3 +213,24 @@ test("automatic action models persist independently and reset", async ({ page })
   await actions.getByRole("button", { name: "Use default", exact: true }).click();
   await expect(commit).toContainText("Fake Quick");
 });
+
+test("task sounds default off, persist, filter, and reset", async ({ page }) => {
+  await openSettings(page, "General");
+  const toggle = page.getByRole("switch", { name: "Play task sounds", exact: true });
+  await expect(toggle).not.toBeChecked();
+  await toggle.click();
+  await expect(toggle).toBeChecked();
+  await page.reload();
+  await openSettings(page, "General");
+  await expect(toggle).toBeChecked();
+  await page.getByPlaceholder("Filter settings…").fill("ding");
+  await expect(toggle).toBeVisible();
+  await page.getByPlaceholder("Filter settings…").fill("");
+  await page.getByRole("button", { name: "Reset defaults", exact: true }).click();
+  await page.getByRole("dialog", { name: "Reset defaults?", exact: true })
+    .getByRole("button", { name: "Reset defaults", exact: true }).click();
+  await expect(toggle).not.toBeChecked();
+  await page.reload();
+  await openSettings(page, "General");
+  await expect(toggle).not.toBeChecked();
+});

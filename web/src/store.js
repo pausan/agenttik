@@ -170,6 +170,12 @@ export function fail(err) {
   if (toast) toast.add({ title: "Something went wrong", description, color: "error" });
 }
 
+/* notice is fail's calm twin: what was asked for cannot happen yet, and
+   nothing is broken. It says what comes first instead of reporting an error. */
+export function notice(title, description) {
+  if (toast) toast.add({ title, description, color: "info" });
+}
+
 /* ------------------------------------------------------------- providers */
 
 export async function loadProviders() {
@@ -1802,6 +1808,11 @@ export async function startTask(project) {
    project page's New task button. A session, project, or file tab all
    identify their owning project. */
 export function startCurrentTask() {
+  // An empty sidebar has nowhere to put a task, and that is a first launch
+  // rather than a failure: say which step comes before this one.
+  if (!S.projects.length) {
+    return notice("No projects yet", "Add the folder you want to work in from the Projects panel, or take the Quick Start Tour in Settings → Help.");
+  }
   const id = currentProjectID();
   const project = S.project?.project?.id === id
     ? S.project.project

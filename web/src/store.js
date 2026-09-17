@@ -487,6 +487,11 @@ document.addEventListener("visibilitychange", () => { attentionVisible.value = !
 function saveTaskAttention() {
   try { storage.setItem("agenttik.unreadTasks", JSON.stringify(S.unreadTasks)); } catch { /* memory still works */ }
 }
+export function toggleTaskUnread(id) {
+  if (S.unreadTasks[id]) delete S.unreadTasks[id];
+  else S.unreadTasks[id] = -1; // Manually unread, including tasks without turns.
+  saveTaskAttention();
+}
 trackTaskAttention(S.unreadTasks,
   () => S.tab?.kind === "session" ? S.tab.sessionID : null,
   () => attentionVisible.value, saveTaskAttention);
@@ -3576,7 +3581,7 @@ export async function init() {
     try {
       const unread = JSON.parse(storage.getItem("agenttik.unreadTasks") || "{}");
       for (const [id, turn] of Object.entries(unread || {})) {
-        if (Number.isSafeInteger(turn) && turn > 0) S.unreadTasks[id] = turn;
+        if (Number.isSafeInteger(turn) && (turn > 0 || turn === -1)) S.unreadTasks[id] = turn;
       }
     } catch { /* Ignore invalid saved state. */ }
     await restoreOpenTabs();

@@ -424,3 +424,38 @@ test("new task choices stay with their project across reloads", async ({ page })
   expect((await created).postDataJSON()).toMatchObject({ model: "fake-quick", effort: "high" });
   await expect(modelButton(page)).toContainText("Fake Quick");
 });
+
+test("task context menus rename and persist unread without opening the task", async ({ page }) => {
+  await addProject(page);
+  await openProject(page);
+  await newTask(page);
+  const row = sidebar(page).locator(".task-row").first();
+  await row.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Mark unread", exact: true }).click();
+  await expect(row.locator(".task-title")).toHaveClass(/font-bold/);
+  await page.waitForTimeout(3200);
+  await expect(row.locator(".task-title")).toHaveClass(/font-bold/);
+  await openProject(page);
+  await page.reload();
+  await expect(row.locator(".task-title")).toHaveClass(/font-bold/);
+  await row.click({ button: "right" });
+  await expect(page.getByRole("menuitem", { name: "Archive task", exact: true })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Stop task", exact: true })).toHaveCount(0);
+  await page.getByRole("menuitem", { name: "Mark read", exact: true }).click();
+  await expect(row.locator(".task-title")).not.toHaveClass(/font-bold/);
+  await expect(page.getByPlaceholder("Ask the agent…")).toBeHidden();
+  await row.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Rename task", exact: true }).click();
+  await row.getByRole("textbox").fill("Context renamed");
+  await row.getByRole("textbox").press("Enter");
+  await expect(row.locator(".task-title")).toHaveText("Context renamed");
+  await expect(page.locator(".task-row").filter({ hasText: "Context renamed" })).toHaveCount(2);
+  const projectRow = page.locator(".task-row").filter({ hasText: "Context renamed" }).last();
+  await projectRow.click({ button: "right" });
+  await expect(page.getByRole("menuitem", { name: "Delete task", exact: true })).toBeVisible();
+  await page.getByRole("menuitem", { name: "Archive task", exact: true }).click();
+  await expect(row).toHaveCount(0);
+  await projectRow.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Unarchive task", exact: true }).click();
+  await expect(row).toBeVisible();
+});

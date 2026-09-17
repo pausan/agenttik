@@ -8,10 +8,12 @@
 
    A title is three to seven words the model chose, which is not always enough
    to tell two tasks apart, so hovering the row shows its opening prompt. */
-import { nextTick, ref } from "vue";
+import { computed, nextTick, ref } from "vue";
 
 import { taskDot } from "../task-attention.js";
 import StatusDot from "./StatusDot.vue";
+
+defineOptions({ inheritAttrs: false });
 
 const props = defineProps({
   title: { type: String, default: "" },
@@ -41,7 +43,17 @@ const props = defineProps({
   stoppable: Boolean,
 });
 
-const emit = defineEmits(["select", "stop", "toggle-archive", "delete", "rename", "editing", "open-job"]);
+const emit = defineEmits(["select", "stop", "toggle-archive", "delete", "rename", "editing", "open-job", "toggle-unread"]);
+
+const menu = computed(() => [
+  { label: "Open task", icon: "i-lucide-message-square", onSelect: () => emit("select") },
+  { label: props.unread ? "Mark read" : "Mark unread", icon: props.unread ? "i-lucide-mail-open" : "i-lucide-mail", onSelect: () => emit("toggle-unread") },
+  { label: "Rename task", icon: "i-lucide-pencil", onSelect: edit },
+  ...(props.job ? [{ label: "Open scheduled job", icon: "i-lucide-calendar", onSelect: () => emit("open-job") }] : []),
+  ...(props.stoppable ? [{ label: "Stop task", icon: "i-lucide-square", onSelect: () => emit("stop") }] : []),
+  ...(props.archive ? [{ label: props.archived ? "Unarchive task" : "Archive task", icon: props.archived ? "i-lucide-archive-restore" : "i-lucide-archive", onSelect: () => emit("toggle-archive") }] : []),
+  ...(props.deletable ? [{ label: "Delete task", icon: "i-lucide-trash-2", color: "error", onSelect: () => emit("delete") }] : []),
+]);
 
 const editing = ref(false);
 const draft = ref("");
@@ -76,7 +88,9 @@ defineExpose({ edit });
 </script>
 
 <template>
+  <UContextMenu :items="menu" :disabled="editing" :content="{ onCloseAutoFocus: (event) => event.preventDefault() }">
   <div
+    v-bind="$attrs"
     class="task-row mb-px flex items-center rounded-[var(--ui-radius)]"
     :class="active ? 'bg-primary/10' : 'hover:bg-elevated'"
   >
@@ -190,4 +204,5 @@ defineExpose({ edit });
       </button>
     </template>
   </div>
+  </UContextMenu>
 </template>

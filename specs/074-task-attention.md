@@ -14,7 +14,18 @@ bold title and returns the dot to its normal status.
 The store records final persisted `done` stream events, including tasks with
 no open tab. A new turn clears the previous unread result. One Vue watcher
 owns one timeout for the selected transcript; row count adds no timers.
-Unread turn IDs are saved through instance/profile-scoped UI storage and
+Right-clicking a sidebar or project task row opens actions for opening, renaming,
+and marking read or unread, plus stop, archive/unarchive, scheduled job, and
+project-list deletion when those controls are available. Right-clicking does
+not select the task; deletion keeps the existing confirmation. During inline
+rename the text field keeps its native context menu.
+
+Mark unread works even without a completed turn. On the selected task it holds
+until leaving and returning to the transcript; hiding the window alone does
+not clear it. A new turn or completion replaces that manual state. Manual
+unread uses `-1` alongside positive unread turn IDs.
+
+Unread markers are saved through instance/profile-scoped UI storage and
 restored on reload. Private mode uses memory storage. Read state is local to
 this client; completions missed while disconnected are not backfilled.
 

@@ -31,6 +31,7 @@ import {
   setScheduleArchived,
   setSchedulePaused,
   setTaskArchived,
+  toggleTaskUnread,
   setTaskPageSize,
   startTask,
   stopTask,
@@ -344,6 +345,7 @@ async function doDelete() {
             :prompt="row.task.prompt"
             :status="row.task.status"
             :unread="!!S.unreadTasks[row.task.id]"
+            @toggle-unread="toggleTaskUnread(row.task.id)"
             :queued="row.task.queue_count"
             :sub="subtitle(row.task)"
             :outcome="row.archived ? row.task.summary : ''"

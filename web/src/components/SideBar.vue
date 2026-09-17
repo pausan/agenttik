@@ -17,6 +17,7 @@ import {
   setScheduleArchived,
   setSchedulePaused,
   setTaskArchived,
+  toggleTaskUnread,
   setProjectHidden,
   stopTask,
   toggleProjectTasks,
@@ -332,6 +333,7 @@ function onTaskDrop(e) {
               :prompt="s.prompt"
               :status="s.status"
               :unread="!!S.unreadTasks[s.id]"
+              @toggle-unread="toggleTaskUnread(s.id)"
               :queued="s.queue_count"
               :active="S.detail?.session.id === s.id"
               :number="taskNumber(p, s)"

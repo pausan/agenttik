@@ -56,3 +56,36 @@ test("error red survives acknowledgement and running keeps its activity dot", ()
   assert.equal(taskDot("running", true), "running");
   assert.equal(taskDot("waiting", false), "waiting");
 });
+
+test("manually unread stays unread for the current visit, then clears after returning", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const unread = reactive({ a: 1 });
+  const selected = ref("a");
+  const visible = ref(true);
+  const stop = trackTaskAttention(unread, () => selected.value, () => visible.value);
+  t.after(stop);
+  t.mock.timers.tick(3000);
+  unread.a = -1;
+  t.mock.timers.tick(4000);
+  visible.value = false;
+  visible.value = true;
+  t.mock.timers.tick(4000);
+  assert.equal(unread.a, -1);
+  selected.value = null;
+  selected.value = "a";
+  t.mock.timers.tick(2999);
+  assert.equal(unread.a, -1);
+  t.mock.timers.tick(1);
+  assert.equal(unread.a, undefined);
+});
+
+test("a new completion replaces a manual unread hold", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const unread = reactive({});
+  const stop = trackTaskAttention(unread, () => "a", () => true);
+  t.after(stop);
+  unread.a = -1;
+  unread.a = 7;
+  t.mock.timers.tick(3000);
+  assert.equal(unread.a, undefined);
+});

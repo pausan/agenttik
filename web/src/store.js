@@ -22,7 +22,7 @@ import { initSmartSearch, setSmartSearch } from "./smart-search.js";
 
 /* Sidebar widths are the user's, so they are kept across reloads. */
 const LAYOUT_KEY = "agenttik.layout";
-const LAST_USED_KEY = "agenttik.lastUsed";
+const LAST_USED_KEY = "agenttik.lastUsedByProject";
 const OPEN_TABS_KEY = "agenttik.openTabs";
 const FILE_MODE_KEY = "agenttik.fileMode";
 const DIFF_VIEW_KEY = "agenttik.diffView";
@@ -1663,10 +1663,8 @@ function tabLabel(session) {
   return session.title?.trim() || "New task";
 }
 
-/* A new session asks nothing: it opens empty on the model, effort and
-   permission the last conversation was using. localStorage keeps that across
-   a reload; without it we fall back to the most recent session, then to a
-   starred combination, then to whatever is installed. */
+/* New tasks inherit the newest task in their project. Storage preserves its
+   choice across reloads and after it leaves the active task list. */
 export function loadLastUsed() {
   try {
     S.lastUsed = JSON.parse(storage.getItem(LAST_USED_KEY));
@@ -1676,12 +1674,18 @@ export function loadLastUsed() {
 }
 
 function rememberUsed(sess) {
+  const previous = S.lastUsed?.[sess.project_id];
+  if (previous && previous.created_at > sess.created_at) return;
   S.lastUsed = {
-    provider: sess.provider,
-    account_id: sess.account_id || 0,
-    model: sess.model,
-    effort: sess.effort || "",
-    permission: sess.permission,
+    ...S.lastUsed,
+    [sess.project_id]: {
+      created_at: sess.created_at,
+      provider: sess.provider,
+      account_id: sess.account_id || 0,
+      model: sess.model,
+      effort: sess.effort || "",
+      permission: sess.permission,
+    },
   };
   try {
     storage.setItem(LAST_USED_KEY, JSON.stringify(S.lastUsed));
@@ -1692,12 +1696,15 @@ function rememberUsed(sess) {
 
 /* sessionDefaults skips any choice that no longer works — a CLI uninstalled,
    a model retired — rather than starting a session that cannot run. */
-function sessionDefaults() {
-  const recent = S.sessions.reduce(
-    (best, s) => (!best || s.last_active_at > best.last_active_at ? s : best),
+async function sessionDefaults(projectID) {
+  const sessions = await api("GET", `/api/sessions?window=all&project_id=${projectID}&include_done=true&limit=0`);
+  const recent = sessions.reduce(
+    (best, s) => (!best || s.created_at > best.created_at ? s : best),
     null,
   );
-  for (const c of [S.lastUsed, recent, S.stars[0]]) {
+  const saved = S.lastUsed?.[projectID];
+  const latest = recent && (!saved || recent.created_at >= saved.created_at) ? recent : saved;
+  for (const c of [latest, recent, S.stars[0]]) {
     if (!c) continue;
     const p = providerOf(c.provider);
     if (!p || !p.available || !p.models.some((m) => m.id === c.model)) continue;
@@ -1757,7 +1764,12 @@ async function blankSessionID(projectID) {
    to the front with the cursor in the box, which is what was being asked
    for. */
 export async function startTask(project) {
-  const cfg = sessionDefaults();
+  let cfg;
+  try {
+    cfg = await sessionDefaults(project.id);
+  } catch (e) {
+    return fail(e);
+  }
   /* The prompt bar's focus watcher only sees a request made after it mounts,
      and coming from a project page mounts it with this very switch, so the
      cursor is asked for once the switch has been drawn. */

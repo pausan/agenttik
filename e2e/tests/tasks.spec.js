@@ -1,5 +1,6 @@
 import {
   FAKE_MODEL,
+  REPO,
   addProject,
   expect,
   modelButton,
@@ -397,4 +398,29 @@ test("Ctrl+W closes the active tab, falling back to the project when a task clos
   await page.keyboard.press("Control+w");
   await expect(page.getByRole("heading", { name: "agenttik" })).toHaveCount(0);
   await expect(page.getByText("Pick a task, or a project to start one.")).toBeVisible();
+});
+
+
+test("new task choices stay with their project across reloads", async ({ page }) => {
+  await addProject(page);
+  await openProject(page);
+  await newTask(page);
+  await pickModel(page, "Fake Quick");
+  await page.getByTitle("Effort", { exact: true }).click();
+  await page.getByRole("option", { name: "High", exact: true }).click();
+  await page.getByPlaceholder("Ask the agent…").fill("keep project A task");
+
+  await addProject(page, REPO + "/web");
+  await openProject(page, REPO + "/web");
+  await newTask(page);
+  await pickModel(page, "Fake Careful");
+  await page.getByPlaceholder("Ask the agent…").fill("keep project B task");
+  await page.reload();
+  await expect(modelButton(page)).toContainText("Fake Careful");
+
+  await sidebar(page).getByText(REPO, { exact: true }).click();
+  const created = page.waitForRequest((r) => r.method() === "POST" && r.url().endsWith("/api/sessions"));
+  await newTask(page);
+  expect((await created).postDataJSON()).toMatchObject({ model: "fake-quick", effort: "high" });
+  await expect(modelButton(page)).toContainText("Fake Quick");
 });

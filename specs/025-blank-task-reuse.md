@@ -1,8 +1,9 @@
 # Reusing an untitled task
 
-New and reused blank tasks preserve the last-used subscription, model and effort
-together, including after a reload. A removed subscription falls back to the
-provider default. Selecting an existing task updates the remembered choice.
+New and reused blank tasks inherit the subscription, model, effort and permission
+of the newest task in their project, including after a reload. Opening an older
+task or using another project does not replace that choice. A removed
+subscription falls back to the provider default.
 
 Starting a task lands on an untouched one of that project wherever it is, not
 only when it is the tab in front. The chord, the strip's `+` and both New task

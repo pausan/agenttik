@@ -12,6 +12,19 @@ TAG_SCRIPT = textwrap.dedent(WORKFLOW.split('        run: |\n')[1].split('\n  bu
 
 
 class BuildVersionTest(unittest.TestCase):
+    def test_release_title(self):
+        command = WORKFLOW.split('        run: gh release create ', 1)[1].splitlines()[0]
+        for tag, title in [('v0/v0.7.8', 'v0.7.8'),
+                           ('v12/v12.3.4-rc.1', 'v12.3.4-rc.1'),
+                           ('v0.7.8', 'v0.7.8')]:
+            with self.subTest(tag=tag):
+                result = subprocess.check_output(
+                    ['bash', '-eu', '-c',
+                     'gh() { printf "%s\\n" "$@"; }; gh release create ' + command],
+                    env={**os.environ, 'TAG': tag}, text=True).splitlines()
+                self.assertEqual(result[2], tag)
+                self.assertEqual(result[result.index('--title') + 1], title)
+
     def test_versions(self):
         for tag, version in [('', None), ('v0/v0.7.1', '0.7.1'),
                              ('v12/v12.3.4-rc.1', '12.3.4'),

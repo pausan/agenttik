@@ -52,8 +52,8 @@ jobs:
       is_release: ${{ steps.tag.outputs.is_release }}
     steps:
       # A release tag is vMAJOR/vMAJOR.MINOR.PATCH, optionally carrying a suffix of
-      # letters, dashes and further dots. The full tag names the
-      # release; only the MAJOR.MINOR.PATCH part goes into the binary, so
+      # letters, dashes and further dots. The release targets the full tag;
+      # its title uses the final component. Only MAJOR.MINOR.PATCH goes into the binary, so
       # `agenttik --version` always reports a bare X.Y.Z.
       - id: tag
         env:
@@ -243,4 +243,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.release-tag.outputs.tag }}
-        run: gh release create "$TAG" release/* --title "$TAG" --generate-notes
+        run: gh release create "$TAG" release/* --title "${TAG##*/}" --generate-notes

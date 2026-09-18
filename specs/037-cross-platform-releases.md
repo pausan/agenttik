@@ -29,7 +29,8 @@ letters, dashes and further dots, creates a GitHub Release. The release job
 waits for all matrix builds to succeed, then attaches
 `agenttik_<tag>_<platform>_<architecture>` binaries, with `.exe` on Windows.
 The `<tag>` in filenames is the final component, such as `v0.7.1`; the
-release uses the full `v0/v0.7.1` tag. Legacy unprefixed tags are also accepted.
+release title also uses that final component while targeting the full
+`v0/v0.7.1` tag. Legacy unprefixed tags are also accepted.
 That job only downloads those artifacts, so it has no checkout for `gh` to read
 a git remote from and names the repository in `GH_REPO` instead.
 An untagged push names its binaries after the short commit instead.

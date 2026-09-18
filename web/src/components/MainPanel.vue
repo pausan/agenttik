@@ -100,6 +100,14 @@ function onEnd() {
 }
 
 const current = computed(() => S.tab);
+// Sandboxed HTML documents cannot expose their scroll offset to the parent.
+// Keep visited HTML previews mounted until their tabs close or change mode.
+const visitedHTML = new WeakSet();
+const retainedHTML = computed(() => {
+  const tab = current.value;
+  if (tab?.kind === "file" && tab.mode === "preview" && /\.html?$/i.test(tab.path)) visitedHTML.add(tab);
+  return S.tabs.filter((candidate) => candidate.mode === "preview" && visitedHTML.has(candidate));
+});
 const running = computed(() => !!S.detail?.running);
 
 /* Stats belongs to the task in front. Leaving that task closes its popover so
@@ -227,11 +235,17 @@ const badge = computed(() => {
       <ProjectView v-if="current?.kind === 'project'" :tab="current" />
       <PinnedPromptView v-else-if="current?.kind === 'schedule' && current.data.schedule.every === 'pinned'" :key="current.id" :tab="current" />
       <ScheduleView v-else-if="current?.kind === 'schedule'" :tab="current" />
-      <FileView v-else-if="current?.kind === 'file'" :tab="current" />
+      <FileView v-else-if="current?.kind === 'file' && !retainedHTML.includes(current)" :tab="current" />
       <!-- Keyed by the tab, so switching between two terminals builds the one
            in front rather than rewriting the last one's screen. -->
       <TerminalView v-else-if="current?.kind === 'terminal'" :key="current.id" :tab="current" />
-      <Transcript v-else @start-tour="emit('start-tour')" />
+      <Transcript v-else-if="!current || current.kind === 'session'" @start-tour="emit('start-tour')" />
+      <FileView
+        v-for="tab in retainedHTML"
+        v-show="tab === current"
+        :key="tab.id"
+        :tab="tab"
+      />
     </div>
 
     <!-- A file carries its own bar, and a terminal is one. The prompt box

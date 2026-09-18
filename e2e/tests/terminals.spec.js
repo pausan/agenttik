@@ -200,3 +200,21 @@ test("terminal clipboard menu and shortcuts copy selection and paste into the sh
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("terminal scrollback returns to the saved line after switching tabs", async ({ page }) => {
+  await addProject(page);
+  await openProject(page);
+  await newTask(page);
+  await newTerminal(page).click();
+  await run(page, "seq 1 250");
+  await expectScreen(page, "250");
+  const viewport = pane(page).locator(".xterm-viewport");
+  await viewport.evaluate(el => { el.scrollTop = 300; });
+  await expect.poll(() => viewport.evaluate(el => el.scrollTop)).toBeGreaterThan(0);
+  const offset = await viewport.evaluate(el => el.scrollTop);
+  const screen = await pane(page).innerText();
+  await page.getByRole("tab", { name: "New task", exact: true }).click();
+  await terminalTabs(page).first().click();
+  await expect.poll(() => viewport.evaluate(el => el.scrollTop)).toBe(offset);
+  await expect.poll(() => pane(page).innerText()).toBe(screen);
+});

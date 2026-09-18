@@ -15,6 +15,7 @@
    `sessions.position` is the order someone chose for the work in front of
    them, and a history is ordered by the clock. */
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { vTabScroll } from "../tab-scroll";
 
 import {
   S,
@@ -82,7 +83,7 @@ const lowerTabs = [
    — on the page itself and on every return to the tab. */
 function focusFilter() {
   if (isMobile()) return;
-  nextTick(() => filterField.value?.inputRef?.focus());
+  nextTick(() => filterField.value?.inputRef?.focus({ preventScroll: true }));
 }
 onMounted(focusFilter);
 watch(lower, (which) => {
@@ -275,7 +276,7 @@ async function doDelete() {
 </script>
 
 <template>
-  <div class="min-h-0 flex-1 overflow-auto">
+  <div v-tab-scroll="[tab]" class="min-h-0 flex-1 overflow-auto">
     <div class="mx-auto max-w-[860px] px-6 py-5 max-md:px-3 max-md:py-3">
       <div class="mb-3.5 flex items-start gap-3 border-b border-default pb-3">
         <div class="min-w-0">

@@ -10,6 +10,10 @@ The sidebar owns active-task order. Its first nine tasks in the selected project
 
 Selecting a project still changes to that project strip. Where it lands depends on how it was reached. `Alt+A` … `Alt+H` go to the work: the task that project was last left on, which is whatever session sits in its context slot, and otherwise the first task in its sidebar list — the one `Alt+1` reaches. Only a project with no tasks at all shows its own page, which is where the first task is started from. A click on a project row shows that page instead, whether or not the project is already selected: the page is the project's overview, and once a conversation is open on top of it the row is the only way back. The tabs remain one flat array, narrowed by `S.activeProjectID` for display.
 
+Open tabs preserve their scroll positions when switching tabs or projects. File
+modes keep separate positions. Closing a tab releases its scroll memory; see
+[076](076-tab-scroll.md).
+
 ## Choices
 
 **One context slot per project.** A project strip is the visible workspace, so one context slot per strip keeps a project page, one session or one scheduled job at the left edge while preserving the independent tabs beside it. A job is read the way a page is — its clock, its counter, its runs — and a strip that grew a tab per job visited would bury the work the strip is for.

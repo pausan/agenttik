@@ -10,6 +10,7 @@ import {
   updateQueuedModel,
   updateQueuedPrompt,
 } from "../store";
+import { tabScroll, vTabScroll } from "../tab-scroll";
 import Message from "./Message.vue";
 import ModelSelection from "./ModelSelection.vue";
 import ToolGroup from "./ToolGroup.vue";
@@ -64,16 +65,17 @@ const rows = computed(() =>
   allRows.value.length > shown.value ? allRows.value.slice(-shown.value) : allRows.value,
 );
 
-/* Opening a task — at launch, or by switching to its tab — draws the tail and
+/* First opening a task draws the tail and
    then the whole thing. The rest is drawn from a timeout inside a frame
    callback: the callback runs before the tail is painted, the timeout after
    it, which is the first moment the rest costs nobody anything.
 
-   The box is put back at the bottom afterwards, since the rows going in above
-   the tail are what the scroll position was measured against. */
+   Returning to an open tab draws all rows immediately so its saved scroll
+   offset is measured against the complete conversation. */
 function revealTranscript() {
   const turn = ++reveal;
-  shown.value = TAIL;
+  shown.value = tabScroll(S.tab) ? Infinity : TAIL;
+  if (shown.value === Infinity) return;
   if (allRows.value.length <= TAIL) return;
   requestAnimationFrame(() =>
     setTimeout(async () => {
@@ -89,11 +91,11 @@ function revealTranscript() {
 
 watch(() => S.detail?.session.id, revealTranscript, { immediate: true });
 // A short live conversation can cross the threshold without changing tabs.
-// It gets the same one-paint tail rather than hiding its earlier rows until
-// the user leaves and returns.
+// Keep the rows already on screen instead of briefly hiding them and
+// moving a reader who has scrolled up.
 watch(
   () => allRows.value.length > TAIL,
-  (long, wasLong) => long && !wasLong && revealTranscript(),
+  (long, wasLong) => { if (long && !wasLong) shown.value = Infinity; },
 );
 
 /* Queued prompts are drawn under the transcript, each with how long it has
@@ -244,20 +246,36 @@ onUnmounted(() => {
   window.clearInterval(clock);
 });
 
-/* Follow the stream: every delta grows the last message, so watching the
-   messages deeply is what tells us to scroll. */
+/* Follow new output only while reading the bottom. A tab switch restores
+   its saved position instead of being treated as new output. */
+let follow = true;
+function onScroll() {
+  const el = box.value;
+  follow = el.scrollHeight - el.clientHeight - el.scrollTop < 2;
+}
 watch(
-  () => [S.detail?.messages, queued.value.length],
-  async () => {
+  () => [S.activeTab, S.detail?.messages, queued.value.length],
+  async (value, previous) => {
+    const tab = S.tab;
+    const switched = value[0] !== previous?.[0];
+    if (switched && tabScroll(tab)) {
+      follow = false;
+      await nextTick();
+      await nextTick();
+      if (S.tab === tab && box.value) onScroll();
+      return;
+    }
+    if (switched) follow = true;
+    if (!follow) return;
     await nextTick();
-    if (box.value) box.value.scrollTop = box.value.scrollHeight;
+    if (S.tab === tab && box.value) box.value.scrollTop = box.value.scrollHeight;
   },
-  { deep: true, flush: "post" },
+  { deep: true, flush: "post", immediate: true },
 );
 </script>
 
 <template>
-  <div ref="box" class="min-h-0 flex-1 overflow-auto">
+  <div ref="box" v-tab-scroll="[S.tab, '', true]" class="min-h-0 flex-1 overflow-auto" @scroll="onScroll">
     <div v-if="!S.detail" class="pt-[18vh] text-center text-dimmed">
       <p>Pick a task, or a project to start one.</p>
       <UButton class="mt-4" label="Take the Quick Start Tour" icon="i-lucide-graduation-cap" @click="emit('start-tour')" />

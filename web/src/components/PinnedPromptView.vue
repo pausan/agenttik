@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref, watch } from "vue";
+import { vTabScroll } from "../tab-scroll";
 import { patchSchedule, removeSchedule, runPinnedPrompt, setScheduleArchived, setScheduleModel } from "../store";
 import ModelSelection from "./ModelSelection.vue";
 
@@ -38,7 +39,7 @@ function chooseModel(choice) {
 </script>
 
 <template>
-  <div class="min-h-0 flex-1 overflow-auto">
+  <div v-tab-scroll="[tab]" class="min-h-0 flex-1 overflow-auto">
     <div class="mx-auto max-w-[860px] px-6 py-5">
       <div class="mb-4 flex flex-wrap items-center gap-2 border-b border-default pb-3">
         <UIcon name="i-lucide-pin" class="size-4 text-primary" />

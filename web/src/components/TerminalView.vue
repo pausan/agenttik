@@ -13,6 +13,7 @@ import "@xterm/xterm/css/xterm.css";
 
 import { resizeTerminal, sendTerminalBinary, sendTerminalInput, watchTerminal } from "../terminals";
 import { S, closeTab, copyText, fail, hit } from "../store";
+import { rememberTabScroll, tabScroll } from "../tab-scroll";
 import { colorPreference } from "../color-mode";
 
 const props = defineProps({ tab: { type: Object, required: true } });
@@ -22,6 +23,7 @@ let term = null;
 let fit = null;
 let unwatch = null;
 let observer = null;
+let restoreLine = tabScroll(props.tab, "terminal")?.top;
 const selection = ref("");
 
 function copy() {
@@ -119,7 +121,12 @@ onMounted(() => {
        the stream was reopened, or this view fell behind and was caught up. */
     onData: (bytes, reset) => {
       if (reset) term.reset();
-      term.write(bytes);
+      const target = term;
+      term.write(bytes, () => {
+        if (target !== term || restoreLine === undefined) return;
+        term.scrollToLine(restoreLine);
+        restoreLine = undefined;
+      });
     },
     /* The shell ended — `exit`, or Ctrl+D. The tab stood for that shell, so
        it goes with it rather than sitting there as a dead screen. */
@@ -138,6 +145,9 @@ watch([colorPreference, () => S.colors.accent, () => S.colors.neutral], () => {
 });
 
 onBeforeUnmount(() => {
+  if (term && restoreLine === undefined) {
+    rememberTabScroll(props.tab, "terminal", { top: term.buffer.active.viewportY });
+  }
   observer?.disconnect();
   unwatch?.();
   term?.dispose();

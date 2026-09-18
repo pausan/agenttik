@@ -67,6 +67,7 @@ screen, **session** for the row, the route or the CLI flag.
 
 | Doc | What it covers |
 |-----|----------------|
+| [076](076-tab-scroll.md) | Scroll positions for every open tab, file modes, transcripts and terminals |
 | [075](075-page-find.md) | Find in the current page or text file, match navigation and shortcuts |
 | [013](013-project-logs.md) | Commits, graph, branch actions, files and diffs |
 | [014](014-transcript-messages.md) | Copying messages, editing a prompt in place |

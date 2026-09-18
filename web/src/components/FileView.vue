@@ -10,6 +10,7 @@
    business under a file, so MainPanel leaves it out and this takes its
    place. */
 import { computed, inject, onMounted, onUnmounted, ref, watch } from "vue";
+import { vTabScroll } from "../tab-scroll";
 
 import { canPreview, isDirty, isFont, isImage, isOutsideProject, saveFile, setFileMode } from "../store";
 import { langOf } from "../highlight";
@@ -176,7 +177,7 @@ const stat = computed(() => {
       />
     </div>
 
-    <div class="min-h-0 flex-1" :class="fills ? 'overflow-hidden' : 'overflow-auto'">
+    <div v-tab-scroll="[tab, tab.mode, false, body !== 'loading']" class="min-h-0 flex-1" :class="fills ? 'overflow-hidden' : 'overflow-auto'">
       <p v-if="body === 'error'" role="alert" class="px-5 py-5 text-warning">{{ tab.loadError }}</p>
       <p v-else-if="body === 'loading'" class="px-5 py-5 text-center text-dimmed">Loading…</p>
       <p v-else-if="body === 'empty'" class="px-5 py-5 text-center text-dimmed">

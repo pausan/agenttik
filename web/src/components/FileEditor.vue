@@ -81,6 +81,8 @@ watch(
     if (!line) return;
     props.tab.goto = 0;
     await nextTick();
+    // An explicit line request takes precedence over the tab's saved offset.
+    await nextTick();
     grow(); // the pane can only be measured once the field is its full height
     const el = area.value;
     if (!el || !layer.value) return;

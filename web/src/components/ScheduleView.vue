@@ -7,6 +7,7 @@
 
    See specs/028-scheduled-jobs.md. */
 import { computed, ref, watch } from "vue";
+import { vTabScroll } from "../tab-scroll";
 
 import {
   S,
@@ -126,7 +127,7 @@ function runTime(run) {
 </script>
 
 <template>
-  <div class="min-h-0 flex-1 overflow-auto">
+  <div v-tab-scroll="[tab]" class="min-h-0 flex-1 overflow-auto">
     <div class="mx-auto max-w-[860px] px-6 py-5">
       <div class="mb-3.5 flex items-start gap-3 border-b border-default pb-3">
         <div class="min-w-0">

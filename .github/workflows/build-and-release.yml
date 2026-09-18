@@ -51,8 +51,8 @@ jobs:
       version: ${{ steps.tag.outputs.version }}
       is_release: ${{ steps.tag.outputs.is_release }}
     steps:
-      # A release tag is vMAJOR.MINOR.PATCH, optionally carrying a suffix of
-      # letters, dashes and further dots. The full tag names the assets and the
+      # A release tag is vMAJOR/vMAJOR.MINOR.PATCH, optionally carrying a suffix of
+      # letters, dashes and further dots. The full tag names the
       # release; only the MAJOR.MINOR.PATCH part goes into the binary, so
       # `agenttik --version` always reports a bare X.Y.Z.
       - id: tag
@@ -60,7 +60,8 @@ jobs:
           REF_TYPE: ${{ github.ref_type }}
           TAG: ${{ github.ref_name }}
         run: |
-          if [[ "$REF_TYPE" == "tag" && "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)[-.A-Za-z0-9]*$ ]]; then
+          leaf=${TAG##*/}
+          if [[ "$REF_TYPE" == "tag" && "$leaf" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)[-.A-Za-z0-9]*$ ]]; then
             printf 'tag=%s\n' "$TAG" >> "$GITHUB_OUTPUT"
             printf 'version=%s\n' "${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
             echo 'is_release=true' >> "$GITHUB_OUTPUT"
@@ -165,6 +166,7 @@ jobs:
           VERSION: ${{ needs.release-tag.outputs.version }}
         run: |
           mkdir -p dist
+          TAG=${TAG##*/}
           # An untagged push has no version to report, so it says which commit
           # it is instead, in the file name and in the binary alike.
           ldflags="-s -w -X main.version=${VERSION:-${GITHUB_SHA::12}}"

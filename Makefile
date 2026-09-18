@@ -15,11 +15,11 @@ ifeq ($(shell uname -s),Darwin)
 export CGO_LDFLAGS += -framework UniformTypeIdentifiers
 endif
 
-# VERSION is what --version reports. A vX.Y.Z tag on HEAD gives its X.Y.Z,
+# VERSION is what --version reports. A vMAJOR/vX.Y.Z tag on HEAD gives its X.Y.Z,
 # dropping any suffix the tag carries; anything else gives the short commit.
 # Override it with `make build VERSION=1.2.3`.
 VERSION ?= $(shell git describe --tags --exact-match 2>/dev/null | \
-	sed -n 's/^v\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p')
+	sed -n 's|.*/||; s/^v\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p')
 ifeq ($(strip $(VERSION)),)
 VERSION := $(shell git rev-parse --short=12 HEAD 2>/dev/null || echo dev)
 endif

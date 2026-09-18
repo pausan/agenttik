@@ -81,12 +81,15 @@ documents the requests it uses ([054](054-orchestrator-project.md)).
 `main.version` defaults to `dev` and the build overwrites it with
 `-ldflags "-X main.version=..."`. `--version` prints `agenttik <version>`.
 
-A release tag is `vMAJOR.MINOR.PATCH`, optionally followed by letters, dashes
-and further dots: `v1.2.3`, `v1.2.3-beta.1`, `v1.2.3-rc-2`. Only the
+A release tag is `vMAJOR/vMAJOR.MINOR.PATCH`, optionally followed by letters, dashes
+and further dots: `v1/v1.2.3`, `v1/v1.2.3-beta.1`, `v1/v1.2.3-rc-2`. Only the
 `MAJOR.MINOR.PATCH` part is built in, so `--version` always reports a bare
 `X.Y.Z`. The suffix survives in the asset names and the release title, which
-use the whole tag; two tags sharing a core therefore ship binaries that report
+use the final tag component and full tag respectively; two tags sharing a core ship binaries that report
 the same version.
+
+Builds parse the final component after the slash and also accept legacy unprefixed tags.
+The namespace matches the major version.
 
 An untagged push has no version to report, so it reports which commit it is:
 the first 12 characters of the SHA. `make` derives the same two cases from

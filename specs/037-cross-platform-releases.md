@@ -24,13 +24,17 @@ macOS arm64 is stripped only: [UPX does not support that target](https://github.
 Every platform runs the final executable with `--version` and checks its output
 before upload. Compression, integrity or version-check failures fail the build.
 
-Only a pushed tag matching `vMAJOR.MINOR.PATCH`, with an optional suffix of
+Only a pushed tag matching `vMAJOR/vMAJOR.MINOR.PATCH`, with an optional suffix of
 letters, dashes and further dots, creates a GitHub Release. The release job
 waits for all matrix builds to succeed, then attaches
 `agenttik_<tag>_<platform>_<architecture>` binaries, with `.exe` on Windows.
+The `<tag>` in filenames is the final component, such as `v0.7.1`; the
+release uses the full `v0/v0.7.1` tag. Legacy unprefixed tags are also accepted.
 That job only downloads those artifacts, so it has no checkout for `gh` to read
 a git remote from and names the repository in `GH_REPO` instead.
 An untagged push names its binaries after the short commit instead.
+
+Run `python3 scripts/test-build-version.py` to verify local and CI tag parsing.
 
 Every build links in the version the binary reports, on top of whatever
 `-ldflags` the matrix already carries; see 044 for what that version is.

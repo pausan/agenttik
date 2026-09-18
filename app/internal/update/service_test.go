@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"sync/atomic"
@@ -16,7 +18,7 @@ import (
 )
 
 func release(tag, platform string) Release {
-	name := "agenttik_" + tag + "_" + platform
+	name := "agenttik_" + path.Base(tag) + "_" + platform
 	return Release{Tag: tag, Assets: []Asset{{Name: name, URL: "https://github.com/pausan/agenttik/releases/download/" + tag + "/" + name, Size: 3, Digest: fmt.Sprintf("sha256:%x", sha256.Sum256([]byte("new")))}}}
 }
 func TestSelectOffer(t *testing.T) {
@@ -181,5 +183,18 @@ func TestHelperRejectsChangedDownload(t *testing.T) {
 	}
 	if _, err := os.Stat(manifest + ".ready"); !os.IsNotExist(err) {
 		t.Fatal("reported readiness")
+	}
+}
+
+func TestNamespacedRelease(t *testing.T) {
+	for _, escaped := range []bool{false, true} {
+		r := release("v2/v2.1.0", "linux_amd64")
+		if escaped {
+			r.Assets[0].URL = "https://github.com/pausan/agenttik/releases/download/" + url.PathEscape(r.Tag) + "/" + r.Assets[0].Name
+		}
+		offer := selectOffer([]Release{release("v1.9.0", "linux_amd64"), r, release("v3/v3.0.0-rc.1", "linux_amd64")}, "2.0.0", "linux", "amd64", false)
+		if offer == nil || offer.Version != r.Tag {
+			t.Fatalf("escaped=%v: offer=%+v", escaped, offer)
+		}
 	}
 }

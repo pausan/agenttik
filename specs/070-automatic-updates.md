@@ -10,7 +10,7 @@ private instances do not run the checker. Development/commit builds skip it.
 The checker examines the most recent 100 published releases and chooses the
 highest stable semantic version newer than the current version with an exact
 OS/architecture asset match. Drafts and prereleases are excluded. Assets use
-`agenttik_<tag>_<os>_<arch>`, `.exe` on Windows, or `.app.zip` when running from
+`agenttik_<tag-leaf>_<os>_<arch>`, `.exe` on Windows, or `.app.zip` when running from
 a macOS application bundle. A positive size up to 512 MiB and a SHA-256 digest
 are required. Metadata comes from the
 [GitHub releases API](https://docs.github.com/en/rest/releases/releases).
@@ -49,8 +49,12 @@ which never starts can leave an `update-*` directory for manual cleanup.
 
 ## API and boundaries
 
+Release versions accept `vMAJOR/vMAJOR.MINOR.PATCH` and legacy unprefixed tags;
+asset names use the final tag component. Download URLs retain the full tag,
+with either literal or percent-encoded slashes.
+
 `GET /api/updates` reads cached status. `POST /api/updates/ignore` and
-`POST /api/updates/install` take only `{ "version": "vX.Y.Z" }`; callers cannot
+`POST /api/updates/install` take only `{ "version": "vMAJOR/vX.Y.Z" }`; callers cannot
 supply paths or URLs. The local desktop proxy adds a private random token.
 Requests without it see empty status and cannot mutate updates. Profile
 windows use the root instance's updater. Exposed listeners and remote windows

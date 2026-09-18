@@ -11,7 +11,9 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -108,7 +110,7 @@ func (s *Service) save() error {
 	return os.Rename(s.path+".tmp", s.path)
 }
 func stable(value string) *semver.Version {
-	v, err := semver.StrictNewVersion(strings.TrimPrefix(value, "v"))
+	v, err := semver.StrictNewVersion(strings.TrimPrefix(path.Base(value), "v"))
 	if err != nil || v.Prerelease() != "" {
 		return nil
 	}
@@ -125,14 +127,14 @@ func selectOffer(releases []Release, current, goos, arch string, bundle bool) *O
 		if r.Draft || r.Prerelease || v == nil || !v.GreaterThan(base) {
 			continue
 		}
-		name := "agenttik_" + r.Tag + "_" + goos + "_" + arch
+		name := "agenttik_" + path.Base(r.Tag) + "_" + goos + "_" + arch
 		if goos == "windows" {
 			name += ".exe"
 		} else if bundle {
 			name += ".app.zip"
 		}
 		for _, a := range r.Assets {
-			if a.Name == name && a.Size > 0 && a.Size <= maxDownload && validDigest(a.Digest) && a.URL == "https://github.com/pausan/agenttik/releases/download/"+r.Tag+"/"+name {
+			if a.Name == name && a.Size > 0 && a.Size <= maxDownload && validDigest(a.Digest) && (a.URL == "https://github.com/pausan/agenttik/releases/download/"+r.Tag+"/"+name || a.URL == "https://github.com/pausan/agenttik/releases/download/"+url.PathEscape(r.Tag)+"/"+name) {
 				offer = &Offer{Version: r.Tag, Asset: a}
 				base = v
 				break

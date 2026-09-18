@@ -4,6 +4,11 @@
 embedded UI, on every push, pull request and manual dispatch. The build matrix
 uses native runners for Linux amd64 and arm64, macOS arm64, and Windows amd64.
 
+UI builds use Node 22 and `npm ci` with the committed `web/package-lock.json`.
+Keep the lockfile compatible with npm 10, including bundled optional dependencies
+for other platforms. After dependency changes, validate it with
+`npx --yes npm@10.9.8 ci --prefix web` before running the UI build.
+
 The matrix carries the per-platform build flags: the build tags, extra Go
 `-ldflags`, and `CGO_LDFLAGS`. Those last two are only added when the platform
 sets them. All matrix builds use `-trimpath` and Go linker flags `-s -w` to omit

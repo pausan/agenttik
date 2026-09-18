@@ -44,16 +44,17 @@ const (
 // Settings is in force for the very next request.
 type Credentials struct {
 	Enabled      bool
+	TOTPDisabled bool
 	PasswordHash string
 	Secret       string
 }
 
 // ready reports whether these credentials can actually let anybody in. A
-// half-set lock — enabled with no password, or none of a secret — would
+// half-set lock — missing a password or a required authenticator seed — would
 // otherwise be a lock nobody holds the key to, so the gate refuses every
 // login instead of opening.
 func (c Credentials) ready() bool {
-	return c.Enabled && c.PasswordHash != "" && c.Secret != ""
+	return c.Enabled && c.PasswordHash != "" && (c.TOTPDisabled || c.Secret != "")
 }
 
 // Gate is the lock in front of the exposed listener. Its zero value is not
@@ -145,7 +146,7 @@ func (g *Gate) authorized(r *http.Request) bool {
 	return true
 }
 
-// login checks a password and a code, and starts a session if both hold. It
+// login checks a password and, when enabled, a code before starting a session. It
 // answers the form it was posted from, so a failure comes back as the same
 // page with a reason on it rather than as a bare status.
 func (g *Gate) login(w http.ResponseWriter, r *http.Request, creds Credentials) {
@@ -164,24 +165,28 @@ func (g *Gate) login(w http.ResponseWriter, r *http.Request, creds Credentials) 
 		return
 	}
 	// A lock nobody can open is not a reason to let anybody in: an enabled
-	// setting missing its password or its seed refuses every login, and the
+	// setting missing its password or a required seed refuses every login, and the
 	// window's own Settings is where that gets put right.
 	if !creds.ready() {
 		g.deny(w, r, creds, "Sign-in is not finished being set up on this machine.")
 		return
 	}
 
-	// Both are checked every time, even when the first already failed, so a
+	// With 2FA enabled, both are checked even when the first failed, so a
 	// wrong password and a wrong code cost the same and take the same time to
 	// say so.
 	passOK := bcrypt.CompareHashAndPassword([]byte(creds.PasswordHash), []byte(r.FormValue("password"))) == nil
-	step, codeOK := Verify(creds.Secret, r.FormValue("code"), time.Now())
+	var step uint64
+	codeOK := true
+	if !creds.TOTPDisabled {
+		step, codeOK = Verify(creds.Secret, r.FormValue("code"), time.Now())
+	}
 	if !passOK || !codeOK {
 		g.deny(w, r, creds, "Wrong password or code.")
 		return
 	}
 
-	if !g.claimStep(creds.Secret, step) {
+	if !creds.TOTPDisabled && !g.claimStep(creds.Secret, step) {
 		g.deny(w, r, creds, "That code has already been used. Wait for the next code and try again.")
 		return
 	}
@@ -297,7 +302,7 @@ func (g *Gate) challenge(w http.ResponseWriter, r *http.Request, creds Credentia
 	if why != "" {
 		status = http.StatusUnauthorized
 	}
-	writeLoginPage(w, status, why, safeNext(next), creds.ready())
+	writeLoginPage(w, status, why, safeNext(next), creds)
 }
 
 // wantsHTML reports whether this request came from a browser's address bar

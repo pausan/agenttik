@@ -12,9 +12,9 @@ import (
 func (s *Store) GetServerConfig() (ServerConfig, error) {
 	var c ServerConfig
 	err := s.db.QueryRow(
-		`SELECT enabled, host, port, auth_enabled, password_hash, totp_secret
+		`SELECT enabled, host, port, auth_enabled, password_hash, totp_secret, totp_disabled
 		   FROM server_config WHERE id = 1`).
-		Scan(&c.Enabled, &c.Host, &c.Port, &c.AuthEnabled, &c.PasswordHash, &c.TOTPSecret)
+		Scan(&c.Enabled, &c.Host, &c.Port, &c.AuthEnabled, &c.PasswordHash, &c.TOTPSecret, &c.TOTPDisabled)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ServerConfig{}, nil
 	}
@@ -42,15 +42,15 @@ func (s *Store) SetServerConfig(c ServerConfig) error {
 }
 
 // SetServerAuth replaces the lock on the exposed server, leaving where it
-// listens alone. All three fields are written together: a password and a
-// seed only mean anything as a pair, so there is no partial update to make.
+// listens alone. Credentials and the 2FA preference are written together.
 func (s *Store) SetServerAuth(c ServerConfig) error {
 	_, err := s.db.Exec(
-		`INSERT INTO server_config (id, auth_enabled, password_hash, totp_secret) VALUES (1, ?, ?, ?)
+		`INSERT INTO server_config (id, auth_enabled, password_hash, totp_secret, totp_disabled) VALUES (1, ?, ?, ?, ?)
 		 ON CONFLICT(id) DO UPDATE SET auth_enabled  = excluded.auth_enabled,
 		                               password_hash = excluded.password_hash,
-		                               totp_secret   = excluded.totp_secret`,
-		c.AuthEnabled, c.PasswordHash, c.TOTPSecret)
+		                               totp_secret   = excluded.totp_secret,
+		                               totp_disabled = excluded.totp_disabled`,
+		c.AuthEnabled, c.PasswordHash, c.TOTPSecret, c.TOTPDisabled)
 	if err != nil {
 		return fmt.Errorf("set server auth: %w", err)
 	}

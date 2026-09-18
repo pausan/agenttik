@@ -63,7 +63,7 @@ test("General disappears when another settings section is selected", async ({ pa
 
 test("authentication enables before a password and the current code refreshes", async ({ page }) => {
   const config = { available: true, enabled: false, host: "127.0.0.1", port: 7717,
-    auth_enabled: false, has_password: false, totp_secret: "" };
+    auth_enabled: false, totp_enabled: true, has_password: false, totp_secret: "" };
   await page.route("**/api/server", (route) => route.fulfill({ json: config }));
   await page.route("**/api/server/auth", async (route) => {
     const body = route.request().postDataJSON();
@@ -72,6 +72,7 @@ test("authentication enables before a password and the current code refreshes", 
       config.has_password = true;
     }
     config.auth_enabled = body.enabled;
+    if (body.totp_enabled !== undefined) config.totp_enabled = body.totp_enabled;
     config.totp_secret = "GEZDGNBVGY3TQOJQ";
     await route.fulfill({ json: config });
   });
@@ -83,7 +84,7 @@ test("authentication enables before a password and the current code refreshes", 
   await page.clock.install();
   await openSettings(page, "Server");
   const dialog = page.getByRole("dialog");
-  const toggle = dialog.getByRole("switch", { name: "Ask for a password and a code" });
+  const toggle = dialog.getByRole("switch", { name: "Enable password" });
   await toggle.click();
   await expect(toggle).toBeChecked();
   await expect(dialog.getByText("Browser access is blocked", { exact: false })).toBeVisible();
@@ -109,6 +110,14 @@ test("authentication enables before a password and the current code refreshes", 
   expect(reads).toBe(previous);
   await dialog.getByRole("button", { name: "Server", exact: true }).click();
   await expect(dialog.getByLabel("Current code")).toHaveText("654321");
+  const twoFactor = dialog.getByRole("switch", { name: "Enable 2FA" });
+  await expect(twoFactor).toBeChecked();
+  await twoFactor.click();
+  await expect(twoFactor).not.toBeChecked();
+  await expect(dialog.getByLabel("Authenticator seed")).toBeHidden();
+  await expect(dialog.getByPlaceholder("At least 8 characters")).toBeVisible();
+  await twoFactor.click();
+  await expect(dialog.getByLabel("Authenticator seed")).toBeVisible();
   await toggle.click();
   await expect(toggle).not.toBeChecked();
   await expect(dialog.getByLabel("Current code")).toBeHidden();

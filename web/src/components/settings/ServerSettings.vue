@@ -226,8 +226,8 @@ async function copyCode() {
   window.setTimeout(() => (codeCopied.value = false), 1200);
 }
 watch(
-  () => [props.active, rows.value.length, S.serverConfig.auth_enabled, S.serverConfig.totp_secret],
-  ([active, visible, enabled, secret], _, onCleanup) => {
+  () => [props.active, rows.value.length, S.serverConfig.auth_enabled, S.serverConfig.totp_secret, S.serverConfig.totp_enabled],
+  ([active, visible, enabled, secret, totpEnabled], _, onCleanup) => {
     let stopped = false;
     let timer;
     currentCode.value = "";
@@ -235,7 +235,7 @@ watch(
       stopped = true;
       clearTimeout(timer);
     });
-    if (!active || !visible || !enabled || !secret) return;
+    if (!active || !visible || !enabled || !secret || !totpEnabled) return;
     async function refresh() {
       let delay = 30000;
       try {
@@ -327,7 +327,7 @@ const qr = computed(() =>
         }}
         {{
           S.serverConfig.auth_enabled
-            ? "It asks for a password and a code."
+            ? (S.serverConfig.totp_enabled ? "It asks for a password and a code." : "It asks for a password.")
             : "There is no login — treat that as a trusted address."
         }}
       </p>
@@ -336,7 +336,7 @@ const qr = computed(() =>
         <USwitch
           :model-value="S.serverConfig.auth_enabled"
           :disabled="busy"
-          label="Ask for a password and a code"
+          label="Enable password"
           @update:model-value="toggleAuth"
         />
         <p class="mt-1 text-xs text-dimmed">
@@ -370,70 +370,79 @@ const qr = computed(() =>
             />
           </div>
 
-          <div class="mt-4 text-xs font-medium text-muted">Authenticator</div>
-          <p class="mt-0.5 text-xs text-dimmed">
-            Scan this with an authenticator app, or type the seed into one by hand.
-          </p>
-          <div class="mt-2 flex items-start gap-3">
-            <img
-              v-if="qr"
-              :src="qr"
-              alt="QR code pairing an authenticator app with this server"
-              width="128"
-              height="128"
-              class="shrink-0 rounded bg-white p-1.5"
-            />
-            <div>
-              <div class="flex items-center gap-1">
-                <UInput
-                  v-model="seed"
-                  spellcheck="false"
-                  autocapitalize="off"
-                  class="w-80 font-mono text-xs font-normal"
-                  aria-label="Authenticator seed"
-                  @change="applySeed"
-                  @keydown.enter="$event.target.blur()"
-                />
-                <UButton
-                  :icon="seedCopied ? 'i-lucide-check' : 'i-lucide-copy'"
-                  size="xs"
-                  color="neutral"
-                  variant="ghost"
-                  aria-label="Copy the seed"
-                  title="Copy the seed"
-                  @click="copySeed"
-                />
-              </div>
-              <div class="mt-2">
-                <div class="text-xs text-muted">Current code</div>
+          <USwitch
+            :model-value="S.serverConfig.totp_enabled"
+            :disabled="busy"
+            label="Enable 2FA"
+            class="mt-4"
+            @update:model-value="apply({ totp_enabled: $event })"
+          />
+          <div v-if="S.serverConfig.totp_enabled">
+            <div class="mt-4 text-xs font-medium text-muted">Authenticator</div>
+            <p class="mt-0.5 text-xs text-dimmed">
+              Scan this with an authenticator app, or type the seed into one by hand.
+            </p>
+            <div class="mt-2 flex items-start gap-3">
+              <img
+                v-if="qr"
+                :src="qr"
+                alt="QR code pairing an authenticator app with this server"
+                width="128"
+                height="128"
+                class="shrink-0 rounded bg-white p-1.5"
+              />
+              <div>
                 <div class="flex items-center gap-1">
-                  <output aria-label="Current code" class="font-mono text-lg tracking-widest">{{ currentCode || "------" }}</output>
+                  <UInput
+                    v-model="seed"
+                    spellcheck="false"
+                    autocapitalize="off"
+                    class="w-80 font-mono text-xs font-normal"
+                    aria-label="Authenticator seed"
+                    @change="applySeed"
+                    @keydown.enter="$event.target.blur()"
+                  />
                   <UButton
-                    :icon="codeCopied ? 'i-lucide-check' : 'i-lucide-copy'"
+                    :icon="seedCopied ? 'i-lucide-check' : 'i-lucide-copy'"
                     size="xs"
                     color="neutral"
                     variant="ghost"
-                    aria-label="Copy the code"
-                    title="Copy the code"
-                    :disabled="!currentCode"
-                    @click="copyCode"
+                    aria-label="Copy the seed"
+                    title="Copy the seed"
+                    @click="copySeed"
                   />
                 </div>
-                <p class="text-xs text-dimmed">Refreshes every 30 seconds.</p>
+                <div class="mt-2">
+                  <div class="text-xs text-muted">Current code</div>
+                  <div class="flex items-center gap-1">
+                    <output aria-label="Current code" class="font-mono text-lg tracking-widest">{{ currentCode || "------" }}</output>
+                    <UButton
+                      :icon="codeCopied ? 'i-lucide-check' : 'i-lucide-copy'"
+                      size="xs"
+                      color="neutral"
+                      variant="ghost"
+                      aria-label="Copy the code"
+                      title="Copy the code"
+                      :disabled="!currentCode"
+                      @click="copyCode"
+                    />
+                  </div>
+                  <p class="text-xs text-dimmed">Refreshes every 30 seconds.</p>
+                </div>
+                <UButton
+                  label="New seed"
+                  icon="i-lucide-refresh-cw"
+                  size="xs"
+                  color="neutral"
+                  variant="subtle"
+                  class="mt-2"
+                  :disabled="busy"
+                  @click="rollSeed"
+                />
+                <p class="mt-2 max-w-80 text-xs text-dimmed">
+                  Changing sign-in settings signs every browser out. A new seed needs pairing again.
+                </p>
               </div>
-              <UButton
-                label="New seed"
-                icon="i-lucide-refresh-cw"
-                size="xs"
-                color="neutral"
-                variant="subtle"
-                class="mt-2"
-                :disabled="busy"
-                @click="rollSeed"
-              />
-              <p class="mt-2 max-w-80 text-xs text-dimmed">
-                Changing the password or seed signs every browser out. A new seed needs pairing again.
-              </p>
             </div>
           </div>
         </div>

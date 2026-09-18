@@ -60,7 +60,7 @@ identity or an API compatibility guarantee. HTTPS uses normal certificate
 verification.
 
 After discovery, the remote server serves its existing login form when
-needed: agenttik's built-in protection asks for a password and authenticator
+needed: agenttik's built-in protection asks for a password and, when 2FA is enabled, an authenticator
 code, with no username. The client does not save passwords. Remote desktop
 and loopback clients keep a separate in-memory cookie jar per connection,
 strip local cookies and authorization headers, and keep login redirects

@@ -84,7 +84,7 @@ export const S = reactive({
   // specs/043-exposed-server.md.
   instanceInfo: { name: "", version: "" },
   serverConfig: { available: false, enabled: false, host: "", port: 0, listening: false,
-    auth_enabled: false, has_password: false, totp_secret: "", totp_uri: "" },
+    auth_enabled: false, totp_enabled: true, has_password: false, totp_secret: "", totp_uri: "" },
   /* sessionID -> unsent prompt, for a conversation with no tab of its own.
      A project has one context slot, so opening anything else in it drops the
      session tab the text was typed into; the text is the user's and outlives

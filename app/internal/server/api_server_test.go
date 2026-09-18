@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"io"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
@@ -78,7 +79,7 @@ func lockTheServer(t *testing.T, s *Server) string {
 		t.Fatalf("lock the server: status %d", resp.StatusCode)
 	}
 	info := decode[serverConfigInfo](t, resp)
-	if !info.AuthEnabled || !info.HasPassword {
+	if !info.AuthEnabled || !info.HasPassword || !info.TOTPEnabled {
 		t.Fatalf("lock did not take: %+v", info)
 	}
 	if info.TOTPSecret == "" {
@@ -328,4 +329,59 @@ func read(t *testing.T, resp *http.Response) string {
 		t.Fatalf("read body: %v", err)
 	}
 	return buf.String()
+}
+
+func TestPasswordOnlyAndReenableTOTP(t *testing.T) {
+	s, addr := exposed(t)
+	lockTheServer(t, s)
+	resp := do(t, s, "PUT", "/api/server/auth", map[string]any{
+		"enabled": true, "totp_enabled": false,
+	})
+	info := decode[serverConfigInfo](t, resp)
+	if info.TOTPEnabled || !info.AuthEnabled {
+		t.Fatalf("password-only settings: %+v", info)
+	}
+	saved, err := s.store.GetServerConfig()
+	if err != nil || !saved.TOTPDisabled {
+		t.Fatalf("2FA preference not persisted: %+v, %v", saved, err)
+	}
+	c := browser()
+	page := fetch(t, c, addr, "text/html")
+	body, _ := io.ReadAll(page.Body)
+	if strings.Contains(string(body), `name="code"`) || !strings.Contains(string(body), `name="password"`) {
+		t.Fatalf("unexpected password-only form: %s", body)
+	}
+	for _, pw := range []string{"wrong", exposedPassword, exposedPassword} {
+		login, err := c.PostForm(addr+"/__auth/login", url.Values{"password": {pw}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		login.Body.Close()
+		want := http.StatusSeeOther
+		if pw == "wrong" {
+			want = http.StatusUnauthorized
+		}
+		if login.StatusCode != want {
+			t.Fatalf("login status %d, want %d", login.StatusCode, want)
+		}
+	}
+	resp = do(t, s, "PUT", "/api/server/auth", map[string]any{"enabled": true})
+	if decode[serverConfigInfo](t, resp).TOTPEnabled {
+		t.Fatal("omitted preference reset 2FA")
+	}
+	resp = do(t, s, "PUT", "/api/server/auth", map[string]any{"enabled": true, "totp_enabled": true})
+	if !decode[serverConfigInfo](t, resp).TOTPEnabled {
+		t.Fatal("2FA not reenabled")
+	}
+	if got := fetch(t, c, addr+"/api/projects", "application/json").StatusCode; got != http.StatusUnauthorized {
+		t.Fatalf("session not revoked: %d", got)
+	}
+	login, err := c.PostForm(addr+"/__auth/login", url.Values{"password": {exposedPassword}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer login.Body.Close()
+	if login.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("missing code accepted after reenabling: %d", login.StatusCode)
+	}
 }

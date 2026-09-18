@@ -373,6 +373,7 @@ func (s *Server) reloadCredentials() netauth.Credentials {
 	}
 	c := netauth.Credentials{
 		Enabled:      cfg.AuthEnabled,
+		TOTPDisabled: cfg.TOTPDisabled,
 		PasswordHash: cfg.PasswordHash,
 		Secret:       cfg.TOTPSecret,
 	}

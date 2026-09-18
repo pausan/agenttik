@@ -354,12 +354,13 @@ type ServerConfig struct {
 	Port    int    `json:"port"`
 
 	// The lock in front of that exposed listener, and nothing else: the
-	// window's own connection never asks for it. AuthEnabled with either of
-	// the other two blank is a half-set lock, which app/internal/netauth
-	// treats as closed to everybody rather than open to everybody.
+	// window's own connection never asks for it. An enabled lock requires a
+	// password and, unless TOTPDisabled, an authenticator seed. Missing
+	// required credentials block all sign-ins.
 	// PasswordHash is bcrypt and never leaves the process; TOTPSecret has to
 	// be readable, because Settings shows it as text and as a QR to pair
 	// from. See 043-exposed-server.md.
+	TOTPDisabled bool   `json:"-"`
 	AuthEnabled  bool   `json:"auth_enabled"`
 	PasswordHash string `json:"-"`
 	TOTPSecret   string `json:"-"`

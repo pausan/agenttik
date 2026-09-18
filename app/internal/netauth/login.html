@@ -26,18 +26,19 @@
 <form method="post" action="/__auth/login" autocomplete="off">
   <div>
     <h1>agenttik</h1>
-    <p>This server asks for a password and the six-digit code from your authenticator.</p>
+    <p>This server asks for a password{{if .TOTPEnabled}} and the six-digit code from your authenticator{{end}}.</p>
   </div>
   {{if .Why}}<p class="bad">{{.Why}}</p>{{end}}
-  {{if not .Ready}}<p class="bad">No password or seed has been set in Settings &rsaquo; Server on the machine running agenttik.</p>{{end}}
+  {{if not .Ready}}<p class="bad">Sign-in setup is incomplete in Settings &rsaquo; Server on the machine running agenttik.</p>{{end}}
   <input type="hidden" name="next" value="{{.Next}}">
   <label>Password
     <input type="password" name="password" autocomplete="current-password" autofocus required>
   </label>
-  <label>Code
+  {{if .TOTPEnabled}}<label>Code
     <input type="text" id="code" name="code" inputmode="numeric" pattern="[0-9]*" maxlength="6"
            autocomplete="one-time-code" placeholder="000000" required>
   </label>
+  {{end}}
   <button type="submit">Sign in</button>
 </form>
 </body>

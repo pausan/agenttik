@@ -367,6 +367,7 @@ CREATE TABLE server_identity (
 );
 INSERT INTO server_identity (id, name) VALUES (1, 'agenttik-' || lower(hex(randomblob(4))));
 `,
+	`ALTER TABLE server_config ADD COLUMN totp_disabled INTEGER NOT NULL DEFAULT 0;`,
 }
 
 func migrate(db *sql.DB, path string) error {

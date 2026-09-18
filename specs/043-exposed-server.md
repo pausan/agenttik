@@ -31,13 +31,17 @@ address as the link.
 
 ## The lock
 
-A second switch, **Ask for a password and a code**, puts a login in front of
+A second switch, **Enable password**, puts a login in front of
 that listener. It is off by default, and the pane carries a standing warning
 whenever the host is not loopback and the switch is off: anyone who can reach
 that address and port has the same access this window does.
 
 Turned on, a browser reaching the address gets a login form asking for a
-password and the six digits an authenticator app is showing. The window is
+password and, when **Enable 2FA** is on, the six digits an authenticator app is showing.
+2FA defaults to on for new and existing configurations. It can be disabled for
+password-only sign-in; the saved seed is retained for reenabling it.
+The API exposes `totp_enabled`; omitting it in an auth update preserves its value.
+The database stores `totp_disabled` with a default of false. The window is
 never asked. It reaches the backend down its own loopback proxy, which the
 gate is not in front of, so a forgotten password is an inconvenience rather
 than a lock-out — Settings is still right there to set a new one.
@@ -46,7 +50,7 @@ The authenticator seed is shown as selectable text to copy, as a QR to scan,
 and as a field to type into: a seed that already exists somewhere can be
 pasted in rather than paired afresh, and the button beside it rolls a random
 one for a seed that has been seen by the wrong person. Changing either the
-seed or the password signs every browser out.
+seed, password, or either switch signs every browser out.
 
 ## Choices
 
@@ -123,7 +127,7 @@ reveals the field, because a fresh "Other" and whatever well-known host was
 saved before are otherwise indistinguishable — it applies on blur, once a
 host has actually been typed. The port field validates its range client-side
 before ever calling `PUT`. The lock switch applies in both directions immediately.
-Enabling it generates a random TOTP seed if none exists. Without a saved
+Enabling protection with 2FA generates a random TOTP seed if none exists. Without a saved
 password, browser access is blocked and the pane explains how to unlock it.
 Passwords are entered once and saved with Save or Enter.
 The current six-digit code appears beside the seed and QR, with a copy button.
@@ -166,7 +170,7 @@ change of password or seed calls — ends them all at once. `SameSite=Lax` is
 also what keeps another site from making the API do anything with that
 cookie, since no CSRF token is minted anywhere.
 
-**A half-set lock opens for nobody.** Enabled with no password, or no seed,
+**A half-set lock opens for nobody.** Enabled with no password, or with 2FA enabled but no seed,
 refuses every login rather than letting everybody through. This is a supported
 setup state: the switch stays enabled while a password is being added.
 

@@ -34,6 +34,7 @@ type serverConfigInfo struct {
 	// the only thing the form needs to know. The seed does travel, because
 	// the pane shows it as text to copy and as a QR to scan — both are
 	// behind this same lock once it is on.
+	TOTPEnabled bool   `json:"totp_enabled"`
 	AuthEnabled bool   `json:"auth_enabled"`
 	HasPassword bool   `json:"has_password"`
 	TOTPSecret  string `json:"totp_secret,omitempty"`
@@ -105,6 +106,7 @@ func (s *Server) serverConfigInfo(cfg store.ServerConfig) serverConfigInfo {
 	st := s.network.Status()
 	info.Listening, info.Addr, info.Error = st.Listening, st.Addr, st.Error
 	info.AuthEnabled = cfg.AuthEnabled
+	info.TOTPEnabled = !cfg.TOTPDisabled
 	info.HasPassword = cfg.PasswordHash != ""
 	info.TOTPSecret = cfg.TOTPSecret
 	if cfg.TOTPSecret != "" {
@@ -138,9 +140,10 @@ func (s *Server) putServerAuth(c *fiber.Ctx) error {
 		return badRequest("nothing to configure: this is a web launch, already serving on its own address")
 	}
 	var body struct {
-		Enabled    bool   `json:"enabled"`
-		Password   string `json:"password"`
-		TOTPSecret string `json:"totp_secret"`
+		Enabled     bool   `json:"enabled"`
+		TOTPEnabled *bool  `json:"totp_enabled"`
+		Password    string `json:"password"`
+		TOTPSecret  string `json:"totp_secret"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return badRequest("invalid body: %v", err)
@@ -164,7 +167,10 @@ func (s *Server) putServerAuth(c *fiber.Ctx) error {
 		}
 		cfg.TOTPSecret = secret
 	}
-	if body.Enabled {
+	if body.TOTPEnabled != nil {
+		cfg.TOTPDisabled = !*body.TOTPEnabled
+	}
+	if body.Enabled && !cfg.TOTPDisabled {
 		if cfg.TOTPSecret == "" {
 			secret, err := netauth.NewSecret()
 			if err != nil {

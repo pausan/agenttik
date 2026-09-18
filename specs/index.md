@@ -67,6 +67,7 @@ screen, **session** for the row, the route or the CLI flag.
 
 | Doc | What it covers |
 |-----|----------------|
+| [075](075-page-find.md) | Find in the current page or text file, match navigation and shortcuts |
 | [013](013-project-logs.md) | Commits, graph, branch actions, files and diffs |
 | [014](014-transcript-messages.md) | Copying messages, editing a prompt in place |
 | [016](016-file-tab-reuse.md) | The temporary file tab a click reuses |

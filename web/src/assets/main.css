@@ -408,3 +408,6 @@ button[draggable="true"]:active { cursor: grabbing; }
   background-position: 0 0, 8px 8px;
   background-size: 16px 16px;
 }
+
+::highlight(page-find) { background-color: #fde68a; color: #171717; }
+::highlight(page-find-current) { background-color: #fb923c; color: #171717; }

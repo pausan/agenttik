@@ -64,6 +64,7 @@ const remoteConnect = ref(false);
 const RemoteConnectModal = defineAsyncComponent(() => import("./components/RemoteConnectModal.vue"));
 const goToFile = ref(false);
 const sideBar = ref(null);
+const mainPanel = ref(null);
 const mobileSideBar = ref(null);
 const media = window.matchMedia(MOBILE_QUERY);
 const mobile = ref(media.matches);
@@ -156,6 +157,7 @@ function onKey(e) {
     if (!e.repeat) window.runtime.EventsEmit("agenttik:quit");
     return;
   }
+  if (hit(e, "page.find")) return run(e, () => mainPanel.value?.find());
   if (hit(e, "task.prev")) return run(e, () => selectAdjacentSidebarRow(-1));
   if (hit(e, "task.next")) return run(e, () => selectAdjacentSidebarRow(1));
   if (hit(e, "tab.prev")) return run(e, () => selectAdjacentTab(-1));
@@ -302,7 +304,7 @@ onUnmounted(() => {
       @remote="remoteConnect = true"
       />
       <Splitter v-if="!mobile" v-show="!diffExpanded" side="left" />
-      <MainPanel @start-tour="startTour" />
+      <MainPanel ref="mainPanel" @start-tour="startTour" />
       <template v-if="!mobile && hasInspector()">
         <Splitter v-show="!diffExpanded" side="right" />
         <InspectorPanel v-show="!diffExpanded" @show-in-tree="showFileInTree" />

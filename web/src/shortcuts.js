@@ -26,6 +26,7 @@ export const ACTIONS = [
   { id: "project.at", group: "Tabs", what: "Switch to one of the first eight projects, again to fold its tasks", keys: ["Alt+A…H"], fixed: true },
   { id: "terminal.new", group: "Tabs", what: "New terminal in the project folder", keys: [primaryChord("Alt+T")] },
 
+  { id: "page.find", group: "Panels", what: "Find in current page or text file", keys: [primaryChord("F")] },
   { id: "goto", group: "Panels", what: "Command Palette", keys: [primaryChord("Shift+P")] },
   { id: "panel.projects", group: "Panels", what: "Projects", keys: ["Alt+P"] },
   { id: "panel.tree", group: "Panels", what: "Tree, cursor in the filter", keys: ["Alt+T"] },

@@ -19,6 +19,11 @@ import { primaryChord } from "../platform";
 import Transcript from "./Transcript.vue";
 import PromptBar from "./PromptBar.vue";
 import StatusDot from "./StatusDot.vue";
+import PageFind from "./PageFind.vue";
+
+const find = ref(null);
+const content = ref(null);
+defineExpose({ find: () => find.value?.show() });
 
 const diffExpanded = inject("diffExpanded");
 
@@ -217,14 +222,17 @@ const badge = computed(() => {
       </div>
     </div>
 
-    <ProjectView v-if="current?.kind === 'project'" :tab="current" />
-    <PinnedPromptView v-else-if="current?.kind === 'schedule' && current.data.schedule.every === 'pinned'" :key="current.id" :tab="current" />
-    <ScheduleView v-else-if="current?.kind === 'schedule'" :tab="current" />
-    <FileView v-else-if="current?.kind === 'file'" :tab="current" />
-    <!-- Keyed by the tab, so switching between two terminals builds the one
-         in front rather than rewriting the last one's screen. -->
-    <TerminalView v-else-if="current?.kind === 'terminal'" :key="current.id" :tab="current" />
-    <Transcript v-else @start-tour="emit('start-tour')" />
+    <PageFind ref="find" :root="content" :context="`${S.activeProjectID}:${current?.id}:${current?.mode}`" />
+    <div ref="content" class="flex min-h-0 flex-1 flex-col">
+      <ProjectView v-if="current?.kind === 'project'" :tab="current" />
+      <PinnedPromptView v-else-if="current?.kind === 'schedule' && current.data.schedule.every === 'pinned'" :key="current.id" :tab="current" />
+      <ScheduleView v-else-if="current?.kind === 'schedule'" :tab="current" />
+      <FileView v-else-if="current?.kind === 'file'" :tab="current" />
+      <!-- Keyed by the tab, so switching between two terminals builds the one
+           in front rather than rewriting the last one's screen. -->
+      <TerminalView v-else-if="current?.kind === 'terminal'" :key="current.id" :tab="current" />
+      <Transcript v-else @start-tour="emit('start-tour')" />
+    </div>
 
     <!-- A file carries its own bar, and a terminal is one. The prompt box
          belongs to a conversation, and under either of those it is only in

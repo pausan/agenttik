@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { reactive, ref } from "vue";
-import { trackTaskAttention, taskDot } from "./task-attention.js";
+import { trackTaskAttention, taskDot, projectDot } from "./task-attention.js";
 
 test("reading requires three uninterrupted visible seconds and restarts for a new completion", (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
@@ -88,4 +88,28 @@ test("a new completion replaces a manual unread hold", (t) => {
   unread.a = 7;
   t.mock.timers.tick(3000);
   assert.equal(unread.a, undefined);
+});
+
+test("project dots combine unread task attention with task and scheduled job activity", () => {
+  const project = { recent_sessions: [{ id: "a", status: "idle" }, { id: "b", status: "idle" }], schedules: [] };
+  const unread = { a: 1 };
+  assert.equal(projectDot(project, {}), null);
+  assert.equal(projectDot(project, unread), "unread");
+  assert.equal(projectDot(project, { elsewhere: 1 }), null);
+  project.recent_sessions[1].status = "running";
+  assert.equal(projectDot(project, unread), "unread-running");
+  assert.equal(projectDot(project, {}), "running");
+  project.recent_sessions[1].status = "idle";
+  project.schedules.push({ running: true });
+  assert.equal(projectDot(project, unread), "unread-running");
+  assert.equal(projectDot(project, {}), "running");
+  project.schedules[0].running = false;
+  assert.equal(projectDot(project, unread), "unread");
+  project.recent_sessions[0].status = "error";
+  assert.equal(projectDot(project, unread), null);
+  project.recent_sessions[0].status = "running";
+  assert.equal(projectDot(project, unread), "running");
+  project.recent_sessions[0].status = "idle";
+  assert.equal(projectDot(project, { a: -1 }), "unread");
+  assert.equal(projectDot({ recent_sessions: [], schedules: [] }, unread), null);
 });

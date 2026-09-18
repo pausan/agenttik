@@ -144,4 +144,4 @@ disagree about, for a human to settle.
 
 - [071 Troubleshooting](071-troubleshooting.md) — local error reports in About, and the macOS idle CPU/memory loop and its measurements.
 
-- [074 Task attention](074-task-attention.md) — unread completion cues and three-second acknowledgement.
+- [074 Task attention](074-task-attention.md) — task and project unread cues and three-second acknowledgement.

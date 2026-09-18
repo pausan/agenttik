@@ -28,3 +28,10 @@ export function trackTaskAttention(unread, currentTask, visible, save = () => {}
 export function taskDot(status, unread) {
   return unread && status !== "error" && status !== "running" ? "unread" : status;
 }
+
+export function projectDot(project, unread) {
+  const running = project.recent_sessions.some((task) => task.status === "running") ||
+    project.schedules.some((schedule) => schedule.running);
+  const attention = project.recent_sessions.some((task) => taskDot(task.status, unread[task.id]) === "unread");
+  return attention ? (running ? "unread-running" : "unread") : (running ? "running" : null);
+}

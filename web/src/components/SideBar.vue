@@ -24,6 +24,7 @@ import {
 } from "../store";
 import { isMobile, SEGMENTED } from "../ui";
 import { beginDrag } from "../drag";
+import { projectDot } from "../task-attention";
 import FileTree from "./FileTree.vue";
 import ProfilePicker from "./ProfilePicker.vue";
 import HiddenProjectsMenu from "./HiddenProjectsMenu.vue";
@@ -137,10 +138,9 @@ const numbers = computed(() => {
 const taskNumber = (project, task) =>
   S.activeProjectID === project.id ? numbers.value.get(task.id) || 0 : 0;
 
-/* A project is lit while any of its tasks is mid-turn, whether or not that
-   conversation is the one on screen. */
-const busy = (p) =>
-  p.recent_sessions.some((s) => s.status === "running") || p.schedules.some((s) => s.running);
+const projectDots = computed(() => new Map(
+  S.projects.map((project) => [project.id, projectDot(project, S.unreadTasks)]),
+));
 
 /* The schedule tab in front, so its sidebar row is highlighted the way an
    open conversation's is. */
@@ -288,7 +288,7 @@ function onTaskDrop(e) {
                     title="Orchestrator · pinned first"
                     aria-label="Orchestrator · pinned first"
                   />
-                  <StatusDot v-if="busy(p)" status="running" />
+                  <StatusDot v-if="projectDots.get(p.id)" :status="projectDots.get(p.id)" />
                 </span>
                 <span class="block truncate pl-4 text-xs text-dimmed">{{ p.path }}</span>
               </button>

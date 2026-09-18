@@ -5,6 +5,12 @@ turn finishes and its result has not been read. Failed tasks keep their red
 status dot, including after reading. Running tasks keep their activity dot;
 provider retry waiting keeps its existing amber status after acknowledgement.
 
+Project rows in the sidebar show a steady amber dot when any of their tasks
+has an amber unread dot, including manually marked unread tasks. The amber
+dot pulses while a task or scheduled job in that project is running. Without
+unread task attention, running projects keep the primary activity pulse and
+inactive projects have no dot. Folding a project does not hide its indicator.
+
 Reading means keeping the task transcript selected in a visible window for
 three continuous seconds. Clicking and keyboard navigation behave alike.
 Leaving the transcript or hiding the window cancels the timer. A completion

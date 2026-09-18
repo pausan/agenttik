@@ -12,8 +12,10 @@ Inline formatting does not interrupt a phrase. Hidden or collapsed content,
 form fields, unrendered terminal scrollback and sandboxed HTML iframe contents
 are not searched.
 
-The bar shows the active match and total, or “No matches”. Enter / Shift+Enter
-and the arrow buttons move forward / backward, wrapping at either end. Matches
+The bar shows the active match and total, or “No matches”. In the search field,
+Down / Enter moves to the next match and Up / Shift+Enter moves to the previous
+match. The arrow buttons do the same. Navigation wraps at either end and keeps
+the query unchanged; with no matches it does nothing. Matches
 are highlighted and the current match scrolls into view. Engines without CSS
 Highlights use a DOM selection for the current match. Escape in the find bar or
 the close button closes it and restores focus. Changing project, tab or file

@@ -92,10 +92,10 @@ defineExpose({ show });
 
 <template>
   <div v-if="open" role="search" aria-label="Find in current page" class="flex shrink-0 items-center gap-2 border-b border-default bg-default px-3 py-2" @keydown.esc.stop.prevent="close">
-    <input ref="input" v-model="query" aria-label="Find in current page" placeholder="Find in current page…" class="min-w-0 flex-1 rounded border border-default bg-default px-2 py-1 text-sm" @keydown.enter.stop.prevent="move($event.shiftKey ? -1 : 1)" />
+    <input ref="input" v-model="query" aria-label="Find in current page" placeholder="Find in current page…" class="min-w-0 flex-1 rounded border border-default bg-default px-2 py-1 text-sm" @keydown.enter.stop.prevent="move($event.shiftKey ? -1 : 1)" @keydown.up.exact.stop.prevent="move(-1)" @keydown.down.exact.stop.prevent="move(1)" />
     <span role="status" class="whitespace-nowrap text-xs text-muted">{{ count ? `${current + 1} of ${count}` : query ? 'No matches' : '0 matches' }}</span>
-    <UButton icon="i-lucide-chevron-up" aria-label="Previous match" color="neutral" variant="ghost" size="xs" :disabled="!count" @click="move(-1)" />
-    <UButton icon="i-lucide-chevron-down" aria-label="Next match" color="neutral" variant="ghost" size="xs" :disabled="!count" @click="move(1)" />
+    <UButton icon="i-lucide-chevron-up" aria-label="Previous match" title="Previous match (↑ or Shift+Enter)" color="neutral" variant="ghost" size="xs" :disabled="!count" @click="move(-1)" />
+    <UButton icon="i-lucide-chevron-down" aria-label="Next match" title="Next match (↓ or Enter)" color="neutral" variant="ghost" size="xs" :disabled="!count" @click="move(1)" />
     <UButton icon="i-lucide-x" aria-label="Close find" color="neutral" variant="ghost" size="xs" @click="close" />
   </div>
 </template>

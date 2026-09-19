@@ -282,3 +282,43 @@ func TestMoveProjectBetweenProfiles(t *testing.T) {
 		t.Fatalf("running project: %d", response.StatusCode)
 	}
 }
+
+func TestProfilesReorder(t *testing.T) {
+	s := profileServer(t)
+	work := decode[Profile](t, do(t, s, "POST", "/api/profiles", map[string]string{"name": "Work"}))
+	check := func() {
+		t.Helper()
+		catalog := decode[struct {
+			Profiles []Profile `json:"profiles"`
+		}](t, do(t, s, "GET", "/api/profiles", nil))
+		if len(catalog.Profiles) != 2 || catalog.Profiles[0] != work || catalog.Profiles[1].ID != "default" {
+			t.Fatalf("unexpected order: %+v", catalog.Profiles)
+		}
+	}
+	if resp := do(t, s, "PUT", "/api/profiles/order?profile="+work.ID, map[string]any{"ids": []string{work.ID, "default"}}); resp.StatusCode != 204 {
+		t.Fatalf("reorder: %d", resp.StatusCode)
+	}
+	check()
+	for _, ids := range [][]string{nil, {"default"}, {"default", "default"}, {"default", "missing"}, {"default", work.ID, "extra"}} {
+		if resp := do(t, s, "PUT", "/api/profiles/order", map[string]any{"ids": ids}); resp.StatusCode != 400 {
+			t.Fatalf("invalid order %v: %d", ids, resp.StatusCode)
+		}
+		check()
+	}
+	s.CloseProfiles()
+	if err := s.EnableProfiles(false); err != nil {
+		t.Fatal(err)
+	}
+	check()
+	// Failed persistence must leave the in-memory order untouched too.
+	if err := os.Remove(s.profiles.path()); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(s.profiles.path(), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if resp := do(t, s, "PUT", "/api/profiles/order", map[string]any{"ids": []string{"default", work.ID}}); resp.StatusCode != 500 {
+		t.Fatalf("failed save: %d", resp.StatusCode)
+	}
+	check()
+}

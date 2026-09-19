@@ -183,6 +183,7 @@ func (s *Server) routes() {
 	api.Post("/updates/install", s.installUpdate)
 	api.Put("/server/name", s.putServerName)
 	api.Get("/profiles", s.listProfiles)
+	api.Put("/profiles/order", s.reorderProfiles)
 	api.Post("/profiles", s.createProfile)
 	api.Post("/profiles/:id/projects/:projectID/move", s.moveProjectProfile)
 	api.Patch("/profiles/:id", s.renameProfile)

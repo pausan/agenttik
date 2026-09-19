@@ -1,8 +1,9 @@
 # Local profiles
 
-Profiles are local to a data directory on this computer. Settings → General → Profiles adds,
-renames, and removes profiles. The built-in profile, initially named Default,
-holds existing data and cannot be removed. Names are trimmed, unique ignoring
+Profiles are local to a data directory on this computer. Settings → Profiles adds,
+renames, reorders, and removes profiles. Up/down buttons save the shared order
+for Settings and profile pickers, including the built-in profile. The built-in
+profile, initially named Default, holds existing data and cannot be removed. Names are trimmed, unique ignoring
 case, and limited to 80 bytes.
 Renaming changes the display name only: the stable ID, data, running work, and
 open profile remain unchanged. A pencil button beside each name opens the inline
@@ -62,12 +63,15 @@ SQLite does not guarantee cross-database atomicity on a machine crash.
 ## Storage and routing
 
 - Existing Default data stays at `<data-dir>/agenttik.db` without migration.
-- `profiles.json` holds stable UUIDs and display names, written by atomic rename.
+- `profiles.json` holds stable UUIDs and display names in display order, written
+  by atomic rename.
 - Added profiles live under `<data-dir>/profiles/<uuid>/`, each with a database,
   instance lock, runner, and clocks. They reopen at startup, so schedules resume
   even when another profile is being viewed.
 - `GET/POST /api/profiles` lists/creates; `PATCH /api/profiles/:id` renames;
-  `DELETE /api/profiles/:id` removes.
+  `DELETE /api/profiles/:id` removes. `PUT /api/profiles/order` accepts
+  `{ids: [...]}` containing every current profile exactly once; missing, duplicate, or
+  unknown IDs leave the catalog unchanged.
 - API URLs carry `?profile=<uuid>`; missing means Default and unknown IDs return
   404. Native desktop, network-server, and remote-connection controls remain at
   instance scope. Profile management is shared across the instance.
@@ -87,5 +91,5 @@ CLI discovery, favourites, subscriptions, invalid names, deletion, and shutdown.
 Move tests cover ID collisions, history and image copies, return moves, blocked
 work, duplicate folders, failed-copy rollback, and moves in either direction.
 Browser tests cover the picker, palette switching, appearance, tree expansion,
-renaming, and removal; private tests cover concurrent instances and
+renaming, reordering, and removal; private tests cover concurrent instances and
 SIGTERM cleanup. Startup remains under the one-second budget.

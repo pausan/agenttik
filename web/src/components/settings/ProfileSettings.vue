@@ -12,7 +12,7 @@ const busy = ref(false);
 const removing = ref(null);
 const editing = ref(null);
 const draft = ref("");
-const show = computed(() => fuzzyAny(["profiles", "local", "add", "rename", "edit", "remove", ...profiles.items.map(p => p.name)], props.filter) !== null);
+const show = computed(() => fuzzyAny(["profiles", "local", "add", "rename", "edit", "remove", "order", "reorder", ...profiles.items.map(p => p.name)], props.filter) !== null);
 watchEffect(() => emit("count", show.value ? 1 : 0));
 
 function startEdit(p) {
@@ -29,6 +29,20 @@ async function saveEdit(p) {
   try {
     await api("PATCH", `/api/profiles/${p.id}`, { name: draft.value });
     cancelEdit();
+    await loadProfiles();
+  } catch (e) { fail(e); }
+  finally { busy.value = false; }
+}
+
+async function move(index, offset) {
+  if (busy.value) return;
+  const ids = profiles.items.map(p => p.id);
+  const target = index + offset;
+  if (target < 0 || target >= ids.length) return;
+  [ids[index], ids[target]] = [ids[target], ids[index]];
+  busy.value = true;
+  try {
+    await api("PUT", "/api/profiles/order", { ids });
     await loadProfiles();
   } catch (e) { fail(e); }
   finally { busy.value = false; }
@@ -64,7 +78,9 @@ async function remove() {
       <UInput v-model="name" placeholder="Profile name" aria-label="Profile name" maxlength="80" class="min-w-0 flex-1" />
       <UButton type="submit" label="Add profile" :disabled="!name.trim() || busy" :loading="busy" />
     </form>
-    <div v-for="p in profiles.items" :key="p.id" class="flex items-center gap-2 border-t border-default py-2">
+    <div v-for="(p, index) in profiles.items" :key="p.id" class="flex items-center gap-2 border-t border-default py-2">
+      <UButton color="neutral" variant="ghost" icon="i-lucide-arrow-up" :aria-label="`Move ${p.name} up`" :disabled="busy || index === 0" @click="move(index, -1)" />
+      <UButton color="neutral" variant="ghost" icon="i-lucide-arrow-down" :aria-label="`Move ${p.name} down`" :disabled="busy || index === profiles.items.length - 1" @click="move(index, 1)" />
       <form v-if="editing === p.id" class="flex min-w-0 flex-1 items-center gap-2" @submit.prevent="saveEdit(p)">
         <UInput
           v-model="draft"

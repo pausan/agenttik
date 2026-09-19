@@ -139,3 +139,24 @@ test("a conflicting project move keeps the source visible", async ({ page, agent
   await expect(sidebar(page).getByText("Same folder", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Move project", exact: true })).toBeEnabled();
 });
+
+test("settings reorder profiles and persist the picker order", async ({ page, agenttik }) => {
+  await page.request.post(`${agenttik.url}/api/profiles`, { data: { name: "Work" } });
+  await openSettings(page, "Profiles");
+  const up = page.getByRole("button", { name: /^Move .* up$/ });
+  await expect(page.getByRole("button", { name: "Move Default up", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Move Work down", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "Move Work up", exact: true }).click();
+  await expect(up.first()).toHaveAttribute("aria-label", "Move Work up");
+  await expect(up.first()).toBeDisabled();
+  await page.reload();
+  await openSettings(page, "Profiles");
+  await expect(up.first()).toHaveAttribute("aria-label", "Move Work up");
+  await page.getByRole("button", { name: "Move Work down", exact: true }).click();
+  await expect(up.first()).toHaveAttribute("aria-label", "Move Default up");
+  await page.getByRole("button", { name: "Move Default down", exact: true }).click();
+  await expect(up.first()).toHaveAttribute("aria-label", "Move Work up");
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await page.getByRole("button", { name: "Profile: Default", exact: true }).click();
+  await expect(page.getByRole("menuitem")).toHaveText(["Work", "Default"]);
+});

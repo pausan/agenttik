@@ -288,6 +288,45 @@ func validateProfileName(raw string) (string, error) {
 	return name, nil
 }
 
+func (s *Server) reorderProfiles(c *fiber.Ctx) error {
+	m := s.profiles
+	if m == nil {
+		return fiber.NewError(503, "Profiles are unavailable")
+	}
+	var body struct {
+		IDs []string `json:"ids"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return fiber.NewError(400, "Invalid profile order")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closed {
+		return fiber.NewError(503, "Instance is shutting down")
+	}
+	if len(body.IDs) != len(m.profiles) {
+		return fiber.NewError(400, "Order must include every profile exactly once")
+	}
+	byID := make(map[string]Profile, len(m.profiles))
+	for _, p := range m.profiles {
+		byID[p.ID] = p
+	}
+	next := make([]Profile, 0, len(m.profiles))
+	for _, id := range body.IDs {
+		p, ok := byID[id]
+		if !ok {
+			return fiber.NewError(400, "Order must include every profile exactly once")
+		}
+		next = append(next, p)
+		delete(byID, id)
+	}
+	if err := m.save(next); err != nil {
+		return err
+	}
+	m.profiles = next
+	return c.SendStatus(204)
+}
+
 func (s *Server) renameProfile(c *fiber.Ctx) error {
 	m := s.profiles
 	if m == nil {

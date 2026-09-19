@@ -77,7 +77,7 @@ func (p *Provider) Run(ctx context.Context, req agent.TurnRequest) (<-chan agent
 		return nil, fmt.Errorf("unsupported OpenCode Go model %q", req.Model)
 	}
 	if !p.AccountStatus(req.AccountHome).SignedIn {
-		return nil, fmt.Errorf("sign in to OpenCode Go in Settings → Subscriptions")
+		return nil, fmt.Errorf("sign in to OpenCode Go in Settings → Providers → Subscriptions")
 	}
 	if p.useCLI(req) {
 		return p.runCLI(ctx, req)

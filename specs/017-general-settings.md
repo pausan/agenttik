@@ -1,8 +1,8 @@
 # General settings
 
-Settings grew a fourth section, **General**, and it is where the dialog now
-opens: the sidebar's Settings button and the launcher's Settings entry both
-land there, the keyboard button still lands on Shortcuts.
+The settings tree opens on **General**. Appearance, Profiles, Projects and
+Shortcuts are its children. The sidebar and launcher Settings entries land on
+General; the keyboard button opens General → Shortcuts.
 
 It controls prompt submission, project folding, where new tasks and projects
 are inserted, and project task search. **Fuzzy Search** is the default;

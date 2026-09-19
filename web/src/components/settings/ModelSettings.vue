@@ -7,6 +7,7 @@ import {
   setActionModel,
   fail,
   isModelChoiceHidden,
+  isModelChoiceEnabled,
   modelAccountLabel,
   modelPickerGroups,
   providerOf,
@@ -35,7 +36,7 @@ const groups = computed(() => allGroups.value.flatMap((group) => {
 const favouriteRows = computed(() => S.stars.flatMap((star) => {
   const provider = providerOf(star.provider);
   const model = provider?.models.find((candidate) => candidate.id === star.model);
-  if (!provider || !model) return [];
+  if (!isModelChoiceEnabled(star.provider, star.account_id, star.model) || !model) return [];
   const effort = star.effort
     ? star.effort[0].toUpperCase() + star.effort.slice(1)
     : "Default";
@@ -115,7 +116,7 @@ async function removeFavourite(star) {
   <section v-if="groups.length || favouriteRows.length || actionRows.length">
     <div class="mb-0.5 font-semibold text-highlighted">Models</div>
     <p class="mb-3.5 text-xs text-dimmed">
-      Hidden subscriptions and models stay out of every model picker. Add favourites from the
+      Only connected subscriptions and enabled API providers appear here. Hidden models stay out of every model picker. Add favourites from the
       main prompt, then set their order here.
     </p>
 

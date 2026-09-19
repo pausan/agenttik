@@ -42,21 +42,23 @@ A chord bound to two actions is not refused — it is labelled, on both rows,
 with the other action's name. Which one runs is whichever handler asks first,
 and that is not something to find out by accident.
 
-The dialog grew a rail to hold all this: **General**, **Projects**, **Orchestrator**,
-**Appearance**, **Models**, **Subscriptions**, **Server**, **Shortcuts** —
-General is [017](017-general-settings.md), Projects lists what has been
-archived ([041](041-project-archiving.md)), Orchestrator enables the optional
-app-wide project and resets its instructions ([054](054-orchestrator-project.md)), Subscriptions is which account
-each provider runs on ([050](050-subscription-accounts.md)), and Server is
-[043](043-exposed-server.md) — with a filter above them. The filter fuzzy-matches every row in every section — a palette name, a
-model, a subscription, a shortcut and its keys — and each section reports how
-many it kept, so
-the count beside a section says where the answer is before you click.
-Filtering into a section that has no matches moves to one that does. Every
-pane stays mounted, which is what keeps those counts live; they are small
-enough that this costs nothing — and it is why a provider's rows are a
-labelled group in both Models and Subscriptions, since its name is now in two
-lists at once.
+Settings has a collapsible navigation tree, in this order:
+
+- General: its own pane, with Appearance, Profiles, Projects and Shortcuts below it.
+- Orchestrator.
+- Providers: Subscriptions and API Providers.
+- Models, Server, Help and About.
+
+General opens by default. Parent chevrons collapse their children; selecting a
+child through an external shortcut opens its parent. Providers selects
+Subscriptions. On phones the groups form a bounded, horizontally scrolling rail.
+The icons are bundled from both Vue and JavaScript sources for offline use.
+
+The filter fuzzy-matches rows in every pane. Matching children keep their parent
+visible and expanded, parent counts include matching descendants, and a selected
+pane with no matches moves to the first matching pane. Panes stay mounted to
+keep counts current. API setup and connected-model filtering are described in
+[078](078-api-providers.md).
 
 Matching is per field rather than over one joined string: a subsequence match
 against a label and its keys run together is loose enough to hit almost

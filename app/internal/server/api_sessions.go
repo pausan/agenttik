@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/pausan/agenttik/app/internal/agent"
+	"github.com/pausan/agenttik/app/internal/agent/apiprovider"
 	"github.com/pausan/agenttik/app/internal/runner"
 	"github.com/pausan/agenttik/app/internal/store"
 )
@@ -159,14 +160,23 @@ func (s *Server) updateSession(c *fiber.Ctx) error {
 		// AccountID is which subscription of the provider runs the next turn.
 		// Absent keeps the one the task has, unless the provider changed, in
 		// which case that provider's default answers.
-		AccountID *int64  `json:"account_id"`
-		Model     *string `json:"model"`
-		Effort    *string `json:"effort"`
-		Title     *string `json:"title"`
-		Done      *bool   `json:"done"`
+		AccountID  *int64  `json:"account_id"`
+		Model      *string `json:"model"`
+		Effort     *string `json:"effort"`
+		Title      *string `json:"title"`
+		Permission *string `json:"permission"`
+		Done       *bool   `json:"done"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return badRequest("invalid body: %v", err)
+	}
+	if body.Permission != nil {
+		if string(agent.Permission(*body.Permission).Valid()) != *body.Permission {
+			return badRequest("permission must be plan, workspace, or full")
+		}
+		if s.runner.Running(id) {
+			return badRequest("stop this task before changing tool access")
+		}
 	}
 	if body.Provider != nil || body.AccountID != nil || body.Model != nil || body.Effort != nil {
 		providerName, model, effort := sess.Provider, sess.Model, sess.Effort
@@ -206,6 +216,17 @@ func (s *Server) updateSession(c *fiber.Ctx) error {
 		// account that made it, and the other account cannot resume it.
 		switched := providerName != sess.Provider || accountID != sess.AccountID
 		if err := s.store.SetSessionModel(id, providerName, accountID, model, effort, switched); err != nil {
+			return err
+		}
+	}
+	if body.Permission != nil && *body.Permission != sess.Permission {
+		name := sess.Provider
+		if body.Provider != nil {
+			name = *body.Provider
+		}
+		provider, _ := s.registry.Get(name)
+		_, direct := provider.(*apiprovider.Provider)
+		if err := s.store.SetSessionPermission(id, *body.Permission, !direct); err != nil {
 			return err
 		}
 	}

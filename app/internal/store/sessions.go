@@ -224,6 +224,23 @@ func (s *Store) SetSessionModel(id, provider string, accountID int64, model, eff
 	return nil
 }
 
+// SetSessionPermission applies to the next turn. CLI conversations restart so
+// their sandbox is recreated; direct API turns rebuild tools on every request.
+func (s *Store) SetSessionPermission(id, permission string, resetProviderSession bool) error {
+	query := `UPDATE sessions SET permission = ?, updated_at = ? WHERE id = ?`
+	if resetProviderSession {
+		query = `UPDATE sessions SET permission = ?, provider_session_id = '', updated_at = ? WHERE id = ?`
+	}
+	result, err := s.db.Exec(query, permission, nowMillis(), id)
+	if err != nil {
+		return fmt.Errorf("set session permission: %w", err)
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // SetSessionDone ticks a session off, or unticks it. Doing so is not activity,
 // so last_active_at is left alone and the Sessions window keeps showing it.
 func (s *Store) SetSessionDone(id string, done bool) error {

@@ -44,7 +44,7 @@ export default defineConfig({
         selectMenu: { slots: { content: "z-50" } },
         inputMenu: { slots: { content: "z-50" } },
       },
-      icon: { clientBundle: { scan: true } },
+      icon: { clientBundle: { scan: { globInclude: ["src/**/*.{vue,js}"] } } },
     }),
     keepPlaceholder(),
   ],

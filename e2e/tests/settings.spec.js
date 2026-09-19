@@ -97,7 +97,7 @@ test("authentication enables before a password and the current code refreshes", 
   });
   await dialog.getByRole("button", { name: "Copy the code", exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.copiedCode)).toBe("123456");
-  await expect(dialog.locator('input[type="password"]')).toHaveCount(1);
+  await expect(dialog.locator('input[type="password"]:visible')).toHaveCount(1);
   await dialog.getByPlaceholder("At least 8 characters").fill("a-new-password");
   await dialog.getByPlaceholder("At least 8 characters").press("Enter");
   await expect(dialog.getByText("Change the password", { exact: true })).toBeVisible();

@@ -1,7 +1,7 @@
 <script setup>
 import { computed, defineAsyncComponent, nextTick, ref, watch } from "vue";
 
-import { S, createSchedule, contextWindow, enqueue, enterDoes, fail, hit, limitsKey, openTerminal, refreshSubscriptionLimits, send, setModel, stopTurn } from "../store";
+import { S, createSchedule, contextWindow, enqueue, enterDoes, fail, hit, limitsKey, openTerminal, refreshSubscriptionLimits, send, setModel, setTaskPermission, providerOf, stopTurn } from "../store";
 import { ago } from "../api";
 import Chord from "./Chord.vue";
 import ContextPane from "./ContextPane.vue";
@@ -76,6 +76,18 @@ watch(
 
 function chooseModel(choice) {
   setModel(choice.provider, choice.model, choice.effort, choice.accountID);
+}
+
+const savingPermission = ref(false);
+const toolPermissions = [
+  { label: "Read only", value: "plan" },
+  { label: "Edit project files", value: "workspace" },
+  { label: "Full access", value: "full" },
+];
+async function choosePermission(permission) {
+  savingPermission.value = true;
+  try { await setTaskPermission(permission); } catch (error) { fail(error); }
+  finally { savingPermission.value = false; }
 }
 
 const contextUsed = computed(() => S.detail?.stats.context_tokens || 0);
@@ -267,6 +279,12 @@ function runMenuAction(action) {
           <UButton type="button" size="xs" color="neutral" icon="i-lucide-x" :aria-label="`Remove image ${i + 1}`" class="absolute top-0 right-0" @click="removeImage(i)" />
         </div>
         <span v-if="uploading" role="status" class="text-sm text-muted">Saving images…</span>
+      </div>
+      <div v-if="providerOf(S.detail.session.provider)?.kind === 'api'" class="mb-2 flex flex-wrap items-center gap-2 px-2 text-xs text-muted">
+        <span>Tool access</span>
+        <USelect :model-value="S.detail.session.permission" :items="toolPermissions" size="xs" aria-label="Tool access"
+          :disabled="S.detail.running || savingPermission" @update:model-value="choosePermission" />
+        <span class="text-dimmed">{{ S.detail.session.permission === 'full' ? 'Commands run on the Agenttik host.' : 'Full access enables shell and Python.' }}</span>
       </div>
       <div class="prompt-controls flex items-center gap-1.5">
         <div class="prompt-model-controls contents">

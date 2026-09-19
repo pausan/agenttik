@@ -21,8 +21,8 @@ const emit = defineEmits(["count"]);
 /* A provider the filter names keeps all its subscriptions; otherwise the
    aliases themselves are matched, so "personal" finds the one row. */
 const providers = computed(() =>
-  S.providers.flatMap((p) => {
-    if (fuzzyAny([p.display_name, p.name, "subscriptions", "accounts"], props.filter) !== null) {
+  S.providers.filter((p) => p.kind !== "api").flatMap((p) => {
+    if (fuzzyAny([p.display_name, p.name, "subscriptions", "accounts", "providers"], props.filter) !== null) {
       return [p];
     }
     const accounts = p.accounts.filter(

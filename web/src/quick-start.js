@@ -10,7 +10,7 @@ export const TOUR_STEPS = [
     "You perform every action. Previous and Next are always available. Close this tour anytime and restart it from Settings → Help. Minimize it whenever you need more room.",
   ] },
   { id: "connect", title: "Set up your first agent", paragraphs: [
-    "Open Settings → Subscriptions. Choose Codex, Claude Code, or another provider. Follow its installation instructions if needed, then click Sign in and finish the login. Reopen Settings to refresh the connection status.",
+    "Open Settings → Providers. Under Subscriptions, choose a provider, install its CLI if needed, and sign in. Under API Providers, enter a key and click Enable. API tasks need Full access to run the tutorial commands and tests. Reopen Settings to refresh subscription status.",
     "One connected provider is enough to start. You can add more providers and subscriptions in Settings later, and choose a model for each task.",
   ] },
   { id: "project", title: "Create a practice project", paragraphs: [

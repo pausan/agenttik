@@ -231,12 +231,22 @@ export function accountLabel(name, id) {
 /* Every model control names the subscription, including System. The shorter
    accountLabel above remains for places where a lone System label is noise. */
 export function modelAccountLabel(name, id) {
+  const provider = providerOf(name);
+  if (provider?.kind === "api") return provider.display_name;
   return accountOf(name, id)?.alias || (id ? "removed subscription" : "System");
 }
 
 /* The subscription a new task on this provider starts on. */
 export function defaultAccountOf(name) {
-  return (accountsOf(name).find((a) => a.is_default) || { id: 0 }).id;
+  const provider = providerOf(name);
+  const accounts = accountsOf(name).filter((a) => !provider?.multi_account || a.signed_in);
+  return (accounts.find((a) => a.is_default) || accounts[0] || { id: 0 }).id;
+}
+
+export function isModelChoiceEnabled(provider, accountID, model) {
+  const p = providerOf(provider);
+  return !!p?.available && (!p.multi_account || !!accountOf(provider, accountID)?.signed_in) &&
+    p.models.some((m) => m.id === model);
 }
 
 /* modelPickerGroups is the group list every model control draws — the prompt
@@ -249,15 +259,15 @@ export function defaultAccountOf(name) {
    Values are `model:<provider>:<account>:<model>`, read back by
    parseModelChoice, so all three controls speak one format. */
 export function modelPickerGroups({ includeHidden = false } = {}) {
-  return S.providers.flatMap((p) => {
+  return S.providers.filter((p) => p.available && p.models.length).flatMap((p) => {
     const accounts = p.accounts?.length ? p.accounts : [{ id: 0, alias: "" }];
-    return accounts.filter((account) => includeHidden || !isModelChoiceHidden(p.name, account.id)).map((account) => ({
+    return accounts.filter((account) => (!p.multi_account || account.signed_in) && (includeHidden || !isModelChoiceHidden(p.name, account.id))).map((account) => ({
       id: `${p.name}:${account.id}`,
-      label: `${account.alias || "System"} · ${p.display_name}`,
+      label: p.kind === "api" ? p.display_name : `${account.alias || "System"} · ${p.display_name}`,
       provider: p,
       account,
       items: p.models.filter((m) => includeHidden || !isModelChoiceHidden(p.name, account.id, m.id)).map((m) => ({
-        label: `${account.alias || "System"} · ${m.label}`,
+        label: `${p.kind === "api" ? p.display_name : account.alias || "System"} · ${m.label}`,
         search: `${account.alias || "System"} · ${p.display_name} · ${p.name} · ${m.label} · ${m.id}`,
         value: `model:${p.name}:${account.id}:${m.id}`,
         disabled: !p.available,
@@ -292,7 +302,7 @@ export function isModelChoiceHidden(provider, accountID, model = "") {
 }
 
 export function isModelChoiceVisible(provider, accountID, model) {
-  return !isModelChoiceHidden(provider, accountID) && !isModelChoiceHidden(provider, accountID, model);
+  return isModelChoiceEnabled(provider, accountID, model) && !isModelChoiceHidden(provider, accountID) && !isModelChoiceHidden(provider, accountID, model);
 }
 
 export async function setModelChoiceHidden(provider, accountID, model, hidden) {
@@ -1735,7 +1745,7 @@ async function sessionDefaults(projectID) {
   for (const c of [latest, recent, S.stars[0]]) {
     if (!c) continue;
     const p = providerOf(c.provider);
-    if (!p || !p.available || !p.models.some((m) => m.id === c.model)) continue;
+    if (!isModelChoiceEnabled(c.provider, c.account_id, c.model)) continue;
     return {
       provider: p.name,
       account_id: accountOf(p.name, c.account_id) ? (c.account_id || 0) : defaultAccountOf(p.name),
@@ -1744,7 +1754,7 @@ async function sessionDefaults(projectID) {
       permission: c.permission || "workspace",
     };
   }
-  const p = S.providers.find((x) => x.available && x.models.length && (!x.direct_login || x.accounts?.some((a) => a.is_default && a.signed_in)));
+  const p = S.providers.find((x) => x.available && x.models.length && (!x.multi_account || x.accounts?.some((a) => a.signed_in)));
   if (!p) return null;
   return { provider: p.name, account_id: defaultAccountOf(p.name), model: p.models[0].id, effort: "", permission: "workspace" };
 }
@@ -1814,7 +1824,7 @@ export async function startTask(project) {
     await openTask(reusable);
     return reuse("session:" + reusable);
   }
-  if (!cfg) return fail(new Error("No agent provider is ready. Open Settings to install a CLI or sign in."));
+  if (!cfg) return fail(new Error("No agent provider is ready. Open Settings → Providers to connect a subscription or API key."));
   try {
     const sess = await api("POST", "/api/sessions", { project_id: project.id, ...cfg });
     await Promise.all([refreshProjects(), refreshSessions()]);
@@ -1895,6 +1905,13 @@ export async function setModel(provider, model, effort, accountID) {
   } catch (e) {
     fail(e);
   }
+}
+
+export async function setTaskPermission(permission) {
+  const tab = S.owner;
+  if (tab?.kind !== "session") return;
+  tab.detail.session = await api("PATCH", `/api/sessions/${tab.sessionID}`, { permission });
+  rememberUsed(tab.detail.session);
 }
 
 /* renameTask retitles a session. The same session shows in the sidebar, in
@@ -3641,4 +3658,14 @@ export async function setActionModel(action, choice) {
   S.actionModels = await api("PUT", `/api/action-models/${action}`, choice ? {
     provider: choice.provider, account_id: choice.accountID, model: choice.model, effort: choice.effort,
   } : {});
+}
+
+export async function configureAPIProvider(name, connection) {
+  S.providers = await api("PUT", `/api/providers/${encodeURIComponent(name)}/api`, connection);
+  await loadActionModels();
+}
+
+export async function removeAPIProviderKey(name) {
+  S.providers = await api("DELETE", `/api/providers/${encodeURIComponent(name)}/api`);
+  await loadActionModels();
 }

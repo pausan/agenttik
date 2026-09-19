@@ -78,8 +78,12 @@ requests. Live credentials and model availability have not been verified.
 
 The runtime has bounded steps, execution time and output, but no automatic context
 compaction, image understanding or local currency budget. Provider-side spending
-limits should be set in the provider console. Full permission is required for
-shell/Python tests and commands; Workspace confines edits to project files.
+limits should be set in the provider console. The task prompt has a **Tool access** selector: Read only, Edit project files
+(default), or Full access for shell/Python commands. Changes are saved through
+`PATCH /api/sessions/:id` with `permission` and refused during an active turn.
+API conversation history is retained when permission changes. New tasks remember
+the last task choice, and schedules inherit the selected permission. Workspace
+confines edits to project files.
 
 Implementation references: [OpenAI function calling](https://developers.openai.com/api/docs/guides/function-calling),
 [Anthropic streaming](https://platform.claude.com/docs/en/build-with-claude/streaming),

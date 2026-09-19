@@ -35,6 +35,12 @@ func apiProviderServer(t *testing.T) (*Server, *store.Store) {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Error(err)
 		}
+		messages, _ := body["messages"].([]any)
+		if len(messages) > 0 && messages[len(messages)-1].(map[string]any)["content"] == "hold for cancellation" {
+			_, _ = io.Copy(io.Discard, r.Body)
+			<-r.Context().Done()
+			return
+		}
 		if body["model"] != "gpt-test" {
 			t.Error("wrong model", body["model"])
 		}
@@ -155,5 +161,46 @@ func TestSignedOutSubscriptionHasNoModels(t *testing.T) {
 	p := providerNamed(t, s, "signed-out")
 	if !p.Available || len(p.Models) != 0 || len(p.Accounts) != 2 {
 		t.Fatal("subscription discovery did not keep setup while hiding models", p)
+	}
+}
+
+func TestAPITaskPermissionPersistsAndKeepsConversation(t *testing.T) {
+	s, st := apiProviderServer(t)
+	if resp := do(t, s, "PUT", "/api/providers/api-openai/api", map[string]any{"key": "test-only-key", "enabled": true}); resp.StatusCode != 200 {
+		t.Fatal(resp.StatusCode)
+	}
+	project, err := st.CreateProject("permissions", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	session := decode[store.Session](t, do(t, s, "POST", "/api/sessions", map[string]any{"project_id": project.ID, "provider": "api-openai"}))
+	if err := st.SetProviderSessionID(session.ID, "keep-this-conversation"); err != nil {
+		t.Fatal(err)
+	}
+	path := "/api/sessions/" + session.ID
+	if resp := do(t, s, "PATCH", path, map[string]string{"permission": "invalid"}); resp.StatusCode != 400 {
+		t.Fatal("invalid permission accepted")
+	}
+	full := decode[store.Session](t, do(t, s, "PATCH", path, map[string]string{"permission": "full"}))
+	if full.Permission != "full" || full.ProviderSessionID != "keep-this-conversation" {
+		t.Fatal(full)
+	}
+	stored, err := st.GetSession(session.ID)
+	if err != nil || stored.Permission != "full" {
+		t.Fatal(stored, err)
+	}
+	if err := st.SetProviderSessionID(session.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.runner.Send(session.ID, "hold for cancellation"); err != nil {
+		t.Fatal(err)
+	}
+	defer s.runner.Stop(session.ID)
+	if resp := do(t, s, "PATCH", path, map[string]string{"permission": "plan"}); resp.StatusCode != 400 {
+		t.Fatal("running task changed permission", resp.StatusCode)
+	}
+	stored, _ = st.GetSession(session.ID)
+	if stored.Permission != "full" {
+		t.Fatal("failed permission change was written")
 	}
 }

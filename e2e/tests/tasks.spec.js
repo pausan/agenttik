@@ -36,19 +36,20 @@ test("an empty prompt sends nothing", async ({ page }) => {
   await expect(page.getByText("You", { exact: true })).toHaveCount(0);
 });
 
-test("setup lists the providers and whether their CLI is installed", async ({ page }) => {
+test("model settings only list connected providers and setup keeps subscriptions", async ({ page }) => {
   await page.getByRole("button", { name: "Settings" }).click();
   await page.getByRole("button", { name: "Models" }).click();
 
-  // Every pane of Settings stays mounted, and the Subscriptions one lists the
-  // same providers, so each is asked for as its own group in this list.
-  await expect(page.getByRole("group", { name: "System · Claude Code models" })).toBeVisible();
-  await expect(page.getByRole("group", { name: "System · Codex models" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "System · Claude Code models" })).toHaveCount(0);
+  await expect(page.getByRole("group", { name: "System · Codex models" })).toHaveCount(0);
   // The fake provider spawns no CLI, so it is ready regardless of what is
   // installed on the machine running the suite.
   await expect(page.getByRole("group", { name: "System · Fake models" })).toBeVisible();
   await expect(page.getByRole("button", { name: `Hide System · Fake · ${FAKE_MODEL}` })).toBeVisible();
   await expect(page.getByText("ready")).not.toHaveCount(0);
+  await page.getByRole("button", { name: "Subscriptions", exact: true }).click();
+  await expect(page.getByRole("group", { name: "Claude Code subscriptions" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Codex subscriptions" })).toBeVisible();
 });
 
 test("a starred model and effort heads the picker and sets both at once", async ({ page }) => {

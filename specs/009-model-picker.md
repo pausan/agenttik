@@ -5,15 +5,17 @@ message editor, queued prompt, scheduled job and pinned prompt. It always
 draws a model button and a separate effort select. Only the main prompt adds
 the favourite button.
 
-The model button and every model row use one line: `Subscription · Model`.
+Subscription model buttons and rows use one line: `Subscription · Model`.
+API rows use `Service API · Model`, under a `Service API` group.
 Rows sit under collapsible `Subscription · Provider` groups, so the provider
 is visible without repeating it on every row. The fuzzy field matches the
 subscription, provider display name and id, model display name and id.
 
 Favourites come first, in their Settings order, as `Subscription · Model ·
 Effort`. Their section is independently height-limited, and the whole palette
-is bounded by the viewport. Models from an unavailable CLI remain visible but
-disabled.
+is bounded by the viewport. Unavailable CLIs, signed-out subscription accounts,
+disabled APIs, and their favourites are omitted from settings and every picker.
+API setup and discovery are described in [078](078-api-providers.md).
 
 A favourite carries provider, subscription, model and effort. Picking it sets
 the whole combination. Changing the ordinary model keeps the current effort

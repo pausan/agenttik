@@ -207,8 +207,11 @@ button[draggable="true"]:active { cursor: grabbing; }
   .queued-actions [data-slot="label"] { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .settings-layout { height: 64dvh; flex-direction: column; }
   .settings-nav { width: 100%; border-right: 0; border-bottom: 1px solid var(--ui-border); padding: 0 0 0.5rem; }
-  .settings-sections { display: flex; flex: none; gap: 0.25rem; }
-  .settings-sections > button { width: auto; min-width: max-content; min-height: 44px; margin: 0; }
+  .settings-sections { display: flex; flex: none; gap: 0.5rem; max-height: 7rem; }
+  .settings-sections > li { min-width: max-content; margin: 0; }
+  .settings-sections button { min-height: 36px; }
+  .settings-sections > li > ul { display: grid; grid-template-columns: max-content; margin-left: 0; padding-left: 0.5rem; }
+  .settings-sections > li[data-section="general"] > ul { grid-template-columns: repeat(2, max-content); }
 }
 
 /* A path is more readable clipped at the front than at the end, and rtl is

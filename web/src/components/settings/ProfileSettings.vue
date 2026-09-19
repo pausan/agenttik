@@ -73,7 +73,7 @@ async function remove() {
 <template>
   <section v-if="show">
     <div class="mb-1 font-semibold text-highlighted">Local profiles</div>
-    <p class="mb-4 text-xs text-dimmed">Each profile keeps its projects, tasks, settings, and subscriptions separately on this computer. Project files are shared. Switching profiles reloads the view; other profiles keep running.</p>
+    <p class="mb-4 text-xs text-dimmed">Each profile keeps its projects, tasks, settings, models, and favourites separately on this computer. Providers, subscriptions, and project files are shared. Switching profiles reloads the view; other profiles keep running.</p>
     <form class="mb-4 flex gap-2" @submit.prevent="add">
       <UInput v-model="name" placeholder="Profile name" aria-label="Profile name" maxlength="80" class="min-w-0 flex-1" />
       <UButton type="submit" label="Add profile" :disabled="!name.trim() || busy" :loading="busy" />
@@ -110,7 +110,7 @@ async function remove() {
     </div>
     <p class="mt-2 text-xs text-dimmed">The built-in profile cannot be removed.</p>
     <UModal :open="!!removing" title="Remove profile?" @update:open="v => { if (!v && !busy) removing = null; }">
-      <template #body><p>Remove {{ removing?.name }} and all its tasks, history, settings, and subscriptions? Running tasks will stop. Project files stay on disk. This cannot be undone.</p></template>
+      <template #body><p>Remove {{ removing?.name }} and all its tasks, history, and settings? Running tasks will stop. Project files stay on disk. This cannot be undone.</p></template>
       <template #footer>
         <UButton color="neutral" variant="ghost" label="Cancel" :disabled="busy" @click="removing = null" />
         <UButton color="error" label="Remove profile" :loading="busy" @click="remove" />

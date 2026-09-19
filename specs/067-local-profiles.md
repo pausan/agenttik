@@ -16,15 +16,23 @@ running tasks and schedules. Unsaved file edits use the existing browser unload
 warning. A profile in the window URL scopes each API request, stream, image, and
 saved tab; windows can use different profiles concurrently.
 
-Each added profile has its own SQLite database, provider accounts, attachments,
-search index, settings, model favourites and visibility, projects, tasks, history,
-and schedules. Subscription lists and default subscription choices are isolated. API keys,
-model catalogs and API conversation files are separate per profile too
-([078](078-api-providers.md)). The same folder
+Each added profile has its own SQLite database, attachments, search index,
+settings, model favourites and visibility, projects, tasks, history, and schedules.
+Provider connections, named subscriptions, their default choice, and System
+subscription display names are shared across the instance. API keys and discovered
+catalogs are shared too; API conversation files remain profile-local
+([078](078-api-providers.md)). Models and automatic-action model choices stay
+profile-local. The same folder
 can be registered independently in multiple profiles. Working files are shared:
 profiles do not create copies of the project directory. Browser preferences are
 scoped too, including Light/Dark/System mode and file-tree expansion. Default
 retains its existing browser keys; added profiles use separate keys.
+
+Existing profile subscriptions are imported into the instance database at startup.
+IDs in tasks, schedules, queues, favourites, visibility and action models are
+remapped; duplicate aliases receive a numeric suffix. Managed login directories
+move under the instance's `accounts/profiles/<uuid>/` so deleting a profile cannot
+remove a shared login. Existing instance defaults take precedence.
 
 ## Moving projects
 
@@ -40,12 +48,9 @@ Images referenced by project/task prompts, messages or schedules and direct API
 conversation files are copied into the destination. Source managed files remain
 because another task may reference them. Browser preferences and drafts do not move.
 
-Credentials and provider settings stay in their profile. Tasks and schedules reset
-to the system subscription; tasks previously using a named subscription start a
-new provider conversation on their next prompt while retaining visible history.
-System-subscription conversations keep their thread, and direct API conversations
-get a fresh file ID pointing to the copied history. All moved schedules arrive
-paused, so the user can configure destination providers before resuming them.
+Moved tasks and schedules retain their shared subscription IDs and provider
+threads. Direct API conversations get a fresh file ID pointing to copied history.
+All moved schedules arrive paused.
 
 Running turns, queued prompts (including retries), and running schedule jobs block
 a move. Unsaved file edits in the initiating window also block it. Successful moves
@@ -87,7 +92,8 @@ Private tabs, drafts, and app preferences stay in memory and are lost on reload;
 they never enter the normal browser storage. The footer identifies private mode.
 
 Validation: Go tests cover isolation, same-folder projects, settings, persistence,
-CLI discovery, favourites, subscriptions, invalid names, deletion, and shutdown.
+CLI discovery, local model visibility/favourites, shared subscriptions, friendly
+System names, invalid names, deletion, and shutdown.
 Move tests cover ID collisions, history and image copies, return moves, blocked
 work, duplicate folders, failed-copy rollback, and moves in either direction.
 Browser tests cover the picker, palette switching, appearance, tree expansion,

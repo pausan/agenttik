@@ -70,8 +70,8 @@ func TestConnectionLifecyclePrivateStorageAndIsolation(t *testing.T) {
 	if _, err := p.Run(context.Background(), agent.TurnRequest{Model: "gpt-test"}); err == nil {
 		t.Fatal("disabled provider ran")
 	}
-	if p.ForProfile(t.TempDir()).Available() == nil {
-		t.Fatal("profile inherited key")
+	if !p.ForProfile(t.TempDir()).Connection().KeySet {
+		t.Fatal("profile did not inherit key")
 	}
 	before := requests.Load()
 	_ = p.Models()
@@ -184,5 +184,65 @@ func TestModelCompatibilityFilters(t *testing.T) {
 		if got := p.supportsTools(catalogModel{ID: test.id}); got != test.want {
 			t.Errorf("%s %s: %v", test.provider, test.id, got)
 		}
+	}
+}
+
+func TestProfileSharesConnectionButKeepsHistoryLocal(t *testing.T) {
+	root := New(Catalog[0], t.TempDir())
+	if err := root.save(config{Key: "shared-key", Enabled: true, Models: []agent.Model{{ID: "model"}}}); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	profile := root.ForProfile(dir)
+	if profile.Available() != nil || len(profile.Models()) != 1 {
+		t.Fatal("connection not shared")
+	}
+	if profile.dir == root.dir || profile.dir != filepath.Join(dir, "api-providers", Catalog[0].ID) {
+		t.Fatal("history directory is not local")
+	}
+	if err := profile.RemoveKey(); err != nil {
+		t.Fatal(err)
+	}
+	if root.Connection().KeySet || profile.Connection().KeySet {
+		t.Fatal("removal not shared")
+	}
+}
+
+func TestImportLegacyConnectionPreservesConflictingKey(t *testing.T) {
+	root := New(Catalog[0], t.TempDir())
+	dir := t.TempDir()
+	legacy := New(Catalog[0], dir)
+	if err := legacy.save(config{Key: "legacy-key", Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := root.ImportConnection(dir); err != nil {
+		t.Fatal(err)
+	}
+	if root.snapshot().Key != "legacy-key" {
+		t.Fatal("legacy key not adopted")
+	}
+	if err := legacy.save(config{Key: "different-key", Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := root.ImportConnection(dir); err != nil {
+		t.Fatal(err)
+	}
+	if root.snapshot().Key != "legacy-key" {
+		t.Fatal("shared key overwritten")
+	}
+	if _, err := os.Stat(filepath.Join(root.dir, "legacy", filepath.Base(dir)+".json")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(legacy.path()); !os.IsNotExist(err) {
+		t.Fatal("legacy connection could be reimported")
+	}
+	if err := root.RemoveKey(); err != nil {
+		t.Fatal(err)
+	}
+	if err := root.ImportConnection(dir); err != nil {
+		t.Fatal(err)
+	}
+	if root.Connection().KeySet {
+		t.Fatal("removed key resurrected")
 	}
 }

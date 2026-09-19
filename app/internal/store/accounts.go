@@ -32,6 +32,9 @@ func scanAccount(row interface{ Scan(...any) error }) (*Account, error) {
 // added, grouped by provider. The system account is not among them: it needs
 // no row and has nothing to store.
 func (s *Store) ListAccounts() ([]Account, error) {
+	if s.accounts != nil {
+		return s.accounts.ListAccounts()
+	}
 	rows, err := s.db.Query(`SELECT ` + accountCols +
 		` FROM provider_accounts ORDER BY provider, created_at, id`)
 	if err != nil {
@@ -54,6 +57,9 @@ func (s *Store) ListAccounts() ([]Account, error) {
 // than the system account: a task whose subscription was removed must say so,
 // not quietly run on someone else's allowance.
 func (s *Store) GetAccount(id int64) (*Account, error) {
+	if s.accounts != nil {
+		return s.accounts.GetAccount(id)
+	}
 	v, err := scanAccount(s.db.QueryRow(
 		`SELECT `+accountCols+` FROM provider_accounts WHERE id = ?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -68,6 +74,9 @@ func (s *Store) GetAccount(id int64) (*Account, error) {
 // CreateAccount adds a subscription. The alias is unique per provider, since
 // it is how the two are told apart in every picker that offers them.
 func (s *Store) CreateAccount(v *Account) error {
+	if s.accounts != nil {
+		return s.accounts.CreateAccount(v)
+	}
 	v.CreatedAt = nowMillis()
 	res, err := s.db.Exec(
 		`INSERT INTO provider_accounts (provider, alias, home, is_default, created_at)
@@ -84,6 +93,9 @@ func (s *Store) CreateAccount(v *Account) error {
 
 // UpdateAccount renames a subscription or repoints it at another directory.
 func (s *Store) UpdateAccount(v *Account) error {
+	if s.accounts != nil {
+		return s.accounts.UpdateAccount(v)
+	}
 	res, err := s.db.Exec(
 		`UPDATE provider_accounts SET alias = ?, home = ? WHERE id = ?`,
 		v.Alias, v.Home, v.ID)
@@ -99,6 +111,9 @@ func (s *Store) UpdateAccount(v *Account) error {
 // DeleteAccount forgets a subscription. The directory it named is left alone:
 // it holds a login this app did not create and must not destroy.
 func (s *Store) DeleteAccount(id int64) error {
+	if s.accounts != nil {
+		return s.accounts.DeleteAccount(id)
+	}
 	res, err := s.db.Exec(`DELETE FROM provider_accounts WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("delete account %d: %w", id, err)
@@ -113,6 +128,9 @@ func (s *Store) DeleteAccount(id int64) error {
 // SystemAccount clears the flag from every row instead of setting one, since
 // the CLI's own login has no row to carry it.
 func (s *Store) SetDefaultAccount(provider string, id int64) error {
+	if s.accounts != nil {
+		return s.accounts.SetDefaultAccount(provider, id)
+	}
 	tx, err := s.db.Begin()
 	if err != nil {
 		return fmt.Errorf("set default account: %w", err)
@@ -143,6 +161,9 @@ func (s *Store) SetDefaultAccount(provider string, id int64) error {
 // DefaultAccount is the subscription a new task on this provider starts on.
 // No flagged row means the CLI's own login.
 func (s *Store) DefaultAccount(provider string) (int64, error) {
+	if s.accounts != nil {
+		return s.accounts.DefaultAccount(provider)
+	}
 	var id int64
 	err := s.db.QueryRow(
 		`SELECT id FROM provider_accounts WHERE provider = ? AND is_default = 1`, provider).Scan(&id)
@@ -171,4 +192,25 @@ func (s *Store) AccountUsage(id int64) (sessions, schedules int64, err error) {
 		return 0, 0, fmt.Errorf("account %d usage: %w", id, err)
 	}
 	return sessions, schedules, nil
+}
+
+// AccountStore owns the instance-wide provider subscriptions.
+func (s *Store) AccountStore() *Store {
+	if s.accounts != nil {
+		return s.accounts
+	}
+	return s
+}
+
+func (s *Store) SystemAccountName(provider string) string {
+	var alias string
+	_ = s.AccountStore().db.QueryRow(`SELECT alias FROM system_account_names WHERE provider = ?`, provider).Scan(&alias)
+	if alias == "" {
+		return "System"
+	}
+	return alias
+}
+func (s *Store) SetSystemAccountName(provider, alias string) error {
+	_, err := s.AccountStore().db.Exec(`INSERT INTO system_account_names(provider, alias) VALUES (?, ?) ON CONFLICT(provider) DO UPDATE SET alias = excluded.alias`, provider, alias)
+	return err
 }

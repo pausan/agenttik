@@ -19,7 +19,7 @@ queued prompts, schedules and automatic-action overrides.
 | `api-mistral` | Mistral | Chat Completions |
 | `api-xai` | xAI | Chat Completions |
 
-Each profile has one key per API provider. Enable saves it after fetching models;
+The instance has one shared key per API provider. Enable saves it after fetching models;
 Save key replaces it after the same check. An empty key keeps the saved key.
 Refresh models fetches the catalog again. Disable retains the key but removes
 models from settings and pickers; Remove key disables and clears the credential
@@ -43,13 +43,17 @@ connections, `api.enabled`, `api.key_set`, and `api.key_url`. It never includes 
 updated providers. `DELETE` at the same route removes the key. Existing server
 and remote authentication protect these routes like the other settings routes.
 
-Keys and cached models live in `<profile-data>/api-providers/<id>/connection.json`,
+Keys and cached models live in `<data-dir>/api-providers/<id>/connection.json`,
 written atomically with mode 0600 on POSIX and private parent directories.
 They are local credential files, not encrypted vault storage. Keys are neither
 browser preferences nor SQLite fields. Requests use fixed HTTPS service URLs;
 redirects are refused, and raw upstream error bodies are not exposed.
-Added profiles construct separate API-provider instances, so changing a key in
-one cannot change another. Private mode uses its temporary data directory.
+Added profiles share live connection state while keeping conversation files in
+their own directory. Connection changes apply to every profile. Private mode
+uses its temporary data directory. Legacy profile keys fill an empty shared
+connection in profile order; an existing instance key takes precedence. Original
+connection files are preserved under `api-providers/<id>/legacy/<profile-id>.json`
+for recovery, then removed from the profile directory to prevent reimport.
 
 ## Models and tasks
 
@@ -71,7 +75,7 @@ in the runtime system prompt. There are no subscription allowance bars for APIs.
 ## Verification and limits
 
 Go fixtures exercise discovery, filtering, invalid keys, private persistence,
-profile isolation, disable/removal, real session dispatch and token recording.
+shared connections, local model preferences, disable/removal, real session dispatch and token recording.
 Browser tests exercise the settings tree, mobile layout, key forms, error display,
 model visibility and task selection with mocked connections. Tests make no paid
 requests. Live credentials and model availability have not been verified.

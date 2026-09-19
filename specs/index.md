@@ -10,7 +10,7 @@ screen, **session** for the row, the route or the CLI flag.
 | Doc | What it covers |
 |-----|----------------|
 | [068](068-quick-start-tour.md) | Quick Start Tour, first agent, practice repo, queues and local commits |
-| [067](067-local-profiles.md) | Local profiles, project moves, isolated preferences and subscriptions, palette switching |
+| [067](067-local-profiles.md) | Local profiles, project moves, local models, shared providers, profile switching |
 | [066](066-private-mode.md) | Temporary instances and cleanup on exit |
 | [065](065-opencode-subscription.md) | OpenCode Go, optional CLI, direct coding turns and provider policy review |
 | [064](064-remote-connections.md) | Remote connections, server names, discovery and login |
@@ -18,7 +18,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [060](060-desktop-tray.md) | Close to tray, global show/hide shortcut, working pulse, native lifecycle |
 | [001](001-architecture.md) | Process model, packages, request flow |
 | [002](002-data-model.md) | SQLite schema, upgrade safeguards, metrics, storage location |
-| [078](078-api-providers.md) | API keys, eight services, profile isolation and connected-model visibility |
+| [078](078-api-providers.md) | API keys, eight services, shared connections and local model visibility |
 | [077](077-direct-api-runtime.md) | Shared API coding loop, project instructions, detected tools and permissions |
 | [003](003-providers.md) | Provider interface, desktop CLI discovery, invocation, event mapping |
 | [004](004-ui.md) | Layout, panels, appearance modes, persistent Tree navigation, shortcuts, HTTP API |

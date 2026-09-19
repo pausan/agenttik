@@ -118,7 +118,7 @@ func TestAPIProviderKeyLifecycleAndTask(t *testing.T) {
 	}
 }
 
-func TestAPIKeysAndModelsAreIsolatedPerProfile(t *testing.T) {
+func TestAPIConnectionsAreSharedAcrossProfiles(t *testing.T) {
 	s, _ := apiProviderServer(t)
 	if err := s.EnableProfiles(false); err != nil {
 		t.Fatal(err)
@@ -132,8 +132,8 @@ func TestAPIKeysAndModelsAreIsolatedPerProfile(t *testing.T) {
 		t.Fatal(resp.StatusCode)
 	}
 	rows := decode[[]providerInfo](t, do(t, s, "GET", "/api/providers?profile="+profile.ID, nil))
-	if len(rows) != 1 || rows[0].Available || rows[0].API.KeySet || len(rows[0].Models) != 0 {
-		t.Fatal("profile inherited connection", rows)
+	if len(rows) != 1 || !rows[0].Available || !rows[0].API.KeySet || len(rows[0].Models) == 0 {
+		t.Fatal("profile did not inherit connection", rows)
 	}
 	if resp := do(t, s, "PUT", "/api/providers/api-openai/api?profile="+profile.ID, map[string]any{"key": "test-only-key", "enabled": true}); resp.StatusCode != 200 {
 		t.Fatal(resp.StatusCode)
@@ -142,8 +142,8 @@ func TestAPIKeysAndModelsAreIsolatedPerProfile(t *testing.T) {
 		t.Fatal(resp.StatusCode)
 	}
 	rows = decode[[]providerInfo](t, do(t, s, "GET", "/api/providers?profile="+profile.ID, nil))
-	if !rows[0].Available {
-		t.Fatal("default removal disabled other profile")
+	if rows[0].Available || rows[0].API.KeySet {
+		t.Fatal("removal did not disable other profile")
 	}
 }
 

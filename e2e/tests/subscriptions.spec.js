@@ -36,10 +36,10 @@ test("the machine's own login is the only subscription until one is added", asyn
 
   const system = pane(page).getByText("System", { exact: true });
   await expect(system).toBeVisible();
-  // It is what new tasks use, and it is not something to be removed or renamed.
+  // It is what new tasks use, and it is not something to be removed. Its display name can be changed.
   await expect(pane(page).getByText("default", { exact: true })).toBeVisible();
   await expect(pane(page).getByRole("button", { name: "Remove System" })).toHaveCount(0);
-  await expect(pane(page).getByRole("button", { name: "Rename System" })).toHaveCount(0);
+  await expect(pane(page).getByRole("button", { name: "Rename System" })).toBeVisible();
 });
 
 test("a second subscription is added, named and made the default", async ({ page }) => {
@@ -123,7 +123,7 @@ test("removing a subscription says what still runs on it", async ({ page }) => {
   await pane(page).getByRole("button", { name: "Remove Personal" }).click();
   // The count is the consequence: those tasks stop until another
   // subscription is chosen for them, so it is said before the removal.
-  await expect(pane(page).getByText(/1 task\(s\) and 0 job\(s\) still run on it/)).toBeVisible();
+  await expect(pane(page).getByText(/1 task\(s\) and 0 job\(s\) in this profile still run on it/)).toBeVisible();
   await pane(page).getByRole("button", { name: "Remove", exact: true }).click();
   await expect(pane(page).getByText("Personal", { exact: true })).toHaveCount(0);
 });
@@ -166,4 +166,19 @@ test("OpenCode Go connects without a CLI and keeps its direct preference", async
   await expect(go.getByLabel("Run with")).toHaveValue("direct");
   await expect(go.getByLabel(/OpenCode Go key/)).toHaveValue("");
   await expect(page.getByRole("group", { name: "Claude Code subscriptions" }).getByText(/Claude Code CLI is required/)).toBeVisible();
+});
+
+
+test("system subscription accepts a friendly name and keeps its system badge", async ({ page, agenttik }) => {
+  await openSettings(page, "Subscriptions");
+  await pane(page).getByRole("button", { name: "Rename System", exact: true }).click();
+  await pane(page).getByRole("textbox").fill("Personal login");
+  await pane(page).getByRole("button", { name: "Save", exact: true }).click();
+  await expect(pane(page).getByText("Personal login", { exact: true })).toBeVisible();
+  await expect(pane(page).getByText("system", { exact: true })).toBeVisible();
+  await expect(pane(page).getByRole("button", { name: "Remove Personal login", exact: true })).toHaveCount(0);
+  const work = await (await page.request.post(`${agenttik.url}/api/profiles`, { data: { name: "Work" } })).json();
+  await page.goto(`${agenttik.url}/?profile=${work.id}`);
+  await openSettings(page, "Subscriptions");
+  await expect(pane(page).getByRole("button", { name: "Rename Personal login", exact: true })).toBeVisible();
 });

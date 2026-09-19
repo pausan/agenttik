@@ -34,7 +34,7 @@ async function remove(provider) {
   <div>
     <h3 class="font-semibold text-highlighted">API Providers</h3>
     <p class="mb-4 text-xs text-dimmed">
-      Connect an API key to load models for this profile. API usage is billed separately from subscriptions.
+      Connect an API key for all profiles. Choose visible and favourite models in each profile. API usage is billed separately from subscriptions.
       Only enabled connections appear in Models. Keys are stored on the Agenttik host and are never shown again.
     </p>
     <section v-for="provider in providers" :key="provider.name" role="group" :aria-label="provider.display_name" class="mb-4 rounded-lg border border-default p-3">

@@ -1,4 +1,4 @@
-// Package apiprovider connects profile-scoped API keys to the shared coding runtime.
+// Package apiprovider connects shared API keys to the shared coding runtime.
 package apiprovider
 
 import (
@@ -46,6 +46,7 @@ type Connection struct {
 
 type Provider struct {
 	definition Definition
+	shared     *Provider
 	dir        string
 	http       *http.Client
 	update     sync.Mutex
@@ -77,13 +78,51 @@ func All(dataDir string) []agent.Provider {
 	return out
 }
 
-// ForProfile gives each profile its own credentials, model cache and history.
-func (p *Provider) ForProfile(dataDir string) *Provider { return New(p.definition, dataDir) }
-func (p *Provider) Name() string                        { return "api-" + p.definition.ID }
-func (p *Provider) DisplayName() string                 { return p.definition.Label + " API" }
-func (p *Provider) Efforts() []string                   { return nil }
-func (p *Provider) path() string                        { return filepath.Join(p.dir, "connection.json") }
-func (p *Provider) snapshot() config                    { p.mu.RLock(); defer p.mu.RUnlock(); return p.config }
+// ForProfile shares the connection while keeping conversation files local.
+func (p *Provider) ForProfile(dataDir string) *Provider {
+	return &Provider{definition: p.definition, dir: filepath.Join(dataDir, "api-providers", p.definition.ID), http: p.http, shared: p}
+}
+
+// ImportConnection adopts a legacy profile connection when the shared one is
+// empty. Preserve conflicting keys in the instance directory for recovery.
+func (p *Provider) ImportConnection(dataDir string) error {
+	legacyPath := filepath.Join(dataDir, "api-providers", p.definition.ID, "connection.json")
+	data, err := os.ReadFile(legacyPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var legacy config
+	if len(data) > 4<<20 || json.Unmarshal(data, &legacy) != nil {
+		return fmt.Errorf("cannot read saved API configuration")
+	}
+	p.update.Lock()
+	defer p.update.Unlock()
+	if p.snapshot().Key == "" && legacy.Key != "" {
+		if err := p.save(legacy); err != nil {
+			return err
+		}
+	}
+	backup := filepath.Join(p.dir, "legacy", filepath.Base(dataDir)+".json")
+	if err := direct.PrivateWrite(backup, data); err != nil {
+		return err
+	}
+	return os.Remove(legacyPath)
+}
+func (p *Provider) Name() string        { return "api-" + p.definition.ID }
+func (p *Provider) DisplayName() string { return p.definition.Label + " API" }
+func (p *Provider) Efforts() []string   { return nil }
+func (p *Provider) path() string        { return filepath.Join(p.dir, "connection.json") }
+func (p *Provider) snapshot() config {
+	if p.shared != nil {
+		return p.shared.snapshot()
+	}
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.config
+}
 func (p *Provider) Connection() Connection {
 	c := p.snapshot()
 	return Connection{Enabled: c.Enabled && c.Key != "", KeySet: c.Key != "", KeyURL: p.definition.KeyURL}
@@ -96,6 +135,9 @@ func (p *Provider) Models() []agent.Model {
 	return slices.Clone(c.Models)
 }
 func (p *Provider) Available() error {
+	if p.shared != nil {
+		return p.shared.Available()
+	}
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	if p.loadErr != nil {
@@ -107,6 +149,9 @@ func (p *Provider) Available() error {
 	return nil
 }
 func (p *Provider) Configure(ctx context.Context, key string, enabled, refresh bool) error {
+	if p.shared != nil {
+		return p.shared.Configure(ctx, key, enabled, refresh)
+	}
 	key = strings.TrimSpace(key)
 	if len(key) > 8192 || strings.ContainsFunc(key, func(r rune) bool { return r < 33 || r > 126 }) {
 		return fmt.Errorf("invalid API key")
@@ -133,6 +178,9 @@ func (p *Provider) Configure(ctx context.Context, key string, enabled, refresh b
 	return p.save(c)
 }
 func (p *Provider) RemoveKey() error {
+	if p.shared != nil {
+		return p.shared.RemoveKey()
+	}
 	p.update.Lock()
 	defer p.update.Unlock()
 	return p.save(config{})

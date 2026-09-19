@@ -79,17 +79,17 @@ async function submitAdd(provider) {
   }
 }
 
-function startEdit(account) {
-  editing[account.id] = { alias: account.alias, home: account.home };
+function startEdit(provider, account) {
+  editing[`${provider}:${account.id}`] = { alias: account.alias, home: account.home };
 }
 
 async function submitEdit(provider, account) {
-  const form = editing[account.id];
+  const form = editing[`${provider}:${account.id}`];
   if (!form) return;
   busy.value += 1;
   try {
-    await updateAccount(provider, account.id, { alias: form.alias.trim(), home: form.home.trim() });
-    delete editing[account.id];
+    await updateAccount(provider, account.id, { alias: form.alias.trim(), ...(account.system ? {} : { home: form.home.trim() }) });
+    delete editing[`${provider}:${account.id}`];
   } catch (e) {
     fail(e);
   } finally {
@@ -194,6 +194,7 @@ function copy(text) {
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-1.5">
               <span class="truncate text-[13px] text-highlighted">{{ a.alias }}</span>
+              <UBadge v-if="a.system" color="neutral" variant="soft" size="sm">system</UBadge>
               <UBadge v-if="a.is_default" color="primary" variant="soft" size="sm">default</UBadge>
               <UBadge :color="a.signed_in ? 'success' : 'warning'" variant="soft" size="sm">
                 {{ a.signed_in ? a.detail || "signed in" : "not signed in" }}
@@ -225,14 +226,13 @@ function copy(text) {
             @click="p.direct_login ? startConnect(p.name, a) : signIn(p.name, a)"
           />
           <UButton
-            v-if="!a.system"
             size="xs"
             color="neutral"
             variant="ghost"
             icon="i-lucide-pencil"
             :disabled="!!busy"
             :aria-label="`Rename ${a.alias}`"
-            @click="startEdit(a)"
+            @click="startEdit(p.name, a)"
           />
           <UButton
             v-if="!a.system"
@@ -274,14 +274,14 @@ function copy(text) {
         <!-- Renaming and repointing are one form: both describe the same
              subscription, and a login moved to another folder is usually
              being renamed as well. -->
-        <div v-if="editing[a.id]" class="mt-1.5 flex items-end gap-2">
+        <div v-if="editing[`${p.name}:${a.id}`]" class="mt-1.5 flex items-end gap-2">
           <label class="flex-1 text-[11px] text-muted">
             Name
-            <UInput v-model="editing[a.id].alias" size="xs" class="mt-0.5 w-full" />
+            <UInput v-model="editing[`${p.name}:${a.id}`].alias" size="xs" class="mt-0.5 w-full" />
           </label>
-          <label class="flex-[2] text-[11px] text-muted">
+          <label v-if="!a.system" class="flex-[2] text-[11px] text-muted">
             Login folder
-            <UInput v-model="editing[a.id].home" size="xs" class="mt-0.5 w-full" />
+            <UInput v-model="editing[`${p.name}:${a.id}`].home" size="xs" class="mt-0.5 w-full" />
           </label>
           <UButton size="xs" label="Save" :disabled="!!busy" @click="submitEdit(p.name, a)" />
           <UButton
@@ -289,7 +289,7 @@ function copy(text) {
             color="neutral"
             variant="ghost"
             label="Cancel"
-            @click="delete editing[a.id]"
+            @click="delete editing[`${p.name}:${a.id}`]"
           />
         </div>
 
@@ -298,10 +298,10 @@ function copy(text) {
             Remove {{ a.alias }}?
             {{
               removing[a.id].sessions || removing[a.id].schedules
-                ? `${removing[a.id].sessions} task(s) and ${removing[a.id].schedules} job(s) still run on it and will stop until another subscription is chosen for them.`
-                : "Nothing runs on it."
+                ? `${removing[a.id].sessions} task(s) and ${removing[a.id].schedules} job(s) in this profile still run on it and will stop until another subscription is chosen for them.`
+                : "Nothing in this profile runs on it."
             }}
-            Its login folder is left on disk.
+            Removal affects every profile. Its login folder is left on disk.
           </p>
           <div class="mt-1 flex gap-2">
             <UButton

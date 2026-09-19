@@ -11,8 +11,12 @@ contract are in [065](065-opencode-subscription.md).
 ## Accounts and isolation
 
 **System**, account `0`, has no database row. It uses the provider's default
-login folder and cannot be renamed, moved or removed. It can be signed in or
-replaced as the default by a named account.
+login folder and cannot be moved or removed. Its friendly name can be edited
+in Settings, with a persistent **system** badge identifying it. Names are trimmed,
+nonempty, at most 80 bytes, and cannot match a named subscription. It can be signed
+in or replaced as the default by a named account. Subscriptions, defaults and
+System names are shared across local profiles; model choices and favourites are
+per profile.
 
 | Provider | Account selection | Login location |
 |---|---|---|

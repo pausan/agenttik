@@ -46,7 +46,7 @@ const systemAlias = "System"
 // one shape to draw either way.
 func (s *Server) providerAccounts(p agent.Provider, rows []store.Account) []accountInfo {
 	multi, ok := p.(agent.MultiAccount)
-	system := accountInfo{ID: store.SystemAccount, Alias: systemAlias, System: true, IsDefault: true}
+	system := accountInfo{ID: store.SystemAccount, Alias: s.store.SystemAccountName(p.Name()), System: true, IsDefault: true}
 	if !ok {
 		return []accountInfo{system}
 	}
@@ -182,7 +182,7 @@ func (s *Server) createAccount(c *fiber.Ctx) error {
 	if alias == "" {
 		return badRequest("a name for the subscription is required")
 	}
-	if strings.EqualFold(alias, systemAlias) {
+	if strings.EqualFold(alias, systemAlias) || strings.EqualFold(alias, s.store.SystemAccountName(provider.Name())) {
 		return badRequest("%q is what the CLI's own login is called; choose another name", systemAlias)
 	}
 	home := strings.TrimSpace(body.Home)
@@ -203,22 +203,40 @@ func (s *Server) createAccount(c *fiber.Ctx) error {
 }
 
 // updateAccount renames a subscription or repoints it at another directory.
-// The system account has no row: it can be made the default, which is the
-// endpoint below, but it cannot be renamed or moved from here.
+// The system account can have a friendly name, but its login folder is fixed.
 func (s *Server) updateAccount(c *fiber.Ctx) error {
 	provider, account, err := s.account(c)
 	if err != nil {
 		return err
 	}
-	if account == nil {
-		return badRequest("the CLI's own login cannot be renamed or moved")
-	}
 	var body accountBody
 	if err := c.BodyParser(&body); err != nil {
 		return badRequest("invalid body: %v", err)
 	}
+	if account == nil {
+		alias := strings.TrimSpace(body.Alias)
+		if alias == "" || len(alias) > 80 {
+			return badRequest("subscription name must be 1–80 bytes")
+		}
+		if body.Home != "" {
+			return badRequest("the system login folder cannot be changed")
+		}
+		rows, err := s.store.ListAccounts()
+		if err != nil {
+			return err
+		}
+		for _, row := range rows {
+			if row.Provider == provider.Name() && strings.EqualFold(row.Alias, alias) {
+				return badRequest("a subscription with that name already exists")
+			}
+		}
+		if err := s.store.SetSystemAccountName(provider.Name(), alias); err != nil {
+			return err
+		}
+		return c.JSON(s.providerAccounts(provider, rows)[0])
+	}
 	if alias := strings.TrimSpace(body.Alias); alias != "" {
-		if strings.EqualFold(alias, systemAlias) {
+		if strings.EqualFold(alias, systemAlias) || strings.EqualFold(alias, s.store.SystemAccountName(provider.Name())) {
 			return badRequest("%q is what the CLI's own login is called; choose another name", systemAlias)
 		}
 		account.Alias = alias
@@ -363,7 +381,7 @@ func (s *Server) accountResponse(p agent.Provider, account *store.Account) accou
 // Kept out of the CLI's own directory so signing this one out, or deleting
 // it, can never touch the account the machine was already using.
 func (s *Server) managedHome(provider, alias string) string {
-	return filepath.Join(s.store.Dir(), "accounts", provider, slug(alias))
+	return filepath.Join(s.store.AccountStore().Dir(), "accounts", provider, slug(alias))
 }
 
 var nonSlug = regexp.MustCompile(`[^a-z0-9]+`)

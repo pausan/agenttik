@@ -110,9 +110,13 @@ func (s *Store) MoveProjectTo(dst *Store, id int64) (int64, error) {
 			case "turn_id":
 				values[i] = fmt.Sprintf(`CASE WHEN turn_id IS NULL OR turn_id = 0 THEN turn_id ELSE turn_id + %d END`, offsets["turns"])
 			case "account_id":
-				values[i] = "0"
+				if s.AccountStore() != dst.AccountStore() {
+					values[i] = "0"
+				}
 			case "provider_session_id":
-				values[i] = `CASE WHEN account_id = 0 THEN provider_session_id ELSE '' END`
+				if s.AccountStore() != dst.AccountStore() {
+					values[i] = `CASE WHEN account_id = 0 THEN provider_session_id ELSE '' END`
+				}
 			case "paused":
 				values[i] = "1"
 			case "position":

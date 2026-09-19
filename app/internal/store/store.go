@@ -12,8 +12,9 @@ import (
 )
 
 type Store struct {
-	db   *sql.DB
-	path string
+	accounts *Store
+	db       *sql.DB
+	path     string
 	// dir is the data directory the database sits in. Kept because it is also
 	// where app-managed directories belong — a subscription's CLI config dir,
 	// for one. See 050-subscription-accounts.md.

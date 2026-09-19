@@ -132,9 +132,17 @@ func (m *profileManager) open(id string) (*profileRuntime, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := db.ShareAccounts(m.root.store); err != nil {
+		db.Close()
+		return nil, err
+	}
 	providers := make([]agent.Provider, 0, len(m.root.registry.All()))
 	for _, provider := range m.root.registry.All() {
 		if api, ok := provider.(*apiprovider.Provider); ok {
+			if err := api.ImportConnection(dir); err != nil {
+				db.Close()
+				return nil, err
+			}
 			providers = append(providers, api.ForProfile(dir))
 		} else {
 			providers = append(providers, provider)

@@ -193,7 +193,7 @@ func TestDeletingProfileStopsOnlyItsRunner(t *testing.T) {
 	}
 }
 
-func TestProfilesPersistSeparateFavouritesAndSubscriptions(t *testing.T) {
+func TestProfilesShareSubscriptionsAndPersistSeparateFavourites(t *testing.T) {
 	s := profileServer(t)
 	p := decode[Profile](t, do(t, s, "POST", "/api/profiles", map[string]string{"name": "Work"}))
 	homes := make(map[string]string)
@@ -224,11 +224,11 @@ func TestProfilesPersistSeparateFavouritesAndSubscriptions(t *testing.T) {
 			t.Fatalf("profile %s favourites: %+v", id, stars)
 		}
 		providers := decode[[]providerInfo](t, do(t, s, "GET", "/api/providers"+query, nil))
-		if len(providers) != 1 || len(providers[0].Accounts) != 2 {
+		if len(providers) != 1 || len(providers[0].Accounts) != 3 {
 			t.Fatalf("profile %s subscriptions: %+v", id, providers)
 		}
-		account := providers[0].Accounts[1]
-		if account.Alias != id || !account.IsDefault || account.Home != homes[id] {
+		account := providers[0].Accounts[2]
+		if account.Alias != p.ID || !account.IsDefault || account.Home != homes[p.ID] {
 			t.Fatalf("profile %s subscription changed: %+v", id, account)
 		}
 	}
@@ -240,6 +240,10 @@ func TestMoveProjectBetweenProfiles(t *testing.T) {
 	other := decode[Profile](t, do(t, s, "POST", "/api/profiles", map[string]string{"name": "Other"}))
 	project := decode[store.Project](t, do(t, s, "POST", "/api/projects", map[string]string{"path": t.TempDir()}))
 	session := decode[store.Session](t, do(t, s, "POST", "/api/sessions", map[string]any{"project_id": project.ID, "provider": "fake", "model": "fake-quick", "title": "Moved task"}))
+	account := decode[accountInfo](t, do(t, s, "POST", "/api/providers/fake/accounts", map[string]string{"alias": "Shared login"}))
+	if err := s.store.SetSessionModel(session.ID, "fake", account.ID, "fake-quick", "", false); err != nil {
+		t.Fatal(err)
+	}
 	source := "default"
 	for _, destination := range []string{work.ID, other.ID, "default"} {
 		url := fmt.Sprintf("/api/profiles/%s/projects/%d/move?profile=%s", destination, project.ID, source)
@@ -254,7 +258,7 @@ func TestMoveProjectBetweenProfiles(t *testing.T) {
 			t.Fatalf("source project: %d", resp.StatusCode)
 		}
 		moved := decode[sessionDetail](t, do(t, s, "GET", "/api/sessions/"+session.ID+"?profile="+destination, nil)).Session
-		if moved.Title != "Moved task" || moved.ProjectID != result.ID {
+		if moved.Title != "Moved task" || moved.ProjectID != result.ID || moved.AccountID != account.ID {
 			t.Fatalf("moved task: %+v", moved)
 		}
 		project.ID, source = result.ID, destination
@@ -321,4 +325,37 @@ func TestProfilesReorder(t *testing.T) {
 		t.Fatalf("failed save: %d", resp.StatusCode)
 	}
 	check()
+}
+
+func TestProfilesShareSystemNamesButKeepModelVisibility(t *testing.T) {
+	s := profileServer(t)
+	p := decode[Profile](t, do(t, s, "POST", "/api/profiles", map[string]string{"name": "Work"}))
+	query := "?profile=" + p.ID
+	resp := do(t, s, "PATCH", "/api/providers/fake/accounts/0"+query, map[string]string{"alias": "Personal"})
+	if resp.StatusCode != 200 {
+		t.Fatalf("rename system: %d", resp.StatusCode)
+	}
+	for _, q := range []string{"", query} {
+		providers := decode[[]providerInfo](t, do(t, s, "GET", "/api/providers"+q, nil))
+		if a := providers[0].Accounts[0]; a.Alias != "Personal" || !a.System || a.ID != 0 {
+			t.Fatalf("system: %+v", a)
+		}
+	}
+	if resp := do(t, s, "PATCH", "/api/providers/fake/accounts/0", map[string]string{"alias": "", "home": t.TempDir()}); resp.StatusCode != 400 {
+		t.Fatalf("invalid rename: %d", resp.StatusCode)
+	}
+	if err := s.profiles.running[p.ID].server.store.SetModelChoiceHidden("fake", 0, "fake-quick", true); err != nil {
+		t.Fatal(err)
+	}
+	choices, err := s.store.ListHiddenModelChoices()
+	if err != nil || len(choices) != 0 {
+		t.Fatalf("visibility crossed profiles: %+v %v", choices, err)
+	}
+	s.CloseProfiles()
+	if err := s.EnableProfiles(false); err != nil {
+		t.Fatal(err)
+	}
+	if name := s.profiles.running[p.ID].server.store.SystemAccountName("fake"); name != "Personal" {
+		t.Fatal(name)
+	}
 }

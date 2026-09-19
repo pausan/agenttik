@@ -368,6 +368,8 @@ CREATE TABLE server_identity (
 INSERT INTO server_identity (id, name) VALUES (1, 'agenttik-' || lower(hex(randomblob(4))));
 `,
 	`ALTER TABLE server_config ADD COLUMN totp_disabled INTEGER NOT NULL DEFAULT 0;`,
+	`CREATE TABLE system_account_names (provider TEXT PRIMARY KEY, alias TEXT NOT NULL);
+CREATE TABLE shared_accounts_migrated (id INTEGER PRIMARY KEY CHECK (id = 1));`,
 }
 
 func migrate(db *sql.DB, path string) error {

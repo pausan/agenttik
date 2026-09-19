@@ -242,8 +242,7 @@ button[draggable="true"]:active { cursor: grabbing; }
 /* The file editor: a transparent textarea over a coloured copy of the same
    text. The two layers must break lines in exactly the same places, so every
    property that decides where a line wraps is set on both — and the textarea
-   is the one in flow, sized to its content, so revealing the caret scrolls
-   the pane rather than the field. */
+   fills the coloured copy's height, so revealing the caret scrolls the pane. */
 .editor { position: relative; }
 .editor > pre,
 .editor > textarea {
@@ -258,14 +257,14 @@ button[draggable="true"]:active { cursor: grabbing; }
   tab-size: 2;
 }
 .editor > pre {
-  position: absolute;
-  inset: 0;
   overflow: hidden;
   color: var(--ui-text-highlighted);
   pointer-events: none;
 }
 .editor > textarea {
-  position: relative;
+  position: absolute;
+  inset: 0;
+  height: 100%;
   display: block;
   width: 100%;
   border: 0;

@@ -61,8 +61,8 @@ The icons are bundled from both Vue and JavaScript sources for offline use.
 
 The filter fuzzy-matches rows in every pane. Matching children keep their parent
 visible and expanded, parent counts include matching descendants, and a selected
-pane with no matches moves to the first matching pane. Panes stay mounted to
-keep counts current. API setup and connected-model filtering are described in
+pane with no matches moves to the first matching pane. Panes mount on first visit and stay mounted until Settings closes, preserving
+unsaved fields. Entering a filter mounts all panes to populate search counts. API setup and connected-model filtering are described in
 [078](078-api-providers.md).
 
 Matching is per field rather than over one joined string: a subsequence match

@@ -47,6 +47,7 @@ test("appearance modes persist and System follows device changes", async ({ page
 test("General disappears when another settings section is selected", async ({ page }) => {
   await openSettings(page);
   const dialog = page.getByRole("dialog");
+  await expect(dialog).toHaveCSS("animation-name", "none");
   const prompt = dialog.getByText("What the prompt box does", { exact: false });
   const folding = dialog.getByText("What selecting a project does", { exact: false });
   await expect(prompt).toBeVisible();

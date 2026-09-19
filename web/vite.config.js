@@ -19,6 +19,10 @@ function keepPlaceholder() {
   };
 }
 
+// Portals should respond on the next paint, without waiting for entrance or
+// exit animations before accepting another click.
+const portalContent = "z-50 data-[state=open]:animate-none data-[state=closed]:animate-none";
+
 export default defineConfig({
   worker: { format: "es" },
   plugins: [
@@ -34,15 +38,15 @@ export default defineConfig({
         colors: { primary: "blue", neutral: "zinc" },
         // Portals must sit above pane scrollbars and resize handles. Keep
         // the same level so later portals (including nested dialogs) win.
-        modal: { slots: { overlay: "z-50", content: "z-50" } },
-        slideover: { slots: { overlay: "z-50", content: "z-50" } },
-        popover: { slots: { content: "z-50" } },
-        tooltip: { slots: { content: "z-50" } },
-        dropdownMenu: { slots: { content: "z-50" } },
-        contextMenu: { slots: { content: "z-50" } },
-        select: { slots: { content: "z-50" } },
-        selectMenu: { slots: { content: "z-50" } },
-        inputMenu: { slots: { content: "z-50" } },
+        modal: { slots: { overlay: "z-50", content: "z-50" }, defaultVariants: { transition: false } },
+        slideover: { slots: { overlay: "z-50", content: "z-50" }, defaultVariants: { transition: false } },
+        popover: { slots: { content: portalContent } },
+        tooltip: { slots: { content: portalContent } },
+        dropdownMenu: { slots: { content: portalContent } },
+        contextMenu: { slots: { content: portalContent } },
+        select: { slots: { content: portalContent } },
+        selectMenu: { slots: { content: portalContent } },
+        inputMenu: { slots: { content: portalContent } },
       },
       icon: { clientBundle: { scan: { globInclude: ["src/**/*.{vue,js}"] } } },
     }),

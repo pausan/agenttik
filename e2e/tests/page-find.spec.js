@@ -83,3 +83,43 @@ test("page find matches rendered text across inline markup and excludes the side
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("editor overlay follows wrapped text, trailing lines and viewport resizing", async ({ page }) => {
+  const dir = await mkdtemp(join(tmpdir(), "agenttik-editor-layout-"));
+  try {
+    const source = 'const text = "' + "wrapped text ".repeat(60) + '";\n\n';
+    await writeFile(join(dir, "wrap.js"), source);
+    await addProject(page, dir);
+    await openProject(page, dir);
+    await sidebar(page).getByRole("tab", { name: "Tree" }).click();
+    await sidebar(page).getByRole("button", { name: "wrap.js", exact: true }).click();
+    const editor = page.getByRole("textbox", { name: "wrap.js", exact: true });
+    const aligned = async () => {
+      const sizes = await editor.evaluate(el => ({
+        field: el.getBoundingClientRect().height,
+        layer: el.previousElementSibling.getBoundingClientRect().height,
+        extra: el.scrollHeight - el.clientHeight,
+      }));
+      expect(Math.abs(sizes.field - sizes.layer)).toBeLessThan(2);
+      expect(sizes.extra).toBeLessThan(2);
+    };
+    await expect(editor).toHaveValue(source);
+    await aligned();
+    await editor.focus();
+    await editor.press("Control+End");
+    await editor.press("Enter");
+    await editor.press("Tab");
+    await expect(editor).toHaveValue(source + "\n  ");
+    await aligned();
+    await editor.press("Control+z");
+    await expect(editor).toHaveValue(source + "\n");
+    await editor.press("Control+y");
+    await expect(editor).toHaveValue(source + "\n  ");
+    await page.setViewportSize({ width: 800, height: 700 });
+    await aligned();
+    await editor.fill("");
+    await aligned();
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

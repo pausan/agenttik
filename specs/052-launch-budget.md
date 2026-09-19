@@ -9,8 +9,8 @@ creation and server startup are outside this browser budget.
 
 Projects and task rows load first. Saved tabs fetch their required data in
 parallel and join the strip in saved order. A project requires only its
-metadata and open tasks; statistics, daily metrics, archived tasks and
-schedules arrive independently afterward. Statistics remain pending until
+metadata and open tasks. Statistics, daily metrics, archived tasks and
+project schedules load only when their respective panes are opened. Statistics remain pending until
 an actual answer arrives. Providers and the global schedule list start after
 restoration, keeping CLI probes out of the initial request queue.
 
@@ -24,7 +24,8 @@ read once and the event stream opens once after restoration.
 Views reached only after a click or shortcut are separate browser chunks.
 Dialogs mount on demand; the add-project dialog remains mounted after first
 use so a minimized clone can continue. A long task initially draws its newest
-40 transcript rows, then fills in the rest after first paint. Static UI and
+40 transcript rows, then fills in the rest in batches of 40, yielding to
+input and painting between batches. Static UI and
 ordinary API responses use fast gzip; event streams stay uncompressed.
 
 `make test-startup` runs `e2e/tests/startup.spec.js` against the built web

@@ -26,6 +26,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [056](056-pasted-images.md) | Clipboard images, previews, storage and agent file references |
 | [055](055-mobile-layout.md) | Phone navigation, drawers, touch controls and viewport sizing |
 | [005](005-testing.md) | The three test layers and how they are isolated |
+| [079](079-ui-performance.md) | Interaction benchmarks, archive memory and editor rendering |
 | [052](052-launch-budget.md) | One-second cold/warm UI gate, concurrent reads, and deferred data |
 
 ## Projects and tasks
@@ -37,7 +38,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [008](008-project-workspaces.md) | Per-project tab strips, the context tab, what a letter and a click open |
 | [021](021-stop-active-tasks.md) | Stopping an active or scheduled task from the sidebar |
 | [025](025-blank-task-reuse.md) | Starting a task lands on an untitled one wherever it is |
-| [030](030-project-tasks.md) | Every task of a project in one paged list, behind a focused filter, and its jobs beside them |
+| [030](030-project-tasks.md) | Open tasks, backend archive pages, filters and on-demand project panes |
 | [057](057-smart-search.md) | Backend Bekko task search, shared cache, progress and time filters |
 | [038](038-task-naming.md) | What a task is called, on screen and on the wire |
 | [040](040-editable-project-path.md) | Repointing a project at a moved folder, by typing or by browsing |

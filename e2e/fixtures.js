@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import { expect, test as base } from "@playwright/test";
 
-const BIN = fileURLToPath(new URL("../bin/agenttik-web", import.meta.url));
+const BIN = process.env.AGENTTIK_E2E_BIN || fileURLToPath(new URL("../bin/agenttik-web", import.meta.url));
 
 /* A machine that happens to have claude, codex or copilot installed makes the
    app probe a real CLI at startup — sometimes for seconds, once each for

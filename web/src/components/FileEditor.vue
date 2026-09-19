@@ -6,12 +6,12 @@
    colours go in a <pre> underneath and the textarea above it keeps only its
    caret and its selection. Both wrap, in the same font at the same size, so
    the two layers break lines identically and stay aligned with no scroll
-   syncing at all — the wrapper is what scrolls, and the textarea grows to
-   fit its content rather than scrolling inside itself. */
+   syncing at all. The coloured copy sizes the wrapper; the textarea fills
+   it, so typing needs no synchronous height measurements. */
 import { computed, nextTick, ref, watch } from "vue";
 
 import { editFile } from "../store";
-import { highlight, langOf } from "../highlight";
+import { highlightLines, langOf } from "../highlight";
 import { useTextHistory } from "../text-history";
 
 const props = defineProps({ tab: { type: Object, required: true } });
@@ -31,12 +31,11 @@ const history = useTextHistory(text, (value) => editFile(props.tab, value));
 
 /* The trailing newline is deliberate: without it the last line of the <pre>
    collapses and the caret sits a line above its own text. */
-const coloured = computed(() => highlight(text.value + "\n", lang.value));
+const coloured = computed(() => highlightLines(text.value, lang.value));
 
 function onInput(e) {
   history.input(e);
   editFile(props.tab, e.target.value);
-  grow();
 }
 
 /* Tab indents rather than moving to the next control: this is an editor.
@@ -52,19 +51,7 @@ function onKey(e) {
   el.selectionStart = el.selectionEnd = from + 2;
   history.input({ target: el });
   editFile(props.tab, el.value);
-  grow();
 }
-
-/* A textarea has no intrinsic height, so it is set from its own content and
-   the wrapper does the scrolling. */
-function grow() {
-  const el = area.value;
-  if (!el) return;
-  el.style.height = "0px";
-  el.style.height = el.scrollHeight + "px";
-}
-
-watch(text, () => nextTick(grow), { immediate: true });
 
 /* A file opened from a path in a transcript arrives with a line to show.
    Selecting it marks it, and the coloured layer is what says where it is:
@@ -83,7 +70,6 @@ watch(
     await nextTick();
     // An explicit line request takes precedence over the tab's saved offset.
     await nextTick();
-    grow(); // the pane can only be measured once the field is its full height
     const el = area.value;
     if (!el || !layer.value) return;
     const lines = text.value.split("\n");
@@ -143,7 +129,7 @@ function scroller(el) {
        copy with the wrapper's padding box, so any padding here would offset
        one layer from the other. -->
   <div class="editor font-mono text-xs">
-    <pre ref="layer" aria-hidden="true"><code v-html="coloured"></code></pre>
+    <pre ref="layer" aria-hidden="true"><code v-if="lang"><span v-for="(line, i) in coloured" :key="i" v-html="line + '\n'"></span></code><code v-else v-text="text + '\n'"></code></pre>
     <textarea
       ref="area"
       :value="text"

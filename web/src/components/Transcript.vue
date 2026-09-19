@@ -65,28 +65,25 @@ const rows = computed(() =>
   allRows.value.length > shown.value ? allRows.value.slice(-shown.value) : allRows.value,
 );
 
-/* First opening a task draws the tail and
-   then the whole thing. The rest is drawn from a timeout inside a frame
-   callback: the callback runs before the tail is painted, the timeout after
-   it, which is the first moment the rest costs nobody anything.
-
-   Returning to an open tab draws all rows immediately so its saved scroll
-   offset is measured against the complete conversation. */
+/* Paint the newest rows first, then add at most one screenful per frame.
+   Yielding between batches lets typing and tab changes interrupt a long
+   transcript. Returning to a saved reading position still restores all rows. */
 function revealTranscript() {
   const turn = ++reveal;
   shown.value = tabScroll(S.tab) ? Infinity : TAIL;
-  if (shown.value === Infinity) return;
-  if (allRows.value.length <= TAIL) return;
-  requestAnimationFrame(() =>
-    setTimeout(async () => {
-      // A tab switch can happen between the frame and its timeout. Its old
-      // callback must not reveal the new conversation before its tail paints.
-      if (turn !== reveal) return;
-      shown.value = Infinity;
-      await nextTick();
-      if (turn === reveal && box.value) box.value.scrollTop = box.value.scrollHeight;
-    }, 0),
-  );
+  if (allRows.value.length <= shown.value) return;
+  const more = () => requestAnimationFrame(() => setTimeout(async () => {
+    if (turn !== reveal) return;
+    const el = box.value;
+    const height = el?.scrollHeight || 0;
+    const top = el?.scrollTop || 0;
+    shown.value += TAIL;
+    await nextTick();
+    if (turn !== reveal || !el) return;
+    el.scrollTop = follow ? el.scrollHeight : top + el.scrollHeight - height;
+    if (shown.value < allRows.value.length) more();
+  }, 0));
+  more();
 }
 
 watch(() => S.detail?.session.id, revealTranscript, { immediate: true });
@@ -94,8 +91,10 @@ watch(() => S.detail?.session.id, revealTranscript, { immediate: true });
 // Keep the rows already on screen instead of briefly hiding them and
 // moving a reader who has scrolled up.
 watch(
-  () => allRows.value.length > TAIL,
-  (long, wasLong) => { if (long && !wasLong) shown.value = Infinity; },
+  () => [S.detail?.session.id, allRows.value.length],
+  ([id, count], [previousID, previousCount]) => {
+    if (id === previousID && count > previousCount) shown.value += count - previousCount;
+  },
 );
 
 /* Queued prompts are drawn under the transcript, each with how long it has
@@ -254,7 +253,8 @@ function onScroll() {
   follow = el.scrollHeight - el.clientHeight - el.scrollTop < 2;
 }
 watch(
-  () => [S.activeTab, S.detail?.messages, queued.value.length],
+  () => [S.activeTab, S.detail?.messages, S.detail?.messages.length,
+    S.detail?.messages.at(-1)?.content, queued.value.length],
   async (value, previous) => {
     const tab = S.tab;
     const switched = value[0] !== previous?.[0];
@@ -270,7 +270,7 @@ watch(
     await nextTick();
     if (S.tab === tab && box.value) box.value.scrollTop = box.value.scrollHeight;
   },
-  { deep: true, flush: "post", immediate: true },
+  { flush: "post", immediate: true },
 );
 </script>
 

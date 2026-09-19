@@ -303,17 +303,22 @@ function codeInMarkup(text, state, out) {
   return markupLine(text.slice(close.index), "", out);
 }
 
-/* highlight returns one HTML string with the source's own newlines, so the
-   coloured layer and the textarea over it wrap and break identically. */
-export function highlight(text, lang) {
-  if (!lang) return esc(String(text ?? ""));
+/* Per-line HTML lets the editor patch only changed lines. Lexer state still
+   flows through every line, including when an earlier edit opens a comment. */
+export function highlightLines(text, lang) {
   const lines = String(text ?? "").split("\n");
   const out = [];
+  if (!lang) return lines.map(esc);
   let state = "";
   for (const line of lines) {
     const r = lineHTML(lang, state, line);
     out.push(r.html);
     state = r.next;
   }
-  return out.join("\n");
+  return out;
+}
+
+export function highlight(text, lang) {
+  if (!lang) return esc(String(text ?? ""));
+  return highlightLines(text, lang).join("\n");
 }

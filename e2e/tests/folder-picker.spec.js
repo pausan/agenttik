@@ -46,7 +46,8 @@ test("Enter takes the best match and walks into it", async ({ page }) => {
 
 test("clicking a folder walks into it and the breadcrumb walks back up", async ({ page }) => {
   await field(page).fill(PARENT + "/");
-  await rows(page).filter({ hasText: "agenttik" }).first().click();
+  // Wait for the requested folder, not a similarly named row in the old listing.
+  await rows(page).filter({ hasText: /▸\s*agenttik\s*$/ }).click();
   await expect(field(page)).toHaveValue(REPO + "/");
 
   await page.getByRole("dialog").getByRole("button", { name: "github", exact: true }).click();

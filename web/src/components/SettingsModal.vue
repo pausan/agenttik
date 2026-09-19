@@ -4,8 +4,8 @@
    section reports how many it kept, so the counts say where the answer is
    before you click.
 
-   Every pane stays mounted, which is what keeps those counts live while
-   the filter changes. They are small enough that this costs nothing. */
+   Panes mount on first visit and stay mounted while Settings is open, so
+   unsaved fields survive navigation. Searching mounts all panes for counts. */
 import { computed, reactive, ref, watch } from "vue";
 
 import { S, fail, loadActionModels, loadArchivedProjects, loadOrchestratorConfig, loadProviders, loadServerConfig, openProject } from "../store";
@@ -31,6 +31,15 @@ const emit = defineEmits(["start-tour"]);
 const section = defineModel("section", { type: String, default: "general" });
 
 const filter = ref("");
+const visited = reactive(new Set());
+watch([section, filter], ([id, query]) => {
+  visited.add(id);
+  if (query) {
+    for (const node of SETTINGS_SECTIONS.flatMap(s => [s, ...(s.children || [])])) {
+      if (!node.group) visited.add(node.id);
+    }
+  }
+}, { immediate: true });
 const counts = reactive({});
 const expanded = reactive({ general: true, providers: true });
 const shown = computed(() => visibleSettings(filter.value, counts));
@@ -120,63 +129,63 @@ async function showOrchestrator() {
         </nav>
 
         <div class="min-h-0 min-w-0 flex-1 overflow-auto pr-1">
-          <div v-show="section === 'help'">
+          <div v-if="visited.has('help')" v-show="section === 'help'">
             <HelpSettings :filter="filter" @count="counts.help = $event" @start-tour="emit('start-tour')" />
           </div>
-          <div v-show="section === 'about'">
+          <div v-if="visited.has('about')" v-show="section === 'about'">
             <AboutSettings :filter="filter" @count="counts.about = $event" />
           </div>
-          <div v-show="section === 'general'">
+          <div v-if="visited.has('general')" v-show="section === 'general'">
             <GeneralSettings
               :filter="filter"
               @count="counts.general = $event"
             />
           </div>
-          <div v-show="section === 'profiles'">
+          <div v-if="visited.has('profiles')" v-show="section === 'profiles'">
             <ProfileSettings :filter="filter" @count="counts.profiles = $event" />
           </div>
-          <div v-show="section === 'projects'">
+          <div v-if="visited.has('projects')" v-show="section === 'projects'">
             <ProjectSettings
               :filter="filter"
               @count="counts.projects = $event"
             />
           </div>
-          <div v-show="section === 'orchestrator'">
+          <div v-if="visited.has('orchestrator')" v-show="section === 'orchestrator'">
             <OrchestratorSettings
               :filter="filter"
               @count="counts.orchestrator = $event"
               @open-project="showOrchestrator"
             />
           </div>
-          <div v-show="section === 'appearance'">
+          <div v-if="visited.has('appearance')" v-show="section === 'appearance'">
             <AppearanceSettings
               :filter="filter"
               @count="counts.appearance = $event"
             />
           </div>
-          <div v-show="section === 'models'">
+          <div v-if="visited.has('models')" v-show="section === 'models'">
             <ModelSettings
               :filter="filter"
               @count="counts.models = $event"
             />
           </div>
-          <div v-show="section === 'subscriptions'">
+          <div v-if="visited.has('subscriptions')" v-show="section === 'subscriptions'">
             <SubscriptionSettings
               :filter="filter"
               @count="counts.subscriptions = $event"
             />
           </div>
-          <div v-show="section === 'api-providers'">
+          <div v-if="visited.has('api-providers')" v-show="section === 'api-providers'">
             <APIProviderSettings :filter="filter" @count="counts['api-providers'] = $event" />
           </div>
-          <div v-show="section === 'server'">
+          <div v-if="visited.has('server')" v-show="section === 'server'">
             <ServerSettings
               :active="open && section === 'server'"
               :filter="filter"
               @count="counts.server = $event"
             />
           </div>
-          <div v-show="section === 'shortcuts'">
+          <div v-if="visited.has('shortcuts')" v-show="section === 'shortcuts'">
             <ShortcutSettings
               :filter="filter"
               @count="counts.shortcuts = $event"

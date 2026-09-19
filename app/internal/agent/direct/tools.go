@@ -1,4 +1,4 @@
-package opencode
+package direct
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"runtime"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -15,7 +15,7 @@ import (
 	"github.com/pausan/agenttik/app/internal/process"
 )
 
-func codingTools(permission agent.Permission) []any {
+func codingTools(permission agent.Permission, env environment) []any {
 	tool := func(name, description string, properties map[string]any, required ...string) any {
 		return map[string]any{"type": "function", "function": map[string]any{"name": name, "description": description, "parameters": map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false}}}
 	}
@@ -25,38 +25,59 @@ func codingTools(permission agent.Permission) []any {
 		tool("list_directory", "List a project directory. Use . for the project root.", map[string]any{"path": str}, "path"),
 	}
 	if permission.Valid() != agent.PermissionPlan {
-		out = append(out, tool("write_file", "Write a UTF-8 project file. Its parent directory must exist.", map[string]any{"path": str, "content": str}, "path", "content"))
+		out = append(out, tool("write_file", "Write a UTF-8 project file. Missing parent directories are created.", map[string]any{"path": str, "content": str}, "path", "content"))
 	}
-	if permission.Valid() == agent.PermissionFull {
-		out = append(out, tool("shell", "Run a shell command in the project. Timeout: 60 seconds.", map[string]any{"command": str}, "command"))
+	if permission.Valid() == agent.PermissionFull && len(env.Shells) > 0 {
+		out = append(out, tool("shell", "Run a shell command in the project. Timeout: 60 seconds.", map[string]any{"command": str, "shell": str}, "command"))
+	}
+	if permission.Valid() == agent.PermissionFull && env.Python != "" {
+		out = append(out, tool("python", "Run Python code in the project. Timeout: 60 seconds.", map[string]any{"code": str}, "code"))
 	}
 	return out
 }
-func runTool(ctx context.Context, req agent.TurnRequest, call toolCall) (string, error) {
+func RunTool(ctx context.Context, req agent.TurnRequest, call ToolCall) (string, error) {
+	return runTool(ctx, req, call, detectEnvironment())
+}
+
+func runTool(ctx context.Context, req agent.TurnRequest, call ToolCall, env environment) (string, error) {
 	var args struct {
 		Path    string `json:"path"`
 		Content string `json:"content"`
 		Command string `json:"command"`
+		Shell   string `json:"shell"`
+		Code    string `json:"code"`
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
 	}
 	if json.Unmarshal([]byte(call.Function.Arguments), &args) != nil {
 		return "", fmt.Errorf("invalid tool arguments")
 	}
-	if call.Function.Name == "shell" {
+	if call.Function.Name == "shell" || call.Function.Name == "python" {
 		if req.Permission.Valid() != agent.PermissionFull {
-			return "", fmt.Errorf("shell requires full access")
+			return "", fmt.Errorf("shell and Python require full access")
 		}
 		shellCtx, cancel := context.WithTimeout(ctx, time.Minute)
 		defer cancel()
-		bin, flag := "sh", "-c"
-		if runtime.GOOS == "windows" {
-			bin, flag = "cmd", "/c"
+		var cmd *exec.Cmd
+		if call.Function.Name == "python" {
+			if env.Python == "" {
+				return "", fmt.Errorf("Python is not available")
+			}
+			cmd = exec.CommandContext(shellCtx, env.Python, "-c", args.Code)
+		} else {
+			shell, ok := env.shell(args.Shell)
+			if !ok {
+				return "", fmt.Errorf("requested shell is not available")
+			}
+			argv := append(append([]string{}, shell.Args...), args.Command)
+			cmd = exec.CommandContext(shellCtx, shell.Path, argv...)
 		}
-		cmd := exec.CommandContext(shellCtx, bin, flag, args.Command)
 		cmd.Dir = req.WorkDir
 		process.Configure(cmd)
 		cmd.Cancel = func() error { return process.Kill(cmd.Process) }
 		cmd.WaitDelay = time.Second
-		output := &limitedOutput{}
+		output := &LimitedOutput{}
 		cmd.Stdout = output
 		cmd.Stderr = output
 		err := cmd.Run()
@@ -125,6 +146,9 @@ func runTool(ctx context.Context, req agent.TurnRequest, call toolCall) (string,
 		if info, err := root.Stat(args.Path); err == nil && !info.Mode().IsRegular() {
 			return "", fmt.Errorf("only regular files can be written")
 		}
+		if err := root.MkdirAll(filepath.Dir(args.Path), 0755); err != nil {
+			return "", err
+		}
 		err := root.WriteFile(args.Path, []byte(args.Content), 0644)
 		return "File written.", err
 	default:
@@ -132,9 +156,9 @@ func runTool(ctx context.Context, req agent.TurnRequest, call toolCall) (string,
 	}
 }
 
-type limitedOutput struct{ strings.Builder }
+type LimitedOutput struct{ strings.Builder }
 
-func (b *limitedOutput) Write(p []byte) (int, error) {
+func (b *LimitedOutput) Write(p []byte) (int, error) {
 	n := len(p)
 	if left := 65536 - b.Len(); left > 0 {
 		if len(p) > left {

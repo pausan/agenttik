@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/pausan/agenttik/app/internal/agent"
+	"github.com/pausan/agenttik/app/internal/agent/direct"
 )
 
 func TestAccountIsolationAndPrivateKey(t *testing.T) {
@@ -138,8 +139,8 @@ func TestDirectCodingTurnResumeAndHeaders(t *testing.T) {
 			t.Error("unstable session")
 		}
 		var body struct {
-			Messages []message `json:"messages"`
-			Tools    []any     `json:"tools"`
+			Messages []direct.Message `json:"messages"`
+			Tools    []any            `json:"tools"`
 		}
 		if json.NewDecoder(r.Body).Decode(&body) != nil {
 			t.Error("bad body")
@@ -195,19 +196,19 @@ func TestPermissionAndPathBoundaries(t *testing.T) {
 	work, outside := t.TempDir(), t.TempDir()
 	_ = os.WriteFile(filepath.Join(outside, "secret"), []byte("private"), 0600)
 	req := agent.TurnRequest{WorkDir: work, Permission: agent.PermissionPlan}
-	call := toolCall{}
+	call := direct.ToolCall{}
 	call.Function.Name = "write_file"
 	call.Function.Arguments = `{"path":"x","content":"oops"}`
-	if _, err := runTool(context.Background(), req, call); err == nil {
+	if _, err := direct.RunTool(context.Background(), req, call); err == nil {
 		t.Fatal("plan wrote file")
 	}
 	call.Function.Name = "shell"
 	call.Function.Arguments = `{"command":"echo unsafe"}`
-	if _, err := runTool(context.Background(), req, call); err == nil {
+	if _, err := direct.RunTool(context.Background(), req, call); err == nil {
 		t.Fatal("plan ran shell")
 	}
 	req.Permission = agent.PermissionWorkspace
-	if _, err := runTool(context.Background(), req, call); err == nil {
+	if _, err := direct.RunTool(context.Background(), req, call); err == nil {
 		t.Fatal("workspace ran shell")
 	}
 	if err := os.Symlink(outside, filepath.Join(work, "escape")); err != nil {
@@ -215,18 +216,18 @@ func TestPermissionAndPathBoundaries(t *testing.T) {
 	}
 	call.Function.Name = "read_file"
 	call.Function.Arguments = `{"path":"escape/secret"}`
-	if _, err := runTool(context.Background(), req, call); err == nil {
+	if _, err := direct.RunTool(context.Background(), req, call); err == nil {
 		t.Fatal("symlink escaped project")
 	}
 	call.Function.Name = "write_file"
 	call.Function.Arguments = `{"path":"escape/secret","content":"oops"}`
-	if _, err := runTool(context.Background(), req, call); err == nil {
+	if _, err := direct.RunTool(context.Background(), req, call); err == nil {
 		t.Fatal("write escaped project")
 	}
 }
 func TestDirectErrorsAndCancellation(t *testing.T) {
 	for _, input := range []string{`data: {"error":{"message":"secret"}}`, "data: [DONE]\n", `data: {"choices":[{"delta":{},"finish_reason":"length"}]}`} {
-		if _, _, err := readCompletion(strings.NewReader(input), func(agent.Event) {}); err == nil {
+		if _, _, err := direct.ReadCompletion(strings.NewReader(input), func(agent.Event) {}); err == nil {
 			t.Errorf("accepted incomplete/error stream %q", input)
 		}
 	}
@@ -290,7 +291,7 @@ func TestFragmentedToolCall(t *testing.T) {
 		fmt.Fprintf(&response, "data: %s\n\n", b)
 	}
 	response.WriteString("data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n")
-	reply, _, err := readCompletion(strings.NewReader(response.String()), func(agent.Event) {})
+	reply, _, err := direct.ReadCompletion(strings.NewReader(response.String()), func(agent.Event) {})
 	if err != nil {
 		t.Fatal(err)
 	}

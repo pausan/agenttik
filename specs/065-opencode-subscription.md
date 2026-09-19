@@ -54,23 +54,25 @@ Messages/Responses-only Go models are not offered by this adapter.
 
 SSE text, reasoning, fragmented function calls, and token accounting map to
 agent events. A tool loop runs at most 64 steps. Plan permits project reads
-and directory listings; Workspace adds file writes; Full adds shell commands
-with a 60-second timeout. Go's `os.Root` confines file operations, including
+and directory listings; Workspace adds file writes; Full adds detected shell and Python commands
+with a 60-second timeout. The shared runtime loads project AGENTS.md, detects
+available executables, and asks for completion, verification and a final summary
+([077](077-direct-api-runtime.md)). Go's `os.Root` confines file operations, including
 symlinks, to the project. Shell processes are killed as a group on timeout or
 cancellation. Each file read/tool output is limited to 64 KiB, each write to
 1 MiB, and HTTP/history data to 16 MiB. HTTP requests time out after five
 minutes. Truncated/error streams fail the turn rather than report success.
 
-Completed conversation history is saved privately under
+Conversation history is saved privately under
 `<home>/opencode/agenttik-sessions/direct-<uuid>.json`. Resume requires the
 same account and work folder. Isolated title/outcome requests have no tools
 and do not save history. There is no automatic context compaction; large
-conversations require a new task. An unsuccessful turn does not advance the
-saved history, although tools may already have changed files.
+conversations require a new task. An unsuccessful turn saves the prompt and completed tool results, since tools
+may already have changed files. Interrupted response fragments are not saved.
 
 Direct mode has basic file and shell tools, without the CLI's plugins, MCP,
-subagents or image understanding. File writes require an existing parent
-folder; Full shell access can create folders and run tests. Subscription
+subagents or image understanding. File writes create missing parent
+folders; Full shell/Python access can run tests. Subscription
 allowance bars are absent because no supported usage-query endpoint is used.
 
 ## CLI turns

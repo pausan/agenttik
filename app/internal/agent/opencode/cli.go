@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/pausan/agenttik/app/internal/agent"
+	"github.com/pausan/agenttik/app/internal/agent/direct"
 	"github.com/pausan/agenttik/app/internal/process"
 )
 
@@ -52,7 +53,7 @@ func (p *Provider) runCLI(ctx context.Context, req agent.TurnRequest) (<-chan ag
 	if err != nil {
 		return nil, err
 	}
-	stderr := &limitedOutput{}
+	stderr := &direct.LimitedOutput{}
 	cmd.Stderr = stderr
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("start OpenCode CLI: %w", err)

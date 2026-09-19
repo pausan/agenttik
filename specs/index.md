@@ -18,6 +18,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [060](060-desktop-tray.md) | Close to tray, global show/hide shortcut, working pulse, native lifecycle |
 | [001](001-architecture.md) | Process model, packages, request flow |
 | [002](002-data-model.md) | SQLite schema, upgrade safeguards, metrics, storage location |
+| [077](077-direct-api-runtime.md) | Shared API coding loop, project instructions, detected tools and permissions |
 | [003](003-providers.md) | Provider interface, desktop CLI discovery, invocation, event mapping |
 | [004](004-ui.md) | Layout, panels, appearance modes, persistent Tree navigation, shortcuts, HTTP API |
 | [073](073-terminals.md) | Shells in the project folder, per-project terminal tabs, and how they stream |

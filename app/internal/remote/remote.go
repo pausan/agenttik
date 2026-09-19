@@ -51,12 +51,27 @@ func Parse(address string) (*url.URL, error) {
 	return u, nil
 }
 
+// Discovery probes connect directly, regardless of HTTP proxy environment settings.
+var directDiscoveryClient = &http.Client{
+	Timeout:       5 * time.Second,
+	Transport:     &http.Transport{DisableKeepAlives: true},
+	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+}
+
+func CheckDirect(ctx context.Context, address string) (*url.URL, Info, error) {
+	return check(ctx, address, directDiscoveryClient)
+}
+
 func Check(ctx context.Context, address string) (*url.URL, Info, error) {
+	client := &http.Client{Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	return check(ctx, address, client)
+}
+
+func check(ctx context.Context, address string, client *http.Client) (*url.URL, Info, error) {
 	u, err := Parse(address)
 	if err != nil {
 		return nil, Info{}, err
 	}
-	client := &http.Client{Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String()+VersionPath, nil)
 	if err != nil {
 		return nil, Info{}, err

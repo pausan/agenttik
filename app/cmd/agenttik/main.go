@@ -54,6 +54,7 @@ func run() error {
 		return update.Helper(os.Args[2])
 	}
 	cfg := config.Default()
+	findRemotes := flag.Bool("find-remotes", false, "find agenttik servers on local private IPv4 /8 ranges and exit (port from --addr)")
 	remoteAddress := flag.String("remote", "", "connect to an agenttik server at `host:port or URL`")
 	private := flag.Bool("private", false, "start an isolated temporary instance and remove its data on exit")
 	webOnly := flag.Bool("web", false, "serve the web UI only, no desktop window")
@@ -80,6 +81,12 @@ func run() error {
 	if *showVersion {
 		fmt.Println("agenttik", version)
 		return nil
+	}
+	if *findRemotes {
+		if *remoteAddress != "" || *apiMethod != "" || *apiBody != "" || *initProject || *private || *webOnly || flag.NArg() != 0 {
+			return errors.New("--find-remotes cannot be combined with --remote, --api, --body, --init, --private, --web, or positional arguments")
+		}
+		return runFindRemotes(cfg.Addr)
 	}
 	if *private && (*remoteAddress != "" || *apiMethod != "" || *initProject) {
 		return errors.New("--private cannot be combined with --remote, --api, or --init")

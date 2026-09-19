@@ -23,6 +23,29 @@ before switching; unsaved file edits block the connection until saved or
 discarded. Restored desktop tabs and drafts are keyed by remote
 origin, so matching task IDs on different servers do not share drafts.
 
+## Finding instances from the CLI
+
+`agenttik --find-remotes` scans active, non-loopback private IPv4 interfaces
+and exits without opening a window, database, or instance lock. Each interface
+address is expanded to /8 and intersected with private address space:
+`10.0.0.0/8`, `172.16.0.0/12`, or `192.168.0.0/16`. Duplicate ranges are scanned
+once. Public, link-local, loopback, and IPv6 addresses are excluded.
+
+Discovery probes HTTP port 7717 by default. `--addr :PORT` selects another
+port; its host is ignored. Each match prints its URL, quoted name, and quoted
+version to stdout, separated by tabs, as soon as it is found. Progress and
+the match count go to stderr. No matches is a successful result; no eligible
+interfaces is an error. Ctrl+C cancels the scan and exits nonzero, preserving
+matches already printed. The flag cannot be combined with other action modes
+or positional arguments. `--data-dir` is unused.
+
+The scan uses 128 workers, a 500 ms deadline per address, and bounded memory.
+A silent /8 can take about 18 hours; slow servers may be missed. Probes bypass
+HTTP proxies, do not follow redirects, and validate the same public
+`/api/version` signature used by remote connections. Password-protected
+instances are discoverable. Only the chosen HTTP port is scanned; arbitrary
+ports, HTTPS listeners, and loopback-only desktop backends are not discovered.
+
 ## Server names
 
 Each server database receives a persistent generated name, `agenttik-` plus

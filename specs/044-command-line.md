@@ -1,7 +1,7 @@
 # The command line, and the version a tag builds in
 
 `agenttik` takes long options: `--addr`, `--data-dir`, `--init`, `--web`,
-`--private`, `--remote`, `--api`, `--body`, `--help` and `--version`. Go's `flag` package treats `-addr` and `--addr` as
+`--private`, `--remote`, `--find-remotes`, `--api`, `--body`, `--help` and `--version`. Go's `flag` package treats `-addr` and `--addr` as
 the same option, so the single-dash form keeps working; only the double-dash
 one is documented. `--help` prints to stdout and exits 0, while an unknown
 option prints the same text to stderr and exits 2, which is `flag`'s own

@@ -65,6 +65,9 @@ func (s *Server) listProviders(c *fiber.Ctx) error {
 		}
 		if api, ok := p.(*apiprovider.Provider); ok {
 			connection := api.Connection()
+			if !connection.Catalog && !connection.KeySet {
+				continue
+			}
 			info.Kind, info.API = "api", &connection
 			info.Accounts = []accountInfo{{ID: store.SystemAccount, Alias: "API", System: true, IsDefault: true, SignedIn: connection.Enabled}}
 		}

@@ -204,3 +204,62 @@ func TestAPITaskPermissionPersistsAndKeepsConversation(t *testing.T) {
 		t.Fatal("failed permission change was written")
 	}
 }
+
+func TestNamedAPIConnections(t *testing.T) {
+	s, st := apiProviderServer(t)
+	if err := s.EnableProfiles(false); err != nil {
+		t.Fatal(err)
+	}
+	profile := decode[Profile](t, do(t, s, "POST", "/api/profiles", map[string]string{"name": "Work"}))
+	for _, body := range []map[string]string{{"name": "", "key": "test-only-key"}, {"name": "Work", "key": ""}, {"name": "Work", "key": "invalid"}} {
+		if resp := do(t, s, "POST", "/api/providers/api-openai/api", body); resp.StatusCode != 400 {
+			t.Fatal(resp.StatusCode)
+		}
+	}
+	var ids []string
+	for _, name := range []string{"Work", "Personal", "Work"} {
+		rows := decode[[]providerInfo](t, do(t, s, "POST", "/api/providers/api-openai/api?profile="+profile.ID, map[string]string{"name": name, "key": "test-only-key"}))
+		row := rows[len(rows)-1]
+		if row.DisplayName != name+" · OpenAI API" || !row.Available || row.API.Catalog {
+			t.Fatal(row)
+		}
+		ids = append(ids, row.Name)
+	}
+	if ids[0] == ids[1] || ids[0] == ids[2] {
+		t.Fatal("connections reused an identity")
+	}
+	rows := decode[[]providerInfo](t, do(t, s, "GET", "/api/providers?profile="+profile.ID, nil))
+	if len(rows) != 4 {
+		t.Fatal(rows)
+	}
+	if resp := do(t, s, "DELETE", "/api/providers/"+ids[0]+"/api?profile="+profile.ID, nil); resp.StatusCode != 200 {
+		t.Fatal(resp.StatusCode)
+	}
+	rows = decode[[]providerInfo](t, do(t, s, "GET", "/api/providers", nil))
+	if len(rows) != 3 || rows[1].Name != ids[1] || !rows[1].Available {
+		t.Fatal(rows)
+	}
+	loaded := apiprovider.All(st.Dir())
+	names := map[string]bool{}
+	for _, p := range loaded {
+		names[p.Name()] = true
+	}
+	if names[ids[0]] || !names[ids[1]] || !names[ids[2]] {
+		t.Fatal(names)
+	}
+	next := decode[Profile](t, do(t, s, "POST", "/api/profiles", map[string]string{"name": "Later"}))
+	rows = decode[[]providerInfo](t, do(t, s, "GET", "/api/providers?profile="+next.ID, nil))
+	if len(rows) != 3 || rows[1].DisplayName != "Personal · OpenAI API" {
+		t.Fatal(rows)
+	}
+	local := s.profiles.running[next.ID].server
+	resp := do(t, local, "POST", "/api/providers/api-openai/api", map[string]string{"name": "Local", "key": "test-only-key"})
+	if resp.StatusCode != 200 {
+		t.Fatal(resp.StatusCode)
+	}
+	rows = decode[[]providerInfo](t, do(t, s, "GET", "/api/providers", nil))
+	if len(rows) != 4 || rows[3].DisplayName != "Local · OpenAI API" {
+		t.Fatal(rows)
+	}
+
+}

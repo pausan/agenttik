@@ -46,6 +46,7 @@ type Server struct {
 	updateContext context.Context
 
 	profiles *profileManager
+	apiRoot  *Server
 	app      *fiber.App
 	version  string
 	store    *store.Store
@@ -195,6 +196,7 @@ func (s *Server) routes() {
 	api.Get("/attachments/:name", s.getAttachment)
 
 	api.Get("/providers", s.listProviders)
+	api.Post("/providers/:provider/api", s.addAPIProvider)
 	api.Put("/providers/:provider/api", s.configureAPIProvider)
 	api.Delete("/providers/:provider/api", s.removeAPIProviderKey)
 	api.Get("/providers/:provider/subscription-limits", s.subscriptionLimits)

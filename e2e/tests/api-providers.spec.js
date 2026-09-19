@@ -15,7 +15,7 @@ test("settings tree groups sections, collapses, and searches descendants", async
   await expect(nav.getByRole("button", { name: "API Providers", exact: true })).toBeHidden();
   await dialog.getByPlaceholder("Filter settings…").fill("OpenRouter");
   await expect(nav.getByRole("button", { name: /^API Providers/ })).toBeVisible();
-  await expect(dialog.getByRole("group", { name: "OpenRouter API", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Provider", exact: true })).toBeVisible();
   await dialog.getByPlaceholder("Filter settings…").fill("");
   await nav.getByRole("button", { name: "Models", exact: true }).click();
   await expect(dialog.getByRole("group", { name: "System · Fake models", exact: true })).toBeVisible();
@@ -45,7 +45,7 @@ test("API keys enable models, select tasks, hide when disabled, and can be remov
       const body = route.request().postDataJSON();
       if (body.key === "invalid-key") { await route.fulfill({ status: 400, json: { error: "Provider rejected the key" } }); return; }
       if (body.key) { expect(body.key).toBe("ui-test-only-key"); savedKey = true; }
-      enabled = body.enabled;
+      enabled = route.request().method() === "POST" || body.enabled;
     }
     await route.fulfill({ json: responses() });
   });
@@ -62,13 +62,19 @@ test("API keys enable models, select tasks, hide when disabled, and can be remov
   await openSettings(page, "API Providers");
   const dialog = page.getByRole("dialog");
   const provider = dialog.getByRole("group", { name: "OpenAI API", exact: true });
-  const key = provider.getByLabel("OpenAI API key", { exact: true });
-  await expect(provider.getByRole("button", { name: "Enable", exact: true })).toBeDisabled();
+  const form = dialog.getByRole("form", { name: "Add API provider" });
+  await expect(form.getByRole("button", { name: "Add", exact: true })).toBeDisabled();
+  await form.getByRole("button", { name: "Provider", exact: true }).click();
+  await page.getByPlaceholder("Search providers…").fill("opnai");
+  await page.getByRole("option", { name: "OpenAI", exact: true }).click();
+  await expect(page.getByRole("listbox")).toBeHidden();
+  await form.getByLabel("Name", { exact: true }).fill("Work");
+  const key = form.getByLabel("API key", { exact: true });
   await key.fill("invalid-key");
-  await provider.getByRole("button", { name: "Enable", exact: true }).click();
-  await expect(provider.getByRole("alert")).toContainText("Provider rejected the key");
+  await form.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(form.getByRole("alert")).toContainText("Provider rejected the key");
   await key.fill("ui-test-only-key");
-  await provider.getByRole("button", { name: "Enable", exact: true }).click();
+  await form.getByRole("button", { name: "Add", exact: true }).click();
   await expect(key).toHaveValue("");
   await expect(provider.getByText("1 model", { exact: true })).toBeVisible();
   await dialog.getByRole("button", { name: "Models", exact: true }).click();
@@ -95,8 +101,8 @@ test("API keys enable models, select tasks, hide when disabled, and can be remov
   await dialog.getByRole("button", { name: "API Providers", exact: true }).click();
   await provider.getByRole("button", { name: "Enable", exact: true }).click();
   await expect(provider.getByText("1 model", { exact: true })).toBeVisible();
-  await provider.getByRole("button", { name: "Remove key", exact: true }).click();
-  await expect(provider.getByRole("button", { name: "Enable", exact: true })).toBeDisabled();
+  await provider.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(provider).toHaveCount(0);
   expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain("ui-test-only-key");
 });
 
@@ -106,8 +112,52 @@ test("the settings tree and API setup fit a phone", async ({ page }, testInfo) =
   await page.getByRole("dialog", { name: "Projects and tasks", exact: true }).getByRole("button", { name: "Settings", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Settings", exact: true });
   await dialog.getByRole("button", { name: "API Providers", exact: true }).click();
-  await expect(dialog.getByRole("group", { name: "OpenRouter API", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Provider", exact: true })).toBeVisible();
   await dialog.screenshot({ path: testInfo.outputPath("settings-api-phone.png") });
   expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBeTruthy();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+});
+
+test("multiple named connections to one provider can be added and deleted independently", async ({ page }) => {
+  let templates = [];
+  let connections = [];
+  let sequence = 0;
+  await page.route("**/api/providers", async (route) => {
+    const response = await route.fetch();
+    templates = await response.json();
+    await route.fulfill({ response, json: [...templates, ...connections] });
+  });
+  await page.route("**/api/providers/*/api", async (route) => {
+    if (route.request().method() === "POST") {
+      const body = route.request().postDataJSON();
+      const template = templates.find((p) => p.name === "api-openrouter");
+      connections.push({ ...template, name: `api-openrouter-${++sequence}`, display_name: `${body.name} · OpenRouter API`,
+        available: true, models: [{ id: "test-model", label: "Test model" }],
+        api: { ...template.api, catalog: false, enabled: true, key_set: true } });
+    } else {
+      const id = route.request().url().split("/").at(-2);
+      connections = connections.filter((p) => p.name !== id);
+    }
+    await route.fulfill({ json: [...templates, ...connections] });
+  });
+  await openSettings(page, "API Providers");
+  const dialog = page.getByRole("dialog");
+  const form = dialog.getByRole("form", { name: "Add API provider" });
+  await form.getByRole("button", { name: "Provider", exact: true }).click();
+  await page.getByPlaceholder("Search providers…").fill("opnrt");
+  await expect(page.getByRole("option")).toHaveCount(1);
+  await page.getByRole("option", { name: "OpenRouter", exact: true }).click();
+  await expect(page.getByRole("listbox")).toBeHidden();
+  for (const name of ["Work", "Personal", "Work research"]) {
+    await form.getByLabel("Name", { exact: true }).fill(name);
+    await form.getByLabel("API key", { exact: true }).fill(`test-${name.replaceAll(" ", "-")}`);
+    await form.getByRole("button", { name: "Add", exact: true }).click();
+    await expect(dialog.getByRole("group", { name: `${name} · OpenRouter API`, exact: true })).toBeVisible();
+    await expect(form.getByLabel("API key", { exact: true })).toHaveValue("");
+  }
+  const work = dialog.getByRole("group", { name: "Work · OpenRouter API", exact: true });
+  await work.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(work).toHaveCount(0);
+  await expect(dialog.getByRole("group", { name: "Personal · OpenRouter API", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("group", { name: "Work research · OpenRouter API", exact: true })).toBeVisible();
 });

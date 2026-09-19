@@ -3653,6 +3653,11 @@ export async function setActionModel(action, choice) {
   } : {});
 }
 
+export async function addAPIProvider(provider, connection) {
+  S.providers = await api("POST", `/api/providers/${encodeURIComponent(provider)}/api`, connection);
+  await loadActionModels();
+}
+
 export async function configureAPIProvider(name, connection) {
   S.providers = await api("PUT", `/api/providers/${encodeURIComponent(name)}/api`, connection);
   await loadActionModels();

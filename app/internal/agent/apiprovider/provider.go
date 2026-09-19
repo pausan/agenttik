@@ -3,6 +3,7 @@ package apiprovider
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -32,6 +33,7 @@ var Catalog = []Definition{
 }
 
 type config struct {
+	Name    string        `json:"name,omitempty"`
 	Key     string        `json:"key"`
 	Enabled bool          `json:"enabled"`
 	Models  []agent.Model `json:"models"`
@@ -39,13 +41,17 @@ type config struct {
 
 // Connection is the write-only key's public status; it never contains a secret.
 type Connection struct {
-	Enabled bool   `json:"enabled"`
-	KeySet  bool   `json:"key_set"`
-	KeyURL  string `json:"key_url"`
+	Provider string `json:"provider"`
+	Label    string `json:"label"`
+	Catalog  bool   `json:"catalog"`
+	Enabled  bool   `json:"enabled"`
+	KeySet   bool   `json:"key_set"`
+	KeyURL   string `json:"key_url"`
 }
 
 type Provider struct {
 	definition Definition
+	id         string
 	shared     *Provider
 	dir        string
 	http       *http.Client
@@ -56,7 +62,10 @@ type Provider struct {
 }
 
 func New(definition Definition, dataDir string) *Provider {
-	p := &Provider{definition: definition, dir: filepath.Join(dataDir, "api-providers", definition.ID), http: &http.Client{
+	return newConnection(definition, dataDir, definition.ID)
+}
+func newConnection(definition Definition, dataDir, id string) *Provider {
+	p := &Provider{definition: definition, id: id, dir: filepath.Join(dataDir, "api-providers", id), http: &http.Client{
 		Timeout:       5 * time.Minute,
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
 	}}
@@ -72,20 +81,32 @@ func New(definition Definition, dataDir string) *Provider {
 }
 func All(dataDir string) []agent.Provider {
 	out := make([]agent.Provider, 0, len(Catalog))
+	entries, _ := os.ReadDir(filepath.Join(dataDir, "api-providers"))
 	for _, definition := range Catalog {
 		out = append(out, New(definition, dataDir))
+		for _, entry := range entries {
+			if entry.IsDir() && strings.HasPrefix(entry.Name(), definition.ID+"-") {
+				p := newConnection(definition, dataDir, entry.Name())
+				if p.snapshot().Key != "" {
+					out = append(out, p)
+				}
+			}
+		}
 	}
 	return out
 }
 
 // ForProfile shares the connection while keeping conversation files local.
 func (p *Provider) ForProfile(dataDir string) *Provider {
-	return &Provider{definition: p.definition, dir: filepath.Join(dataDir, "api-providers", p.definition.ID), http: p.http, shared: p}
+	return &Provider{definition: p.definition, id: p.id, dir: filepath.Join(dataDir, "api-providers", p.id), http: p.http, shared: p}
 }
 
 // ImportConnection adopts a legacy profile connection when the shared one is
 // empty. Preserve conflicting keys in the instance directory for recovery.
 func (p *Provider) ImportConnection(dataDir string) error {
+	if p.id != p.definition.ID {
+		return nil
+	}
 	legacyPath := filepath.Join(dataDir, "api-providers", p.definition.ID, "connection.json")
 	data, err := os.ReadFile(legacyPath)
 	if errors.Is(err, os.ErrNotExist) {
@@ -111,10 +132,15 @@ func (p *Provider) ImportConnection(dataDir string) error {
 	}
 	return os.Remove(legacyPath)
 }
-func (p *Provider) Name() string        { return "api-" + p.definition.ID }
-func (p *Provider) DisplayName() string { return p.definition.Label + " API" }
-func (p *Provider) Efforts() []string   { return nil }
-func (p *Provider) path() string        { return filepath.Join(p.dir, "connection.json") }
+func (p *Provider) Name() string { return "api-" + p.id }
+func (p *Provider) DisplayName() string {
+	if name := p.snapshot().Name; name != "" {
+		return name + " · " + p.definition.Label + " API"
+	}
+	return p.definition.Label + " API"
+}
+func (p *Provider) Efforts() []string { return nil }
+func (p *Provider) path() string      { return filepath.Join(p.dir, "connection.json") }
 func (p *Provider) snapshot() config {
 	if p.shared != nil {
 		return p.shared.snapshot()
@@ -125,7 +151,7 @@ func (p *Provider) snapshot() config {
 }
 func (p *Provider) Connection() Connection {
 	c := p.snapshot()
-	return Connection{Enabled: c.Enabled && c.Key != "", KeySet: c.Key != "", KeyURL: p.definition.KeyURL}
+	return Connection{Provider: p.definition.ID, Label: p.definition.Label, Catalog: p.id == p.definition.ID, Enabled: c.Enabled && c.Key != "", KeySet: c.Key != "", KeyURL: p.definition.KeyURL}
 }
 func (p *Provider) Models() []agent.Model {
 	c := p.snapshot()
@@ -218,4 +244,29 @@ func (p *Provider) Run(ctx context.Context, req agent.TurnRequest) (<-chan agent
 	}
 	client := direct.Client{HTTP: p.http, Endpoint: endpoint, Protocol: p.definition.Protocol, Key: c.Key, HistoryDir: filepath.Join(p.dir, "sessions")}
 	return client.Run(ctx, req)
+}
+
+// Create validates a separate credential before publishing the connection.
+func (p *Provider) Create(ctx context.Context, name, key string) (*Provider, error) {
+	name, key = strings.TrimSpace(name), strings.TrimSpace(key)
+	if name == "" || len(name) > 120 {
+		return nil, fmt.Errorf("enter a name of up to 120 characters")
+	}
+	if key == "" {
+		return nil, fmt.Errorf("enter an API key first")
+	}
+	id := fmt.Sprintf("%s-%x", p.definition.ID, randomID())
+	next := newConnection(p.definition, filepath.Dir(filepath.Dir(p.dir)), id)
+	next.config.Name = name
+	if err := next.Configure(ctx, key, true, false); err != nil {
+		return nil, err
+	}
+	return next, nil
+}
+func randomID() []byte {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		panic(err)
+	}
+	return b
 }

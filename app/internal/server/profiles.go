@@ -151,6 +151,7 @@ func (m *profileManager) open(id string) (*profileRuntime, error) {
 	registry := agent.NewRegistry(providers...)
 	r := runner.New(db, registry, runner.NewHub())
 	s := New(db, registry, r)
+	s.apiRoot = m.root
 	s.SetVersion(m.root.version)
 	// CLI calls from this profile's orchestrator discover its own endpoint.
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -232,7 +233,7 @@ func (s *Server) routeProfile(c *fiber.Ctx) error {
 	if id != "default" && m.running[id] == nil {
 		return fiber.NewError(404, "Profile no longer exists")
 	}
-	if id == "default" || strings.HasPrefix(path, "/api/updates") || path == "/api/foreground" || path == "/api/desktop" || strings.HasPrefix(path, "/api/server") || strings.HasPrefix(path, "/api/remote/") || path == "/api/version" {
+	if (c.Method() == "POST" && strings.HasPrefix(path, "/api/providers/") && strings.HasSuffix(path, "/api")) || id == "default" || strings.HasPrefix(path, "/api/updates") || path == "/api/foreground" || path == "/api/desktop" || strings.HasPrefix(path, "/api/server") || strings.HasPrefix(path, "/api/remote/") || path == "/api/version" {
 		return c.Next()
 	}
 	m.running[id].server.app.Handler()(c.Context())

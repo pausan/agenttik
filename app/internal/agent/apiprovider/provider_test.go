@@ -246,3 +246,42 @@ func TestImportLegacyConnectionPreservesConflictingKey(t *testing.T) {
 		t.Fatal("removed key resurrected")
 	}
 }
+
+func TestNamedConnectionsKeepKeysAndHistoriesSeparate(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Header.Get("Authorization") {
+		case "Bearer work-key", "Bearer personal-key":
+			fmt.Fprint(w, `{"data":[{"id":"gpt-test"}]}`)
+		default:
+			w.WriteHeader(401)
+		}
+	}))
+	defer upstream.Close()
+	dir := t.TempDir()
+	template := New(Definition{ID: "openai", Label: "OpenAI", BaseURL: upstream.URL, Protocol: "chat"}, dir)
+	work, err := template.Create(context.Background(), "Work", "work-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	personal, err := template.Create(context.Background(), "Personal", "personal-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if work.dir == personal.dir || work.Name() == personal.Name() {
+		t.Fatal("shared connection identity")
+	}
+	profileDir := t.TempDir()
+	if work.ForProfile(profileDir).dir == personal.ForProfile(profileDir).dir {
+		t.Fatal("shared histories")
+	}
+	reloaded := newConnection(template.definition, dir, work.id)
+	if reloaded.snapshot().Key != "work-key" || reloaded.DisplayName() != "Work · OpenAI API" {
+		t.Fatal("lost saved connection")
+	}
+	if err := work.RemoveKey(); err != nil {
+		t.Fatal(err)
+	}
+	if personal.snapshot().Key != "personal-key" || !personal.Connection().Enabled {
+		t.Fatal("removed another key")
+	}
+}

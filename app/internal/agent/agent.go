@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"slices"
+	"sync"
 )
 
 var ErrNotImplemented = errors.New("provider not implemented")
@@ -225,6 +227,7 @@ type Metered interface {
 
 // Registry holds the providers this build supports, in display order.
 type Registry struct {
+	mu    sync.RWMutex
 	order []Provider
 	byID  map[string]Provider
 }
@@ -239,8 +242,23 @@ func NewRegistry(providers ...Provider) *Registry {
 }
 
 func (r *Registry) Get(name string) (Provider, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	p, ok := r.byID[name]
 	return p, ok
 }
 
-func (r *Registry) All() []Provider { return r.order }
+func (r *Registry) All() []Provider {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return slices.Clone(r.order)
+}
+func (r *Registry) Add(p Provider) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.byID[p.Name()]; ok {
+		return
+	}
+	r.order = append(r.order, p)
+	r.byID[p.Name()] = p
+}

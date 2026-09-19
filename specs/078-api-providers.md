@@ -19,11 +19,15 @@ queued prompts, schedules and automatic-action overrides.
 | `api-mistral` | Mistral | Chat Completions |
 | `api-xai` | xAI | Chat Completions |
 
-The instance has one shared key per API provider. Enable saves it after fetching models;
+The instance supports any number of named connections per API provider.
+A fuzzy-search provider dropdown, name and API key form adds a connection after
+validating its catalog. Each has a stable generated ID (`api-<service>-<random-id>`),
+its own credential and model cache, and a name shown alongside the service in model pickers.
+Existing connections retain their IDs and credentials. Enable saves a key after fetching models;
 Save key replaces it after the same check. An empty key keeps the saved key.
 Refresh models fetches the catalog again. Disable retains the key but removes
-models from settings and pickers; Remove key disables and clears the credential
-and model cache. Failed validation preserves the last working connection.
+models from settings and pickers; Delete removes the connection from settings
+and pickers and clears its credential and model cache. Conversation history is retained. Failed validation preserves the last working connection.
 
 Catalogs are cached on disk and read without network calls at startup or during
 normal provider listing. Enabling and refreshing have a 20-second deadline.
@@ -38,7 +42,11 @@ at inference; refresh the catalog or choose another model.
 ## Credentials and API
 
 `GET /api/providers` includes `kind` (`subscription` or `api`) and, for API
-connections, `api.enabled`, `api.key_set`, and `api.key_url`. It never includes keys.
+connections, `api.enabled`, `api.key_set`, `api.key_url`, service `api.provider` and `api.label`.
+`api.catalog` identifies service templates used by the add dropdown; unconfigured
+templates are not shown as saved connections. It never includes keys.
+`POST /api/providers/:provider/api` accepts `{name, key}` and adds a separate
+connection, shared immediately with all profiles.
 `PUT /api/providers/:provider/api` accepts `{key, enabled, refresh}` and returns
 updated providers. `DELETE` at the same route removes the key. Existing server
 and remote authentication protect these routes like the other settings routes.
@@ -64,7 +72,7 @@ disabling prevents subsequent turns. Group/model visibility and favourites remai
 saved so reconnecting restores preferences. New tasks skip unavailable recent
 choices and use a signed-in account when the preferred subscription is signed out.
 
-API rows and selected buttons name the service (for example `OpenAI API · …`).
+API rows and selected buttons name the connection and service (for example `Work · OpenAI API · …`).
 Switching provider resets the provider conversation through the existing session
 mechanism. API tasks use the [shared runtime](077-direct-api-runtime.md), keep
 history under the provider's `sessions/` folder, and use provider-default reasoning

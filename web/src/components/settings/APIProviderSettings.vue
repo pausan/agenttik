@@ -1,6 +1,6 @@
 <script setup>
 import { computed, reactive, ref, watchEffect } from "vue";
-import { S, configureAPIProvider, removeAPIProviderKey } from "../../store";
+import { S, addAPIProvider, configureAPIProvider, removeAPIProviderKey } from "../../store";
 import { fuzzyAny } from "../../fuzzy";
 
 const props = defineProps({ filter: { type: String, default: "" } });
@@ -8,9 +8,27 @@ const emit = defineEmits(["count"]);
 const keys = reactive({});
 const errors = reactive({});
 const busy = ref("");
-const providers = computed(() => S.providers.filter((p) => p.kind === "api" &&
+const selected = ref("");
+const search = ref("");
+const name = ref("");
+const key = ref("");
+const addError = ref("");
+const catalog = computed(() => S.providers.filter((p) => p.kind === "api" && p.api.catalog));
+const options = computed(() => catalog.value.map((p) => ({ label: p.api.label, value: p.name, score: fuzzyAny([p.api.label, p.api.provider], search.value) }))
+  .filter((p) => p.score !== null).sort((a, b) => a.score - b.score));
+async function add() {
+  busy.value = "add";
+  addError.value = "";
+  try {
+    await addAPIProvider(selected.value, { name: name.value, key: key.value });
+    name.value = "";
+    key.value = "";
+  } catch (error) { addError.value = error.message; }
+  finally { busy.value = ""; }
+}
+const providers = computed(() => S.providers.filter((p) => p.kind === "api" && p.api.key_set &&
   fuzzyAny([p.display_name, p.name, "providers", "api", "key", "connection", "billing"], props.filter) !== null));
-watchEffect(() => emit("count", providers.value.length));
+watchEffect(() => emit("count", providers.value.length + catalog.value.filter((p) => fuzzyAny([p.display_name, "API Providers"], props.filter) !== null).length));
 
 async function save(provider, enabled = true, refresh = false) {
   busy.value = provider.name;
@@ -37,6 +55,23 @@ async function remove(provider) {
       Connect an API key for all profiles. Choose visible and favourite models in each profile. API usage is billed separately from subscriptions.
       Only enabled connections appear in Models. Keys are stored on the Agenttik host and are never shown again.
     </p>
+    <form aria-label="Add API provider" class="mb-4 space-y-3 rounded-lg border border-default p-3" @submit.prevent="add">
+      <div>
+        <label for="api-provider" class="mb-1 block text-xs text-muted">Provider</label>
+        <USelectMenu id="api-provider" v-model="selected" v-model:search-term="search" :items="options" value-key="value"
+          ignore-filter placeholder="Select a provider" aria-label="Provider" :search-input="{ placeholder: 'Search providers…' }" class="w-full" :disabled="!!busy" />
+      </div>
+      <div>
+        <label for="api-name" class="mb-1 block text-xs text-muted">Name</label>
+        <UInput id="api-name" v-model="name" placeholder="e.g. Work or Personal" :maxlength="120" class="w-full" :disabled="!!busy" />
+      </div>
+      <div>
+        <label for="api-key" class="mb-1 block text-xs text-muted">API key</label>
+        <UInput id="api-key" v-model="key" type="password" autocomplete="new-password" class="w-full" :disabled="!!busy" />
+      </div>
+      <UButton type="submit" label="Add" :loading="busy === 'add'" :disabled="!!busy || !selected || !name.trim() || !key.trim()" />
+      <p v-if="addError" role="alert" class="text-xs text-error">{{ addError }}</p>
+    </form>
     <section v-for="provider in providers" :key="provider.name" role="group" :aria-label="provider.display_name" class="mb-4 rounded-lg border border-default p-3">
       <div class="mb-2 flex items-center justify-between gap-2">
         <h4 class="font-medium text-highlighted">{{ provider.display_name }}</h4>
@@ -54,7 +89,7 @@ async function remove(provider) {
             :loading="busy === provider.name" :disabled="!!busy || (!provider.api.key_set && !keys[provider.name]?.trim())" />
           <UButton v-if="provider.api.enabled" type="button" size="xs" color="neutral" variant="soft" label="Refresh models" :disabled="!!busy" @click="save(provider, true, true)" />
           <UButton v-if="provider.api.enabled" type="button" size="xs" color="neutral" variant="ghost" label="Disable" :disabled="!!busy" @click="save(provider, false)" />
-          <UButton v-if="provider.api.key_set" type="button" size="xs" color="error" variant="ghost" label="Remove key" :disabled="!!busy" @click="remove(provider)" />
+          <UButton v-if="provider.api.key_set" type="button" size="xs" color="error" variant="ghost" label="Delete" :disabled="!!busy" @click="remove(provider)" />
           <UButton :to="provider.api.key_url" target="_blank" rel="noopener noreferrer" size="xs" color="neutral" variant="link" label="Get API key" trailing-icon="i-lucide-external-link" />
         </div>
       </form>

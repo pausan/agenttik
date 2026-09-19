@@ -4,8 +4,10 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"image/png"
 	"strings"
 	"testing"
@@ -94,5 +96,39 @@ func TestTrayShortcutCleanup(t *testing.T) {
 				t.Fatal("shortcut not unregistered")
 			}
 		})
+	}
+}
+
+func TestQuitConfirmation(t *testing.T) {
+	for _, explicit := range []bool{false, true} {
+		for _, busy := range []bool{false, true} {
+			for _, accept := range []bool{false, true} {
+				t.Run(fmt.Sprintf("explicit=%v/busy=%v/accept=%v", explicit, busy, accept), func(t *testing.T) {
+					calls := 0
+					w := &window{quitting: explicit, trayReady: explicit, busy: func() bool { return busy }}
+					w.confirmQuit = func(ctx context.Context) bool {
+						calls++
+						if !w.beforeClose(ctx) {
+							t.Fatal("overlapping close should be blocked")
+						}
+						return accept
+					}
+					blocked := w.beforeClose(context.Background())
+					if blocked != (busy && !accept) || w.quitting == blocked {
+						t.Fatalf("blocked=%v quitting=%v", blocked, w.quitting)
+					}
+					if (calls == 1) != busy {
+						t.Fatalf("confirmation calls = %d", calls)
+					}
+					if blocked {
+						w.busy = func() bool { return false }
+						w.trayReady = false
+						if w.beforeClose(context.Background()) {
+							t.Fatal("cancel prevented a later idle close")
+						}
+					}
+				})
+			}
+		}
 	}
 }

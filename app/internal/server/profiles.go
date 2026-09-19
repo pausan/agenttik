@@ -462,3 +462,22 @@ func (s *Server) moveProjectProfile(c *fiber.Ctx) error {
 	destination.projectsChanged()
 	return c.JSON(fiber.Map{"id": movedID, "profile_id": destinationID})
 }
+
+// Busy reports work across every local profile, including profiles that are
+// not selected in the window.
+func (s *Server) Busy() bool {
+	if s.runner.Busy() {
+		return true
+	}
+	if s.profiles == nil {
+		return false
+	}
+	s.profiles.mu.RLock()
+	defer s.profiles.mu.RUnlock()
+	for _, rt := range s.profiles.running {
+		if rt.server.runner.Busy() {
+			return true
+		}
+	}
+	return false
+}

@@ -19,6 +19,13 @@ and restarting removes the tray and releases the shortcut; closing then exits.
 the process from the focused window even when Close to tray is enabled. It is
 not registered globally and cannot be chosen as the show/hide shortcut.
 
+Before exiting through window close, the quit shortcut, or tray Quit, the app
+checks all local profiles for running turns. If any are active, a native
+confirmation asks whether to quit and stop them. No or dismissing the dialog
+keeps the app open; Yes continues shutdown. Idle apps close immediately.
+Only one confirmation can be open at a time. Closing to the tray does not
+prompt, since tasks keep running. Remote windows do not stop the server's tasks.
+
 ## Storage and API
 
 SQLite's singleton `desktop_config` row stores `close_to_tray` (default false)
@@ -111,6 +118,9 @@ appears in Settings.
 
 ## Verification
 
+Desktop tests cover idle exit, confirmation acceptance and cancellation, repeated
+close requests, and retrying after cancellation. Server tests cover running
+work in another local profile.
 Store/API tests cover defaults, persistence, invalid chords, web mode and
 startup error reporting. `app/internal/traypulse` tests cover the frames
 cycling through near-black, blue and white, rising monotonically in brightness without the

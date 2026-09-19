@@ -359,3 +359,30 @@ func TestProfilesShareSystemNamesButKeepModelVisibility(t *testing.T) {
 		t.Fatal(name)
 	}
 }
+
+func TestBusyIncludesEveryLocalProfile(t *testing.T) {
+	s := profileServer(t)
+	p := decode[Profile](t, do(t, s, "POST", "/api/profiles", map[string]string{"name": "Work"}))
+	if s.Busy() {
+		t.Fatal("idle profiles reported busy")
+	}
+	local := s.profiles.running[p.ID].server
+	project, err := local.store.CreateProject("project", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	session := &store.Session{ID: "busy-profile", ProjectID: project.ID, Provider: "fake", Model: "fake-quick", Title: "Wait"}
+	if err := local.store.CreateSession(session); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := local.runner.Send(session.ID, "@wait 60000"); err != nil {
+		t.Fatal(err)
+	}
+	if s.runner.Busy() || !s.Busy() {
+		t.Fatal("work in another profile must count")
+	}
+	local.runner.Shutdown()
+	if s.Busy() {
+		t.Fatal("stopped profile still reported busy")
+	}
+}

@@ -182,7 +182,7 @@ func desktopShortcutForOS(chord, goos string) string {
 // tray menu.
 func (w *window) quit() {
 	w.mu.Lock()
-	if w.quitting || w.ctx == nil {
+	if w.quitting || w.confirming || w.ctx == nil {
 		w.mu.Unlock()
 		return
 	}
@@ -234,11 +234,42 @@ func (w *window) toggleVisibility() {
 
 func (w *window) beforeClose(ctx context.Context) bool {
 	w.mu.Lock()
-	defer w.mu.Unlock()
-	if !w.trayReady || w.quitting {
+	if w.confirming {
+		w.mu.Unlock()
+		return true
+	}
+	if w.trayReady && !w.quitting {
+		wruntime.WindowHide(ctx)
+		w.hidden = true
+		w.mu.Unlock()
+		return true
+	}
+	w.confirming = true
+	w.mu.Unlock()
+
+	allow := w.busy == nil || !w.busy() || w.confirmQuit(ctx)
+
+	w.mu.Lock()
+	w.confirming = false
+	w.quitting = allow
+	w.mu.Unlock()
+	return !allow
+}
+
+func confirmDesktopQuit(ctx context.Context) bool {
+	wruntime.WindowShow(ctx)
+	wruntime.WindowUnminimise(ctx)
+	answer, err := wruntime.MessageDialog(ctx, wruntime.MessageDialogOptions{
+		Type:          wruntime.QuestionDialog,
+		Title:         "Quit agenttik?",
+		Message:       "Tasks are still running. Quitting will stop them. Quit anyway?",
+		Buttons:       []string{"Yes", "No"},
+		DefaultButton: "No",
+		CancelButton:  "No",
+	})
+	if err != nil {
+		log.Printf("confirm quit: %v", err)
 		return false
 	}
-	wruntime.WindowHide(ctx)
-	w.hidden = true
-	return true
+	return answer == "Yes"
 }

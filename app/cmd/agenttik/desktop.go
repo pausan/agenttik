@@ -37,7 +37,7 @@ import (
 func runDesktop(srv *server.Server, turns *runner.Runner, lock *single.Lock, defaultAddr string) error {
 	// A second launch reaches this instance over the same port the window
 	// does, so the hook goes in before anything is serving on it.
-	win := &window{}
+	win := &window{busy: srv.Busy, confirmQuit: confirmDesktopQuit}
 	srv.OnForeground(win.present)
 	config, err := srv.ConfigureDesktop(win.trayStatus)
 	if err != nil {
@@ -125,12 +125,15 @@ func runDesktop(srv *server.Server, turns *runner.Runner, lock *single.Lock, def
 // answering by the time Wails calls opened, and a second launch can ask to be
 // raised in that gap, so the context crosses goroutines and needs the guard.
 type window struct {
-	mu        sync.Mutex
-	ctx       context.Context
-	hidden    bool
-	trayReady bool
-	quitting  bool
-	trayError string
+	mu          sync.Mutex
+	ctx         context.Context
+	hidden      bool
+	trayReady   bool
+	quitting    bool
+	trayError   string
+	busy        func() bool
+	confirmQuit func(context.Context) bool
+	confirming  bool
 }
 
 func (w *window) opened(ctx context.Context) {

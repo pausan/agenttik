@@ -14,7 +14,7 @@ files, including before the first commit. Renames include both index paths.
 A vertically resizable commit message textarea sits above Staged, with the
 current branch below it on the left and the generate-message and Commit icon
 buttons on the right. Long branch names truncate and show the full name in a
-tooltip. The branch is available before the first commit too. Commit uses a Git commit symbol. Editing stays inline. Switching project or
+tooltip. The branch is available before the first commit too. Commit uses a Git commit symbol and a text label. Editing stays inline. Switching project or
 repository clears the draft. Commit needs staged files
 and a nonblank message. Git errors keep the draft and display inline.
 A four-point star left of Commit generates or replaces the message from only

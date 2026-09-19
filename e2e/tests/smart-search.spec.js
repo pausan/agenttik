@@ -1,7 +1,6 @@
 import { addProject, expect, openProject, openSettings, test } from "../fixtures.js";
 
 test("project task time filter combines with fuzzy search", async ({ page }) => {
-  await addProject(page);
   const now = Date.now();
   const tasks = [
     { id: "recent", title: "Recent task", last_active_at: now },
@@ -12,6 +11,7 @@ test("project task time filter combines with fuzzy search", async ({ page }) => 
   await page.route("**/api/sessions?*project_id=**", (route) => route.fulfill({
     json: route.request().url().includes("only_done=true") ? [] : tasks,
   }));
+  await addProject(page);
   await openProject(page);
   const main = page.locator("main");
   for (const [label, count] of [["Last 24h", 1], ["Last week", 2], ["Last month", 3], ["All times", 4]]) {

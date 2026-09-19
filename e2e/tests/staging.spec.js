@@ -35,7 +35,7 @@ test("stage, unstage and commit through the inline resizable composer", async ({
     const branch = pane.getByLabel("Current branch", { exact: true });
     await expect(branch).toHaveText("feature/commit-composer");
     await expect(branch).toHaveAttribute("title", "feature/commit-composer");
-    await expect(commit).toHaveText("");
+    await expect(commit).toHaveText("Commit");
     const branchBox = await branch.boundingBox();
     const buttonBox = await commit.boundingBox();
     expect(branchBox.x).toBeCloseTo(box.x, 0);

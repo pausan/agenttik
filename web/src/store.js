@@ -1088,19 +1088,10 @@ async function loadProjectTab(id, silent = false) {
       kind: "project",
       label: project.name,
       projectID: id,
-      data: { project, sessions, stats: null, metrics: [], archived: [], schedules: [] },
+      data: { project, sessions, stats: null, metrics: [], schedules: [], revision: 0 },
     });
     setContextTab(tab);
-    // Each secondary answer can arrive independently. None holds open tasks
-    // behind history or statistics, including when the project is restored.
-    for (const [key, request] of [
-      ["stats", () => api("GET", `/api/projects/${id}/stats`)],
-      ["metrics", () => api("GET", `/api/projects/${id}/metrics`)],
-      ["archived", () => projectArchived(id)],
-      ["schedules", () => projectSchedules(id)],
-    ]) {
-      request().then((value) => { tab.data[key] = value; }).catch(fail);
-    }
+
   };
 }
 
@@ -1108,12 +1099,6 @@ async function loadProjectTab(id, silent = false) {
    order it was dragged into. */
 function projectSessions(id) {
   return api("GET", `/api/sessions?window=all&project_id=${id}&include_done=false&limit=0`);
-}
-
-/* Archived ones are the second list under it, newest first, which is the
-   order the server sends them in. */
-function projectArchived(id) {
-  return api("GET", `/api/sessions?window=all&project_id=${id}&only_done=true&limit=0`);
 }
 
 /* The project's scheduled jobs, both states in one request: the sidebar shows
@@ -1125,21 +1110,25 @@ function projectSchedules(id) {
   return api("GET", `/api/schedules?window=all&project_id=${id}&include_done=true`);
 }
 
-async function reloadProjectTab(tab) {
+// Secondary panes are read only while visible. A revision invalidates their
+// component-local requests when a task event changes the project.
+export async function loadProjectPane(tab, pane) {
   const id = tab.projectID;
-  try {
-    const [metrics, stats, sessions, archived, schedules] = await Promise.all([
-      api("GET", `/api/projects/${id}/metrics`),
+  if (pane === "stats") {
+    const [stats, metrics] = await Promise.all([
       api("GET", `/api/projects/${id}/stats`),
-      projectSessions(id),
-      projectArchived(id),
-      projectSchedules(id),
+      api("GET", `/api/projects/${id}/metrics`),
     ]);
-    tab.data.stats = stats;
-    tab.data.metrics = metrics;
-    tab.data.sessions = sessions;
-    tab.data.archived = archived;
-    tab.data.schedules = schedules;
+    return { stats, metrics };
+  }
+  if (pane === "jobs") return { schedules: await projectSchedules(id) };
+  return {};
+}
+
+async function reloadProjectTab(tab) {
+  tab.data.revision++;
+  try {
+    tab.data.sessions = await projectSessions(tab.projectID);
   } catch {
     /* a refresh that fails is not worth interrupting anyone over */
   }
@@ -1650,7 +1639,7 @@ export async function reorderSchedules(projectID, ids) {
 /* -------------------------------------------------------------- sessions */
 
 export async function refreshSessions() {
-  const params = new URLSearchParams({ window: S.window });
+  const params = new URLSearchParams({ window: S.window, include_done: "false" });
   if (S.query.trim()) params.set("q", S.query.trim());
   S.sessions = await api("GET", "/api/sessions?" + params);
   syncSessionTabs();
@@ -1666,9 +1655,7 @@ export function setWindow(value) {
   refreshSchedules().catch(() => {});
 }
 
-/* setTaskPageSize changes how many task rows a project page draws and
-   remembers it. It is a slice of a list already loaded, so nothing is
-   fetched. */
+/* Open tasks page locally; the visible archive requests the new page size. */
 export function setTaskPageSize(size) {
   if (size === S.taskPageSize || !TASK_PAGE_SIZES.includes(size)) return;
   S.taskPageSize = size;
@@ -1745,11 +1732,7 @@ function rememberUsed(sess) {
 /* sessionDefaults skips any choice that no longer works — a CLI uninstalled,
    a model retired — rather than starting a session that cannot run. */
 async function sessionDefaults(projectID) {
-  const sessions = await api("GET", `/api/sessions?window=all&project_id=${projectID}&include_done=true&limit=0`);
-  const recent = sessions.reduce(
-    (best, s) => (!best || s.created_at > best.created_at ? s : best),
-    null,
-  );
+  const [recent] = await api("GET", `/api/sessions?window=all&project_id=${projectID}&include_done=true&newest=true&limit=1`);
   const saved = S.lastUsed?.[projectID];
   const latest = recent && (!saved || recent.created_at >= saved.created_at) ? recent : saved;
   for (const c of [latest, recent, S.stars[0]]) {

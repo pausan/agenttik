@@ -2,7 +2,9 @@
 
 Settings → General → Project task search offers Fuzzy Search (default) and
 Smart Search. The preference is local to each browser and survives reloads.
-Only project task search changes; other searches keep fuzzy matching.
+Only the project's open Tasks list uses this choice. Archived tasks use
+backend title search and pagination ([030](030-project-tasks.md)); other
+searches keep their existing matching.
 
 The Go backend runs the MIT-licensed `hotchpotch/bekko-embedding-v1-a8m`
 model at revision `c721113d59a1d91b447450324f51c4b3332c924a`. Native ONNX

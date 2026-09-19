@@ -127,7 +127,7 @@ test("a launch reads the two lists once, however many tabs it restores", async (
   // rather than one behind another. See specs/052-launch-budget.md.
   const times = (re) => launch.filter((one) => re.test(one)).length;
   expect(times(/^\/api\/projects$/), `projects read ${times(/^\/api\/projects$/)} times`).toBe(1);
-  expect(times(/^\/api\/sessions\?window=[^&]+$/)).toBe(1);
+  expect(times(/^\/api\/sessions\?window=[^&]+&include_done=false$/)).toBe(1);
   // One read per restored tab: three tasks and the file beside the last.
   expect(times(/^\/api\/sessions\/[^/?]+$/)).toBe(3);
   expect(times(/^\/api\/projects\/\d+\/file\?/)).toBe(1);

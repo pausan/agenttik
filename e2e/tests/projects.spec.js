@@ -251,7 +251,9 @@ test("archiving a finished task writes what it came to under its row", async ({ 
   const tasks = page.locator("main");
   await tasks.getByTitle("Archive task").click();
 
-  // The row goes grey at once and grows its outcome a beat later: the fake
+  await tasks.getByRole("tab", { name: "Archived", exact: true }).click();
+
+  // The archive row grows its outcome a beat later: the fake
   // provider answers the isolated summary request with "Outcome: " plus the
   // reply it was handed. See specs/051-task-outcomes.md.
   await expect(tasks.getByTitle("Unarchive task")).toBeVisible();

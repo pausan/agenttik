@@ -83,6 +83,8 @@ type SessionFilter struct {
 	ProjectID   int64 // 0 means all projects
 	Query       string
 	Limit       int
+	Offset      int
+	Newest      bool // newest created session, for new-task model defaults
 	ExcludeDone bool // the project views hide ticked-off sessions
 	OnlyDone    bool // ... and list them separately, under their own filter
 }
@@ -118,8 +120,10 @@ func (s *Store) ListSessions(f SessionFilter) ([]Session, error) {
 	if len(where) > 0 {
 		sqlStr += " WHERE " + strings.Join(where, " AND ")
 	}
-	if f.OnlyDone {
-		sqlStr += ` ORDER BY s.last_active_at DESC`
+	if f.Newest {
+		sqlStr += ` ORDER BY s.created_at DESC, s.id DESC`
+	} else if f.OnlyDone {
+		sqlStr += ` ORDER BY s.last_active_at DESC, s.id DESC`
 	} else if f.ProjectID > 0 {
 		sqlStr += ` ORDER BY s.position, s.last_active_at DESC`
 	} else {
@@ -128,6 +132,10 @@ func (s *Store) ListSessions(f SessionFilter) ([]Session, error) {
 	if f.Limit > 0 {
 		sqlStr += " LIMIT ?"
 		args = append(args, f.Limit)
+		if f.Offset > 0 {
+			sqlStr += " OFFSET ?"
+			args = append(args, f.Offset)
+		}
 	}
 
 	rows, err := s.db.Query(sqlStr, args...)

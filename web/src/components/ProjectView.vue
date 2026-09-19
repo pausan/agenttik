@@ -1,24 +1,11 @@
 <script setup>
-/* A project in the centre: every task it has under Tasks, with project
-   activity beside them under Stats.
-
-   One list holds both states. Open tasks come first, in the order they were
-   dragged into, drawn in the strongest text the theme has; archived ones
-   follow, newest first, drawn grey — the colour is what says which is which,
-   so a history and a working list read as one place rather than two. It is
-   drawn a page at a time, 25 rows by default.
-
-   Open rows are dragged with the browser's own drag and drop rather than
-   pointer maths. The list reorders under the cursor as you go, so where the
-   row is when you let go is where it lands, and the new order is sent once on
-   drop. Archived rows are not dragged and are not ordered by anyone:
-   `sessions.position` is the order someone chose for the work in front of
-   them, and a history is ordered by the clock. */
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { vTabScroll } from "../tab-scroll";
 
 import {
   S,
+  fail,
+  loadProjectPane,
   TASK_PAGE_SIZES,
   openSchedule,
   pickTask,
@@ -45,6 +32,7 @@ import { beginDrag } from "../drag";
 import { isMobile } from "../ui";
 import ScheduleRow from "./ScheduleRow.vue";
 import TaskRow from "./TaskRow.vue";
+import ArchivedTasks from "./ArchivedTasks.vue";
 
 const props = defineProps({ tab: { type: Object, required: true } });
 
@@ -74,10 +62,22 @@ const lower = computed({
 });
 const lowerTabs = [
   { label: "Tasks", value: "tasks" },
+  { label: "Archived", value: "archived" },
   { label: "Jobs", value: "jobs" },
   { label: "Prompt", value: "prompt" },
   { label: "Stats", value: "stats" },
 ];
+
+watch([() => props.tab, lower, () => props.tab.data.revision], async ([tab, pane], _, onCleanup) => {
+  let stale = false;
+  onCleanup(() => { stale = true; });
+  try {
+    const data = await loadProjectPane(tab, pane);
+    if (!stale) Object.assign(tab.data, data);
+  } catch (error) {
+    if (!stale) fail(error);
+  }
+}, { immediate: true });
 
 /* Opening a project is asking which task, so the cursor starts in the filter
    — on the page itself and on every return to the tab. */
@@ -163,9 +163,10 @@ const charts = computed(() => [
   { label: "Agent time", key: "duration_ms", max: maxDuration.value, color: "bg-sky-500/70" },
 ]);
 
-const tasks = computed(() => [...props.tab.data.sessions, ...(props.tab.data.archived || [])]);
+const tasks = computed(() => props.tab.data.sessions);
 const total = computed(() => tasks.value.length);
-const signature = computed(() => JSON.stringify(tasks.value.map((task) => [task.id, taskText(task)])));
+const signature = computed(() => smartSearch.enabled
+  ? JSON.stringify(tasks.value.map((task) => [task.id, taskText(task)])) : "");
 watch(signature, () => { if (smartSearch.enabled) refreshSmartIndex(); });
 watch([filter, signature, () => smartSearch.enabled, () => smartSearch.version], () => {
   const current = ++searchSequence;
@@ -288,8 +289,7 @@ async function doDelete() {
 
       <UTabs v-model="lower" :items="lowerTabs" :content="false" size="sm" class="mb-4" />
 
-      <!-- Every task of the project, a page at a time: what is open, then
-           what it has archived. -->
+      <!-- Open tasks stay local for immediate filtering and reordering. -->
       <template v-if="lower === 'tasks'">
         <div class="mb-2 flex flex-wrap items-center gap-3">
           <UInput
@@ -377,6 +377,8 @@ async function doDelete() {
           />
         </div>
       </template>
+
+      <ArchivedTasks v-else-if="lower === 'archived'" :key="tab.projectID" :tab="tab" @delete="deleting = $event" />
 
       <!-- Every job of the project: what is still scheduled, then what it has
            archived. An archived job is paused by definition, so its row drops

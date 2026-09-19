@@ -36,11 +36,16 @@ func (s *Server) listSessions(c *fiber.Ctx) error {
 		ProjectID: int64(c.QueryInt("project_id")),
 		Query:     c.Query("q"),
 		Limit:     c.QueryInt("limit", 200),
+		Offset:    c.QueryInt("offset", 0),
+		Newest:    c.QueryBool("newest", false),
 		// The Sessions list keeps ticked-off sessions; the project views ask
 		// for them to be left out, then ask for those alone for their
 		// archive filter.
 		ExcludeDone: !c.QueryBool("include_done", true),
 		OnlyDone:    c.QueryBool("only_done", false),
+	}
+	if f.Offset < 0 || (f.Offset > 0 && f.Limit <= 0) {
+		return badRequest("offset requires a positive limit and must not be negative")
 	}
 	if d > 0 {
 		f.Since = time.Now().Add(-d).UnixMilli()

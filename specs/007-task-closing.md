@@ -23,7 +23,7 @@ rather than archived, so glancing at a new task and closing it leaves nothing
 behind in the archive or the restore stack.
 
 **Deleting** on purpose works the same way, on any task: a trash icon on every
-row of the project page's Tasks tab, open or archived, behind a confirmation
+row of the project page's Tasks and Archived tabs, behind a confirmation
 naming the task ([030](030-project-tasks.md)). There is no restore after —
 unlike archiving, its turns and messages are gone too — so its tab and any
 files opened from it close unsaved rather than asking a second time; the

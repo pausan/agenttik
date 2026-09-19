@@ -75,6 +75,7 @@ type Runner struct {
 	cancelLifetime context.CancelFunc
 	stopping       bool
 	turns          sync.WaitGroup
+	transfer       sync.RWMutex // excludes new turns and schedule ticks during a project move
 	mu             sync.Mutex
 	active         map[string]activeTurn // session id -> turn in flight
 	sched          map[int64]*sync.Mutex // project id -> serializes queue dispatch
@@ -226,6 +227,22 @@ func (r *Runner) Send(sessionID, prompt string) (*store.Turn, error) {
 // prompt sent straight to a session has no row of its own yet; it is described
 // by one here, with the time it was accepted, for the same reason.
 func (r *Runner) send(queued store.QueuedMessage) (*store.Turn, error) {
+	r.transfer.RLock()
+	defer r.transfer.RUnlock()
+	return r.sendDuringTransferLock(queued)
+}
+
+// WithIdleProject prevents new turns and clock fires while project data moves.
+func (r *Runner) WithIdleProject(id int64, move func() error) error {
+	r.transfer.Lock()
+	defer r.transfer.Unlock()
+	if r.projectBusy(id) {
+		return ErrBusy
+	}
+	return move()
+}
+
+func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage) (*store.Turn, error) {
 	sessionID, prompt := queued.SessionID, queued.Prompt
 	sess, err := r.store.GetSession(sessionID)
 	if err != nil {

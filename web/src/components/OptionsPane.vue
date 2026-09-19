@@ -1,15 +1,44 @@
 <script setup>
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 
 import {
   S,
+  fail,
+  moveProject,
   removeProject,
   renameProject,
   setProjectArchived,
   startTask,
   updateProjectPath,
 } from "../store";
+import { profileID } from "../api";
+import { loadProfiles, profiles } from "../profiles";
 import FolderPicker from "./FolderPicker.vue";
+
+const destinations = computed(() => profiles.items
+  .filter((p) => p.id !== profileID)
+  .map((p) => ({ label: p.name, value: p.id })));
+const destination = ref("");
+const moving = ref(false);
+const moveError = ref("");
+onMounted(() => loadProfiles().catch(fail));
+watch(() => S.project?.project.id, () => {
+  destination.value = "";
+  moveError.value = "";
+});
+
+async function move() {
+  if (!destination.value || moving.value) return;
+  moving.value = true;
+  moveError.value = "";
+  try {
+    await moveProject(S.project.project, destination.value);
+  } catch (e) {
+    moveError.value = e.message;
+  } finally {
+    moving.value = false;
+  }
+}
 
 const name = ref("");
 const path = ref("");
@@ -98,6 +127,35 @@ const busy = computed(() => {
     </div>
 
     <UButton block label="New task" @click="startTask(S.project.project)" />
+
+    <div v-if="destinations.length && S.project.project.kind !== 'orchestrator'" class="mt-3.5">
+      <label for="move-project-profile" class="text-xs font-medium text-muted">Move to profile</label>
+      <USelect
+        id="move-project-profile"
+        v-model="destination"
+        :items="destinations"
+        placeholder="Choose a profile"
+        aria-label="Move to profile"
+        class="mt-1 w-full"
+        :disabled="moving"
+      />
+      <p class="mt-1.5 mb-1.5 text-xs text-dimmed">
+        Moves tasks, history and images. The folder stays in place. Schedules arrive paused;
+        subscriptions reset to System. Configure providers in the destination before continuing.
+        Open terminals close.
+      </p>
+      <UButton
+        block
+        color="neutral"
+        variant="soft"
+        label="Move project"
+        :loading="moving"
+        :disabled="!destination || busy || moving"
+        :title="busy ? 'Wait for its tasks to finish, or stop them first.' : ''"
+        @click="move"
+      />
+      <p v-if="moveError" role="alert" class="mt-1.5 text-xs text-error">{{ moveError }}</p>
+    </div>
 
     <p class="mt-3.5 mb-1.5 text-xs text-dimmed">
       Archiving takes the project out of the sidebar and stops its schedules. Its tasks and

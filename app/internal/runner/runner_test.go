@@ -590,3 +590,38 @@ func TestShutdownWaitsForTurnsAndRejectsNewWork(t *testing.T) {
 		t.Fatal("accepted background work after shutdown")
 	}
 }
+
+func TestProjectMoveExcludesTurnStarts(t *testing.T) {
+	fp := &fakeProvider{gate: make(chan struct{})}
+	r, _, sess := setup(t, fp)
+	defer r.Shutdown()
+	if _, err := r.Send(sess.ID, "first"); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.WithIdleProject(sess.ProjectID, func() error { t.Fatal("moved active project"); return nil }); !errors.Is(err, ErrBusy) {
+		t.Fatalf("busy: %v", err)
+	}
+	r.Stop(sess.ID)
+	waitFor(t, func() bool { return !r.Running(sess.ID) }, "turn stop")
+	started := make(chan error, 1)
+	err := r.WithIdleProject(sess.ProjectID, func() error {
+		go func() { _, err := r.Send(sess.ID, "second"); started <- err }()
+		select {
+		case err := <-started:
+			t.Fatalf("turn started during move: %v", err)
+		case <-time.After(30 * time.Millisecond):
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-started:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("turn start stayed blocked")
+	}
+}

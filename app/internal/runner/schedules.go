@@ -42,6 +42,8 @@ func (r *Runner) RunSchedules(ctx context.Context) {
 }
 
 func (r *Runner) tickSchedules(now time.Time) {
+	r.transfer.RLock()
+	defer r.transfer.RUnlock()
 	due, err := r.store.DueSchedules(now.UnixMilli())
 	if err != nil {
 		return
@@ -90,7 +92,7 @@ func (r *Runner) fireSchedule(s *store.Schedule, now time.Time) {
 	// prompt in the queue for it. The run stays open, so the schedule reads as
 	// busy and passes over its next slot rather than piling up a run an hour
 	// for as long as the outage lasts; the retry closes it.
-	if _, err := r.Send(sess.ID, s.Prompt); err != nil && !errors.Is(err, ErrProviderAway) {
+	if _, err := r.sendDuringTransferLock(store.QueuedMessage{SessionID: sess.ID, Prompt: s.Prompt, CreatedAt: now.UnixMilli()}); err != nil && !errors.Is(err, ErrProviderAway) {
 		_, _ = r.store.FinishScheduleRun(sess.ID, store.RunError)
 	}
 }

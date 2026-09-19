@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -230,5 +231,54 @@ func TestProfilesPersistSeparateFavouritesAndSubscriptions(t *testing.T) {
 		if account.Alias != id || !account.IsDefault || account.Home != homes[id] {
 			t.Fatalf("profile %s subscription changed: %+v", id, account)
 		}
+	}
+}
+
+func TestMoveProjectBetweenProfiles(t *testing.T) {
+	s := profileServer(t)
+	work := decode[Profile](t, do(t, s, "POST", "/api/profiles", map[string]string{"name": "Work"}))
+	other := decode[Profile](t, do(t, s, "POST", "/api/profiles", map[string]string{"name": "Other"}))
+	project := decode[store.Project](t, do(t, s, "POST", "/api/projects", map[string]string{"path": t.TempDir()}))
+	session := decode[store.Session](t, do(t, s, "POST", "/api/sessions", map[string]any{"project_id": project.ID, "provider": "fake", "model": "fake-quick", "title": "Moved task"}))
+	source := "default"
+	for _, destination := range []string{work.ID, other.ID, "default"} {
+		url := fmt.Sprintf("/api/profiles/%s/projects/%d/move?profile=%s", destination, project.ID, source)
+		response := do(t, s, "POST", url, nil)
+		if response.StatusCode != 200 {
+			t.Fatalf("move: %d", response.StatusCode)
+		}
+		result := decode[struct {
+			ID int64 `json:"id"`
+		}](t, response)
+		if resp := do(t, s, "GET", fmt.Sprintf("/api/projects/%d?profile=%s", project.ID, source), nil); resp.StatusCode != 404 {
+			t.Fatalf("source project: %d", resp.StatusCode)
+		}
+		moved := decode[sessionDetail](t, do(t, s, "GET", "/api/sessions/"+session.ID+"?profile="+destination, nil)).Session
+		if moved.Title != "Moved task" || moved.ProjectID != result.ID {
+			t.Fatalf("moved task: %+v", moved)
+		}
+		project.ID, source = result.ID, destination
+	}
+	for _, tc := range []struct {
+		destination, source, id string
+		status                  int
+	}{
+		{"default", "default", fmt.Sprint(project.ID), 400},
+		{"missing", "default", fmt.Sprint(project.ID), 404},
+		{work.ID, "missing", fmt.Sprint(project.ID), 404},
+		{work.ID, "default", "9999", 404},
+		{work.ID, "default", "invalid", 400},
+	} {
+		response := do(t, s, "POST", fmt.Sprintf("/api/profiles/%s/projects/%s/move?profile=%s", tc.destination, tc.id, tc.source), nil)
+		if response.StatusCode != tc.status {
+			t.Fatalf("%+v: %d", tc, response.StatusCode)
+		}
+	}
+	if err := s.store.SetSessionStatus(session.ID, "running"); err != nil {
+		t.Fatal(err)
+	}
+	response := do(t, s, "POST", fmt.Sprintf("/api/profiles/%s/projects/%d/move", work.ID, project.ID), nil)
+	if response.StatusCode != 409 {
+		t.Fatalf("running project: %d", response.StatusCode)
 	}
 }

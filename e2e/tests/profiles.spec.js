@@ -98,3 +98,44 @@ test("tree expansion stays with its profile even when project IDs match", async 
   await showTree();
   await expect(folder).toHaveAttribute("aria-expanded", "true");
 });
+
+test("project options move tasks to another profile", async ({ page, agenttik }) => {
+  const work = await (await page.request.post(`${agenttik.url}/api/profiles`, { data: { name: "Work" } })).json();
+  const project = await (await page.request.post(`${agenttik.url}/api/projects`, { data: { path: REPO, name: "Moving project" } })).json();
+  const task = await (await page.request.post(`${agenttik.url}/api/sessions`, {
+    data: { project_id: project.id, provider: "fake", model: "fake-quick", title: "Keep this task" },
+  })).json();
+  await page.reload();
+  await sidebar(page).getByText("Moving project", { exact: true }).click();
+  const options = page.locator("aside").filter({ has: page.getByRole("heading", { name: "Workspace", exact: true }) });
+  await options.getByRole("tab", { name: "Project Options", exact: true }).click();
+  const move = options.getByRole("button", { name: "Move project", exact: true });
+  await expect(move).toBeDisabled();
+  await options.getByRole("combobox", { name: "Move to profile", exact: true }).click();
+  await page.getByRole("option", { name: "Work", exact: true }).click();
+  await move.click();
+  await expect(sidebar(page).getByText("Moving project", { exact: true })).toHaveCount(0);
+  expect((await page.request.get(`${agenttik.url}/api/sessions/${task.id}`)).status()).toBe(404);
+  await page.getByRole("button", { name: "Profile: Default", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Work", exact: true }).click();
+  await expect(sidebar(page).getByText("Moving project", { exact: true })).toBeVisible();
+  await expect(sidebar(page).getByText("Keep this task", { exact: true })).toBeVisible();
+  const moved = await (await page.request.get(`${agenttik.url}/api/sessions/${task.id}?profile=${work.id}`)).json();
+  expect(moved.session.title).toBe("Keep this task");
+});
+
+test("a conflicting project move keeps the source visible", async ({ page, agenttik }) => {
+  const work = await (await page.request.post(`${agenttik.url}/api/profiles`, { data: { name: "Work" } })).json();
+  for (const profile of ["default", work.id]) {
+    await page.request.post(`${agenttik.url}/api/projects?profile=${profile}`, { data: { path: REPO, name: "Same folder" } });
+  }
+  await page.reload();
+  await sidebar(page).getByText("Same folder", { exact: true }).click();
+  await page.getByRole("tab", { name: "Project Options", exact: true }).click();
+  await page.getByRole("combobox", { name: "Move to profile", exact: true }).click();
+  await page.getByRole("option", { name: "Work", exact: true }).click();
+  await page.getByRole("button", { name: "Move project", exact: true }).click();
+  await expect(page.getByText("another project already uses that folder", { exact: true })).toBeVisible();
+  await expect(sidebar(page).getByText("Same folder", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Move project", exact: true })).toBeEnabled();
+});

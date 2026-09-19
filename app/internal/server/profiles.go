@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -361,4 +362,55 @@ func (s *Server) deleteProfile(c *fiber.Ctx) error {
 		return err
 	}
 	return c.SendStatus(204)
+}
+
+// The destination is in the route and the source in the usual profile query.
+// Management's exclusive lock excludes profile deletion and routed requests.
+func (s *Server) moveProjectProfile(c *fiber.Ctx) error {
+	m := s.profiles
+	if m == nil {
+		return fiber.NewError(503, "Profiles are unavailable")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closed {
+		return fiber.NewError(503, "Instance is shutting down")
+	}
+	sourceID, destinationID := c.Query("profile", "default"), c.Params("id")
+	if sourceID == destinationID {
+		return badRequest("choose another profile")
+	}
+	resolve := func(id string) *Server {
+		if id == "default" {
+			return m.root
+		}
+		if rt := m.running[id]; rt != nil {
+			return rt.server
+		}
+		return nil
+	}
+	source, destination := resolve(sourceID), resolve(destinationID)
+	if source == nil || destination == nil {
+		return fiber.NewError(404, "Profile no longer exists")
+	}
+	id, err := strconv.ParseInt(c.Params("projectID"), 10, 64)
+	if err != nil || id <= 0 {
+		return badRequest("invalid project id")
+	}
+	var movedID int64
+	err = source.runner.WithIdleProject(id, func() error {
+		var err error
+		movedID, err = source.store.MoveProjectTo(destination.store, id)
+		return err
+	})
+	if errors.Is(err, store.ErrProjectBusy) || errors.Is(err, store.ErrMoveOrchestrator) || errors.Is(err, runner.ErrBusy) {
+		return fiber.NewError(409, err.Error())
+	}
+	if err != nil {
+		return err
+	}
+	source.terminals.CloseProject(id)
+	source.projectsChanged()
+	destination.projectsChanged()
+	return c.JSON(fiber.Map{"id": movedID, "profile_id": destinationID})
 }

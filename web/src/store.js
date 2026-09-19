@@ -1177,6 +1177,16 @@ export async function removeProject(p) {
   }
 }
 
+export async function moveProject(p, profileID) {
+  if (S.tabs.some((t) => projectOfTab(t) === p.id && isDirty(t))) {
+    throw new Error("Save or discard this project's file edits before moving it.");
+  }
+  await api("POST", `/api/profiles/${encodeURIComponent(profileID)}/projects/${p.id}/move`);
+  const wasShowing = detachProject(p.id);
+  await Promise.all([refreshProjects(), refreshSessions()]);
+  if (wasShowing && S.projects.length) await switchProject(S.projects[0].id);
+}
+
 /* detachProject takes a project off the screen, and says whether it was the
    selected one. Nothing in the strip can belong to a project that has left
    the sidebar, hidden, deleted or archived. Deselecting comes first, so an

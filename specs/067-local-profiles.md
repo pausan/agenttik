@@ -25,6 +25,40 @@ profiles do not create copies of the project directory. Browser preferences are
 scoped too, including Light/Dark/System mode and file-tree expansion. Default
 retains its existing browser keys; added profiles use separate keys.
 
+## Moving projects
+
+Project Options in the right sidebar offers **Move to profile** when another
+profile exists. Choose a destination and click **Move project**. The current
+window stays in its profile; both profiles' open windows refresh their lists.
+The working folder stays in place. The profile-owned orchestrator cannot move.
+
+The move carries the project prompt, tasks (including archived tasks), messages,
+turn usage, outcomes, schedules and their run history. Session UUIDs stay stable;
+integer IDs and their references are remapped to avoid destination collisions.
+Images referenced by project/task prompts, messages or schedules and direct API
+conversation files are copied into the destination. Source managed files remain
+because another task may reference them. Browser preferences and drafts do not move.
+
+Credentials and provider settings stay in their profile. Tasks and schedules reset
+to the system subscription; tasks previously using a named subscription start a
+new provider conversation on their next prompt while retaining visible history.
+System-subscription conversations keep their thread, and direct API conversations
+get a fresh file ID pointing to the copied history. All moved schedules arrive
+paused, so the user can configure destination providers before resuming them.
+
+Running turns, queued prompts (including retries), and running schedule jobs block
+a move. Unsaved file edits in the initiating window also block it. Successful moves
+close source terminals. A destination already using the folder returns a conflict;
+projects are never merged. Missing files or insert failures leave both databases
+unchanged and remove files created by the failed attempt.
+
+`POST /api/profiles/:destination/projects/:projectID/move?profile=:source` returns
+`{id, profile_id}`. The profile manager excludes routed requests and profile removal;
+the source runner excludes turn starts and schedule ticks during transfer. An
+attached SQLite transaction transfers rows and deletes the source project after
+file copies succeed. Both databases use WAL: ordinary errors roll back both, but
+SQLite does not guarantee cross-database atomicity on a machine crash.
+
 ## Storage and routing
 
 - Existing Default data stays at `<data-dir>/agenttik.db` without migration.
@@ -50,6 +84,8 @@ they never enter the normal browser storage. The footer identifies private mode.
 
 Validation: Go tests cover isolation, same-folder projects, settings, persistence,
 CLI discovery, favourites, subscriptions, invalid names, deletion, and shutdown.
+Move tests cover ID collisions, history and image copies, return moves, blocked
+work, duplicate folders, failed-copy rollback, and moves in either direction.
 Browser tests cover the picker, palette switching, appearance, tree expansion,
 renaming, and removal; private tests cover concurrent instances and
 SIGTERM cleanup. Startup remains under the one-second budget.

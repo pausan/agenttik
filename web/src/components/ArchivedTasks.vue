@@ -1,13 +1,17 @@
 <script setup>
 import { computed, ref, watch } from "vue";
 import { api, ago } from "../api";
-import { S, TASK_WINDOWS, openSchedule, pickTask, renameTask, setTaskArchived, toggleTaskUnread } from "../store";
+import { S, openSchedule, pickTask, renameTask, setTaskArchived, toggleTaskUnread } from "../store";
 import TaskRow from "./TaskRow.vue";
 
-const props = defineProps({ tab: { type: Object, required: true } });
+const props = defineProps({
+  tab: { type: Object, required: true },
+  query: { type: String, default: "" },
+  window: { type: String, default: "all" },
+});
 defineEmits(["delete"]);
-const query = ref("");
-const window = ref("all");
+const query = computed(() => props.query);
+const window = computed(() => props.window);
 const page = ref(1);
 const rows = ref([]);
 const loading = ref(false);
@@ -46,10 +50,7 @@ watch([query, window, page, size, () => props.tab.data.revision, retry], (values
 
 <template>
   <section aria-label="Archived tasks">
-    <div class="mb-3 flex gap-3">
-      <UInput v-model="query" type="search" placeholder="Search archived titles" aria-label="Search archived titles" icon="i-lucide-search" class="min-w-0 flex-1" />
-      <USelect v-model="window" :items="TASK_WINDOWS" aria-label="Archived task time filter" />
-    </div>
+    <h3 class="mb-3 text-sm font-medium text-muted">Archived tasks</h3>
     <p v-if="loading" role="status" class="text-sm text-dimmed">Loading archived tasks…</p>
     <div v-else-if="error" role="alert">
       <p class="text-error">{{ error }}</p>

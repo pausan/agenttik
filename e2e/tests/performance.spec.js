@@ -51,18 +51,19 @@ with db:
   const close = performance.now() - closeStart;
   console.log(JSON.stringify({ startup, open, typingP95: typing, close, startupRequests, startupArchiveBytes }));
   if (!process.env.PERF_BASELINE) {
-    expect(startupArchiveBytes).toBe(0);
+    expect(startupArchiveBytes).toBeGreaterThan(0);
+    expect(startupArchiveBytes).toBeLessThan(50_000);
     expect(requests.filter(url => new URL(url).pathname === "/api/sessions")
-      .every(url => new URL(url).searchParams.get("include_done") === "false")).toBeTruthy();
+      .every(url => new URL(url).searchParams.get("include_done") === "false" || new URL(url).searchParams.get("only_done") === "true")).toBeTruthy();
     expect(requests.filter(url => /\/(stats|metrics)(?:\?|$)/.test(url))).toHaveLength(0);
     const main = page.locator("main");
-    await main.getByRole("tab", { name: "Archived", exact: true }).click();
+    await expect(main.getByRole("tab", { name: "Archived", exact: true })).toHaveCount(0);
     const archive = main.getByRole("region", { name: "Archived tasks" });
     await expect(archive.getByText("Benchmark task 1", { exact: true })).toBeVisible();
     await expect(archive.getByTitle("Unarchive task")).toHaveCount(25);
     await archive.getByRole("button", { name: "Next", exact: true }).click();
     await expect(archive.getByText("Benchmark task 26", { exact: true })).toBeVisible();
-    await archive.getByRole("searchbox", { name: "Search archived titles" }).fill("Benchmark task 4999");
+    await main.getByRole("searchbox").fill("Benchmark task 4999");
     await expect(archive.getByTitle("Unarchive task")).toHaveCount(1);
     await expect(archive.getByText("Benchmark task 4999", { exact: true })).toBeVisible();
     await archive.getByTitle("Unarchive task").click();

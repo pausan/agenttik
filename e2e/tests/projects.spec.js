@@ -160,7 +160,7 @@ test("opening a project puts its panes on the right and Tree on the left", async
 
   await expect(page.getByRole("tab", { name: "agenttik" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "agenttik" })).toBeVisible();
-  await expect(page.getByText("No tasks in this project yet.")).toBeVisible();
+  await expect(page.getByText("No open tasks in this project.")).toBeVisible();
 
   for (const pane of ["Project Options", "Changed", "Commits"]) {
     await expect(inspector(page).getByRole("tab", { name: pane })).toBeVisible();
@@ -251,7 +251,7 @@ test("archiving a finished task writes what it came to under its row", async ({ 
   const tasks = page.locator("main");
   await tasks.getByTitle("Archive task").click();
 
-  await tasks.getByRole("tab", { name: "Archived", exact: true }).click();
+  await expect(tasks.getByRole("tab", { name: "Archived", exact: true })).toHaveCount(0);
 
   // The archive row grows its outcome a beat later: the fake
   // provider answers the isolated summary request with "Outcome: " plus the

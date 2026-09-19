@@ -57,12 +57,11 @@ const deleting = ref(null); // the task awaiting its delete confirmation
    project. It also lets the transcript's injected-prompt chip open this page
    straight onto Prompt, whether or not the page was already built. */
 const lower = computed({
-  get: () => props.tab.pane || "tasks",
+  get: () => props.tab.pane === "archived" ? "tasks" : props.tab.pane || "tasks",
   set: (pane) => (props.tab.pane = pane),
 });
 const lowerTabs = [
   { label: "Tasks", value: "tasks" },
-  { label: "Archived", value: "archived" },
   { label: "Jobs", value: "jobs" },
   { label: "Prompt", value: "prompt" },
   { label: "Stats", value: "stats" },
@@ -303,7 +302,6 @@ async function doDelete() {
           />
           <USelect v-model="timeFilter" :items="TASK_TIME_FILTERS" size="sm" aria-label="Task time filter" title="Filter by last activity" />
           <USelect
-            v-if="total > TASK_PAGE_SIZES[0]"
             v-model="size"
             :items="sizeItems"
             size="sm"
@@ -316,8 +314,8 @@ async function doDelete() {
         <p v-if="searching" class="text-xs text-dimmed" role="status">Searching tasks…</p>
         <p v-else-if="searchError" class="text-xs text-error" role="alert">{{ searchError }}</p>
 
-        <p v-if="!total" class="px-3 py-5 text-center text-dimmed">No tasks in this project yet.</p>
-        <p v-else-if="!shown && !searching && !searchError" class="px-3 py-4 text-center text-dimmed">No task matches that.</p>
+        <p v-if="!total" class="px-3 py-5 text-center text-dimmed">No open tasks in this project.</p>
+        <p v-else-if="!shown && !searching && !searchError" class="px-3 py-4 text-center text-dimmed">No open task matches that.</p>
 
         <!-- An archived row is not dragged, and holds the grip column empty so
              both kinds line up. It carries the restore icon rather than the
@@ -376,9 +374,8 @@ async function doDelete() {
             size="sm"
           />
         </div>
+        <ArchivedTasks :key="tab.projectID" :tab="tab" :query="filter" :window="timeFilter" class="mt-5" @delete="deleting = $event" />
       </template>
-
-      <ArchivedTasks v-else-if="lower === 'archived'" :key="tab.projectID" :tab="tab" @delete="deleting = $event" />
 
       <!-- Every job of the project: what is still scheduled, then what it has
            archived. An archived job is paused by definition, so its row drops

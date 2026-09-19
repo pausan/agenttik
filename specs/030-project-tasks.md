@@ -1,8 +1,8 @@
 # Tasks on the project page
 
-A project has five panes: **Tasks**, **Archived**, **Jobs**, **Prompt** and
-**Stats**. Tasks opens first, with the cursor in its filter. Only project
-metadata and open tasks are needed to open or restore a project tab. The
+A project has four panes: **Tasks**, **Jobs**, **Prompt** and
+**Stats**. Tasks opens first, with the cursor in its filter. Project
+metadata and open tasks load first; Tasks also requests one archive page. The
 header derives its running indicator and open-task count from that list.
 
 ## Open tasks
@@ -24,23 +24,23 @@ persists on drop; failure reloads the saved order.
 
 ## Archived tasks
 
-Archived is an explicit history request. It fetches one page from the backend,
+Archived tasks appear below open tasks in Tasks. They fetch one page from the backend,
 ordered by last activity descending with ID descending as a stable tiebreaker.
 The request asks for page size plus one row to enable Next; Previous and Next
-replace that page rather than accumulating history. Leaving Archived releases
-its rows. Opening other projects or receiving background task events does not
-load their archives.
+replace that page rather than accumulating history. Leaving Tasks releases
+its rows. Background projects do not load their archives. Open and archived
+lists page independently, using the same remembered page size.
 
-The archive has a server-side substring search for titles (the sessions API
-also matches project name and path), debounced by 250 ms, and the standard
-activity time windows. These filters run before pagination and reach the
+The shared text filter searches archived titles by server-side substring
+(the sessions API also matches project name and path), debounced by 250 ms.
+The shared activity time window also applies. These filters run before pagination and reach the
 whole archive. This search does not use the open list's fuzzy/semantic mode.
 A changed query, time window or page size resets to page 1. Stale answers are
 ignored after navigation or unmount. Errors show Retry.
 
 Archived rows show their outcome ([051](051-task-outcomes.md)), can be opened
 without restoring, and offer rename, unread, restore and delete actions.
-Restoring moves the task to Tasks. Deleting from either pane asks for
+Restoring moves the task to the open list. Deleting either kind of task asks for
 confirmation and removes the transcript permanently ([007](007-task-closing.md)).
 
 ## Secondary panes and refreshes
@@ -52,7 +52,7 @@ pagination. Prompt edits the standing project instructions ([047](047-project-pr
 Stats loads totals and daily activity only when opened.
 
 Task and schedule events debounce a refresh of open task lists and increment
-a project revision. Only the currently mounted history, Jobs or Stats pane
+a project revision. Only the currently mounted Tasks, Jobs or Stats pane
 requests its secondary data for that revision. Late responses cannot update
 a different pane or project.
 

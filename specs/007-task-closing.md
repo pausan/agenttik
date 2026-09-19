@@ -13,7 +13,7 @@ before reopening its tab.
 
 Archiving a task takes it out of the project's sidebar list and closes its tab
 and any files opened from it. It waits in the project page's
-Archived tab ([030](030-project-tasks.md)) until it is restored.
+Tasks tab ([030](030-project-tasks.md)) until it is restored.
 Submitting a new prompt, either immediately or to the queue, automatically
 unarchives the task and returns it to the project's open task lists. Opening
 an archived task to read its transcript leaves it archived.
@@ -23,7 +23,7 @@ rather than archived, so glancing at a new task and closing it leaves nothing
 behind in the archive or the restore stack.
 
 **Deleting** on purpose works the same way, on any task: a trash icon on every
-row of the project page's Tasks and Archived tabs, behind a confirmation
+row of the project page's Tasks and Tasks tabs, behind a confirmation
 naming the task ([030](030-project-tasks.md)). There is no restore after —
 unlike archiving, its turns and messages are gone too — so its tab and any
 files opened from it close unsaved rather than asking a second time; the

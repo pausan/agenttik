@@ -1,6 +1,6 @@
 # UI interaction performance
 
-Archived tasks remain in the backend until the project's Archived pane opens.
+Archived tasks remain in the backend until the project's Tasks pane opens.
 Only one page plus a lookahead row is retained, and leaving the pane releases
 it. Stats and Jobs also load on demand. New-task model defaults fetch one
 newest task. See [030](030-project-tasks.md).
@@ -35,7 +35,7 @@ npx playwright test tests/performance.spec.js --workers=1 --repeat-each=3
 The fixture uses a disposable database with 5,000 archived tasks, one open task
 and 200 messages. It measures startup, opening and closing the task, real
 prompt/file keystrokes, Settings, and a profile switch. Archive assertions
-check zero initial history requests, bounded pages, searching across history,
+check bounded initial history requests and pages, searching across history,
 and restoring a task. The file is `web/src/store.js`, edited only in memory.
 
 Typing is keydown-to-next-frame p95 over 30 real keystrokes. Task open uses the

@@ -69,7 +69,7 @@ projects are stored separately from archived projects and are not deleted.
 ## Archiving
 
 A task row's archive icon takes it out of the project's sidebar list. Nothing
-is deleted: it moves to the grey half of the project page's Tasks tab, where
+is deleted: it moves to the project page's Archived tab, where
 the restore icon brings it back — see [030](030-project-tasks.md). A task that
 is running or holding queued prompts shows **Stop** in place of the archive
 icon; see [021](021-stop-active-tasks.md).

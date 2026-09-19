@@ -85,6 +85,7 @@ test("orchestrator prompt resets after a pending edit and from settings", async 
 test("disable restores tasks; deletion keeps files and options with fresh history on re-enable", async ({ page, agenttik }) => {
   const cfg = await enable(page, agenttik);
   await settings(page).getByRole("button", { name: "Open project", exact: true }).click();
+  await inspector(page).getByRole("tab", { name: "Project Options", exact: true }).click();
   const name = inspector(page).getByRole("textbox", { name: "Name" });
   await name.fill("Coordinator");
   await name.blur();
@@ -108,6 +109,7 @@ test("disable restores tasks; deletion keeps files and options with fresh histor
   expect((await command(agenttik, "GET", "/api/sessions/" + task.id)).session.id).toBe(task.id);
   await settings(page).getByRole("button", { name: "Open project", exact: true }).click();
 
+  await inspector(page).getByRole("tab", { name: "Project Options", exact: true }).click();
   await inspector(page).getByRole("button", { name: "Delete project", exact: true }).click();
   await settings(page).getByRole("button", { name: "Delete", exact: true }).click();
   await expect(sidebar(page).getByText("Coordinator", { exact: true })).toHaveCount(0);
@@ -142,6 +144,7 @@ test("control commands update live task and project views without reloading", as
   expect((await command(agenttik, "GET", `/api/sessions/${task.id}`)).queued).toHaveLength(0);
   await command(agenttik, "PATCH", `/api/sessions/${task.id}`, { done: true });
   await expect(sidebar(page).getByText("Command-created task", { exact: true })).toHaveCount(0);
+  await page.locator("main").getByRole("tab", { name: "Archived", exact: true }).click();
   await expect(page.locator("main").getByTitle("Unarchive task")).toBeVisible();
   await command(agenttik, "PATCH", `/api/projects/${project.id}`, { name: "Renamed by command" });
   await expect(page.getByRole("heading", { name: "Renamed by command", exact: true })).toBeVisible();

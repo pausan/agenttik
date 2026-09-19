@@ -77,6 +77,8 @@ const items = computed(() =>
   })),
 );
 
+const projectRunning = computed(() => S.project?.sessions.filter(task => task.status === "running").length || 0);
+
 const dragging = ref("");
 
 /* The strip reorders under the pointer, so where a tab is when it is let go
@@ -185,17 +187,17 @@ const badge = computed(() => {
       />
 
       <div class="flex shrink-0 items-center gap-1.5">
-        <template v-if="S.project?.stats">
+        <template v-if="S.project">
           <UBadge
-            :color="S.project.stats.running ? 'primary' : 'neutral'"
+            :color="projectRunning ? 'primary' : 'neutral'"
             variant="soft"
             size="sm"
           >
-            <StatusDot :status="S.project.stats.running ? 'running' : 'idle'" />
-            {{ S.project.stats.running ? `${S.project.stats.running} running` : "idle" }}
+            <StatusDot :status="projectRunning ? 'running' : 'idle'" />
+            {{ projectRunning ? `${projectRunning} running` : "idle" }}
           </UBadge>
           <UBadge color="neutral" variant="soft" size="sm" class="max-md:hidden">
-            {{ S.project.stats.sessions }} {{ S.project.stats.sessions === 1 ? "task" : "tasks" }}
+            {{ S.project.sessions.length }} open {{ S.project.sessions.length === 1 ? "task" : "tasks" }}
           </UBadge>
         </template>
         <template v-else-if="S.detail">

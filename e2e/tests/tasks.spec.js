@@ -368,7 +368,7 @@ test("the transcript follows the task, and the prompt bar goes away with it", as
 
   await openProject(page);
   await expect(page.getByPlaceholder("Ask the agent…")).toBeHidden();
-  await expect(page.getByText("1 task", { exact: true })).toBeVisible();
+  await expect(page.getByText("1 open task", { exact: true })).toBeVisible();
 });
 
 test("clicking a task in the sidebar leaves the cursor in its prompt box", async ({ page }) => {
@@ -456,6 +456,7 @@ test("task context menus rename and persist unread without opening the task", as
   await expect(page.getByRole("menuitem", { name: "Delete task", exact: true })).toBeVisible();
   await page.getByRole("menuitem", { name: "Archive task", exact: true }).click();
   await expect(row).toHaveCount(0);
+  await page.locator("main").getByRole("tab", { name: "Archived", exact: true }).click();
   await projectRow.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Unarchive task", exact: true }).click();
   await expect(row).toBeVisible();

@@ -49,7 +49,7 @@ Browser IndexedDB caches from older builds are unused and can be cleared.
 
 Queries debounce by 250 ms. Outdated responses cannot replace newer queries.
 The frontend restricts results to the current project's tasks, filters scores
-below 0.30 and sorts descending across open and archived tasks. The threshold
+below 0.30 and sorts descending across the open tasks. The threshold
 is a heuristic, not a probability. Empty queries keep open-then-archived order.
 Selecting Fuzzy Search immediately restores title matching.
 

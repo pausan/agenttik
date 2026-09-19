@@ -550,3 +550,14 @@ func TestProjectStreamDeliversTurnEvents(t *testing.T) {
 		}
 	}
 }
+
+func TestSessionPagingRejectsInvalidOffsets(t *testing.T) {
+	s, _ := newTestServer(t)
+	for _, query := range []string{"offset=-1", "offset=1&limit=0", "offset=1&limit=-1"} {
+		resp := do(t, s, "GET", "/api/sessions?"+query, nil)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("%s: status = %d, want 400", query, resp.StatusCode)
+		}
+	}
+}

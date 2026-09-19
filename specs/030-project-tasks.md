@@ -2,7 +2,8 @@
 
 A project has five panes: **Tasks**, **Archived**, **Jobs**, **Prompt** and
 **Stats**. Tasks opens first, with the cursor in its filter. Only project
-metadata and open tasks are needed to open or restore a project tab.
+metadata and open tasks are needed to open or restore a project tab. The
+header derives its running indicator and open-task count from that list.
 
 ## Open tasks
 

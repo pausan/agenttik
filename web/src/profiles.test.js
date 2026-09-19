@@ -29,3 +29,24 @@ test("private state never reads or writes persistent browser storage", async () 
   deepEqual(calls, []);
   delete globalThis.localStorage;
 });
+
+test("profile shortcuts follow saved order, wrap, and preserve URL state", async () => {
+  globalThis.location = { search: "" };
+  let assigned;
+  globalThis.window = { location: { href: "http://localhost/?remote=x#task", assign(url) { assigned = url; } } };
+  const { profiles, switchAdjacentProfile } = await import("./profiles.js");
+  profiles.items = [{ id: "work" }, { id: "default" }, { id: "personal" }];
+  switchAdjacentProfile(1);
+  strictEqual(assigned, "http://localhost/?remote=x&profile=personal#task");
+  switchAdjacentProfile(-1);
+  strictEqual(assigned, "http://localhost/?remote=x&profile=work#task");
+  profiles.items = [{ id: "default" }, { id: "work" }, { id: "personal" }];
+  switchAdjacentProfile(-1);
+  strictEqual(assigned, "http://localhost/?remote=x&profile=personal#task");
+  assigned = undefined;
+  profiles.items = [{ id: "default" }];
+  switchAdjacentProfile(1);
+  strictEqual(assigned, undefined);
+  delete globalThis.location;
+  delete globalThis.window;
+});

@@ -160,3 +160,17 @@ test("settings reorder profiles and persist the picker order", async ({ page, ag
   await page.getByRole("button", { name: "Profile: Default", exact: true }).click();
   await expect(page.getByRole("menuitem")).toHaveText(["Work", "Default"]);
 });
+
+test("profile shortcuts cycle in saved order in both directions", async ({ page, agenttik }) => {
+  const work = await (await page.request.post(`${agenttik.url}/api/profiles`, { data: { name: "Work" } })).json();
+  const personal = await (await page.request.post(`${agenttik.url}/api/profiles`, { data: { name: "Personal" } })).json();
+  await page.request.put(`${agenttik.url}/api/profiles/order`, { data: { ids: ["default", personal.id, work.id] } });
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Profile: Default", exact: true })).toBeVisible();
+  for (const name of ["Personal", "Work", "Default"]) {
+    await page.keyboard.press("Control+Alt+p");
+    await expect(page.getByRole("button", { name: `Profile: ${name}`, exact: true })).toBeVisible();
+  }
+  await page.keyboard.press("Control+Alt+Shift+p");
+  await expect(page.getByRole("button", { name: "Profile: Work", exact: true })).toBeVisible();
+});

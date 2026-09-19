@@ -27,6 +27,7 @@ import InspectorPanel from "./components/InspectorPanel.vue";
 import Splitter from "./components/Splitter.vue";
 import { MOBILE_QUERY } from "./ui";
 import { MACOS } from "./platform";
+import { switchAdjacentProfile } from "./profiles";
 import { storage } from "./api";
 import { readTour, saveTour } from "./quick-start-state";
 
@@ -156,6 +157,13 @@ function onKey(e) {
     e.preventDefault();
     if (!e.repeat) window.runtime.EventsEmit("agenttik:quit");
     return;
+  }
+  for (const [action, offset] of [["profile.next", 1], ["profile.prev", -1]]) {
+    if (hit(e, action)) {
+      e.preventDefault();
+      if (!e.repeat) switchAdjacentProfile(offset);
+      return;
+    }
   }
   if (hit(e, "page.find")) return run(e, () => mainPanel.value?.find());
   if (hit(e, "task.prev")) return run(e, () => selectAdjacentSidebarRow(-1));

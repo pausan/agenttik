@@ -13,6 +13,8 @@
 import { MACOS, primaryChord } from "./platform.js";
 
 export const ACTIONS = [
+  { id: "profile.next", group: "Profiles", what: "Next profile", keys: ["Ctrl+Alt+P"] },
+  { id: "profile.prev", group: "Profiles", what: "Previous profile", keys: ["Ctrl+Alt+Shift+P"] },
   { id: "task.new", group: "Tasks", what: "New task in the current project", keys: [primaryChord("N"), primaryChord("T")] },
   { id: "task.rename", group: "Tasks", what: "Rename the current task or scheduled job", keys: ["F2"] },
   { id: "tab.close", group: "Conversations", what: "Close the current tab", keys: [primaryChord("W")] },

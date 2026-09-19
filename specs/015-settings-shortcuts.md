@@ -18,6 +18,11 @@ The desktop global show/hide shortcut lives in General → Desktop tray,
 because the native shell registers it before the UI loads; see
 [060](060-desktop-tray.md).
 
+`Ctrl+Alt+P` moves to the next local profile; `Ctrl+Alt+Shift+P` moves to the
+previous one. Both wrap in the saved profile order, ignore held-key repeats,
+and use Ctrl on every platform. Switching uses the normal profile reload and
+unsaved-file warning.
+
 Most browser shortcuts are editable. Click a chord in Settings and the next keystroke
 becomes the binding; Escape cancels, and a per-row arrow restores that row's
 default. Recording listens in the capture phase with propagation stopped, so

@@ -12,7 +12,9 @@ editor.
 The sidebar footer shows a profile picker immediately before Shortcuts only when
 more than one profile exists. The command palette offers `Switch to profile: <name>`
 for every other profile and refreshes the list when opened. Switching reloads the window. Other profiles keep
-running tasks and schedules. Unsaved file edits use the existing browser unload
+running tasks and schedules. `Ctrl+Alt+P` selects the next profile and
+`Ctrl+Alt+Shift+P` the previous one, wrapping in saved order. Both are editable
+in Shortcuts and ignore key repeats. Unsaved file edits use the existing browser unload
 warning. A profile in the window URL scopes each API request, stream, image, and
 saved tab; windows can use different profiles concurrently.
 

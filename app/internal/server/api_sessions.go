@@ -76,7 +76,11 @@ func (s *Server) createSession(c *fiber.Ctx) error {
 		return badRequest("unknown provider %q", body.Provider)
 	}
 	if body.Model == "" {
-		body.Model = provider.Models()[0].ID
+		models := provider.Models()
+		if len(models) == 0 {
+			return badRequest("enable this provider before selecting a model")
+		}
+		body.Model = models[0].ID
 	}
 	accountID, err := s.chooseAccount(provider.Name(), body.AccountID, store.SystemAccount, true)
 	if err != nil {

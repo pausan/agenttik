@@ -24,11 +24,11 @@ execution, and cover failed, incomplete and timed-out shell probes.
 
 ```go
 type Provider interface {
-    Name() string                  // "claude" | "codex" | "copilot" | "opencode"
+    Name() string                  // subscription ID or "api-<service>"
     DisplayName() string
     Models() []Model               // each may define its own efforts
     Efforts() []string             // fallback for models without their own list
-    Available() error              // binary on PATH and usable
+    Available() error              // CLI available or API connection enabled
     Run(ctx context.Context, req TurnRequest) (<-chan Event, error)
 }
 ```
@@ -52,6 +52,10 @@ subscription runs exactly the command it always ran.
 
 `DirectAccount` exposes write-only key setup and execution preferences for
 providers supporting direct subscription use. Currently this is OpenCode Go.
+
+API-key providers use separate `api-*` IDs and profile-scoped connection files
+([078](078-api-providers.md)). They run through the shared local tool runtime
+([077](077-direct-api-runtime.md)); subscription credentials are not reused.
 
 `Run` starts the CLI or direct HTTP tool loop and returns a channel that closes when the turn is over. The
 channel carries provider-neutral events:

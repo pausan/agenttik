@@ -100,7 +100,11 @@ func (s *Server) createSchedule(c *fiber.Ctx) error {
 		return badRequest("unknown provider %q", body.Provider)
 	}
 	if body.Model == "" {
-		body.Model = provider.Models()[0].ID
+		models := provider.Models()
+		if len(models) == 0 {
+			return badRequest("enable this provider before selecting a model")
+		}
+		body.Model = models[0].ID
 	}
 	if body.Every != store.EveryPinned {
 		if err := checkRecurrence(body.Every, body.IntervalMinutes, body.AtMinute); err != nil {
@@ -250,7 +254,11 @@ func (s *Server) updateSchedule(c *fiber.Ctx) error {
 		}
 		model := body.Model
 		if model == "" {
-			model = provider.Models()[0].ID
+			models := provider.Models()
+			if len(models) == 0 {
+				return badRequest("enable this provider before selecting a model")
+			}
+			model = models[0].ID
 		}
 		accountID, err := s.chooseAccount(provider.Name(), body.AccountID, sched.AccountID,
 			provider.Name() != sched.Provider)

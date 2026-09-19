@@ -7,21 +7,24 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/pausan/agenttik/app/internal/agent"
+	"github.com/pausan/agenttik/app/internal/agent/apiprovider"
 	"github.com/pausan/agenttik/app/internal/store"
 )
 
 type providerInfo struct {
-	CLI            string        `json:"cli,omitempty"`
-	CLIInstalled   bool          `json:"cli_installed"`
-	CLIRequirement string        `json:"cli_requirement,omitempty"`
-	InstallURL     string        `json:"install_url,omitempty"`
-	DirectLogin    bool          `json:"direct_login"`
-	Name           string        `json:"name"`
-	DisplayName    string        `json:"display_name"`
-	Models         []agent.Model `json:"models"`
-	Efforts        []string      `json:"efforts"`
-	Available      bool          `json:"available"`
-	Reason         string        `json:"reason,omitempty"`
+	Kind           string                  `json:"kind"`
+	API            *apiprovider.Connection `json:"api,omitempty"`
+	CLI            string                  `json:"cli,omitempty"`
+	CLIInstalled   bool                    `json:"cli_installed"`
+	CLIRequirement string                  `json:"cli_requirement,omitempty"`
+	InstallURL     string                  `json:"install_url,omitempty"`
+	DirectLogin    bool                    `json:"direct_login"`
+	Name           string                  `json:"name"`
+	DisplayName    string                  `json:"display_name"`
+	Models         []agent.Model           `json:"models"`
+	Efforts        []string                `json:"efforts"`
+	Available      bool                    `json:"available"`
+	Reason         string                  `json:"reason,omitempty"`
 
 	// Accounts are the subscriptions this provider can run under, the CLI's
 	// own login first and always present. MultiAccount says whether a second
@@ -41,9 +44,10 @@ func (s *Server) listProviders(c *fiber.Ctx) error {
 	for _, p := range s.registry.All() {
 		_, multi := p.(agent.MultiAccount)
 		info := providerInfo{
+			Kind:         "subscription",
 			Name:         p.Name(),
 			DisplayName:  p.DisplayName(),
-			Models:       p.Models(),
+			Models:       []agent.Model{},
 			Efforts:      p.Efforts(),
 			Available:    true,
 			Accounts:     s.providerAccounts(p, accounts),
@@ -51,6 +55,18 @@ func (s *Server) listProviders(c *fiber.Ctx) error {
 		}
 		if err := p.Available(); err != nil {
 			info.Available, info.Reason = false, err.Error()
+		}
+		connected := !multi
+		for _, account := range info.Accounts {
+			connected = connected || account.SignedIn
+		}
+		if info.Available && connected {
+			info.Models = p.Models()
+		}
+		if api, ok := p.(*apiprovider.Provider); ok {
+			connection := api.Connection()
+			info.Kind, info.API = "api", &connection
+			info.Accounts = []accountInfo{{ID: store.SystemAccount, Alias: "API", System: true, IsDefault: true, SignedIn: connection.Enabled}}
 		}
 		switch p.Name() {
 		case "claude":

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/pausan/agenttik/app/internal/agent"
+	"github.com/pausan/agenttik/app/internal/agent/apiprovider"
 	"github.com/pausan/agenttik/app/internal/agent/claudecode"
 	"github.com/pausan/agenttik/app/internal/agent/codex"
 	"github.com/pausan/agenttik/app/internal/agent/copilot"
@@ -165,6 +166,7 @@ func run() error {
 	if fake.Enabled() {
 		providers = append(providers, fake.New())
 	}
+	providers = append(providers, apiprovider.All(db.Dir())...)
 	registry := agent.NewRegistry(providers...)
 
 	// Copilot reports its own model list, and asking costs a CLI start. Ask

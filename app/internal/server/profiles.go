@@ -15,6 +15,8 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"github.com/pausan/agenttik/app/internal/agent"
+	"github.com/pausan/agenttik/app/internal/agent/apiprovider"
 	"github.com/pausan/agenttik/app/internal/runner"
 	"github.com/pausan/agenttik/app/internal/single"
 	"github.com/pausan/agenttik/app/internal/store"
@@ -129,8 +131,17 @@ func (m *profileManager) open(id string) (*profileRuntime, error) {
 		db.Close()
 		return nil, err
 	}
-	r := runner.New(db, m.root.registry, runner.NewHub())
-	s := New(db, m.root.registry, r)
+	providers := make([]agent.Provider, 0, len(m.root.registry.All()))
+	for _, provider := range m.root.registry.All() {
+		if api, ok := provider.(*apiprovider.Provider); ok {
+			providers = append(providers, api.ForProfile(dir))
+		} else {
+			providers = append(providers, provider)
+		}
+	}
+	registry := agent.NewRegistry(providers...)
+	r := runner.New(db, registry, runner.NewHub())
+	s := New(db, registry, r)
 	s.SetVersion(m.root.version)
 	// CLI calls from this profile's orchestrator discover its own endpoint.
 	ln, err := net.Listen("tcp", "127.0.0.1:0")

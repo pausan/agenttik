@@ -1,6 +1,6 @@
 # Local profiles
 
-Profiles are local to a data directory on this computer. Settings → Profiles adds,
+Profiles are local to a data directory on this computer. Settings → General → Profiles adds,
 renames, and removes profiles. The built-in profile, initially named Default,
 holds existing data and cannot be removed. Names are trimmed, unique ignoring
 case, and limited to 80 bytes.
@@ -17,7 +17,9 @@ saved tab; windows can use different profiles concurrently.
 
 Each added profile has its own SQLite database, provider accounts, attachments,
 search index, settings, model favourites and visibility, projects, tasks, history,
-and schedules. Subscription lists and default subscription choices are isolated. The same folder
+and schedules. Subscription lists and default subscription choices are isolated. API keys,
+model catalogs and API conversation files are separate per profile too
+([078](078-api-providers.md)). The same folder
 can be registered independently in multiple profiles. Working files are shared:
 profiles do not create copies of the project directory. Browser preferences are
 scoped too, including Light/Dark/System mode and file-tree expansion. Default

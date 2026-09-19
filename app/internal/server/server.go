@@ -193,6 +193,8 @@ func (s *Server) routes() {
 	api.Get("/attachments/:name", s.getAttachment)
 
 	api.Get("/providers", s.listProviders)
+	api.Put("/providers/:provider/api", s.configureAPIProvider)
+	api.Delete("/providers/:provider/api", s.removeAPIProviderKey)
 	api.Get("/providers/:provider/subscription-limits", s.subscriptionLimits)
 	api.Post("/providers/:provider/accounts", s.createAccount)
 	api.Put("/providers/:provider/account", s.setDefaultAccount)

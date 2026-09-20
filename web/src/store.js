@@ -27,6 +27,7 @@ const LAYOUT_KEY = "agenttik.layout";
 const LAST_USED_KEY = "agenttik.lastUsedByProject";
 const OPEN_TABS_KEY = "agenttik.openTabs";
 const FILE_MODE_KEY = "agenttik.fileMode";
+const DIFF_CONTEXT_KEY = "agenttik.diffContext";
 const DIFF_VIEW_KEY = "agenttik.diffView";
 const COLORS_KEY = "agenttik.colors";
 const KEYS_KEY = "agenttik.keys";
@@ -106,6 +107,7 @@ export const S = reactive({
   // fold state above it is remembered.
   foldOthers: true,
   fileMode: "edit", // default for file links without a line number
+  diffContext: "changes",
   diffView: "unified", // "unified" or "split", likewise
   closing: null, // a close waiting on what to do with unsaved edits
   promptFocus: 0,
@@ -2305,6 +2307,12 @@ export function setDiffView(view) {
   persist(DIFF_VIEW_KEY, view);
 }
 
+export function setDiffContext(context) {
+  if (context !== "changes" && context !== "full") return;
+  S.diffContext = context;
+  persist(DIFF_CONTEXT_KEY, context);
+}
+
 /* editFile compares against what was loaded rather than latching a flag, so
    typing something and taking it back leaves the tab clean again. */
 export function editFile(tab, text) {
@@ -2387,6 +2395,7 @@ function loadFileMode() {
     const mode = storage.getItem(FILE_MODE_KEY);
     // "file" is what the editor used to be called.
     if (mode === "diff" || mode === "preview") S.fileMode = mode;
+    if (storage.getItem(DIFF_CONTEXT_KEY) === "full") S.diffContext = "full";
     if (storage.getItem(DIFF_VIEW_KEY) === "split") S.diffView = "split";
   } catch {
     /* keep the defaults */
@@ -3625,6 +3634,7 @@ export async function resetPreferences() {
   S.layout = { left: 272, right: 312 };
   S.fileMode = "edit";
   S.diffView = "unified";
+  S.diffContext = "changes";
   setFoldOthers(true);
   setWindow(TASK_WINDOWS[0].value);
   setTaskPageSize(25);
@@ -3632,7 +3642,7 @@ export async function resetPreferences() {
   setSmartSearch(false);
   taskSounds.setEnabled(false);
   for (const [key, value] of Object.entries(DEFAULT_COLORS)) setColor(key, value);
-  for (const key of [LAYOUT_KEY, LAST_USED_KEY, FILE_MODE_KEY, DIFF_VIEW_KEY,
+  for (const key of [LAYOUT_KEY, LAST_USED_KEY, FILE_MODE_KEY, DIFF_VIEW_KEY, DIFF_CONTEXT_KEY,
     COLORS_KEY, KEYS_KEY, WINDOW_KEY, TASK_PAGE_KEY, SCHEDULE_KEY, FOLD_KEY,
     "agenttik.smartSearch", TASK_SOUNDS_KEY]) storage.removeItem(key);
   await Promise.all([loadProviders(), loadActionModels()]);

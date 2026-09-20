@@ -183,7 +183,7 @@ const stat = computed(() => {
       <p v-else-if="body === 'empty'" class="px-5 py-5 text-center text-dimmed">
         No changes to this file.
       </p>
-      <FileDiff v-else-if="body === 'diff'" :diff="tab.diff" />
+      <FileDiff v-else-if="body === 'diff'" :diff="tab.diff" :tab="tab" />
       <ImageDiff v-else-if="body === 'images'" :tab="tab" @dimensions="dimensions = $event" />
       <FilePreview v-else-if="body === 'preview'" :tab="tab" @dimensions="dimensions = $event" />
       <FileEditor v-else :tab="tab" />

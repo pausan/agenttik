@@ -357,15 +357,16 @@ func (s *Server) projectDiff(c *fiber.Ctx) error {
 		return c.JSON(fileDiff{Path: rel})
 	}
 
+	context := diffContext(c)
 	var out string
 	if _, err := runGit(root, "ls-files", "--error-unmatch", "--", rel); err == nil {
 		// HEAD covers staged and unstaged together; a repository with no
 		// commits has no HEAD, and there the index is the only baseline.
-		if out, err = gitDiff(root, "diff", "--no-color", "HEAD", "--", rel); err != nil {
-			out, _ = gitDiff(root, "diff", "--no-color", "--cached", "--", rel)
+		if out, err = gitDiff(root, "diff", "--no-color", context, "HEAD", "--", rel); err != nil {
+			out, _ = gitDiff(root, "diff", "--no-color", context, "--cached", "--", rel)
 		}
 	} else {
-		out, _ = gitDiff(root, "diff", "--no-color", "--no-index", "--", os.DevNull, rel)
+		out, _ = gitDiff(root, "diff", "--no-color", context, "--no-index", "--", os.DevNull, rel)
 	}
 
 	body := fileDiff{Path: rel, Partial: len(out) > maxFileBytes}
@@ -374,6 +375,14 @@ func (s *Server) projectDiff(c *fiber.Ctx) error {
 	}
 	body.Diff = out
 	return c.JSON(body)
+}
+
+// Whole-file context stays subject to the response and rendering limits.
+func diffContext(c *fiber.Ctx) string {
+	if c.Query("context") == "full" {
+		return "--unified=2147483647"
+	}
+	return "--unified=3"
 }
 
 // gitDiff runs one diff. Diff exits 1 when it finds differences, which is the

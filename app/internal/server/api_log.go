@@ -246,7 +246,7 @@ func (s *Server) projectCommitDiff(c *fiber.Ctx) error {
 		return err
 	}
 	out, _ := gitDiff(root, "-c", "core.quotePath=false", "show", "--no-color",
-		"--format=", "--diff-merges=first-parent", hash, "--", rel)
+		"--format=", "--diff-merges=first-parent", diffContext(c), hash, "--", rel)
 	body := fileDiff{Path: rel, Partial: len(out) > maxFileBytes}
 	if body.Partial {
 		out = out[:maxFileBytes]

@@ -370,6 +370,12 @@ INSERT INTO server_identity (id, name) VALUES (1, 'agenttik-' || lower(hex(rando
 	`ALTER TABLE server_config ADD COLUMN totp_disabled INTEGER NOT NULL DEFAULT 0;`,
 	`CREATE TABLE system_account_names (provider TEXT PRIMARY KEY, alias TEXT NOT NULL);
 CREATE TABLE shared_accounts_migrated (id INTEGER PRIMARY KEY CHECK (id = 1));`,
+	`ALTER TABLE turns ADD COLUMN provider TEXT NOT NULL DEFAULT '';
+ALTER TABLE turns ADD COLUMN account_id INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE turns ADD COLUMN attribution_inferred INTEGER NOT NULL DEFAULT 1;
+UPDATE turns SET provider = (SELECT provider FROM sessions WHERE id = session_id),
+    account_id = (SELECT account_id FROM sessions WHERE id = session_id);
+CREATE INDEX idx_turns_started ON turns(started_at);`,
 }
 
 func migrate(db *sql.DB, path string) error {

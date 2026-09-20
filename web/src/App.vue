@@ -37,6 +37,8 @@ import { readTour, saveTour } from "./quick-start-state";
    the binary beside the main one, so this is still a read off the local
    server and never a network call. */
 const AddProjectModal = defineAsyncComponent(() => import("./components/AddProjectModal.vue"));
+const AnalyticsPage = defineAsyncComponent(() => import("./components/AnalyticsPage.vue"));
+const analytics = ref(false);
 const SettingsModal = defineAsyncComponent(() => import("./components/SettingsModal.vue"));
 const CommandPaletteModal = defineAsyncComponent(() => import("./components/CommandPaletteModal.vue"));
 const GoToFileModal = defineAsyncComponent(() => import("./components/GoToFileModal.vue"));
@@ -274,6 +276,7 @@ onUnmounted(() => {
               @setup="openSettings('general')"
               @shortcuts="openSettings('shortcuts')"
       @remote="remoteConnect = true"
+      @analytics="analytics = true"
             />
           </template>
         </USlideover>
@@ -310,6 +313,7 @@ onUnmounted(() => {
         @setup="openSettings('general')"
         @shortcuts="openSettings('shortcuts')"
       @remote="remoteConnect = true"
+      @analytics="analytics = true"
       />
       <Splitter v-if="!mobile" v-show="!diffExpanded" side="left" />
       <MainPanel ref="mainPanel" @start-tour="startTour" />
@@ -333,6 +337,7 @@ onUnmounted(() => {
     <QuickStartTour v-if="tour.open" v-model:step="tour.step" :setup-open="settings || addProject" :mobile="mobile" @close="tour.open = false" />
     <GoToFileModal v-if="goToFile" v-model:open="goToFile" />
     <RemoteConnectModal v-if="remoteConnect" v-model:open="remoteConnect" />
+    <AnalyticsPage v-if="analytics" v-model:open="analytics" />
     <CommandPaletteModal
       v-if="commandPalette"
       v-model:open="commandPalette"
@@ -342,6 +347,7 @@ onUnmounted(() => {
       @settings="openSettings('general')"
       @shortcuts="openSettings('shortcuts')"
       @remote="remoteConnect = true"
+      @analytics="analytics = true"
     />
   </UApp>
 </template>

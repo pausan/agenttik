@@ -10,9 +10,10 @@ func (s *Store) StartTurn(sessionID, model, effort string) (*Turn, error) {
 	t := &Turn{SessionID: sessionID, Model: model, Effort: effort,
 		StartedAt: nowMillis(), Status: "running"}
 	res, err := s.db.Exec(
-		`INSERT INTO turns (session_id, model, effort, started_at, status)
-		 VALUES (?, ?, ?, ?, ?)`,
-		t.SessionID, t.Model, t.Effort, t.StartedAt, t.Status)
+		`INSERT INTO turns (session_id, model, effort, started_at, status, provider, account_id, attribution_inferred)
+		 VALUES (?, ?, ?, ?, ?, (SELECT provider FROM sessions WHERE id = ?),
+		 (SELECT account_id FROM sessions WHERE id = ?), 0)`,
+		t.SessionID, t.Model, t.Effort, t.StartedAt, t.Status, sessionID, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("start turn: %w", err)
 	}

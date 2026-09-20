@@ -229,6 +229,7 @@ func (s *Server) routes() {
 	api.Put("/orchestrator", s.putOrchestratorConfig)
 	api.Post("/orchestrator/prompt/reset", s.resetOrchestratorPrompt)
 
+	api.Get("/analytics", s.analytics)
 	api.Get("/projects", s.listProjects)
 	api.Post("/projects", s.createProject)
 	api.Post("/projects/order", s.reorderProjects)

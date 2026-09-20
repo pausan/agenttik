@@ -22,7 +22,7 @@ import {
 } from "../store";
 
 const open = defineModel("open", { type: Boolean, default: false });
-const emit = defineEmits(["projects", "tree", "add-project", "settings", "shortcuts", "remote"]);
+const emit = defineEmits(["projects", "tree", "add-project", "settings", "shortcuts", "remote", "analytics"]);
 
 function choose(action) {
   open.value = false;
@@ -30,6 +30,12 @@ function choose(action) {
 }
 
 const navigation = computed(() => [
+  {
+    label: "Analytics",
+    description: "Provider and subscription costs, project and task usage",
+    icon: "i-lucide-chart-no-axes-combined",
+    onSelect: () => choose(() => emit("analytics")),
+  },
   {
     label: "Projects",
     icon: "i-lucide-folder-kanban",

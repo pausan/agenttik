@@ -53,11 +53,13 @@ All timestamps are **unix milliseconds**, so turn timings need no second table.
   saying what the task came to, written from its last reply when it is archived
   and blank for every task archived before there was one
   ([051](051-task-outcomes.md)).
-- **turns** — one row per prompt. `session_id, model, effort, started_at,
+- **turns** — one row per prompt. `session_id, provider, account_id, model, effort, started_at,
   ended_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
   cost_usd, context_tokens, context_window, rate_limits, status, error`. This
-  is the metrics table. The last three are never summed: the newest turn that
-  reported one describes the gauge and the allowance bars now.
+  is the metrics table. Provider/account are captured at turn start; migrated
+  history is marked with `attribution_inferred` ([080](080-analytics.md)).
+  Context and rate limits are never summed: the newest turn that reported
+  one describes the gauge and the allowance bars now.
 - **messages** — the transcript. `session_id, turn_id, role (user | assistant |
   tool | error), content, created_at`.
 - **queued_messages** — prompts waiting for the project runner. `session_id,

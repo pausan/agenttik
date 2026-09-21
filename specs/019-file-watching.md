@@ -15,8 +15,8 @@ The server watches, the browser re-reads:
   one parameter both subscribes to `runner.FilesTopic(id)` and holds the
   watcher open for as long as the connection lasts.
 - A burst of changes becomes one `files_changed` event, and the browser answers
-  it with `refreshChanged()` and `refreshTree()` — the same calls a project
-  switch makes.
+  it with `refreshChanged()`, `refreshLog()` and `refreshTree()` — the same calls
+  a project switch makes.
 
 `git ls-files` keeps listing a tracked file that has been deleted until the
 deletion is staged, so `withoutDeleted` drops those: the tree now loses a file

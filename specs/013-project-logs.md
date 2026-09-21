@@ -161,8 +161,9 @@ a record-separated pretty format and first-parent merge diffs. One
 `for-each-ref` call attaches branch and tag names. The file
 list is `git show --numstat` plus `--name-status`, which override each
 other and so cannot be one call. A commit's files are fetched once per commit
-— history does not change underneath — and the whole log is re-read when a
-turn ends, because a turn that commits has changed history as well as the tree.
+— history does not change underneath — and the whole log is re-read on watched
+filesystem changes and when a turn ends. Branch switches during a task or in a terminal update the current
+branch, available branches and history without reopening the pane.
 
 `hash` is matched against `^[0-9a-fA-F]{4,40}$` rather than merely escaped: anything else could
 be read as a flag. Switch accepts only validated, existing local branch names.

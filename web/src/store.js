@@ -2888,6 +2888,7 @@ function onEvent(msg) {
   if (msg.event?.type === "files_changed") {
     if (msg.project_id === currentProjectID()) {
       refreshChanged();
+      refreshLog();
       refreshTree();
     }
     return;

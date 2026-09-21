@@ -8,10 +8,16 @@ current profile, including hidden and archived entries.
 
 Rolling 1, 7, 14, 30, 90 and 365-day windows use turn start times. The default is
 7 days. Provider grouping combines subscriptions; subscription / connection
-grouping separates them. Projects and task/subscription rows rank by reported
-USD cost, input tokens, output tokens or turn count. Shares use the selected
-metric and the containing provider or subscription total. Expand a project for
+grouping separates them. Model grouping combines all efforts within each provider/model. Projects and task/subscription rows rank by reported
+USD cost, input tokens, output tokens turn count, cache reads or cache writes. Shares use the selected
+metric and the containing provider, subscription or model total. Expand a project for
 its tasks; clicking a task opens it. Refresh updates the window and totals.
+
+The **Models & effort** tab shows vertical bars for recorded provider/model/effort
+combinations, sorted left to right by the selected metric, highest first. Only
+combinations used in the period appear, including those with zero reported cost.
+Missing model/effort values are labeled explicitly. Both tabs share period,
+ranking and refresh controls. Task rows combine model/effort slices.
 
 Summary cards show reported cost, input tokens, output tokens and turns. Cache
 reads and writes remain separate because provider token accounting differs.
@@ -26,7 +32,7 @@ are explicit.
 ## Storage and API
 
 `GET /api/analytics?days=7` accepts integer days from 1 through 3650 and returns
-`from`, `to` (Unix milliseconds) and task/provider/account aggregate `rows`.
+`from`, `to` (Unix milliseconds) and task/provider/account/model/effort aggregate `rows`.
 The half-open interval is `[from, to)`. One SQL query uses the turn start-time
 index and groups before transferring data; transcripts are never loaded.
 Existing profile routing and private-mode storage scope the endpoint.

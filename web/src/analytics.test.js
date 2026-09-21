@@ -34,3 +34,22 @@ test("subscription groups keep separate denominators and token ranking works wit
   assert.equal(rows[0].cost_usd, 2);
   assert.deepEqual(analyticsGroups([]), []);
 });
+
+test("model grouping combines effort and task rows while chart ranks only used combinations", () => {
+  const usage = [
+    { ...rows[0], model: "a", effort: "high" },
+    { ...rows[0], model: "a", effort: "low", cost_usd: 3 },
+    { ...rows[0], model: "b", effort: "high", cost_usd: 0, input_tokens: 500 },
+  ];
+  const models = analyticsGroups(usage, "model");
+  assert.equal(models.length, 2);
+  assert.equal(models[0].model, "a");
+  assert.equal(models[0].cost_usd, 5);
+  assert.equal(models[0].projects[0].rows.length, 1);
+  assert.equal(models[0].projects[0].rows[0].turns, 2);
+  const chart = analyticsGroups(usage, "model_effort");
+  assert.deepEqual(chart.map((g) => [g.model, g.effort, g.cost_usd]), [["a", "low", 3], ["a", "high", 2], ["b", "high", 0]]);
+  assert.equal(analyticsGroups(usage, "model_effort", "input_tokens")[0].model, "b");
+  assert.equal(analyticsTotals(chart).cost_usd, analyticsTotals(usage).cost_usd);
+  assert.deepEqual(analyticsGroups([], "model_effort"), []);
+});

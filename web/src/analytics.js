@@ -9,8 +9,8 @@ export function analyticsTotals(rows) {
 export function analyticsGroups(rows, grouping = "provider", metric = "cost_usd") {
   const groups = new Map();
   for (const row of rows) {
-    const key = grouping === "subscription" ? `${row.provider}:${row.account_id}` : row.provider;
-    if (!groups.has(key)) groups.set(key, { key, provider: row.provider, account_id: grouping === "subscription" ? row.account_id : null, rows: [], projects: new Map() });
+    const key = JSON.stringify(grouping === "model" ? [row.provider, row.model || ""] : grouping === "model_effort" ? [row.provider, row.model || "", row.effort || ""] : grouping === "subscription" ? [row.provider, row.account_id] : [row.provider]);
+    if (!groups.has(key)) groups.set(key, { key, model: row.model || "", effort: row.effort || "", provider: row.provider, account_id: grouping === "subscription" ? row.account_id : null, rows: [], projects: new Map() });
     const group = groups.get(key);
     group.rows.push(row);
     if (!group.projects.has(row.project_id)) group.projects.set(row.project_id, { id: row.project_id, name: row.project_name, rows: [] });
@@ -24,7 +24,12 @@ export function analyticsGroups(rows, grouping = "provider", metric = "cost_usd"
       ...project,
       ...analyticsTotals(project.rows),
       task_count: new Set(project.rows.map((row) => row.session_id)).size,
-      rows: [...project.rows].sort(compare),
+      rows: [...project.rows.reduce((tasks, row) => {
+        const key = JSON.stringify([row.session_id, row.provider, row.account_id]);
+        const previous = tasks.get(key);
+        tasks.set(key, { ...row, ...analyticsTotals(previous ? [previous, row] : [row]) });
+        return tasks;
+      }, new Map()).values()].sort(compare),
     })).sort(compare),
   })).sort(compare);
 }

@@ -72,3 +72,31 @@ test("analytics includes persisted turn usage and opens its task", async ({ page
   await expect(dialog).toBeHidden();
   await expect(page.getByPlaceholder("Ask the agent…")).toBeVisible();
 });
+
+test("analytics charts used model efforts and combines efforts in model breakdown", async ({ page }) => {
+  const base = { provider: "fake", account_id: 0, project_id: 1, project_name: "Alpha", session_id: "a", title: "Task", turns: 1, cost_turns: 1 };
+  await page.route("**/api/analytics?*", (route) => route.fulfill({ json: {
+    from: 1, to: Date.now(), rows: [
+      { ...base, model: "model-a", effort: "high", cost_usd: 2, input_tokens: 100 },
+      { ...base, model: "model-a", effort: "low", cost_usd: 5, input_tokens: 50 },
+      { ...base, model: "model-b", effort: "", cost_usd: 0, cost_turns: 0, input_tokens: 500 },
+    ],
+  } }));
+  const dialog = await openAnalytics(page);
+  await dialog.getByRole("combobox", { name: "Analytics grouping" }).click();
+  await page.getByRole("option", { name: "Model", exact: true }).click();
+  await expect(dialog.locator("section")).toHaveCount(2);
+  await expect(dialog.locator(".analytics-table > tbody > tr:first-child").first()).toContainText("$7.00");
+  await dialog.locator("summary").first().click();
+  await expect(dialog.getByRole("table", { name: "Task breakdown" }).getByRole("button", { name: "Task", exact: true })).toHaveCount(1);
+  await dialog.getByRole("tab", { name: "Models & effort" }).click();
+  const bars = dialog.getByRole("list", { name: "Model and effort usage" }).getByRole("listitem");
+  await expect(bars).toHaveCount(3);
+  await expect(bars.first()).toContainText("low");
+  await expect(bars.last()).toContainText("model-b");
+  await dialog.getByRole("combobox", { name: "Analytics ranking" }).click();
+  await page.getByRole("option", { name: "Input tokens", exact: true }).click();
+  await expect(bars.first()).toContainText("model-b");
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await dialog.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+});

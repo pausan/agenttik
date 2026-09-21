@@ -73,3 +73,21 @@ func TestAnalyticsMigrationBackfillsLegacyTurns(t *testing.T) {
 		t.Fatalf("legacy attribution was not preserved: %+v", rows)
 	}
 }
+
+func TestAnalyticsModelEffort(t *testing.T) {
+	s := testStore(t)
+	p, err := s.CreateProject("Models", "/tmp/analytics-models")
+	must(t, err)
+	must(t, s.CreateSession(&Session{ID: "models", ProjectID: p.ID, Provider: "codex", Model: "unused"}))
+	for _, choice := range [][2]string{{"a", "high"}, {"a", "high"}, {"a", "low"}, {"b", ""}} {
+		turn, err := s.StartTurn("models", choice[0], choice[1])
+		must(t, err)
+		_, err = s.db.Exec("UPDATE turns SET started_at = 1 WHERE id = ?", turn.ID)
+		must(t, err)
+	}
+	rows, err := s.Analytics(0, 2)
+	must(t, err)
+	if len(rows) != 3 || rows[0].Model != "a" || rows[0].Effort != "high" || rows[0].Turns != 2 || rows[1].Effort != "low" || rows[2].Model != "b" || rows[2].Effort != "" {
+		t.Fatalf("wrong model/effort aggregates: %+v", rows)
+	}
+}

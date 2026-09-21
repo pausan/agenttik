@@ -65,7 +65,7 @@ func TestAnalyticsMigrationBackfillsLegacyTurns(t *testing.T) {
 		_, err = s.db.Exec(query)
 		must(t, err)
 	}
-	must(t, applyMigrations(s.db, len(migrations)-1, migrations))
+	must(t, applyMigrations(s.db, len(migrations)-2, migrations[:len(migrations)-1]))
 	must(t, s.SetSessionModel("old", "codex", 0, "m", "", true))
 	rows, err := s.Analytics(0, 2)
 	must(t, err)

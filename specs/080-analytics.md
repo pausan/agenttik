@@ -46,3 +46,26 @@ reconstructed. New turns have `attribution_inferred = 0`.
 Store tests cover window boundaries, provider/account switches, aggregation,
 hidden/closed history and migration. UI unit tests cover grouping, ordering and
 shares; browser tests cover command-palette access and page interactions.
+
+## Codex cost estimates
+
+Completed Codex turns retain their selected model, effort and raw token counts,
+plus `estimated_cost_usd` and `cost_estimate_basis`. Provider-reported `cost_usd`
+remains separate and takes precedence. Analytics rows expose summed
+`estimated_cost_usd` and `estimated_cost_turns` for future display; the current
+page still displays reported cost only. Existing turns are not repriced.
+
+The versioned rate table in `store/pricing.go` uses [OpenAI standard API
+pricing](https://developers.openai.com/api/docs/pricing), verified 2026-09-21,
+for Astra, Sol, Terra, Luna and GPT-5.3-Codex. Codex input totals include cache
+reads and writes; subtract those before applying the ordinary input rate.
+Output includes reasoning and is charged once. Unknown models, missing usage,
+and invalid counters have no estimate (empty basis), rather than a guessed price.
+
+These are short-context API-equivalent estimates, not subscription invoices.
+They use the turn's selected model for all reported tokens, including children;
+the current protocol tracker does not attribute child tokens to individual
+models. Service tier, per-request long-context thresholds, regional uplifts,
+and tool fees are not available for this estimate. Raw usage is retained so
+future analytics can refine the calculation. Rates are stored indirectly by
+the dated basis; changing the table requires a new basis version.

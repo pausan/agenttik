@@ -206,19 +206,21 @@ type ScheduleRun struct {
 }
 
 type Turn struct {
-	ID               int64   `json:"id"`
-	SessionID        string  `json:"session_id"`
-	Model            string  `json:"model"`
-	Effort           string  `json:"effort"`
-	StartedAt        int64   `json:"started_at"`
-	EndedAt          int64   `json:"ended_at"`
-	InputTokens      int64   `json:"input_tokens"`
-	OutputTokens     int64   `json:"output_tokens"`
-	CacheReadTokens  int64   `json:"cache_read_tokens"`
-	CacheWriteTokens int64   `json:"cache_write_tokens"`
-	CostUSD          float64 `json:"cost_usd"`
-	Status           string  `json:"status"`
-	Error            string  `json:"error"`
+	ID                int64   `json:"id"`
+	SessionID         string  `json:"session_id"`
+	Model             string  `json:"model"`
+	Effort            string  `json:"effort"`
+	StartedAt         int64   `json:"started_at"`
+	EndedAt           int64   `json:"ended_at"`
+	InputTokens       int64   `json:"input_tokens"`
+	OutputTokens      int64   `json:"output_tokens"`
+	CacheReadTokens   int64   `json:"cache_read_tokens"`
+	CacheWriteTokens  int64   `json:"cache_write_tokens"`
+	CostUSD           float64 `json:"cost_usd"`
+	EstimatedCostUSD  float64 `json:"estimated_cost_usd"`
+	CostEstimateBasis string  `json:"cost_estimate_basis"`
+	Status            string  `json:"status"`
+	Error             string  `json:"error"`
 
 	// ContextTokens is the size of the root agent's latest prompt during the
 	// turn, not a sum over the task's root and child requests.

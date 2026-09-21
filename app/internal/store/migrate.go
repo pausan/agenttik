@@ -376,6 +376,8 @@ ALTER TABLE turns ADD COLUMN attribution_inferred INTEGER NOT NULL DEFAULT 1;
 UPDATE turns SET provider = (SELECT provider FROM sessions WHERE id = session_id),
     account_id = (SELECT account_id FROM sessions WHERE id = session_id);
 CREATE INDEX idx_turns_started ON turns(started_at);`,
+	`ALTER TABLE turns ADD COLUMN estimated_cost_usd REAL NOT NULL DEFAULT 0;
+ALTER TABLE turns ADD COLUMN cost_estimate_basis TEXT NOT NULL DEFAULT '';`,
 }
 
 func migrate(db *sql.DB, path string) error {

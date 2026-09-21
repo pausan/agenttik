@@ -35,8 +35,13 @@ func (s *Store) HasTurns(sessionID string) (bool, error) {
 	return found == 1, nil
 }
 
-// FinishTurn writes the provider's own token accounting and closes the turn.
+// FinishTurn stores reported usage and a separate fallback cost estimate, then closes the turn.
 func (s *Store) FinishTurn(t *Turn) error {
+	var provider, model string
+	if err := s.db.QueryRow("SELECT provider, model FROM turns WHERE id = ?", t.ID).Scan(&provider, &model); err != nil {
+		return fmt.Errorf("read turn pricing attribution: %w", err)
+	}
+	t.EstimatedCostUSD, t.CostEstimateBasis = estimateTurnCost(provider, model, t)
 	_, err := s.db.Exec(
 		`UPDATE turns SET ended_at = ?, input_tokens = ?, output_tokens = ?,
 		    cache_read_tokens = ?, cache_write_tokens = ?, cost_usd = ?,
@@ -46,7 +51,7 @@ func (s *Store) FinishTurn(t *Turn) error {
 		    subagent_input_tokens = ?, subagent_output_tokens = ?,
 		    subagent_cache_read_tokens = ?, subagent_cache_write_tokens = ?,
 		    subagent_count = ?, usage_breakdown = ?,
-		    status = ?, error = ?
+		    estimated_cost_usd = ?, cost_estimate_basis = ?, status = ?, error = ?
 		 WHERE id = ?`,
 		nowMillis(), t.InputTokens, t.OutputTokens, t.CacheReadTokens,
 		t.CacheWriteTokens, t.CostUSD, t.ContextTokens, t.ContextIsMain, t.ContextWindow,
@@ -54,7 +59,7 @@ func (s *Store) FinishTurn(t *Turn) error {
 		t.MainCacheReadTokens, t.MainCacheWriteTokens,
 		t.SubagentInputTokens, t.SubagentOutputTokens,
 		t.SubagentCacheReadTokens, t.SubagentCacheWriteTokens,
-		t.SubagentCount, t.UsageBreakdown, t.Status, t.Error, t.ID)
+		t.SubagentCount, t.UsageBreakdown, t.EstimatedCostUSD, t.CostEstimateBasis, t.Status, t.Error, t.ID)
 	if err != nil {
 		return fmt.Errorf("finish turn %d: %w", t.ID, err)
 	}
@@ -236,7 +241,7 @@ func (s *Store) ListTurns(sessionID string) ([]Turn, error) {
 		        subagent_input_tokens, subagent_output_tokens,
 		        subagent_cache_read_tokens, subagent_cache_write_tokens,
 		        subagent_count, usage_breakdown,
-		        rate_limits, status, error
+		        rate_limits, estimated_cost_usd, cost_estimate_basis, status, error
 		 FROM turns WHERE session_id = ? ORDER BY id`, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("list turns: %w", err)
@@ -254,7 +259,7 @@ func (s *Store) ListTurns(sessionID string) ([]Turn, error) {
 			&t.SubagentInputTokens, &t.SubagentOutputTokens,
 			&t.SubagentCacheReadTokens, &t.SubagentCacheWriteTokens,
 			&t.SubagentCount, &t.UsageBreakdown,
-			&t.RateLimits, &t.Status, &t.Error); err != nil {
+			&t.RateLimits, &t.EstimatedCostUSD, &t.CostEstimateBasis, &t.Status, &t.Error); err != nil {
 			return nil, fmt.Errorf("list turns: %w", err)
 		}
 		out = append(out, t)

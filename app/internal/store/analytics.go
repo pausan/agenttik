@@ -4,6 +4,9 @@ package store
 // each turn started, split by model and effort. Project/task metadata remains
 // current, including archives.
 type AnalyticsRow struct {
+	EstimatedCostUSD   float64 `json:"estimated_cost_usd"`
+	EstimatedCostTurns int64   `json:"estimated_cost_turns"`
+
 	Model            string  `json:"model"`
 	Effort           string  `json:"effort"`
 	Provider         string  `json:"provider"`
@@ -28,7 +31,8 @@ func (s *Store) Analytics(from, to int64) ([]AnalyticsRow, error) {
 	rows, err := s.db.Query(`SELECT t.provider, t.account_id, p.id, p.name, s.id, s.title, t.model, t.effort,
 		COUNT(*), SUM(t.input_tokens), SUM(t.output_tokens),
 		SUM(t.cache_read_tokens), SUM(t.cache_write_tokens), SUM(t.cost_usd),
-		SUM(t.cost_usd > 0), SUM(t.attribution_inferred)
+		SUM(t.cost_usd > 0), SUM(t.attribution_inferred),
+		SUM(t.estimated_cost_usd), SUM(t.cost_estimate_basis != '')
 		FROM turns t JOIN sessions s ON s.id = t.session_id
 		JOIN projects p ON p.id = s.project_id
 		WHERE t.started_at >= ? AND t.started_at < ?
@@ -44,7 +48,7 @@ func (s *Store) Analytics(from, to int64) ([]AnalyticsRow, error) {
 		if err := rows.Scan(&row.Provider, &row.AccountID, &row.ProjectID, &row.ProjectName,
 			&row.SessionID, &row.Title, &row.Model, &row.Effort, &row.Turns, &row.InputTokens, &row.OutputTokens,
 			&row.CacheReadTokens, &row.CacheWriteTokens, &row.CostUSD, &row.CostTurns,
-			&row.InferredTurns); err != nil {
+			&row.InferredTurns, &row.EstimatedCostUSD, &row.EstimatedCostTurns); err != nil {
 			return nil, err
 		}
 		out = append(out, row)

@@ -284,7 +284,7 @@ const menu = computed(() => [
             @click="toggleCommit(commit.hash)"
           >
             <span class="flex items-center gap-1 text-xs text-highlighted">
-              <span class="min-w-0 truncate" :title="commit.subject">
+              <span class="min-w-0 truncate" :title="commit.message || commit.subject">
                 <span v-for="(part, i) in subjectParts(commit)" :key="i" :class="part.hit ? 'text-primary' : ''">{{ part.text }}</span>
               </span>
               <span class="shrink-0 rounded bg-elevated px-1 text-[10px] text-muted tabular-nums"

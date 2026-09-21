@@ -115,7 +115,7 @@ test("commits offers fuzzy branch selection and branch actions", async ({ page }
 
 test("commit graph toggle, counts, checkout highlight and ref chips", async ({ page }) => {
   const commits = [
-    { hash: "aaaaaaaa", subject: "Merge feature", author: "Test Author", date: "2026-09-15 12:00", parents: ["bbbbbbbb", "cccccccc"], branches: ["main"], tags: ["v1.0"], fileCount: 7 },
+    { hash: "aaaaaaaa", subject: "Merge feature", message: "Merge feature\n\nFull commit body.\nAnother line.", author: "Test Author", date: "2026-09-15 12:00", parents: ["bbbbbbbb", "cccccccc"], branches: ["main"], tags: ["v1.0"], fileCount: 7 },
     { hash: "cccccccc", subject: "Feature work", author: "Test Author", date: "2026-09-15 11:00", parents: ["dddddddd"], branches: ["feature", "origin/feature"], tags: [], fileCount: 32 },
     { hash: "bbbbbbbb", subject: "Main work", author: "Test Author", date: "2026-09-15 10:00", parents: ["dddddddd"], branches: [], tags: [], fileCount: 1 },
     { hash: "dddddddd", subject: "Initial commit", author: "Test Author", date: "2026-09-15 09:00", parents: [], branches: [], tags: [], fileCount: 2 },
@@ -140,11 +140,13 @@ test("commit graph toggle, counts, checkout highlight and ref chips", async ({ p
   await expect(pane.getByText("aaaaaaaa", { exact: true })).toHaveCount(0);
   await expect(head.getByText("v1.0", { exact: true })).toHaveCount(0);
   await expect(head.getByText("main", { exact: true })).toBeVisible();
+  await expect(head.getByText("Merge feature", { exact: true }).locator("..")).toHaveAttribute("title", commits[0].message);
   await expect(head.locator("span.font-mono")).toHaveText("aaaaaaaa · Test Author · 2026-09-15 12:00");
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-pressed", "true");
   await expect(head.locator(":scope > svg")).toBeVisible();
   await expect(head.getByText("main", { exact: true })).toBeVisible();
+  await expect(head.getByText("Merge feature", { exact: true }).locator("..")).toHaveAttribute("title", commits[0].message);
   await expect(head.locator("span.font-mono")).toHaveText("aaaaaaaa · Test Author · 2026-09-15 12:00");
   await expect(head.getByText("v1.0", { exact: true })).toBeVisible();
   await expect(pane.getByText("origin/feature", { exact: true })).toBeVisible();
@@ -159,6 +161,7 @@ test("commit graph toggle, counts, checkout highlight and ref chips", async ({ p
   await expect(head.locator(":scope > svg")).toHaveCount(0);
   await expect(head.getByText("v1.0", { exact: true })).toHaveCount(0);
   await expect(head.getByText("main", { exact: true })).toBeVisible();
+  await expect(head.getByText("Merge feature", { exact: true }).locator("..")).toHaveAttribute("title", commits[0].message);
   await expect(head.locator("span.font-mono")).toHaveText("aaaaaaaa · Test Author · 2026-09-15 12:00");
   await pane.getByRole("button", { name: "Clean branches merged into main or master", exact: true }).click();
   await expect(pane.getByRole("status")).toHaveText("No merged local branches to remove.");

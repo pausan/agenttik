@@ -78,6 +78,9 @@ Read the subscription allowance each CLI reports [7]
 1323b7ae · Pau Sanchez · 2026-09-09 16:46
 ```
 
+Hovering the commit subject shows the full commit message, including its body
+and paragraph breaks, in a native tooltip in both simple and graph views.
+
 The hash is abbreviated to eight characters. The date is `YYYY-MM-DD HH:MM`,
 formatted by git in the zone the commit was made in — git knows that offset
 and the browser does not. That line wraps rather than truncating in a narrow
@@ -152,7 +155,7 @@ other, revision included.
 | GET | `/api/projects/:id/commit?hash=` | `{hash, files[{path,status,additions,deletions,binary}]}` |
 | GET | `/api/projects/:id/commit/diff?hash=&path=` | the same `{path, diff, partial}` a working-tree diff answers |
 
-Each commit includes `hash`, `subject`, `author`, `date`, `parents[]`,
+Each commit includes `hash`, `subject`, `message` (full subject and body), `author`, `date`, `parents[]`,
 `branches[]`, `tags[]` and `fileCount`. The log is one `git log --shortstat` with
 a record-separated pretty format and first-parent merge diffs. One
 `for-each-ref` call attaches branch and tag names. The file

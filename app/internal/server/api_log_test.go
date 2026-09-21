@@ -36,7 +36,8 @@ func TestLogGraphAndFileCounts(t *testing.T) {
 	write("feature.txt", "feature\n")
 	write("binary.dat", "\x00\x01")
 	git("add", ".")
-	git("commit", "-m", "feature")
+	message := "feature\n\nFull message body.\n\n99 files changed\nLast paragraph."
+	git("commit", "-m", message)
 	git("tag", "-a", "v1", "-m", "release")
 	git("tag", "lightweight")
 	git("switch", "main")
@@ -61,6 +62,17 @@ func TestLogGraphAndFileCounts(t *testing.T) {
 	}
 	if graph.Head != head {
 		t.Fatalf("head: %s", graph.Head)
+	}
+	for _, log := range []projectLog{simple, graph} {
+		for _, c := range log.Commits {
+			want := c.Subject
+			if c.Subject == "feature" {
+				want = message
+			}
+			if c.Message != want {
+				t.Fatalf("message: got %q, want %q", c.Message, want)
+			}
+		}
 	}
 	positions := map[string]int{}
 	for i, c := range graph.Commits {

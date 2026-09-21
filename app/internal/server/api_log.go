@@ -28,6 +28,7 @@ type commitEntry struct {
 	// Hash is abbreviated to the eight characters the row shows.
 	Hash    string `json:"hash"`
 	Subject string `json:"subject"`
+	Message string `json:"message"`
 	Author  string `json:"author"`
 	// Date is already formatted as YYYY-MM-DD HH:MM in the committer's own
 	// zone: git knows the offset each commit was made in and the browser does
@@ -75,7 +76,7 @@ func (s *Server) projectLog(c *fiber.Ctx) error {
 		body.Head = strings.TrimSpace(out)
 	}
 	args := []string{"log", "--no-color", "--topo-order", "--shortstat", "--diff-merges=first-parent", "--max-count=" + strconv.Itoa(limit),
-		"--pretty=format:" + logRecordSep + "%H" + logFieldSep + "%an" + logFieldSep + "%ad" + logFieldSep + "%s" + logFieldSep + "%P",
+		"--pretty=format:" + logRecordSep + "%H" + logFieldSep + "%an" + logFieldSep + "%ad" + logFieldSep + "%s" + logFieldSep + "%P%n%B" + logFieldSep,
 		"--date=format:%Y-%m-%d %H:%M"}
 	if c.QueryBool("graph") {
 		args = append(args, "--branches", "--remotes", "--tags")
@@ -122,6 +123,11 @@ func parseLog(out string) []commitEntry {
 			for _, parent := range strings.Fields(fields[4]) {
 				entry.Parents = append(entry.Parents, shortHash(parent))
 			}
+		}
+		entry.Message = entry.Subject
+		if message, remaining, ok := strings.Cut(stats, logFieldSep); ok {
+			entry.Message = strings.TrimRight(message, "\n")
+			stats = remaining
 		}
 		if match := logFileCount.FindStringSubmatch(stats); len(match) > 1 {
 			entry.FileCount, _ = strconv.Atoi(match[1])

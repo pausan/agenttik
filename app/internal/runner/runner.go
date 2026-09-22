@@ -242,6 +242,21 @@ func (r *Runner) WithIdleProject(id int64, move func() error) error {
 	return move()
 }
 
+// startID is the id a provider that names its own conversations is asked to
+// use. Only a conversation that has not run yet can offer one: the task's own
+// id, so both sides agree. Later turns reach here with no thread to resume
+// only because one was reset — a provider, subscription or tool-access change
+// — and the CLI may already keep a conversation under that id on disk, which
+// Claude Code refuses with "Session ID ... is already in use", failing every
+// prompt the task is ever given again. A restart lets the provider pick its
+// own id instead; session_started reports what it picked.
+func startID(sess *store.Session, hasRun bool) string {
+	if hasRun {
+		return ""
+	}
+	return sess.ID
+}
+
 func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage) (*store.Turn, error) {
 	sessionID, prompt := queued.SessionID, queued.Prompt
 	sess, err := r.store.GetSession(sessionID)
@@ -353,7 +368,7 @@ func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage) (*store.Turn
 		Model:             sess.Model,
 		Effort:            sess.Effort,
 		AccountHome:       home,
-		SessionID:         sess.ID,
+		SessionID:         startID(sess, hasRun),
 		ProviderSessionID: sess.ProviderSessionID,
 		Permission:        agent.Permission(sess.Permission),
 	})

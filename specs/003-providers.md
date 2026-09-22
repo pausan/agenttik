@@ -106,7 +106,13 @@ claude -p --output-format stream-json --include-partial-messages --verbose \
 ```
 
 The prompt goes in on stdin, never as an argv element. `--session-id` is used on
-the first turn (we choose the uuid), `--resume` on every turn after.
+a task's very first turn (we choose the uuid, so both sides name the
+conversation the same), `--resume` on every turn after. A turn that has no
+thread to resume although the task has already run — a provider, subscription
+or tool-access change resets the thread — passes neither: the CLI already keeps
+a conversation under the task's id and refuses to be given it again ("Session
+ID ... is already in use"), so it picks the new one itself and reports it in
+`init`.
 
 Events consumed from stdout JSONL:
 

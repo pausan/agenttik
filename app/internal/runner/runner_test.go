@@ -164,6 +164,45 @@ func TestSecondTurnResumes(t *testing.T) {
 	}
 }
 
+// A conversation whose provider thread was reset mid-task must not offer the
+// task's own id again: the CLI may already keep a conversation under it and
+// would refuse it ("Session ID ... is already in use") for good.
+func TestRestartAfterThreadResetAsksForNoID(t *testing.T) {
+	fp := &fakeProvider{script: []agent.Event{
+		{Type: agent.EventSessionStarted, ProviderSessionID: "prov-1"},
+		{Type: agent.EventDone, Usage: &agent.Usage{}},
+	}}
+	r, st, sess := setup(t, fp)
+
+	if _, err := r.Send(sess.ID, "hi"); err != nil {
+		t.Fatalf("first send: %v", err)
+	}
+	waitFor(t, func() bool { return !r.Running(sess.ID) }, "first turn to finish")
+	if fp.lastReq.SessionID != sess.ID {
+		t.Errorf("first turn asked for %q, want the task id %q", fp.lastReq.SessionID, sess.ID)
+	}
+
+	// What a provider, subscription or tool-access change leaves behind.
+	if err := st.SetSessionPermission(sess.ID, "plan", true); err != nil {
+		t.Fatalf("reset thread: %v", err)
+	}
+	fp.script[0].ProviderSessionID = "prov-2"
+	if _, err := r.Send(sess.ID, "hi again"); err != nil {
+		t.Fatalf("second send: %v", err)
+	}
+	waitFor(t, func() bool { return !r.Running(sess.ID) }, "second turn to finish")
+	if fp.lastReq.SessionID != "" || fp.lastReq.ProviderSessionID != "" {
+		t.Errorf("restart asked for an id: %+v", fp.lastReq)
+	}
+	after, err := st.GetSession(sess.ID)
+	if err != nil {
+		t.Fatalf("get session: %v", err)
+	}
+	if after.ProviderSessionID != "prov-2" {
+		t.Errorf("provider session id = %q, want the restart's own", after.ProviderSessionID)
+	}
+}
+
 func TestPromptUnarchivesTask(t *testing.T) {
 	for _, queued := range []bool{false, true} {
 		name := "send"

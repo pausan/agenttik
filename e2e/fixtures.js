@@ -161,9 +161,21 @@ export async function newTask(page) {
    subscription as well as the model, so it is matched by prefix. */
 export const modelButton = (page) => page.getByTitle(/^Choose model/);
 
+/* Rows name only the model — the subscription and provider are the group they
+   sit under — and every group starts collapsed once a favourite exists. Typing
+   the model name is what reveals it either way, so this searches rather than
+   scrolling, and scopes the click to the right group when the caller writes
+   one as `Subscription · Model`. */
 export async function pickModel(page, label = FAKE_MODEL) {
+  const [group, model] = label.includes(" · ")
+    ? [label.slice(0, label.lastIndexOf(" · ")), label.slice(label.lastIndexOf(" · ") + 3)]
+    : ["", label];
   await modelButton(page).click();
-  await page.getByRole("option", { name: label }).click();
+  await page.getByPlaceholder("Search models…").fill(model);
+  const scope = group
+    ? page.getByRole("group", { name: new RegExp(`^${group} · `) })
+    : page;
+  await scope.getByRole("option", { name: model, exact: true }).first().click();
 }
 
 /* Settings opens from the sidebar and lands on the section asked for. */

@@ -141,6 +141,7 @@ function onKey(e) {
           :account-id="S.detail.session.account_id || 0"
           :model="S.detail.session.model"
           :effort="S.detail.session.effort || ''"
+          show-favourite
           size="xs"
           :disabled="sending || choosing"
           :loading="choosing"

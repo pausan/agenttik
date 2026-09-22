@@ -2,20 +2,28 @@
 
 `ModelSelection.vue` is the model control in the main prompt, transcript
 message editor, queued prompt, scheduled job and pinned prompt. It always
-draws a model button and a separate effort select. Only the main prompt adds
-the favourite button.
+draws a model button and a separate effort select. The main prompt and the
+message editor also draw the favourite button.
 
-Subscription model buttons and rows use one line: `Subscription · Model`.
-API rows use `Service API · Model`, under a `Service API` group.
-Rows sit under collapsible `Subscription · Provider` groups, so the provider
-is visible without repeating it on every row. The fuzzy field matches the
-subscription, provider display name and id, model display name and id.
+The closed button reads `Subscription · Model`, and its tooltip spells the
+whole choice out for a name too long to fit.
 
-Favourites come first, in their Settings order, as `Subscription · Model ·
-Effort`. Their section is independently height-limited, and the whole palette
-is bounded by the viewport. Unavailable CLIs, signed-out subscription accounts,
-disabled APIs, and their favourites are omitted from settings and every picker.
-API setup and discovery are described in [078](078-api-providers.md).
+Rows say only the model: the group above them already names the subscription
+and the provider, so nothing is repeated per row. The fuzzy field still
+carries the subscription, provider display name and id, and the model display
+name and id, so searching a provider finds its models.
+
+A model name drops a vendor prefix its own connection already says —
+"Anthropic: Claude Sonnet 4.5" under an Anthropic connection is "Claude Sonnet
+4.5", while the same name under OpenRouter keeps the vendor that tells its
+rows apart. See `web/src/model-labels.js`.
+
+Favourites come first, in their Settings order, as `Subscription · Provider ·
+Model · Effort`. Their section is independently height-limited, and the whole
+palette is bounded by the viewport. Unavailable CLIs, signed-out subscription
+accounts, disabled APIs, and their favourites are omitted from settings and
+every picker. API setup and discovery are described in
+[078](078-api-providers.md).
 
 A favourite carries provider, subscription, model and effort. Picking it sets
 the whole combination. Changing the ordinary model keeps the current effort

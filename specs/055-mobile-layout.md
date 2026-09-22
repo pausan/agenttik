@@ -38,7 +38,9 @@ Navigation does not automatically focus a prompt or filter on phones; tapping
 a field starts editing. Desktop focus behaviour is unchanged. Phone fields
 use 16px text to avoid focus zoom. Dynamic viewport height, the visual viewport
 resize event, and safe-area padding keep the composer within the available
-screen as browser chrome and the software keyboard change its height.
+screen as browser chrome and the software keyboard change its height. That
+measurement is also published as `--mobile-height` on the document element, so
+teleported overlays such as the model picker are bounded by it too.
 
 ## Verification
 

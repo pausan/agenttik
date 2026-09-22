@@ -62,7 +62,7 @@ test("a starred model and effort heads the picker and sets both at once", async 
   await page.getByRole("button", { name: `Add to favourites: System · ${FAKE_MODEL} · High` }).click();
 
   await modelButton(page).click();
-  await expect(page.getByRole("option").first()).toContainText(`System · ${FAKE_MODEL} · High`);
+  await expect(page.getByRole("option").first()).toContainText(`System · Fake · ${FAKE_MODEL} · High`);
   await page.getByRole("option").first().click();
 
   // Picking the combination set the effort too.
@@ -98,7 +98,7 @@ test("model settings reorder favourites and hide a model from every picker", asy
 
   await page.reload();
   await modelButton(page).click();
-  await expect(page.getByRole("option").first()).toContainText("System · Fake Careful · High");
+  await expect(page.getByRole("option").first()).toContainText("System · Fake · Fake Careful · High");
   await page.keyboard.press("Escape");
 
   await page.getByRole("button", { name: "Settings", exact: true }).click();
@@ -293,9 +293,9 @@ test("an edited failed prompt can send immediately with a different model", asyn
   await page.getByRole("button", { name: "Edit this prompt" }).click();
   const editor = page.getByRole("form", { name: "Edit prompt" });
   await editor.getByRole("textbox").fill("corrected prompt");
-  await editor.getByTitle("Change edited prompt model").click();
+  await editor.getByTitle(/^Change edited prompt model/).click();
   await page.getByRole("option", { name: "Fake Careful" }).click();
-  await expect(editor.getByTitle("Change edited prompt model")).toHaveText("System · Fake Careful");
+  await expect(editor.getByTitle(/^Change edited prompt model/)).toHaveText("System · Fake Careful");
   await editor.getByRole("button", { name: "Send", exact: true }).click();
   await expect(editor).toHaveCount(0);
   await expect(page.getByText("idle", { exact: true })).toBeVisible();
@@ -329,9 +329,9 @@ for (const state of ["failed", "stopped"]) {
     await edit.click();
     const editor = page.getByRole("form", { name: "Edit prompt" });
     await editor.getByRole("textbox").fill("corrected prompt");
-    await editor.getByTitle("Change edited prompt model").click();
+    await editor.getByTitle(/^Change edited prompt model/).click();
     await page.getByRole("option", { name: "Fake Careful" }).click();
-    await expect(editor.getByTitle("Change edited prompt model")).toHaveText("System · Fake Careful");
+    await expect(editor.getByTitle(/^Change edited prompt model/)).toHaveText("System · Fake Careful");
     await editor.getByRole("button", { name: "Enqueue", exact: true }).click();
     await expect(editor).toHaveCount(0);
     await expect(page.getByLabel("Queued prompt", { exact: true })).toContainText("corrected prompt");

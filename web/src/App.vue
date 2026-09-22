@@ -87,10 +87,15 @@ function closePanels() {
   workspaceOpen.value = false;
 }
 
-// Visual viewport height also follows the software keyboard on Safari.
+// Visual viewport height also follows the software keyboard on Safari. The
+// measurement is published on the document element as well, because popovers
+// and modals are teleported out of the shell and cannot inherit it from there.
 function resizeViewport() {
   const viewport = window.visualViewport;
   viewportHeight.value = mobile.value && viewport?.scale === 1 ? `${viewport.height}px` : undefined;
+  const root = document.documentElement.style;
+  if (viewportHeight.value) root.setProperty("--mobile-height", viewportHeight.value);
+  else root.removeProperty("--mobile-height");
 }
 
 function changeLayout() {

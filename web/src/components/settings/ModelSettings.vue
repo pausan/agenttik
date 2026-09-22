@@ -211,12 +211,12 @@ async function removeFavourite(star) {
           variant="ghost"
           :icon="isModelChoiceHidden(group.provider.name, group.account.id, item.model.id) ? 'i-lucide-eye-off' : 'i-lucide-eye'"
           :disabled="isModelChoiceHidden(group.provider.name, group.account.id)"
-          :aria-label="`${isModelChoiceHidden(group.provider.name, group.account.id, item.model.id) ? 'Show' : 'Hide'} ${group.account.alias} · ${group.provider.display_name} · ${item.model.label}`"
+          :aria-label="`${isModelChoiceHidden(group.provider.name, group.account.id, item.model.id) ? 'Show' : 'Hide'} ${group.label} · ${item.label}`"
           :title="`${isModelChoiceHidden(group.provider.name, group.account.id, item.model.id) ? 'Show' : 'Hide'} this model`"
           @click="setHidden(group, item.model.id, !isModelChoiceHidden(group.provider.name, group.account.id, item.model.id))"
         />
-        <span class="min-w-0 truncate text-[13px] text-highlighted">
-          {{ group.account.alias }} · {{ group.provider.display_name }} · {{ item.model.label }}
+        <span class="min-w-0 truncate text-[13px] text-highlighted" :title="`${group.label} · ${item.model.label}`">
+          {{ group.label }} · {{ item.label }}
         </span>
       </div>
     </section>

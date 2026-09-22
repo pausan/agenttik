@@ -139,6 +139,10 @@ test("clone locally, enqueue the tutorial prompts and send a parallel question",
   await page.getByRole("button", { name: "More prompt actions" }).click();
   await page.getByRole("button", { name: "Send", exact: true }).last().click();
   await expect(prompt).toHaveValue("");
-  const parallel = await (await page.request.get(`${agenttik.url}/api/sessions`)).json();
-  expect(parallel.filter((s) => s.status === "running")).toHaveLength(2);
+  // The prompt box clears as soon as the send starts, so the second task is
+  // still being created on the server for a moment after it empties.
+  await expect.poll(async () => {
+    const parallel = await (await page.request.get(`${agenttik.url}/api/sessions`)).json();
+    return parallel.filter((s) => s.status === "running").length;
+  }).toBe(2);
 });

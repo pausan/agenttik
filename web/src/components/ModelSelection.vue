@@ -11,6 +11,8 @@ import {
   isModelChoiceVisible,
   isStarred,
   modelAccountLabel,
+  modelGroupLabel,
+  modelLabelOf,
   modelPickerGroups,
   parseModelChoice,
   providerOf,
@@ -33,24 +35,52 @@ const props = defineProps({
 const emit = defineEmits(["change"]);
 
 const NONE = "__default";
+
+/* Both are hoisted out of the template: an object literal there is a new
+   object on every keystroke, which rebuilds the palette's search index and is
+   what makes typing stutter on a phone with a long API catalogue. */
+const FUSE = {
+  fuseOptions: { keys: ["label", "search"], threshold: 0.35, ignoreLocation: true },
+  resultLimit: 100,
+};
+const PALETTE_UI = {
+  // The software keyboard shrinks the visual viewport, not the layout one, so
+  // the list is bounded by the height App.vue measures rather than by vh.
+  viewport: "max-h-[min(30rem,calc(var(--mobile-height,100dvh)*0.62))]",
+  itemLabelBase: "truncate",
+};
+
 const open = ref(false);
 const search = ref("");
-const collapsed = ref(new Set());
+/* Only whether something is being searched reaches the group list, so typing
+   never rebuilds it — the palette does its own filtering. */
+const searching = computed(() => search.value.trim().length > 0);
+const expansion = ref(new Map());
 
 const modelOf = (provider, model) =>
   providerOf(provider)?.models.find((candidate) => candidate.id === model);
-const modelLabel = (provider, model) => modelOf(provider, model)?.label || model;
 const effortLabel = (effort) => effort
   ? effort[0].toUpperCase() + effort.slice(1)
   : "Default";
 const choiceLabel = (provider, accountID, model, effort) => [
   modelAccountLabel(provider, accountID),
-  modelLabel(provider, model),
+  modelLabelOf(provider, model),
   ...(effort !== undefined ? [effortLabel(effort)] : []),
+].join(" · ");
+/* A favourite is the whole combination, so it names all four parts. */
+const favouriteLabel = (star) => [
+  modelGroupLabel(star.provider, star.account_id),
+  modelLabelOf(star.provider, star.model),
+  effortLabel(star.effort),
 ].join(" · ");
 
 const currentLabel = computed(() =>
   props.provider && props.model ? choiceLabel(props.provider, props.accountId, props.model) : "Choose model",
+);
+const currentTitle = computed(() =>
+  props.provider && props.model
+    ? `${props.title}: ${modelGroupLabel(props.provider, props.accountId)} · ${modelLabelOf(props.provider, props.model)}`
+    : props.title,
 );
 const currentEfforts = computed(() => effortsFor(props.provider, props.model));
 const effortItems = computed(() => [
@@ -65,24 +95,38 @@ const favourites = computed(() => S.stars.filter((star) =>
   isModelChoiceVisible(star.provider, star.account_id, star.model),
 ));
 
+/* With favourites at the top the rest of the list starts as one line per
+   subscription, so the choices worth keeping are not buried under every model
+   of every provider. Without them there is nothing to bury, and the groups
+   open as before. Expanding or collapsing one is remembered while the popover
+   is open. */
+function isCollapsed(id) {
+  return expansion.value.get(id) ?? favourites.value.length > 0;
+}
+
+/* A search ignores collapsing altogether: what matches is what shows. */
 function groupCollapsed(id) {
-  return !search.value.trim() && collapsed.value.has(id);
+  return !searching.value && isCollapsed(id);
 }
 
 function toggleGroup(id) {
-  const next = new Set(collapsed.value);
-  if (next.has(id)) next.delete(id);
-  else next.add(id);
-  collapsed.value = next;
+  const next = new Map(expansion.value);
+  next.set(id, !isCollapsed(id));
+  expansion.value = next;
 }
+
+const currentValue = computed(() =>
+  `model:${props.provider}:${props.accountId || 0}:${props.model}`);
+
+const pickerGroups = computed(() => modelPickerGroups());
 
 const groups = computed(() => [
   ...(favourites.value.length ? [{
     id: "favourites",
     label: "Favourites",
     items: favourites.value.map((star, index) => ({
-      label: choiceLabel(star.provider, star.account_id, star.model, star.effort || ""),
-      search: `${modelAccountLabel(star.provider, star.account_id)} · ${providerOf(star.provider)?.display_name || star.provider} · ${modelLabel(star.provider, star.model)} · ${effortLabel(star.effort)}`,
+      label: favouriteLabel(star),
+      search: `${favouriteLabel(star)} · ${star.provider} · ${star.model}`,
       value: `favourite:${index}`,
       disabled: !providerOf(star.provider)?.available,
       icon: star.provider === props.provider && star.account_id === (props.accountId || 0) &&
@@ -90,12 +134,20 @@ const groups = computed(() => [
         ? "i-lucide-check" : undefined,
     })),
   }] : []),
-  ...modelPickerGroups().map((group) => groupCollapsed(group.id)
+  ...pickerGroups.value.map((group) => groupCollapsed(group.id)
+    /* A collapsed group is one row and no heading of its own: the row is the
+       heading. It carries no `label`, and its `slot` names a group-label slot
+       that does not exist, which is what keeps the palette from drawing an
+       empty heading above it. */
     ? {
         ...group,
+        label: "",
+        slot: "collapsed",
         items: [{
-          label: `Show ${group.items.length} models`,
-          search: group.label,
+          label: group.label,
+          count: group.items.length,
+          current: group.items.some((item) => item.value === currentValue.value),
+          search: `${group.label} · ${group.provider.display_name} · ${group.provider.name}`,
           value: `expand:${group.id}`,
           icon: "i-lucide-chevron-right",
         }],
@@ -104,8 +156,7 @@ const groups = computed(() => [
         ...group,
         items: group.items.map((item) => ({
           ...item,
-          icon: item.value === `model:${props.provider}:${props.accountId || 0}:${props.model}`
-            ? "i-lucide-check" : undefined,
+          icon: item.value === currentValue.value ? "i-lucide-check" : undefined,
         })),
       }),
 ]);
@@ -132,8 +183,20 @@ function choose(value) {
       effort: nextEfforts.includes(props.effort) ? props.effort : "",
     });
   }
+  close();
+}
+
+/* Escape, a click outside and a pick all land here, so the next opening
+   starts on a clean search with every group back at its default. */
+function close() {
   open.value = false;
 }
+
+watch(open, (isOpen) => {
+  if (isOpen) return;
+  search.value = "";
+  expansion.value = new Map();
+});
 
 function chooseEffort(value) {
   emit("change", {
@@ -155,10 +218,6 @@ async function favourite() {
     fail(error);
   }
 }
-
-watch(open, (isOpen) => {
-  if (!isOpen) search.value = "";
-});
 </script>
 
 <template>
@@ -173,7 +232,7 @@ watch(open, (isOpen) => {
         trailing-icon="i-lucide-chevron-down"
         :label="currentLabel"
         class="model-selection-button min-w-0 max-w-72"
-        :title="title"
+        :title="currentTitle"
         :disabled="disabled"
         :loading="loading"
       />
@@ -186,20 +245,29 @@ watch(open, (isOpen) => {
           placeholder="Search models…"
           v-model:search-term="search"
           preserve-group-order
-          :ui="{ viewport: 'max-h-[min(30rem,65vh)]', itemLabelBase: 'truncate' }"
-          :fuse="{ fuseOptions: { keys: ['label', 'search'], threshold: 0.35, ignoreLocation: true }, resultLimit: 100 }"
+          :ui="PALETTE_UI"
+          :fuse="FUSE"
           @update:model-value="choose"
         >
+          <!-- A collapsed group says how many models it holds, and whether the
+               chosen one is among them. -->
+          <template #collapsed-trailing="{ item }">
+            <UIcon v-if="item.current" name="i-lucide-check" class="size-4 shrink-0" />
+            <span v-else aria-hidden="true" class="text-xs text-dimmed">{{ item.count }}</span>
+          </template>
+
+          <!-- Collapsed groups name a `collapsed` slot that is deliberately
+               absent, so only expanded groups and Favourites draw a heading. -->
           <template #group-label="{ group, label }">
             <button
               v-if="group.id !== 'favourites'"
               type="button"
-              class="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left font-semibold text-highlighted hover:bg-elevated"
-              :aria-expanded="!groupCollapsed(group.id)"
-              :aria-label="`${groupCollapsed(group.id) ? 'Expand' : 'Collapse'} ${label}`"
+              class="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left font-semibold text-highlighted hover:bg-elevated max-md:py-2"
+              aria-expanded="true"
+              :title="`Collapse ${label}`"
               @click.stop="toggleGroup(group.id)"
             >
-              <UIcon :name="groupCollapsed(group.id) ? 'i-lucide-chevron-right' : 'i-lucide-chevron-down'" class="size-3.5" />
+              <UIcon name="i-lucide-chevron-down" class="size-3.5 shrink-0" />
               <span class="truncate">{{ label }}</span>
             </button>
             <span v-else class="block px-1 py-0.5 font-semibold text-highlighted">{{ label }}</span>

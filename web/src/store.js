@@ -21,6 +21,7 @@ import { ACCENTS, DEFAULT_COLORS, NEUTRALS, applyColors } from "./theme";
 import { ACTIONS, matches } from "./shortcuts";
 import { platformChord, primaryChord } from "./platform";
 import { initSmartSearch, setSmartSearch } from "./smart-search.js";
+import { compactModelLabel as compact } from "./model-labels.js";
 
 /* Sidebar widths are the user's, so they are kept across reloads. */
 const LAYOUT_KEY = "agenttik.layout";
@@ -251,12 +252,39 @@ export function isModelChoiceEnabled(provider, accountID, model) {
     p.models.some((m) => m.id === model);
 }
 
+/* modelGroupLabel names one subscription of one provider — the heading every
+   model row sits under, and the prefix a favourite carries. An API connection
+   is its own heading: its alias and its service name are the same word. */
+export function modelGroupLabel(name, id) {
+  const provider = providerOf(name);
+  if (!provider) return modelAccountLabel(name, id);
+  if (provider.kind === "api") return provider.display_name;
+  return `${accountOf(name, id)?.alias || (id ? "removed subscription" : "System")} · ${provider.display_name}`;
+}
+
+/* Model rows and buttons drop a vendor prefix the connection already names —
+   see model-labels.js. */
+export function compactModelLabel(name, label) {
+  return compact(providerOf(name)?.display_name || "", label);
+}
+
+/* modelLabelOf is how one model is named beside its group or subscription. */
+export function modelLabelOf(name, model) {
+  const found = providerOf(name)?.models.find((candidate) => candidate.id === model);
+  return compactModelLabel(name, found?.label || model);
+}
+
 /* modelPickerGroups is the group list every model control draws — the prompt
    bar's, a queued prompt's, a job's. One group per provider and
    subscription, so which account a model would run on is visible where the
    model is chosen, and searchable with it. A provider with a single
    subscription keeps its plain name, which is every provider until a second
    one is configured.
+
+   A row says only the model: its group already names the subscription and the
+   provider, and repeating them is what makes a long API model name overflow.
+   The fuzzy field still carries both, so searching a provider finds its models
+   without their rows spelling it out.
 
    Values are `model:<provider>:<account>:<model>`, read back by
    parseModelChoice, so all three controls speak one format. */
@@ -265,11 +293,11 @@ export function modelPickerGroups({ includeHidden = false } = {}) {
     const accounts = p.accounts?.length ? p.accounts : [{ id: 0, alias: "" }];
     return accounts.filter((account) => (!p.multi_account || account.signed_in) && (includeHidden || !isModelChoiceHidden(p.name, account.id))).map((account) => ({
       id: `${p.name}:${account.id}`,
-      label: p.kind === "api" ? p.display_name : `${account.alias || "System"} · ${p.display_name}`,
+      label: modelGroupLabel(p.name, account.id),
       provider: p,
       account,
       items: p.models.filter((m) => includeHidden || !isModelChoiceHidden(p.name, account.id, m.id)).map((m) => ({
-        label: `${p.kind === "api" ? p.display_name : account.alias || "System"} · ${m.label}`,
+        label: compactModelLabel(p.name, m.label),
         search: `${account.alias || "System"} · ${p.display_name} · ${p.name} · ${m.label} · ${m.id}`,
         value: `model:${p.name}:${account.id}:${m.id}`,
         disabled: !p.available,

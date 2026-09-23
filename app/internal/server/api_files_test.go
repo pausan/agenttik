@@ -91,6 +91,87 @@ func TestTreeIncludesIgnoredFilesBeyondFormerLimit(t *testing.T) {
 	if !slices.Contains(got.Dirs, "empty") {
 		t.Error("empty folder missing")
 	}
+	if got.Truncated {
+		t.Error("complete listing marked truncated")
+	}
+}
+
+// A folder can hold far more than one listing should carry. The cap is spent
+// in order — what git tracks, what it would track, what it ignores, then the
+// empty folders — so neither a dependency folder nor one not yet in
+// .gitignore can push the project's own files out.
+func TestTreeCapKeepsTheProjectFirst(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := runGit(dir, "init"); err != nil {
+		t.Fatal(err)
+	}
+	for name, content := range map[string]string{
+		".gitignore": "cache/\n", "z-tracked.txt": "", "a-untracked.txt": "",
+		"cache/1.txt": "", "cache/2.txt": "", "cache/3.txt": "",
+	} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, name := range []string{"empty-1", "empty-2"} {
+		if err := os.Mkdir(filepath.Join(dir, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := runGit(dir, "add", ".gitignore", "z-tracked.txt"); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		max                    int
+		files, ignored, dirs   int
+		truncated, untrackedIn bool
+	}{
+		{max: 8, files: 3, ignored: 3, dirs: 2, untrackedIn: true},
+		{max: 7, files: 3, ignored: 3, dirs: 1, truncated: true, untrackedIn: true},
+		{max: 4, files: 3, ignored: 1, truncated: true, untrackedIn: true},
+		// The untracked file sorts first and git would print it first; it
+		// is still what goes.
+		{max: 2, files: 2, truncated: true},
+	} {
+		got := listTree(dir, tc.max)
+		if len(got.Files) != tc.files || len(got.Ignored) != tc.ignored || len(got.Dirs) != tc.dirs || got.Truncated != tc.truncated {
+			t.Errorf("max %d: %d files, %d ignored, %d dirs, truncated %v; want %d, %d, %d, %v",
+				tc.max, len(got.Files), len(got.Ignored), len(got.Dirs), got.Truncated,
+				tc.files, tc.ignored, tc.dirs, tc.truncated)
+		}
+		if slices.Contains(got.Files, "a-untracked.txt") != tc.untrackedIn {
+			t.Errorf("max %d: files %v, untracked file listed = %v", tc.max, got.Files, !tc.untrackedIn)
+		}
+	}
+}
+
+// Outside a repository the walk goes a level at a time, so a folder too large
+// to list whole still shows what sits at its top — a home directory shows its
+// own folders rather than the first files of ~/.cache.
+func TestTreeWalkStopsAtTheCapLevelByLevel(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"a/b/c/deep.txt", "a/b/mid.txt", "top.txt", "z/near.txt"} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := listTree(dir, 3)
+	if want := []string{"a/b/mid.txt", "top.txt", "z/near.txt"}; !slices.Equal(got.Files, want) || !got.Truncated {
+		t.Errorf("cut listing = %v, truncated %v; want %v, truncated", got.Files, got.Truncated, want)
+	}
+	if len(got.Dirs) != 0 {
+		t.Errorf("cut listing names empty folders: %v", got.Dirs)
+	}
+	if got := listTree(dir, 4); len(got.Files) != 4 || got.Truncated {
+		t.Errorf("listing at the cap = %v, truncated %v; want all four, not truncated", got.Files, got.Truncated)
+	}
 }
 
 // A transcript names files the project does not hold — another checkout, a log

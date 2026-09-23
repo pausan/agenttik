@@ -16,7 +16,11 @@ The server watches, the browser re-reads:
   watcher open for as long as the connection lasts.
 - A burst of changes becomes one `files_changed` event, and the browser answers
   it with `refreshChanged()`, `refreshLog()` and `refreshTree()` — the same calls
-  a project switch makes.
+  a project switch makes. The Tree is read one listing at a time: asking while
+  one is out makes a single re-read after it. A truncated Tree (see
+  [027](027-ignored-files-in-the-tree.md)) is not re-read at all. In a folder too
+  large to list, something is always changing, and every read would be the
+  listing at its cap.
 
 `git ls-files` keeps listing a tracked file that has been deleted until the
 deletion is staged, so `withoutDeleted` drops those: the tree now loses a file

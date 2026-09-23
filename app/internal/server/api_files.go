@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -19,8 +20,15 @@ import (
 )
 
 const (
-	maxFileBytes = 2 << 20 // 2 MiB
-	gitTimeout   = 5 * time.Second
+	// maxTreeEntries bounds one tree listing: files, ignored files and empty
+	// folders together. Projects stay well inside it — the largest one here
+	// holds 159,768, nearly all of them ignored dependencies. It is for the
+	// folder that is not a project: a home directory is 9.6 million files, a
+	// 1 GB answer the server built in memory and the window never finished
+	// parsing.
+	maxTreeEntries = 200_000
+	maxFileBytes   = 2 << 20 // 2 MiB
+	gitTimeout     = 5 * time.Second
 )
 
 // skipDirs are excluded from repository discovery and filesystem watching.
@@ -117,10 +125,14 @@ type fileEntry struct {
 // Dirs carries the folders holding no listed file. A tree built from file
 // paths cannot imply those, and a folder just created from the Tree is
 // exactly one of them. See emptyDirs.
+//
+// Truncated says the folder holds more than one listing carries, and this is
+// only the first part of it. See listTree.
 type projectFiles struct {
-	Files   []string `json:"files"`
-	Ignored []string `json:"ignored"`
-	Dirs    []string `json:"dirs"`
+	Files     []string `json:"files"`
+	Ignored   []string `json:"ignored"`
+	Dirs      []string `json:"dirs"`
+	Truncated bool     `json:"truncated,omitempty"`
 }
 
 func (s *Server) projectTree(c *fiber.Ctx) error {
@@ -128,67 +140,107 @@ func (s *Server) projectTree(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	files, ignored, err := listFiles(root)
-	if err != nil {
-		return err
+	return c.JSON(listTree(root, maxTreeEntries))
+}
+
+// listTree fills one listing of at most max entries. The project's own files
+// come first, the ignored ones get what is left and the empty folders the
+// rest: a dependency folder can hold a hundred times the project, and must
+// never push a real file out. A cut listing names no empty folders, since it
+// cannot tell a folder holding nothing from one whose files fell past the cut.
+func listTree(root string, max int) projectFiles {
+	files, ignored, cut := listFiles(root, max)
+	tree := projectFiles{Files: files, Ignored: ignored, Dirs: []string{}, Truncated: cut}
+	if !cut {
+		tree.Dirs, tree.Truncated = emptyDirs(root, files, ignored, max-len(files)-len(ignored))
 	}
-	dirs := emptyDirs(root, files, ignored)
-	return c.JSON(projectFiles{Files: files, Ignored: ignored, Dirs: dirs})
+	return tree
 }
 
 // listFiles prefers git, which gives us .gitignore handling for free and is
-// far faster than walking a large working tree.
-//
-// Listings are complete: ignored dependencies must not hide later paths.
-// Outside git, walk all folders except repository metadata.
-func listFiles(root string) ([]string, []string, error) {
+// far faster than walking a large working tree. Outside git, it walks every
+// folder except repository metadata. Either way it stops at max entries and
+// says whether it had to.
+func listFiles(root string, max int) ([]string, []string, bool) {
 	if isGitRepo(root) {
-		out, err := runGit(root, "ls-files", "--cached", "--others", "--exclude-standard")
-		if err == nil {
-			files := withoutDeleted(root, splitLines(out))
-			if files == nil {
-				files = []string{}
-			}
-			return files, listIgnored(root), nil
+		if files, ignored, cut, err := listRepository(root, max); err == nil {
+			return files, ignored, cut
 		}
 	}
-	paths := []string{}
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil // unreadable entries are skipped, not fatal
-		}
-		if d.IsDir() {
-			if path != root && d.Name() == ".git" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		rel, relErr := filepath.Rel(root, path)
-		if relErr != nil {
-			return nil
-		}
-		paths = append(paths, filepath.ToSlash(rel))
-		return nil
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("walk project: %w", err)
-	}
-	sort.Strings(paths)
-	return paths, []string{}, nil
+	files, cut := walkFiles(root, max)
+	sort.Strings(files)
+	return files, []string{}, cut
 }
 
-// listIgnored lists every file covered by git ignore rules.
-func listIgnored(root string) []string {
+// listRepository lists what git tracks, then what it would track, then what
+// it ignores, each from what the one before left of max. Asked for the first
+// two at once, git prints the untracked files first, so a folder not yet in
+// .gitignore would push the project out of its own listing.
+func listRepository(root string, max int) ([]string, []string, bool, error) {
+	tracked, cut, err := gitList(root, max, "ls-files", "--cached")
+	if err != nil {
+		return nil, nil, false, err
+	}
+	files := withoutDeleted(root, tracked)
+	if cut {
+		return files, []string{}, true, nil
+	}
+	untracked, cut, err := gitList(root, max-len(files), "ls-files", "--others", "--exclude-standard")
+	if err != nil {
+		return nil, nil, false, err
+	}
+	files = append(files, untracked...)
+	if cut {
+		return files, []string{}, true, nil
+	}
+	ignored, cut := listIgnored(root, max-len(files))
+	return files, ignored, cut, nil
+}
+
+// listIgnored lists the files git ignore rules cover, at most max of them.
+func listIgnored(root string, max int) ([]string, bool) {
 	// --ignored only means anything alongside --exclude-standard: without it
 	// git has no set of patterns to call something ignored against.
-	out, err := runGit(root, "ls-files", "--others", "--ignored", "--exclude-standard")
+	ignored, cut, err := gitList(root, max, "ls-files", "--others", "--ignored", "--exclude-standard")
 	if err != nil {
-		return []string{}
+		return []string{}, false
 	}
-	if out == "" {
-		return []string{}
+	return ignored, cut
+}
+
+// walkFiles lists a folder that is not a repository a level at a time, so a
+// folder too large to list whole keeps its upper levels: a home directory
+// shows its own folders rather than the first files of ~/.cache. It stops at
+// max files and says whether it had to.
+func walkFiles(root string, max int) ([]string, bool) {
+	paths := []string{}
+	queue := []string{""}
+	for len(queue) > 0 {
+		rel := queue[0]
+		queue = queue[1:]
+		// An unreadable folder is skipped, not fatal; whatever it gave up
+		// before failing is still listed.
+		entries, _ := os.ReadDir(filepath.Join(root, filepath.FromSlash(rel)))
+		for _, e := range entries {
+			path := e.Name()
+			if rel != "" {
+				path = rel + "/" + path
+			}
+			// A symlink is not an IsDir, so one to a folder is listed rather
+			// than followed out of the project.
+			if e.IsDir() {
+				if e.Name() != ".git" {
+					queue = append(queue, path)
+				}
+				continue
+			}
+			if len(paths) == max {
+				return paths, true
+			}
+			paths = append(paths, path)
+		}
 	}
-	return splitLines(out)
+	return paths, false
 }
 
 // emptyDirs names the folders no listed file lives in. The tree is built from
@@ -201,8 +253,11 @@ func listIgnored(root string) []string {
 // seen once at its own level and never entered. A folder whose contents are
 // all ignored is already in the tree through those files and is neither named
 // here nor walked, which is what keeps `node_modules` out of both.
-func emptyDirs(root string, files, ignored []string) []string {
+//
+// It names at most max folders and says whether there were more.
+func emptyDirs(root string, files, ignored []string, max int) ([]string, bool) {
 	out := []string{}
+	cut := false
 	files, ignored = sorted(files), sorted(ignored)
 
 	var walk func(dir, rel string)
@@ -212,6 +267,9 @@ func emptyDirs(root string, files, ignored []string) []string {
 			return // unreadable is simply a folder we cannot report on
 		}
 		for _, e := range entries {
+			if cut {
+				return
+			}
 			// A symlink is not an IsDir, which is deliberate: following one
 			// would leave the project and could loop.
 			if !e.IsDir() || e.Name() == ".git" {
@@ -226,13 +284,17 @@ func emptyDirs(root string, files, ignored []string) []string {
 				if hasUnder(ignored, child) {
 					continue
 				}
+				if len(out) == max {
+					cut = true
+					return
+				}
 				out = append(out, child)
 			}
 			walk(filepath.Join(dir, e.Name()), child)
 		}
 	}
 	walk(root, "")
-	return out
+	return out, cut
 }
 
 // hasUnder reports whether any listed path lives inside dir. The lists are in
@@ -554,6 +616,46 @@ func runGitWithTimeout(dir string, timeout time.Duration, args ...string) (strin
 			strings.TrimSpace(stderr.String()))
 	}
 	return stdout.String(), nil
+}
+
+// gitList runs a git listing and keeps its first max lines. Git is stopped
+// once there is one more than that, so a repository holding millions of
+// untracked or ignored files costs what the cap does rather than what git
+// would have printed. Running out of time cuts a listing the same way.
+func gitList(dir string, max int, args ...string) ([]string, bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", append([]string{"--no-optional-locks"}, args...)...)
+	cmd.Dir = dir
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, false, err
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, false, err
+	}
+	lines := []string{}
+	scan := bufio.NewScanner(stdout)
+	for scan.Scan() {
+		if len(lines) == max {
+			// Git is still writing the rest, and dies of being stopped:
+			// that exit status says nothing about the lines already read.
+			cancel()
+			_ = cmd.Wait()
+			return lines, true, nil
+		}
+		lines = append(lines, scan.Text())
+	}
+	if err := cmd.Wait(); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return lines, true, nil
+		}
+		return nil, false, fmt.Errorf("git %s: %v: %s", strings.Join(args, " "), err,
+			strings.TrimSpace(stderr.String()))
+	}
+	return lines, false, nil
 }
 
 func splitLines(s string) []string {

@@ -281,6 +281,9 @@ const rows = computed(() => {
         <span class="text-[10px] text-dimmed tabular-nums">{{ matches }}</span>
       </template>
     </UInput>
+    <p v-if="S.treeTruncated" class="shrink-0 px-1 text-xs text-dimmed">
+      Too many files to list. Showing part of this folder; it does not update as files change.
+    </p>
 
     <!-- The trigger is the pane itself, as-child so it adds no element: a
          right click that misses every row still offers New file, and the

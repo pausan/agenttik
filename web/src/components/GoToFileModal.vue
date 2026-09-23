@@ -35,7 +35,7 @@ const groups = computed(() => [{
         autofocus
         @update:open="open = $event"
       >
-        <template #empty>{{ currentProjectID() ? 'No files found.' : 'Select a project to search its files.' }}</template>
+        <template #empty>{{ currentProjectID() ? (S.treeTruncated ? 'No files found in the part of this folder that is listed.' : 'No files found.') : 'Select a project to search its files.' }}</template>
         <template #item-label="{ item }">
           <span><span
             v-for="(seg, i) in segments(item.label, item.hits)"

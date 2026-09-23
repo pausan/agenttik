@@ -125,10 +125,12 @@ export const S = reactive({
   logFiles: {}, // commit hash -> what it touched, fetched the first time it opens
   // Every path in the project, and the subset git ignores. The Tree draws
   // both, the ignored ones grey. treeDirs are the folders holding no file,
-  // which a listing of paths cannot imply on its own.
+  // which a listing of paths cannot imply on its own. treeTruncated says the
+  // folder holds more than one listing carries, and this is only part of it.
   tree: [],
   treeIgnored: [],
   treeDirs: [],
+  treeTruncated: false,
   treeFilter: "",
   query: "", // sidebar session filter
   window: TASK_WINDOWS[0].value,
@@ -2666,11 +2668,32 @@ export function openCommitFile(hash, path, pin = false) {
   return openFileIn(currentProjectID(), S.owner?.id || "", path, { commit: hash, pin });
 }
 
-export async function refreshTree() {
+/* One listing is read at a time. Asking while one is out — a build's burst of
+   changes, a Tree action landing mid-refresh — makes one more read after it
+   rather than a second listing racing the first, and every caller waits for
+   the read that covers them. */
+let treeLoad = null;
+let treeStale = false;
+
+export function refreshTree() {
+  if (treeLoad) {
+    treeStale = true;
+    return treeLoad;
+  }
+  treeLoad = (async () => {
+    do {
+      treeStale = false;
+      await loadTree();
+    } while (treeStale);
+  })().finally(() => (treeLoad = null));
+  return treeLoad;
+}
+
+async function loadTree() {
   const id = currentProjectID();
   if (!id) return clearTree();
   try {
-    const { files = [], ignored = [], dirs = [] } =
+    const { files = [], ignored = [], dirs = [], truncated = false } =
       (await api("GET", `/api/projects/${id}/tree`)) || {};
     // A slow request for the tab we just left must not replace the active
     // project's sidebar Tree.
@@ -2681,6 +2704,7 @@ export async function refreshTree() {
     S.tree = ignored.length ? files.concat(ignored) : files;
     S.treeIgnored = ignored;
     S.treeDirs = dirs;
+    S.treeTruncated = truncated;
   } catch {
     if (currentProjectID() === id) clearTree();
   }
@@ -2690,6 +2714,7 @@ function clearTree() {
   S.tree = [];
   S.treeIgnored = [];
   S.treeDirs = [];
+  S.treeTruncated = false;
 }
 
 /* --------------------------------------------------------- editing files */
@@ -2917,7 +2942,10 @@ function onEvent(msg) {
     if (msg.project_id === currentProjectID()) {
       refreshChanged();
       refreshLog();
-      refreshTree();
+      // A folder too large to list is not followed: re-reading it is the
+      // listing at its most expensive, and in a folder that size something
+      // is always changing.
+      if (!S.treeTruncated) refreshTree();
     }
     return;
   }

@@ -126,7 +126,15 @@ Events consumed from stdout JSONL:
 | `{"type":"result",...}` | `done` with task totals |
 
 Models are aliases (`fable`, `opus`, `sonnet`, `haiku`) so they track the latest
-release without a code change. Efforts: `low`, `medium`, `high`, `xhigh`, `max`.
+release without a code change. Labels include the version reported by the
+installed CLI's initialization metadata, such as `Opus 5.5`. A prompt-free
+initialization query runs outside the project with safe mode and user settings
+only. Labels are cached for ten minutes; a failed refresh retains the last
+successful labels. Until a version is known, the label says `version unknown`.
+Model IDs remain aliases, preserving saved selections and favorites. This
+catalogue describes the machine's default Claude configuration; account-specific
+overrides and runtime fallback can still change the model used for a turn.
+Efforts: `low`, `medium`, `high`, `xhigh`, `max`.
 
 An assistant line without `parent_tool_use_id` belongs to the root agent: its
 message usage updates the main context and the main-agent partition. A line

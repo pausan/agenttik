@@ -6,7 +6,7 @@ subscription group be collapsed.
 
 A provider signed in to more than one subscription contributes one group per
 subscription — `Work · Claude Code` — and each is collapsed on its own; the
-rows beneath read `Opus`. API connections are one group named after the
+rows beneath include the model version, such as `Opus 5.5`. API connections are one group named after the
 service. The list is built by `modelPickerGroups` in the store. See
 [050](050-subscription-accounts.md).
 

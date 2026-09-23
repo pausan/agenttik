@@ -24,25 +24,12 @@ import (
 // Binary is the CLI we shell out to. A variable so tests can point at a fake.
 var Binary = "claude"
 
-type Provider struct{}
+type Provider struct{ cache modelCache }
 
 func New() *Provider { return &Provider{} }
 
 func (p *Provider) Name() string        { return "claude" }
 func (p *Provider) DisplayName() string { return "Claude Code" }
-
-// Models are aliases rather than pinned ids, so they follow the latest release
-// without a code change here. The windows are only what to show before the
-// first turn reports one: every result line names the window the CLI actually
-// used, and that is what the gauge measures against from then on.
-func (p *Provider) Models() []agent.Model {
-	return []agent.Model{
-		{ID: "fable", Label: "Fable", ContextWindow: 1_000_000},
-		{ID: "opus", Label: "Opus", ContextWindow: 1_000_000},
-		{ID: "sonnet", Label: "Sonnet", ContextWindow: 1_000_000},
-		{ID: "haiku", Label: "Haiku", ContextWindow: 200_000},
-	}
-}
 
 func (p *Provider) Efforts() []string {
 	return []string{"low", "medium", "high", "xhigh", "max"}

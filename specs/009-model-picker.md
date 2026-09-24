@@ -38,3 +38,14 @@ Choosing a model from another provider — or another subscription of the same
 one — changes the task's provider and clears the provider-owned thread id. The next prompt starts a new thread on that
 provider; opaque thread ids cannot be resumed across CLIs. The API validates
 the selected provider, its availability, and that the model belongs to it.
+
+Codex discovers its visible models and reasoning efforts through the installed
+CLI's `app-server` `model/list` endpoint, following all pages in CLI order.
+The provider-wide catalog uses the CLI's default login and configuration.
+Results are cached for ten minutes and refreshed on the next catalog request
+(for example, reloading the app). Discovery starts no conversation or model
+turn and times out after ten seconds. Failed or empty replies retain the last
+successful list; before any success, the bundled list is the fallback.
+New model ids and effort levels need no app update. Context-window sizes are
+unknown until turn usage reports them because this endpoint does not provide
+those sizes. Saved model choices are not migrated.

@@ -19,14 +19,16 @@ import (
 
 var Binary = "codex"
 
-type Provider struct{}
+type Provider struct {
+	cache modelCache
+}
 
 func New() *Provider { return &Provider{} }
 
 func (p *Provider) Name() string        { return "codex" }
 func (p *Provider) DisplayName() string { return "Codex" }
 
-func (p *Provider) Models() []agent.Model {
+func fallbackModels() []agent.Model {
 	const window = 1_050_000
 	return []agent.Model{
 		{ID: "gpt-6-astra", Label: "GPT-6 Astra", ContextWindow: window,

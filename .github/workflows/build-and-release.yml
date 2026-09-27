@@ -147,15 +147,6 @@ jobs:
           tar -xJf "$RUNNER_TEMP/upx.tar.xz" -C "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/$archive" >> "$GITHUB_PATH"
 
-      - name: Install UPX on Windows
-        if: matrix.platform == 'windows'
-        shell: pwsh
-        run: |
-          $archive = "upx-$env:UPX_VERSION-win64"
-          Invoke-WebRequest "https://github.com/upx/upx/releases/download/v$env:UPX_VERSION/$archive.zip" -OutFile "$env:RUNNER_TEMP/upx.zip"
-          Expand-Archive "$env:RUNNER_TEMP/upx.zip" -DestinationPath "$env:RUNNER_TEMP/upx"
-          "$env:RUNNER_TEMP/upx/$archive" >> $env:GITHUB_PATH
-
       - name: Build desktop binary
         shell: bash
         env:
@@ -183,9 +174,10 @@ jobs:
             -o "dist/agenttik_${TAG:-${GITHUB_SHA::12}}_${GOOS}_${GOARCH}${{ matrix.extension }}" \
             ./app/cmd/agenttik
 
+      # Windows stays unpacked to reduce antivirus false positives.
       # UPX does not support macOS arm64; that binary is stripped at link time.
       - name: Compress and check executable
-        if: matrix.platform != 'darwin'
+        if: matrix.platform == 'linux'
         shell: bash
         run: |
           upx --best --lzma dist/agenttik_*
@@ -205,6 +197,11 @@ jobs:
         env:
           CGO_LDFLAGS: ${{ matrix.cgo_ldflags }}
         run: go test -tags 'desktop production' ./app/cmd/agenttik -run 'TestTray|TestMacOSDesktopShortcut' -count=1
+
+      - name: Package and verify Windows ZIP
+        if: matrix.platform == 'windows'
+        shell: bash
+        run: python scripts/package-windows.py dist/agenttik_*.exe
 
       - name: Package and verify macOS app
         if: matrix.platform == 'darwin'

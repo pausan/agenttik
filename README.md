@@ -7,6 +7,11 @@ Use Claude Code, Codex and GitHub Copilot through their official CLIs, with your
 in one desktop window or browser tab. Desktop builds support Linux, macOS ARM64,
 and Windows x64.
 
+On Windows, download `agenttik_<version>_windows_amd64.zip` from
+[Releases](https://github.com/pausan/agenttik/releases), extract it, and run the
+`.exe` inside. The executable is unpacked and unsigned. The standalone `.exe`
+release asset is also available for automatic updates.
+
 ![A private workspace with fictional projects, a task conversation, and changed files](docs/screenshots/workspace.png)
 
 ## Main features
@@ -74,7 +79,7 @@ what this build is.
 
 For the desktop app, install the native build dependencies (`make deps` on
 Debian/Ubuntu), then run `make run`. `make build-windows-amd64` cross-compiles
-the Windows x64 binary; build the macOS ARM64 target on macOS with
+the Windows x64 binary and ZIP (requires Python 3.11+); build the macOS ARM64 target on macOS with
 `make build-macos-arm64`. macOS builds also create an ad-hoc-signed
 `agenttik.app` and a ZIP (`bin/` for `make build`, `dist/` for the ARM64 target).
 Extract the release ZIP and move the app to Applications. No Apple developer

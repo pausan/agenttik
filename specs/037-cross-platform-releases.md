@@ -17,12 +17,21 @@ the symbol table and debug information. macOS needs
 dialog filters and only the `wails` CLI adds that framework; a plain
 `go build` fails to link without it.
 
-Linux amd64, Linux arm64 and Windows amd64 binaries are compressed in place
+Linux amd64 and Linux arm64 binaries are compressed in place
 with UPX 5.1.1 (`--best --lzma`) before upload. The workflow downloads the native
 UPX release from `upx/upx` and runs `upx --test` on the compressed executable.
 macOS arm64 is stripped only: [UPX does not support that target](https://github.com/upx/upx/discussions/931).
 Every platform runs the final executable with `--version` and checks its output
 before upload. Compression, integrity or version-check failures fail the build.
+
+Windows amd64 stays unpacked to reduce antivirus false positives. The Python
+3.11+ script `scripts/package-windows.py` creates
+`agenttik_<tag>_windows_amd64.zip` containing only the matching `.exe` at its root
+and verifies its SHA-256 against the original binary. CI and
+`make build-windows-amd64` both produce the ZIP. The standalone, unpacked `.exe`
+is also published because existing automatic updaters require that asset.
+Windows binaries are unsigned; ZIP packaging does not establish publisher trust
+or guarantee that antivirus and SmartScreen warnings disappear.
 
 Only a pushed tag matching `vMAJOR/vMAJOR.MINOR.PATCH`, with an optional suffix of
 letters, dashes and further dots, creates a GitHub Release. The release job
@@ -36,6 +45,8 @@ a git remote from and names the repository in `GH_REPO` instead.
 An untagged push names its binaries after the short commit instead.
 
 Run `python3 scripts/test-build-version.py` to verify local and CI tag parsing.
+Run `python3 scripts/test-package-windows.py` to verify ZIP layout and executable
+byte preservation, including rebuilding an existing archive.
 
 Every build links in the version the binary reports, on top of whatever
 `-ldflags` the matrix already carries; see 044 for what that version is.

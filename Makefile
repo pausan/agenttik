@@ -48,10 +48,11 @@ endif
 build-web: ui
 	CGO_ENABLED=0 go build -ldflags "$(VERSION_LDFLAGS)" -o $(BIN)-web $(PKG)
 
-## build-windows-amd64: Windows x64 desktop binary, with the embedded UI
+## build-windows-amd64: Windows x64 desktop binary and ZIP (needs Python 3.11+)
 build-windows-amd64: ui
 	mkdir -p $(DIST)
 	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-H=windowsgui $(VERSION_LDFLAGS)" -tags "desktop production" -o $(DIST)/agenttik_windows_amd64.exe $(PKG)
+	python3 scripts/package-windows.py $(DIST)/agenttik_windows_amd64.exe
 
 ## build-macos-arm64: macOS ARM64 binary, signed .app and ZIP (run on macOS)
 build-macos-arm64: ui

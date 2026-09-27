@@ -10,7 +10,11 @@ open profile remain unchanged. A pencil button beside each name opens the inline
 editor.
 
 The sidebar footer shows a profile picker immediately before Shortcuts only when
-more than one profile exists. The command palette offers `Switch to profile: <name>`
+more than one profile exists. A pulsing dot on the picker means another profile
+is working; each working profile also has a dot in the menu. The profile list
+includes a live `busy` flag from each runner, including scheduled turns. The
+picker refreshes every three seconds while the document is visible, and stops
+polling on unmount. Activity is transient and is not saved in the catalog. The command palette offers `Switch to profile: <name>`
 for every other profile and refreshes the list when opened. Switching reloads the window. Other profiles keep
 running tasks and schedules. `Ctrl+Alt+P` selects the next profile and
 `Ctrl+Alt+Shift+P` the previous one, wrapping in saved order. Both are editable

@@ -241,11 +241,23 @@ func (s *Server) routeProfile(c *fiber.Ctx) error {
 }
 
 func (s *Server) listProfiles(c *fiber.Ctx) error {
+	type profileStatus struct {
+		Profile
+		Busy bool `json:"busy"`
+	}
 	if s.profiles == nil {
-		return c.JSON(fiber.Map{"profiles": []Profile{{ID: "default", Name: "Default"}}, "private": false})
+		return c.JSON(fiber.Map{"profiles": []profileStatus{{Profile: Profile{ID: "default", Name: "Default"}, Busy: s.runner.Busy()}}, "private": false})
 	}
 	// routeProfile already holds the read lock for this request.
-	return c.JSON(fiber.Map{"profiles": s.profiles.profiles, "private": s.profiles.private})
+	profiles := make([]profileStatus, 0, len(s.profiles.profiles))
+	for _, p := range s.profiles.profiles {
+		r := s.runner
+		if rt := s.profiles.running[p.ID]; rt != nil {
+			r = rt.server.runner
+		}
+		profiles = append(profiles, profileStatus{Profile: p, Busy: r.Busy()})
+	}
+	return c.JSON(fiber.Map{"profiles": profiles, "private": s.profiles.private})
 }
 
 func (s *Server) createProfile(c *fiber.Ctx) error {

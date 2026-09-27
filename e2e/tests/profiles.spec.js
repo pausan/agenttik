@@ -174,3 +174,37 @@ test("profile shortcuts cycle in saved order in both directions", async ({ page,
   await page.keyboard.press("Control+Alt+Shift+p");
   await expect(page.getByRole("button", { name: "Profile: Work", exact: true })).toBeVisible();
 });
+
+test("working profiles pulse in the footer and menu, then clear when stopped", async ({ page, agenttik }) => {
+  const work = await (await page.request.post(`${agenttik.url}/api/profiles`, { data: { name: "Work" } })).json();
+  const project = await (await page.request.post(`${agenttik.url}/api/projects?profile=${work.id}`, { data: { path: REPO } })).json();
+  const task = await (await page.request.post(`${agenttik.url}/api/sessions?profile=${work.id}`, {
+    data: { project_id: project.id, provider: "fake", model: "fake-quick", title: "Working elsewhere" },
+  })).json();
+  const picker = page.getByRole("button", { name: "Profile: Default", exact: true });
+  const cue = picker.getByLabel("Other profiles are working");
+  await expect(picker).toBeVisible();
+  await expect(cue).toHaveCount(0);
+  await page.request.post(`${agenttik.url}/api/sessions/${task.id}/messages?profile=${work.id}`, { data: { prompt: "@wait 60000" } });
+  await expect(cue).toBeVisible();
+  const frames = await cue.evaluate(el => {
+    const animation = el.getAnimations()[0];
+    animation.pause();
+    return [0, 1000, 2000].map(time => {
+      animation.currentTime = time;
+      const style = getComputedStyle(el);
+      return { opacity: Number(style.opacity), scale: new DOMMatrix(style.transform).a, width: el.getBoundingClientRect().width };
+    });
+  });
+  expect(frames[0].scale).toBe(1);
+  expect(frames[1].scale).toBeCloseTo(0.6);
+  expect(frames[1].opacity).toBe(0.5);
+  expect(frames[1].width).toBeLessThan(frames[0].width);
+  expect(frames[2]).toEqual(frames[0]);
+  await picker.click();
+  const item = page.getByRole("menuitem", { name: /Work/ });
+  await expect(item.getByLabel("Working", { exact: true })).toBeVisible();
+  await page.request.post(`${agenttik.url}/api/sessions/${task.id}/stop?profile=${work.id}`);
+  await expect(cue).toHaveCount(0);
+  await expect(item.getByLabel("Working", { exact: true })).toHaveCount(0);
+});

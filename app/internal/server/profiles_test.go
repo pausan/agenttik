@@ -10,6 +10,7 @@ import (
 
 	"github.com/pausan/agenttik/app/internal/agent"
 	"github.com/pausan/agenttik/app/internal/agent/fake"
+	"github.com/pausan/agenttik/app/internal/runner"
 	"github.com/pausan/agenttik/app/internal/single"
 	"github.com/pausan/agenttik/app/internal/store"
 )
@@ -384,5 +385,49 @@ func TestBusyIncludesEveryLocalProfile(t *testing.T) {
 	local.runner.Shutdown()
 	if s.Busy() {
 		t.Fatal("stopped profile still reported busy")
+	}
+}
+
+func TestProfileListReportsActivity(t *testing.T) {
+	s := profileServer(t)
+	s.runner = runner.New(s.store, s.registry, runner.NewHub())
+	p := decode[Profile](t, do(t, s, "POST", "/api/profiles", map[string]string{"name": "Work"}))
+	check := func(active string) {
+		t.Helper()
+		data := decode[struct {
+			Profiles []struct {
+				Profile
+				Busy bool `json:"busy"`
+			} `json:"profiles"`
+		}](t, do(t, s, "GET", "/api/profiles?profile="+p.ID, nil))
+		if len(data.Profiles) != 2 {
+			t.Fatalf("got %d profiles", len(data.Profiles))
+		}
+		for _, profile := range data.Profiles {
+			if profile.Busy != (profile.ID == active) {
+				t.Errorf("profile %s busy = %v, active = %s", profile.ID, profile.Busy, active)
+			}
+		}
+	}
+	check("")
+	for _, id := range []string{"default", p.ID} {
+		local := s
+		if id != "default" {
+			local = s.profiles.running[id].server
+		}
+		project, err := local.store.CreateProject("project", t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		session := &store.Session{ID: "activity-test", ProjectID: project.ID, Provider: "fake", Model: "fake-quick", Title: "Wait"}
+		if err := local.store.CreateSession(session); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := local.runner.Send(session.ID, "@wait 60000"); err != nil {
+			t.Fatal(err)
+		}
+		check(id)
+		local.runner.Shutdown()
+		check("")
 	}
 }

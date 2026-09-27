@@ -10,3 +10,8 @@ as its turn is done or stopped.
 The provider's completion event and the persisted completion event are both
 received. They are deduplicated independently, so the persisted event carrying
 the final stats always clears the progress line.
+
+Project, task, and profile activity dots pulse in opacity and size together over
+two seconds: full opacity at their existing size, fading to half opacity at 60%
+size, then growing again. Scaling does not change layout. Waiting dots use the
+same animation over 2.5 seconds.

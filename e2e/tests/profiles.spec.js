@@ -208,3 +208,41 @@ test("working profiles pulse in the footer and menu, then clear when stopped", a
   await expect(cue).toHaveCount(0);
   await expect(item.getByLabel("Working", { exact: true })).toHaveCount(0);
 });
+
+for (const pending of ["projects", "providers"]) {
+  test(`Ctrl+T during profile ${pending} loading opens a prompt when ready`, async ({ page, agenttik }) => {
+    const work = await (await page.request.post(`${agenttik.url}/api/profiles`, { data: { name: "Work" } })).json();
+    await page.request.post(`${agenttik.url}/api/projects?profile=${work.id}`, { data: { path: REPO } });
+    await page.reload();
+
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    let requested;
+    const held = new Promise(resolve => { requested = resolve; });
+    await page.route(`**/api/${pending}?*`, async route => {
+      if (new URL(route.request().url()).searchParams.get("profile") === work.id) {
+        requested();
+        await gate;
+      }
+      await route.continue();
+    });
+    await page.getByRole("button", { name: "Profile: Default", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Work", exact: true }).click();
+    await held;
+    await expect(page.getByRole("button", { name: "Profile: Work", exact: true })).toBeVisible();
+    try {
+      await page.keyboard.press("Control+t");
+      // Give the shortcut time to run while the required response is held.
+      await page.waitForTimeout(200);
+      await expect(page.getByText("No projects yet", { exact: true })).toHaveCount(0);
+      await expect(page.getByText("Open a project or session first.", { exact: true })).toHaveCount(0);
+      await expect(page.getByText(/No agent provider is ready/)).toHaveCount(0);
+    } finally {
+      release();
+    }
+    await expect(page.getByPlaceholder("Ask the agent…")).toBeFocused();
+    const sessions = await (await page.request.get(`${agenttik.url}/api/sessions?profile=${work.id}&window=all`)).json();
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].provider).toBe("fake");
+  });
+}

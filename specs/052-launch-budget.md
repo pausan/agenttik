@@ -12,7 +12,10 @@ parallel and join the strip in saved order. A project requires only its
 metadata and open tasks. Statistics, daily metrics, archived tasks and
 project schedules load only when their respective panes are opened. Statistics remain pending until
 an actual answer arrives. Providers and the global schedule list start after
-restoration, keeping CLI probes out of the initial request queue.
+restoration, keeping CLI probes out of the initial request queue. New-task
+shortcuts pressed during restoration wait for the selected project. Creating
+a task waits for the initial provider load, including after a profile switch,
+then opens and focuses the prompt without requiring another keypress.
 
 Restored file tabs appear without waiting for file contents or Git diffs.
 They keep their owner, order and saved selection. Their body shows a local

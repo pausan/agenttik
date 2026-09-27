@@ -1829,6 +1829,7 @@ async function blankSessionID(projectID) {
 export async function startTask(project) {
   let cfg;
   try {
+    await providersReady;
     cfg = await sessionDefaults(project.id);
   } catch (e) {
     return fail(e);
@@ -1864,7 +1865,8 @@ export async function startTask(project) {
 /* startCurrentTask is the keyboard and command-palette version of the
    project page's New task button. A session, project, or file tab all
    identify their owning project. */
-export function startCurrentTask() {
+export async function startCurrentTask() {
+  await startupReady;
   // An empty sidebar has nowhere to put a task, and that is a first launch
   // rather than a failure: say which step comes before this one.
   if (!S.projects.length) {
@@ -3630,7 +3632,15 @@ export async function loadInstanceInfo() {
   S.instanceInfo = await api("GET", "/api/version");
 }
 
-export async function init() {
+let startupReady;
+let providersReady;
+
+export function init() {
+  startupReady = initialize();
+  return startupReady;
+}
+
+async function initialize() {
   loadInstanceInfo().catch(fail);
   loadLastUsed();
   loadLayout();
@@ -3667,7 +3677,8 @@ export async function init() {
   } catch (e) {
     fail(e);
   }
-  Promise.all([loadProviders(), refreshSchedules()]).catch(fail);
+  providersReady = loadProviders();
+  Promise.all([providersReady, refreshSchedules()]).catch(fail);
   initialized = true;
   initSmartSearch();
 }

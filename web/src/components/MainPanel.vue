@@ -26,7 +26,7 @@ const find = ref(null);
 const content = ref(null);
 defineExpose({ find: () => find.value?.show() });
 
-const diffExpanded = inject("diffExpanded");
+const fileExpanded = inject("fileExpanded");
 
 const emit = defineEmits(["start-tour"]);
 
@@ -134,7 +134,7 @@ const badge = computed(() => {
 
 <template>
   <main class="flex min-h-0 min-w-0 flex-col">
-    <div v-show="!diffExpanded" class="main-tab-bar flex shrink-0 items-center gap-2.5 border-b border-default pr-3">
+    <div v-show="!fileExpanded" class="main-tab-bar flex shrink-0 items-center gap-2.5 border-b border-default pr-3">
       <div role="tablist" class="flex min-w-0 flex-1 items-center overflow-x-auto">
         <div
           v-for="item in items"

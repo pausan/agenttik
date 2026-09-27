@@ -25,18 +25,18 @@ import ImageDiff from "./ImageDiff.vue";
 
 const props = defineProps({ tab: { type: Object, required: true } });
 
-const diffExpanded = inject("diffExpanded");
-watch(() => props.tab.mode, () => { diffExpanded.value = false; });
+const fileExpanded = inject("fileExpanded");
+watch(() => props.tab.mode, () => { fileExpanded.value = false; });
 function onExpandKey(event) {
-  if (event.key !== "Escape" || !diffExpanded.value) return;
+  if (event.key !== "Escape" || !fileExpanded.value) return;
   event.preventDefault();
   event.stopImmediatePropagation();
-  diffExpanded.value = false;
+  fileExpanded.value = false;
 }
 onMounted(() => window.addEventListener("keydown", onExpandKey, true));
 onUnmounted(() => {
   window.removeEventListener("keydown", onExpandKey, true);
-  diffExpanded.value = false;
+  fileExpanded.value = false;
 });
 
 const image = computed(() => isImage(props.tab.path));
@@ -81,6 +81,8 @@ const modes = computed(() => {
   if (canPreview(props.tab.path)) items.push({ label: "Preview", value: "preview" });
   return items;
 });
+
+const expandLabel = computed(() => props.tab.mode === "edit" ? "editor" : props.tab.mode);
 
 const dirty = computed(() => isDirty(props.tab));
 const text = computed(() => props.tab.edited ?? props.tab.content ?? "");
@@ -156,15 +158,14 @@ const stat = computed(() => {
         >Save</UButton
       >
       <UButton
-        v-if="tab.mode === 'diff'"
-        :icon="diffExpanded ? 'i-lucide-minimize' : 'i-lucide-maximize'"
+        :icon="fileExpanded ? 'i-lucide-minimize' : 'i-lucide-maximize'"
         size="xs"
         color="neutral"
         variant="ghost"
-        :aria-label="diffExpanded ? 'Restore diff' : 'Expand diff'"
-        :title="diffExpanded ? 'Restore diff (Escape)' : 'Expand diff'"
-        :aria-pressed="diffExpanded"
-        @click="diffExpanded = !diffExpanded"
+        :aria-label="`${fileExpanded ? 'Restore' : 'Expand'} ${expandLabel}`"
+        :title="fileExpanded ? `Restore ${expandLabel} (Escape)` : `Expand ${expandLabel}`"
+        :aria-pressed="fileExpanded"
+        @click="fileExpanded = !fileExpanded"
       />
       <UTabs
         :model-value="tab.mode"

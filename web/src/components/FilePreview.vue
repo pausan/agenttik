@@ -54,5 +54,5 @@ const svg = computed(() => "data:image/svg+xml;charset=utf-8," + encodeURICompon
 
   <FontPreview v-else-if="isFont(tab.path)" :src="rawURL(tab)" />
 
-  <MarkdownContent v-else class="markdown mx-auto max-w-3xl px-5 py-5" :text="text" :base-path="tab.path" />
+  <MarkdownContent v-else class="markdown w-full px-8 py-5" :text="text" :base-path="tab.path" />
 </template>

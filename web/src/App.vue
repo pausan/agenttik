@@ -51,9 +51,9 @@ function startTour() {
 }
 watch(tour, (value) => saveTour(storage, value), { deep: true });
 
-const diffExpanded = ref(false);
-provide("diffExpanded", diffExpanded);
-watch([() => S.activeTab, () => S.activeProjectID], () => { diffExpanded.value = false; });
+const fileExpanded = ref(false);
+provide("fileExpanded", fileExpanded);
+watch([() => S.activeTab, () => S.activeProjectID], () => { fileExpanded.value = false; });
 
 const addProject = ref(false);
 // The add-project dialog can keep a clone going after it is minimized, so it
@@ -257,13 +257,13 @@ onUnmounted(() => {
       class="app-shell grid h-full bg-default text-default text-sm"
       :style="{
         '--mobile-height': viewportHeight,
-        gridTemplateRows: mobile && !diffExpanded ? 'auto minmax(0,1fr)' : undefined,
-        gridTemplateColumns: mobile || diffExpanded ? 'minmax(0,1fr)' : hasInspector()
+        gridTemplateRows: mobile && !fileExpanded ? 'auto minmax(0,1fr)' : undefined,
+        gridTemplateColumns: mobile || fileExpanded ? 'minmax(0,1fr)' : hasInspector()
           ? `${S.layout.left}px 1px minmax(0,1fr) 1px ${S.layout.right}px`
           : `${S.layout.left}px 1px minmax(0,1fr)`,
       }"
     >
-      <header v-if="mobile" v-show="!diffExpanded" class="mobile-header flex min-w-0 items-center gap-2 border-b border-default bg-muted p-2">
+      <header v-if="mobile" v-show="!fileExpanded" class="mobile-header flex min-w-0 items-center gap-2 border-b border-default bg-muted p-2">
         <USlideover v-model:open="projectsOpen" side="left" title="Projects and tasks" :ui="drawerUI" :content="{ style: { height: viewportHeight } }">
           <UButton
             icon="i-lucide-menu"
@@ -312,7 +312,7 @@ onUnmounted(() => {
       </header>
       <SideBar
         v-if="!mobile"
-        v-show="!diffExpanded"
+        v-show="!fileExpanded"
         ref="sideBar"
         @add-project="openAddProject"
         @setup="openSettings('general')"
@@ -320,11 +320,11 @@ onUnmounted(() => {
       @remote="remoteConnect = true"
       @analytics="analytics = true"
       />
-      <Splitter v-if="!mobile" v-show="!diffExpanded" side="left" />
+      <Splitter v-if="!mobile" v-show="!fileExpanded" side="left" />
       <MainPanel ref="mainPanel" @start-tour="startTour" />
       <template v-if="!mobile && hasInspector()">
-        <Splitter v-show="!diffExpanded" side="right" />
-        <InspectorPanel v-show="!diffExpanded" @show-in-tree="showFileInTree" />
+        <Splitter v-show="!fileExpanded" side="right" />
+        <InspectorPanel v-show="!fileExpanded" @show-in-tree="showFileInTree" />
       </template>
     </div>
 

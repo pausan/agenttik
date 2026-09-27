@@ -4,6 +4,9 @@ The task's Changed pane has an inline commit composer above an open, collapsible
 **Staged** section. Its empty state uses compact vertical padding.
 Staged and unstaged files have separate counts; partially staged files appear
 in both lists. File rows still open the file and offer Show in tree.
+Both lists reflect Git status independently of rendered diffs. Whitespace-only
+and line-ending-only changes remain listed, as do staged changes whose working
+copy matches HEAD again (the file then appears in both lists).
 
 A plus button stages a file. A minus button unstages it.
 Both lists have an undo-arrow button on each row, with a tooltip, to revert
@@ -36,4 +39,3 @@ or `{}` for all applicable changes. `POST /api/projects/:id/commit` accepts
 `{message}` and commits the index with normal Git hooks (a two-minute timeout allows hooks to finish). All three accept the
 selected `repo` query parameter. Paths are matched against Git status and
 passed as literal pathspecs. Operations never push.
-

@@ -4,6 +4,51 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { addProject, openProject, newTask, inspector, sidebar, test, expect } from "../fixtures.js";
 
+test("changes lists preserve whitespace-only edits and staged edits with an empty working-tree diff", async ({ page }) => {
+  const root = await mkdtemp(join(tmpdir(), "staging-whitespace-"));
+  const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8" });
+  try {
+    git("init", "-q");
+    git("config", "core.autocrlf", "false");
+    await writeFile(join(root, ".gitattributes"), "*.txt -text\n");
+    for (const name of ["endings.txt", "spaces.txt", "partial.txt"]) {
+      await writeFile(join(root, name), "original text\n");
+    }
+    git("add", ".");
+    git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Initial");
+    await writeFile(join(root, "endings.txt"), "original text\r\n");
+    await writeFile(join(root, "spaces.txt"), "original  text \n");
+    await writeFile(join(root, "partial.txt"), "staged text\n");
+    git("add", ".");
+    await writeFile(join(root, "partial.txt"), "original text\n");
+    expect(git("diff", "--cached", "-w", "--", "endings.txt", "spaces.txt")).toBe("");
+    expect(git("diff", "HEAD", "--", "partial.txt")).toBe("");
+
+    await addProject(page, root);
+    await openProject(page, root);
+    await newTask(page);
+    const pane = inspector(page);
+    await expect(pane.getByRole("button", { name: /^Staged/ })).toHaveText("Staged 3");
+    for (const name of ["endings.txt", "spaces.txt", "partial.txt"]) {
+      await expect(pane.getByRole("button", { name: `Unstage ${name}`, exact: true })).toBeVisible();
+    }
+    await expect(pane.getByRole("button", { name: "Stage partial.txt", exact: true })).toBeVisible();
+    await pane.getByRole("button", { name: "Unstage all files", exact: true }).click();
+    await expect(pane.getByText("No staged files.")).toBeVisible();
+    for (const name of ["endings.txt", "spaces.txt"]) {
+      await expect(pane.getByRole("button", { name: `Stage ${name}`, exact: true })).toBeVisible();
+    }
+    await expect(pane.getByRole("button", { name: "Stage partial.txt", exact: true })).toBeHidden();
+    git("add", ".");
+    for (const name of ["endings.txt", "spaces.txt"]) {
+      await expect(pane.getByRole("button", { name: `Unstage ${name}`, exact: true })).toBeVisible();
+    }
+    await expect(pane.getByText("No edited files.")).toBeVisible();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("stage, unstage and commit through the inline resizable composer", async ({ page }) => {
   const root = await mkdtemp(join(tmpdir(), "staging-"));
   const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8" });

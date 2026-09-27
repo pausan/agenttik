@@ -19,6 +19,8 @@ const ScheduleModal = defineAsyncComponent(() => import("./ScheduleModal.vue"));
 
 /* The unsent prompt belongs to the conversation, not to this bar: one bar
    serves every session, so text kept here would follow you between tabs. */
+const emit = defineEmits(["navigate-message"]);
+
 const text = computed({
   get: () => promptText(S.owner?.draft),
   set: (v) => {
@@ -261,18 +263,30 @@ function runMenuAction(action) {
     <div
       class="mx-auto max-w-[860px] rounded-[var(--ui-radius-lg,10px)] bg-default p-2 shadow-xs inset-ring inset-ring-accented focus-within:inset-ring-2 focus-within:inset-ring-primary"
     >
-      <UTextarea
-        ref="prompt"
-        v-model="text"
-        :rows="3"
-        variant="none"
-        placeholder="Ask the agent…"
-        class="w-full"
-        :ui="{ base: 'resize-y' }"
-        @input="onPromptInput"
-        @keydown="onPromptKey"
-        @paste="onPaste"
-      />
+      <div class="flex items-center gap-1">
+        <UTextarea
+          ref="prompt"
+          v-model="text"
+          :rows="3"
+          variant="none"
+          placeholder="Ask the agent…"
+          class="min-w-0 flex-1"
+          :ui="{ base: 'resize-y' }"
+          @input="onPromptInput"
+          @keydown="onPromptKey"
+          @paste="onPaste"
+        />
+        <div class="flex shrink-0 flex-col" aria-label="Message navigation">
+          <UButton type="button" icon="i-lucide-arrow-up" color="neutral" variant="ghost" size="xs"
+            aria-label="Previous human message" title="Previous human message"
+            :disabled="!S.detail?.messages?.some(message => message.role === 'user')"
+            @click="emit('navigate-message', -1)" />
+          <UButton type="button" icon="i-lucide-arrow-down" color="neutral" variant="ghost" size="xs"
+            aria-label="Next human message or latest answer" title="Next human message or latest answer"
+            :disabled="!S.detail?.messages?.length"
+            @click="emit('navigate-message', 1)" />
+        </div>
+      </div>
       <div v-if="images.length || uploading" class="flex flex-wrap gap-2 p-2" aria-label="Attached images">
         <div v-for="(image, i) in images" :key="i" class="relative">
           <a :href="image.url" target="_blank" rel="noopener"><img :src="image.url" :alt="`Attached image ${i + 1}`" class="h-20 w-24 rounded object-contain" /></a>

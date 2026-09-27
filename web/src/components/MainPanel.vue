@@ -21,6 +21,7 @@ import PromptBar from "./PromptBar.vue";
 import StatusDot from "./StatusDot.vue";
 import PageFind from "./PageFind.vue";
 
+const transcript = ref(null);
 const find = ref(null);
 const content = ref(null);
 defineExpose({ find: () => find.value?.show() });
@@ -241,7 +242,7 @@ const badge = computed(() => {
       <!-- Keyed by the tab, so switching between two terminals builds the one
            in front rather than rewriting the last one's screen. -->
       <TerminalView v-else-if="current?.kind === 'terminal'" :key="current.id" :tab="current" />
-      <Transcript v-else-if="!current || current.kind === 'session'" @start-tour="emit('start-tour')" />
+      <Transcript ref="transcript" v-else-if="!current || current.kind === 'session'" @start-tour="emit('start-tour')" />
       <FileView
         v-for="tab in retainedHTML"
         v-show="tab === current"
@@ -253,6 +254,6 @@ const badge = computed(() => {
     <!-- A file carries its own bar, and a terminal is one. The prompt box
          belongs to a conversation, and under either of those it is only in
          the way. -->
-    <PromptBar v-if="S.detail && current?.kind !== 'file' && current?.kind !== 'terminal'" />
+    <PromptBar @navigate-message="transcript?.navigateMessage($event)" v-if="S.detail && current?.kind !== 'file' && current?.kind !== 'terminal'" />
   </main>
 </template>

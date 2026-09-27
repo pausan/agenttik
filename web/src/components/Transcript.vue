@@ -248,8 +248,46 @@ onUnmounted(() => {
 /* Follow new output only while reading the bottom. A tab switch restores
    its saved position instead of being treated as new output. */
 let follow = true;
+let navigationTarget = null;
+let navigationTop = null;
+watch(() => S.detail?.session.id, () => {
+  navigationTarget = null;
+  navigationTop = null;
+});
+
+async function navigateMessage(direction) {
+  const el = box.value;
+  const tab = S.tab;
+  if (!el || !S.detail?.messages.length) return;
+  // Navigation needs even the rows whose initial paint was deferred.
+  reveal++;
+  shown.value = Infinity;
+  await nextTick();
+  if (S.tab !== tab || box.value !== el) return;
+  const humans = [...el.querySelectorAll('[data-human-message]')];
+  const top = el.getBoundingClientRect().top + el.clientTop;
+  let target;
+  if (navigationTarget !== null) {
+    target = direction < 0
+      ? humans.findLast(node => Number(node.dataset.humanMessage) < navigationTarget) || humans[0]
+      : humans.find(node => Number(node.dataset.humanMessage) > navigationTarget);
+  } else {
+    target = direction < 0
+      ? (follow ? humans.at(-1) : humans.findLast(node => node.getBoundingClientRect().top < top - 2)) || humans[0]
+      : follow ? undefined : humans.find(node => node.getBoundingClientRect().top > top + 2);
+  }
+  if (!target && direction < 0) return;
+  navigationTarget = target ? Number(target.dataset.humanMessage) : Infinity;
+  follow = !target;
+  el.scrollTop = target ? el.scrollTop + target.getBoundingClientRect().top - top : el.scrollHeight;
+  navigationTop = el.scrollTop;
+}
+defineExpose({ navigateMessage });
 function onScroll() {
   const el = box.value;
+  if (navigationTop !== null && Math.abs(el.scrollTop - navigationTop) < 2) return;
+  navigationTarget = null;
+  navigationTop = null;
   follow = el.scrollHeight - el.clientHeight - el.scrollTop < 2;
 }
 watch(
@@ -316,7 +354,7 @@ watch(
 
       <template v-for="row in rows" :key="row.at">
         <ToolGroup v-if="row.tools" :tools="row.tools" />
-        <Message v-else :message="row.message" />
+        <Message v-else :message="row.message" :data-human-message="row.message.role === 'user' ? row.at : undefined" />
       </template>
       <div v-if="S.detail.running" class="mb-3 flex items-center gap-2 text-xs text-dimmed" aria-label="Agent working">
         <span aria-hidden="true">{{ clockFace }}</span>

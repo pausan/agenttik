@@ -1,8 +1,9 @@
 # Transcript navigation, copying and editing
 
-The prompt's right edge has Up and Down arrows for scrolling through human
-messages. Up stops at the first human message. Down stops at each later human
-message, then goes to the end of the transcript; further presses do nothing.
+Up and Down arrows sit outside the prompt box, vertically centered beside its
+right edge, for scrolling through human messages. Up stops at the first human
+message. Down stops at each later human message, then goes to the end of the
+transcript; further presses do nothing.
 From the end, Up goes to the last human message. Manual scrolling resets the
 navigation position to the current viewport. Task switches reset the navigation
 cursor. Queued prompts and tool messages are not human-message stops.

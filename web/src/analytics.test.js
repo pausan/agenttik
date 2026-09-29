@@ -53,3 +53,18 @@ test("model grouping combines effort and task rows while chart ranks only used c
   assert.equal(analyticsTotals(chart).cost_usd, analyticsTotals(usage).cost_usd);
   assert.deepEqual(analyticsGroups([], "model_effort"), []);
 });
+
+test("usage cost combines reported and estimated turns without losing model effort slices", () => {
+  const usage = [
+    { ...rows[0], model: "a", effort: "high", cost_usd: 2, cost_turns: 1 },
+    { ...rows[0], model: "a", effort: "low", cost_usd: 0, cost_turns: 0, estimated_cost_usd: 3, estimated_cost_turns: 1 },
+    { ...rows[0], model: "b", effort: "high", cost_usd: 4, cost_turns: 1 },
+  ];
+  const total = analyticsTotals(usage);
+  assert.equal(total.usage_cost_usd, 9);
+  assert.equal(total.priced_turns, 3);
+  const groups = analyticsGroups(usage, "model_effort", "usage_cost_usd");
+  assert.deepEqual(groups.map((g) => [g.model, g.effort, g.usage_cost_usd]), [["b", "high", 4], ["a", "low", 3], ["a", "high", 2]]);
+  assert.equal(groups[1].projects[0].rows[0].estimated_cost_turns, 1);
+  assert.equal(analyticsShare(groups[1].projects[0].usage_cost_usd, groups[1].usage_cost_usd), "100.0%");
+});

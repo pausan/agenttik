@@ -13,6 +13,8 @@ func TestEstimateTurnCost(t *testing.T) {
 		known                 bool
 	}{
 		{"cached input", "codex", "gpt-6-astra", Turn{InputTokens: 1000000, CacheReadTokens: 800000, OutputTokens: 100000}, 7.8, true},
+		{"sol", "codex", "gpt-6-sol", Turn{InputTokens: 1000000, CacheReadTokens: 500000, OutputTokens: 100000}, 2.1, true},
+		{"luna", "codex", "gpt-6-luna", Turn{InputTokens: 1000000, CacheReadTokens: 500000, OutputTokens: 100000}, .105, true},
 		{"cache writes", "codex", "gpt-5.6-sol", Turn{InputTokens: 1000000, CacheReadTokens: 500000, CacheWriteTokens: 100000}, 2.3, true},
 		{"terra", "codex", "gpt-5.6-terra", Turn{OutputTokens: 1000000}, 12, true},
 		{"luna", "codex", "gpt-5.6-luna", Turn{OutputTokens: 1000000}, 1.2, true},

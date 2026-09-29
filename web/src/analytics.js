@@ -1,8 +1,10 @@
-const fields = ["turns", "input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens", "cost_usd", "cost_turns", "inferred_turns"];
+const fields = ["turns", "input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens", "cost_usd", "cost_turns", "estimated_cost_usd", "estimated_cost_turns", "inferred_turns"];
 
 export function analyticsTotals(rows) {
   const total = Object.fromEntries(fields.map((field) => [field, 0]));
   for (const row of rows) for (const field of fields) total[field] += row[field] || 0;
+  total.usage_cost_usd = total.cost_usd + total.estimated_cost_usd;
+  total.priced_turns = total.cost_turns + total.estimated_cost_turns;
   return total;
 }
 

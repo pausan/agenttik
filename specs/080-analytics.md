@@ -8,23 +8,26 @@ current profile, including hidden and archived entries.
 
 Rolling 1, 7, 14, 30, 90 and 365-day windows use turn start times. The default is
 7 days. Provider grouping combines subscriptions; subscription / connection
-grouping separates them. Model grouping combines all efforts within each provider/model. Projects and task/subscription rows rank by reported
-USD cost, input tokens, output tokens turn count, cache reads or cache writes. Shares use the selected
-metric and the containing provider, subscription or model total. Expand a project for
+grouping separates them. Model grouping combines all efforts within each provider/model;
+Model & Effort grouping separates each recorded combination. Projects and task/subscription
+rows rank by usage USD cost, input tokens, output tokens, turn count, cache reads or
+cache writes. Shares use the selected metric and the containing group total. Expand a project for
 its tasks; clicking a task opens it. Refresh updates the window and totals.
 
 The **Models & effort** tab shows vertical bars for recorded provider/model/effort
 combinations, sorted left to right by the selected metric, highest first. Only
-combinations used in the period appear, including those with zero reported cost.
+combinations used in the period appear, including those with unknown cost.
 Missing model/effort values are labeled explicitly. Both tabs share period,
 ranking and refresh controls. Task rows combine model/effort slices.
 
-Summary cards show reported cost, input tokens, output tokens and turns. Cache
-reads and writes remain separate because provider token accounting differs.
-Recorded cost is not a subscription invoice: fixed fees, external usage and
-unreported costs are excluded. A dash means no positive cost was recorded;
-the data cannot distinguish a free turn from missing cost. Each group shows how
-many turns recorded positive cost, making partial coverage visible. Running
+Summary cards show usage cost, input tokens, output tokens and turns. Usage cost
+adds provider-reported cost and stored Codex token-price estimates. A turn with
+reported cost has no estimate, so the sum does not double count it. A leading
+`≈` marks any total containing estimates. Cache reads and writes remain separate
+because provider token accounting differs. Usage cost is not a subscription
+invoice: fixed fees, external usage and unpriced turns are excluded. A dash means
+no cost is known. Each group shows how many turns have reported or estimated cost,
+making partial coverage visible. Running
 turns count, but their token/cost figures arrive when their usage is persisted.
 Deleted projects/tasks no longer contribute. Empty, loading and retry states
 are explicit.
@@ -52,12 +55,13 @@ shares; browser tests cover command-palette access and page interactions.
 Completed Codex turns retain their selected model, effort and raw token counts,
 plus `estimated_cost_usd` and `cost_estimate_basis`. Provider-reported `cost_usd`
 remains separate and takes precedence. Analytics rows expose summed
-`estimated_cost_usd` and `estimated_cost_turns` for future display; the current
-page still displays reported cost only. Existing turns are not repriced.
+`estimated_cost_usd` and `estimated_cost_turns`; the page combines them with
+reported values for display and ranking. Existing turns are not repriced.
 
 The versioned rate table in `store/pricing.go` uses [OpenAI standard API
-pricing](https://developers.openai.com/api/docs/pricing), verified 2026-09-21,
-for Astra, Sol, Terra, Luna and GPT-5.3-Codex. Codex input totals include cache
+pricing](https://developers.openai.com/api/docs/pricing), verified 2026-09-29,
+for GPT-6 Astra, Sol and Luna, GPT-5.6 Sol, Terra and Luna, and GPT-5.3-Codex.
+The model API does not include rates. Codex input totals include cache
 reads and writes; subtract those before applying the ordinary input rate.
 Output includes reasoning and is charged once. Unknown models, missing usage,
 and invalid counters have no estimate (empty basis), rather than a guessed price.

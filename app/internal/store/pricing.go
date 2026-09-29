@@ -1,11 +1,13 @@
 package store
 
-// Standard short-context USD per million tokens, verified 2026-09-21:
+// Standard short-context USD per million tokens, verified 2026-09-29:
 // https://developers.openai.com/api/docs/pricing
 // Keep a versioned basis on each turn: these are API-equivalent estimates,
 // not subscription charges. Unknown models must not inherit another price.
 var codexPrices = map[string][4]float64{
 	"gpt-6-astra":   {10, 1, 12.5, 50},
+	"gpt-6-sol":     {2, .2, 2.5, 10},
+	"gpt-6-luna":    {.1, .01, .125, .5},
 	"gpt-5.6-sol":   {4, .4, 5, 20},
 	"gpt-5.6-terra": {2, .2, 2.5, 12},
 	"gpt-5.6-luna":  {.2, .02, .25, 1.2},
@@ -26,5 +28,5 @@ func estimateTurnCost(provider, model string, t *Turn) (float64, string) {
 		return 0, ""
 	}
 	cost := (float64(input-cached-writes)*price[0] + float64(cached)*price[1] + float64(writes)*price[2] + float64(output)*price[3]) / 1_000_000
-	return cost, "openai-standard-short-context-2026-09-21"
+	return cost, "openai-standard-short-context-2026-09-29"
 }

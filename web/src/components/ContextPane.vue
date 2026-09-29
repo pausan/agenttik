@@ -8,7 +8,7 @@
 import { computed } from "vue";
 
 import { S, contextWindow } from "../store";
-import { duration, nf, tokens, usageBreakdownRows, usageCost } from "../api";
+import { duration, nf, taskStats, tokens, usageBreakdownRows, usageCost } from "../api";
 
 const used = computed(() => S.detail?.stats.context_tokens || 0);
 const total = computed(() => contextWindow(S.detail?.session, S.detail?.stats));
@@ -17,7 +17,7 @@ const pct = computed(() =>
 );
 
 const rows = computed(() => {
-  const stats = S.detail?.stats;
+  const stats = taskStats(S.detail);
   if (!stats) return [];
   return [
     ["Turns", nf.format(stats.turns)],

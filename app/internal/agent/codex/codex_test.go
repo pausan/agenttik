@@ -165,13 +165,14 @@ func TestAppServerNotificationsKeepChildOutOfRootContext(t *testing.T) {
 	for event := range out {
 		got = append(got, event)
 	}
-	if len(got) != 2 || got[0].Type != agent.EventUsage || got[1].Type != agent.EventDone {
+	if len(got) != 3 || got[0].Type != agent.EventUsage || got[1].Type != agent.EventUsage || got[2].Type != agent.EventDone {
 		t.Fatalf("got %+v", got)
 	}
-	if got[0].Usage.ContextTokens != 30 {
-		t.Errorf("live main context = %d, want 30", got[0].Usage.ContextTokens)
+	if got[0].Usage.ContextTokens != 30 || got[0].Usage.InputTokens != 30 ||
+		got[1].Usage.ContextTokens != 30 || got[1].Usage.InputTokens != 70 {
+		t.Errorf("live usage = %+v, %+v", got[0].Usage, got[1].Usage)
 	}
-	usage := got[1].Usage
+	usage := got[2].Usage
 	if usage.ContextTokens != 30 || usage.MainInputTokens != 30 ||
 		usage.SubagentInputTokens != 40 || usage.InputTokens != 70 ||
 		usage.SubagentCount != 1 {

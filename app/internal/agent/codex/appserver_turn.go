@@ -385,12 +385,11 @@ func (r *appServerRun) handleNotification(
 			r.tracker.seed(params.ThreadID, params.TokenUsage)
 			return false, nil
 		}
-		contextTokens, contextWindow, root := r.tracker.update(params.ThreadID, params.TokenUsage)
-		if root && contextTokens > 0 {
-			r.out <- agent.Event{Type: agent.EventUsage, Usage: &agent.Usage{
-				ContextTokens: contextTokens, ContextWindow: contextWindow,
-			}}
-		}
+		r.tracker.update(params.ThreadID, params.TokenUsage)
+		// The browser can show current task totals as well as the latest root
+		// context. Child updates move the totals without changing that context.
+		usage := r.tracker.usage()
+		r.out <- agent.Event{Type: agent.EventUsage, Usage: &usage}
 	case "item/agentMessage/delta":
 		if params.ThreadID == r.rootID && params.Delta != "" {
 			r.streamed[params.ItemID] = true

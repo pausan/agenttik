@@ -44,6 +44,19 @@ type appServerRateLimitWindow struct {
 	ResetsAt           int64   `json:"resetsAt"`
 }
 
+func publicRateLimits(result appServerRateLimits) []agent.RateLimit {
+	// The other IDs in this map meter separate Codex features. In particular,
+	// base_model_inference is another weekly bucket and looks like a duplicate
+	// subscription limit when both are shown in the prompt bar.
+	if limit, ok := result.RateLimitsByLimitID["codex"]; ok {
+		return []agent.RateLimit{publicRateLimit(limit)}
+	}
+	if result.RateLimits != nil {
+		return []agent.RateLimit{publicRateLimit(*result.RateLimits)}
+	}
+	return nil
+}
+
 func publicRateLimit(limit appServerRateLimit) agent.RateLimit {
 	window := func(raw *appServerRateLimitWindow) *agent.RateLimitWindow {
 		if raw == nil {
@@ -121,23 +134,7 @@ func (p *Provider) SubscriptionLimits(ctx context.Context, home string) ([]agent
 		if err := json.Unmarshal(response.Result, &result); err != nil {
 			return nil, fmt.Errorf("decode subscription limits: %w", err)
 		}
-		if len(result.RateLimitsByLimitID) == 0 {
-			if result.RateLimits == nil {
-				return nil, nil
-			}
-			return []agent.RateLimit{publicRateLimit(*result.RateLimits)}, nil
-		}
-
-		limits := make([]agent.RateLimit, 0, len(result.RateLimitsByLimitID))
-		if limit, ok := result.RateLimitsByLimitID["codex"]; ok {
-			limits = append(limits, publicRateLimit(limit))
-		}
-		for id, limit := range result.RateLimitsByLimitID {
-			if id != "codex" {
-				limits = append(limits, publicRateLimit(limit))
-			}
-		}
-		return limits, nil
+		return publicRateLimits(result), nil
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("read app-server response: %w", err)

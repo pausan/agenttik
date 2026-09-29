@@ -32,6 +32,10 @@ A resumed thread is based at its pre-turn total, so earlier turns do not leak
 into the current one. The aggregate on `codex exec --json`'s
 `turn.completed` event does not contain a last-request field; it is retained
 for isolated title and outcome requests and is never used as context.
+During a turn, each Codex usage notification also updates provisional task
+totals in the prompt-bar panel and Task stats. They add to completed turns;
+when the turn ends, persisted stats replace the provisional reading. Cost and
+agent time are final-turn figures.
 Context values saved before this distinction are left intact on their turn
 records but are not shown by the main gauge; the next confirmed root request
 sets `context_is_main` and replaces the display. Until then the ring shows an
@@ -60,10 +64,11 @@ ceiling.
 
 When the selected provider reports subscription buckets, the prompt bar also
 shows one thin bar per allowance window in that shared click target — one per
-window across every bucket the provider sends, because Codex packs its two
-into a single bucket while Claude Code sends a bucket per window and a plan can
-meter more than two. The panel behind it is described below. There are two
-ways a provider can supply a reading:
+window across every bucket the provider sends. Codex shows only its `codex`
+allowance bucket; its `base_model_inference` bucket meters a separate feature
+and can otherwise appear as an empty second Weekly row. Claude Code keeps
+every bucket it reports, including per-model weekly windows. The panel behind
+the bars is described below. There are two ways a provider can supply a reading:
 
 - **Ask.** Codex answers `account/rateLimits/read` on its local app-server, so
   its figures are current on every request. `agent.Metered` is the optional

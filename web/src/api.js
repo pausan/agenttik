@@ -113,6 +113,25 @@ export function usageBreakdownRows(stats) {
   return rows;
 }
 
+// Completed turns are stored on the task; Codex also sends cumulative usage
+// for the turn in progress. Add that provisional reading to the stored totals
+// until the server replaces them with the finished turn's authoritative stats.
+export function taskStats(detail) {
+  const stats = detail?.stats;
+  const live = detail?.liveUsage;
+  if (!stats || !detail.running || !live) return stats;
+  const result = { ...stats };
+  for (const key of [
+    "input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens",
+    "main_input_tokens", "main_output_tokens", "main_cache_read_tokens", "main_cache_write_tokens",
+    "subagent_input_tokens", "subagent_output_tokens", "subagent_cache_read_tokens", "subagent_cache_write_tokens",
+  ]) result[key] = (stats[key] || 0) + (live[key] || 0);
+  result.subagent_count = (stats.subagent_count || 0) + (live.subagent_count || 0);
+  result.usage_breakdown_turns = (stats.usage_breakdown_turns || 0) + 1;
+  result.turns = Math.max(stats.turns || 0, detail.turns?.length || 0);
+  return result;
+}
+
 export function duration(ms) {
   if (!ms) return "0s";
   const s = Math.round(ms / 1000);

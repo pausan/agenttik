@@ -2,7 +2,7 @@
 import { computed } from "vue";
 
 import { S, accountLabel, contextWindow } from "../store";
-import { duration, isoDate, nf, tokens, usageBreakdownRows, usageCost } from "../api";
+import { duration, isoDate, nf, taskStats, tokens, usageBreakdownRows, usageCost } from "../api";
 
 /* The context row is the main agent's latest prompt against its model window,
    not a task sum — see ContextPane.vue, which shows the same number as a gauge. */
@@ -14,7 +14,8 @@ function context(session, stats) {
 
 const rows = computed(() => {
   if (!S.detail) return [];
-  const { session: s, stats } = S.detail;
+  const { session: s } = S.detail;
+  const stats = taskStats(S.detail);
   const lastMessage = S.detail.messages.at(-1)?.created_at || 0;
   return [
     ["Agent time", duration(stats.duration_ms)],

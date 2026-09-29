@@ -3053,10 +3053,11 @@ function onSessionEvent(tab, msg) {
       if (ev.tool) push(tab, "tool", `${ev.tool.name} ${ev.tool.input || ""}`);
       break;
     case "usage":
-      // Mid-turn usage only reports the context in use, so the gauge can
-      // move while the turn runs.
+      // Codex also sends cumulative totals for the active turn. Keep them
+      // separate until the finished server stats arrive.
       if (ev.usage?.context_tokens) tab.detail.stats.context_tokens = ev.usage.context_tokens;
       if (ev.usage?.context_window) tab.detail.stats.context_window = ev.usage.context_window;
+      if (ev.usage?.usage_breakdown) tab.detail.liveUsage = ev.usage;
       break;
     case "limits":
       // The provider named its own allowance mid-turn, so the bars move now
@@ -3081,6 +3082,7 @@ function onSessionEvent(tab, msg) {
       endLive(tab);
       if (msg.stats) {
         tab.detail.stats = msg.stats;
+        tab.detail.liveUsage = null;
         tab.detail.running = false;
         // The transcript grown from the stream has no message ids, and editing
         // a prompt needs one. Re-reading it at the end of a turn is also what
@@ -3147,6 +3149,7 @@ function takeQueued(tab, prompt) {
 function startLocal(tab, prompt, turn) {
   if (turn && !tab.detail.turns.some((current) => current.id === turn.id)) tab.detail.turns.push(turn);
   if (prompt && tab.detail.messages.at(-1)?.content !== prompt) push(tab, "user", prompt);
+  tab.detail.liveUsage = null;
   tab.detail.running = true;
 }
 
@@ -3177,7 +3180,10 @@ async function syncMessages(tab, preserveLive = false) {
     if (keepLive) return;
     tab.detail.messages = detail.messages;
     tab.detail.turns = detail.turns;
-    if (!detail.running) tab.detail.stats = detail.stats;
+    if (!detail.running) {
+      tab.detail.stats = detail.stats;
+      tab.detail.liveUsage = null;
+    }
   } catch {
     /* the transcript on screen is still the one the stream produced */
   }

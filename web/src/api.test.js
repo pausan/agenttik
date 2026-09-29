@@ -1,7 +1,7 @@
 import { strictEqual } from "node:assert/strict";
 import { test } from "node:test";
 
-import { isoDate, usageBreakdownRows, usageCost } from "./api.js";
+import { isoDate, taskStats, usageBreakdownRows, usageCost } from "./api.js";
 
 test("stats dates use a locale-independent ISO timestamp", () => {
   strictEqual(isoDate(Date.UTC(2026, 8, 12, 13, 32, 11)), "2026-09-12 13:32:11");
@@ -34,6 +34,26 @@ test("usage rows keep main, subagent, and unscoped tokens distinct", () => {
 
 test("usage rows stay hidden when a provider cannot attribute agents", () => {
   strictEqual(usageBreakdownRows({ input_tokens: 10 }).length, 0);
+});
+
+test("live Codex usage adds to finished turns until final stats replace it", () => {
+  const detail = {
+    running: true, turns: [{ id: 1 }, { id: 2 }],
+    stats: { turns: 1, input_tokens: 100, output_tokens: 20, main_input_tokens: 100,
+      usage_breakdown_turns: 1 },
+    liveUsage: { input_tokens: 30, output_tokens: 5, main_input_tokens: 20,
+      subagent_input_tokens: 10, subagent_count: 1 },
+  };
+  const live = taskStats(detail);
+  strictEqual(live.turns, 2);
+  strictEqual(live.input_tokens, 130);
+  strictEqual(live.main_input_tokens, 120);
+  strictEqual(live.subagent_input_tokens, 10);
+  strictEqual(live.usage_breakdown_turns, 2);
+  strictEqual(detail.stats.input_tokens, 100);
+  detail.running = false;
+  detail.stats = { turns: 2, input_tokens: 130 };
+  strictEqual(taskStats(detail), detail.stats);
 });
 
 test("remote tabs and drafts are scoped to their server across connection checks", async () => {

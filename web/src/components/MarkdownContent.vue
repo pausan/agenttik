@@ -2,7 +2,7 @@
 import { computed, ref } from "vue";
 
 import { markdown } from "../markdown";
-import { copyText, openExternal, openFileRef, openInSystem, resolveFileRef } from "../store";
+import { copyText, openExternal, openFileRef, resolveFileRef } from "../store";
 
 defineOptions({ inheritAttrs: false });
 
@@ -11,6 +11,7 @@ const props = defineProps({
   basePath: { type: String, default: "" },
 });
 const html = computed(() => markdown(props.text));
+const block = ref(null);
 const aimedLink = ref("");
 const aimedFile = ref(null);
 
@@ -19,8 +20,11 @@ function fileAt(e) {
   return hit ? { path: hit.dataset.file, line: Number(hit.dataset.line) || 0 } : null;
 }
 
-function openFile(file) {
-  if (file) openFileRef(file.path, file.line, props.basePath);
+function openFile(file, system = false) {
+  if (file) {
+    const hints = [...block.value.querySelectorAll("button.file")].map((link) => link.dataset.file);
+    openFileRef(file.path, file.line, props.basePath, hints, system);
+  }
 }
 
 function onClick(e) {
@@ -45,7 +49,7 @@ function openLink() {
 
 const menu = computed(() => aimedFile.value ? [
   { label: "Open in new tab", icon: "i-lucide-file-plus", onSelect: () => openFile(aimedFile.value) },
-  { label: "Open in system browser", icon: "i-lucide-external-link", onSelect: () => openInSystem(resolveFileRef(aimedFile.value.path, props.basePath)) },
+  { label: "Open in system browser", icon: "i-lucide-external-link", onSelect: () => openFile(aimedFile.value, true) },
   { label: "Copy path", icon: "i-lucide-copy", onSelect: () => copyText(resolveFileRef(aimedFile.value.path, props.basePath) || ".") },
 ] : [
   { label: "Open in browser", icon: "i-lucide-external-link", disabled: !aimedLink.value, onSelect: openLink },
@@ -55,6 +59,6 @@ const menu = computed(() => aimedFile.value ? [
 
 <template>
   <UContextMenu :items="menu">
-    <div v-bind="$attrs" v-html="html" @click="onClick" @contextmenu="aimLink" />
+    <div ref="block" v-bind="$attrs" v-html="html" @click="onClick" @contextmenu="aimLink" />
   </UContextMenu>
 </template>

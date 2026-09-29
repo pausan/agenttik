@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"image"
 	"image/color"
 	_ "image/gif"
@@ -18,6 +19,7 @@ import (
 )
 
 type fileInfo struct {
+	Path  string     `json:"path,omitempty"`
 	Dir   bool       `json:"dir,omitempty"`
 	Size  int64      `json:"size"`
 	Image *imageInfo `json:"image,omitempty"`
@@ -57,12 +59,26 @@ func (s *Server) projectFileInfo(c *fiber.Ctx) error {
 		}
 	} else {
 		info, err := os.Stat(abs)
+		if os.IsNotExist(err) && c.Query("locate") == "1" {
+			var hints []string
+			_ = json.Unmarshal([]byte(c.Query("hints")), &hints)
+			if found := locateFileRef(root, abs, c.Query("target"), hints); found != "" {
+				abs = found
+				rel = found
+				if local, e := filepath.Rel(root, found); e == nil && local != ".." && !strings.HasPrefix(local, ".."+string(os.PathSeparator)) {
+					rel = filepath.ToSlash(local)
+				}
+				body.Path = rel
+				info, err = os.Stat(abs)
+				isImage = strings.HasPrefix(rawTypes[strings.ToLower(filepath.Ext(rel))], "image/")
+			}
+		}
 		if err != nil {
 			return badRequest("cannot read %s: %v", rel, err)
 		}
 		if info.IsDir() {
 			c.Set(fiber.HeaderCacheControl, "no-store")
-			return c.JSON(fileInfo{Dir: true})
+			return c.JSON(fileInfo{Dir: true, Path: body.Path})
 		}
 		if !info.Mode().IsRegular() {
 			return badRequest("%s is not a regular file", rel)

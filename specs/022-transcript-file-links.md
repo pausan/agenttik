@@ -38,8 +38,20 @@ Document fragments are stripped; `:line` and `#Lline` retain line navigation.
 
 Transcript paths resolve from the project root. Markdown preview paths resolve
 from the displayed file's folder, including `./` and `../`. Absolute paths
-inside the project have the project folder trimmed off. Open and copy actions use
-the same resolved path, and a missing file is reported without opening a tab.
+inside the project have the project folder trimmed off. Copy uses this resolved path. Opening first checks that exact path. If it is
+missing, other local links in the same Markdown block supply folder hints:
+existing directories and the parents of existing files. Hints are capped at
+100 paths and 2 KB of URL-encoded text. Those folders, the Markdown document
+folder (or project root for transcripts), the
+original target's folder, and the project root are checked with the linked
+relative path and filename, then searched recursively by filename. The first
+regular file found opens with the original line selection. System opening
+uses the same fallback. Absolute targets can also fall back to a local file.
+
+Search runs on the server only for missing link targets, skips Git internals
+and dependency folders, and does not follow directory symlinks. A scan stops
+after 200,000 entries or 250 ms; unreadable directories are skipped. If no
+match is found within that budget, the original error is shown without a tab.
 
 A path that is still absolute after that trimming names a file outside the
 project — another checkout, a log under `/tmp` — and agents write them often

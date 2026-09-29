@@ -2147,14 +2147,22 @@ export function resolveFileRef(path, basePath = "") {
   return parts.join("/");
 }
 
-export async function openFileRef(path, line = 0, basePath = "") {
+export async function openFileRef(path, line = 0, basePath = "", hints = [], system = false) {
   const projectID = currentProjectID();
   const ownerID = S.owner?.id || "";
   if (!projectID) return;
+  const target = path;
   path = resolveFileRef(path, basePath) || ".";
+  const folders = [...new Set(hints.map((hint) => resolveFileRef(hint, basePath) || "."))].slice(0, 100);
+  folders.push(resolveFileRef(".", basePath) || ".");
+  const query = new URLSearchParams({ path, locate: "1", target });
+  // Keep link-heavy replies within the server's request-header limit.
+  while (folders.length && encodeURIComponent(JSON.stringify(folders)).length > 2000) folders.pop();
+  query.set("hints", JSON.stringify(folders));
   try {
-    const info = await api("GET", `/api/projects/${projectID}/file-info?path=${encodeURIComponent(path)}`);
-    if (info.dir) return openInSystem(path, projectID);
+    const info = await api("GET", `/api/projects/${projectID}/file-info?${query}`);
+    path = info.path || path;
+    if (info.dir || system) return openInSystem(path, projectID);
     return openFileIn(projectID, ownerID, path, { line, pin: true });
   } catch (e) {
     fail(e);

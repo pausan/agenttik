@@ -138,3 +138,38 @@ test("Markdown preview links resolve from their document and keep existing tabs"
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("missing transcript links use folder hints and recursive matches", async ({ page }) => {
+  const dir = await mkdtemp(join(tmpdir(), "agenttik-link-search-"));
+  try {
+    await mkdir(join(dir, "a", "nested"), { recursive: true });
+    await mkdir(join(dir, "hint"));
+    await writeFile(join(dir, "a", "nested", "found.txt"), "first\nsecond\nthird\n");
+    await writeFile(join(dir, "hint", "found.txt"), "hint\nsecond\nthird\n");
+    await addProject(page, dir);
+    await openProject(page, dir);
+    await newTask(page);
+    await pickModel(page);
+    await sendPrompt(page, "[folder](hint/) [recover](gone/found.txt:2)");
+    await page.getByRole("button", { name: "recover", exact: true }).click();
+    const tab = page.getByRole("tab", { name: "found.txt", exact: true });
+    await expect(tab).toBeVisible();
+    const editor = page.getByRole("textbox", { name: "hint/found.txt", exact: true });
+    await expect(editor).toHaveValue("hint\nsecond\nthird\n");
+    await expect.poll(() => editor.evaluate((el) => el.value.slice(el.selectionStart, el.selectionEnd))).toBe("second");
+    await tab.getByRole("button", { name: "Close found.txt", exact: true }).click();
+    const opened = [];
+    await page.route("**/api/projects/*/open", async (route) => {
+      opened.push(route.request().postDataJSON());
+      await route.fulfill({ json: { path: "hint/found.txt", dir: false } });
+    });
+    await page.getByRole("button", { name: "recover", exact: true }).click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Open in system browser" }).click();
+    await expect.poll(() => opened).toEqual([{ path: "hint/found.txt" }]);
+    await sendPrompt(page, "[scan](/old/checkout/found.txt)");
+    await page.getByRole("button", { name: "scan", exact: true }).click();
+    await expect(page.getByRole("textbox", { name: "a/nested/found.txt", exact: true })).toBeVisible();
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

@@ -1,11 +1,16 @@
 import { strictEqual } from "node:assert/strict";
 import { test } from "node:test";
 
-import { isoDate, usageBreakdownRows } from "./api.js";
+import { isoDate, usageBreakdownRows, usageCost } from "./api.js";
 
 test("stats dates use a locale-independent ISO timestamp", () => {
   strictEqual(isoDate(Date.UTC(2026, 8, 12, 13, 32, 11)), "2026-09-12 13:32:11");
   strictEqual(isoDate(0), "never");
+});
+
+test("stats mark usage cost when an estimate contributes", () => {
+  strictEqual(usageCost({ cost_usd: 2, estimated_cost_usd: 3 }), "≈$5.0000");
+  strictEqual(usageCost({ cost_usd: 2, estimated_cost_usd: 0 }), "$2.0000");
 });
 
 test("usage rows keep main, subagent, and unscoped tokens distinct", () => {

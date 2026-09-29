@@ -90,7 +90,7 @@ func (s *Store) DiscardTurn(turnID int64) error {
 const statsSelect = `SELECT COUNT(*),
 	COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0),
 	COALESCE(SUM(cache_read_tokens),0), COALESCE(SUM(cache_write_tokens),0),
-	SUM(cost_usd), SUM(COALESCE(ended_at, started_at) - started_at),
+	SUM(cost_usd), SUM(estimated_cost_usd), SUM(COALESCE(ended_at, started_at) - started_at),
 	COALESCE(SUM(main_input_tokens),0), COALESCE(SUM(main_output_tokens),0),
 	COALESCE(SUM(main_cache_read_tokens),0), COALESCE(SUM(main_cache_write_tokens),0),
 	COALESCE(SUM(subagent_input_tokens),0), COALESCE(SUM(subagent_output_tokens),0),
@@ -100,11 +100,11 @@ const statsSelect = `SELECT COUNT(*),
 
 func (s *Store) scanStats(where string, args ...any) (*Stats, error) {
 	var st Stats
-	var cost sql.NullFloat64
+	var cost, estimate sql.NullFloat64
 	var dur sql.NullInt64
 	err := s.db.QueryRow(statsSelect+where, args...).
 		Scan(&st.Turns, &st.InputTokens, &st.OutputTokens,
-			&st.CacheReadTokens, &st.CacheWriteTokens, &cost, &dur,
+			&st.CacheReadTokens, &st.CacheWriteTokens, &cost, &estimate, &dur,
 			&st.MainInputTokens, &st.MainOutputTokens,
 			&st.MainCacheReadTokens, &st.MainCacheWriteTokens,
 			&st.SubagentInputTokens, &st.SubagentOutputTokens,
@@ -113,7 +113,7 @@ func (s *Store) scanStats(where string, args ...any) (*Stats, error) {
 	if err != nil {
 		return nil, err
 	}
-	st.CostUSD, st.DurationMS = cost.Float64, dur.Int64
+	st.CostUSD, st.EstimatedCostUSD, st.DurationMS = cost.Float64, estimate.Float64, dur.Int64
 	return &st, nil
 }
 

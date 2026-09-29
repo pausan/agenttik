@@ -269,6 +269,7 @@ type Stats struct {
 	CacheReadTokens  int64   `json:"cache_read_tokens"`
 	CacheWriteTokens int64   `json:"cache_write_tokens"`
 	CostUSD          float64 `json:"cost_usd"`
+	EstimatedCostUSD float64 `json:"estimated_cost_usd"`
 	DurationMS       int64   `json:"duration_ms"`
 
 	// ContextTokens is the last turn's context size, carried here so the

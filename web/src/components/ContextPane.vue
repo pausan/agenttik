@@ -8,7 +8,7 @@
 import { computed } from "vue";
 
 import { S, contextWindow } from "../store";
-import { cost, duration, nf, tokens, usageBreakdownRows } from "../api";
+import { duration, nf, tokens, usageBreakdownRows, usageCost } from "../api";
 
 const used = computed(() => S.detail?.stats.context_tokens || 0);
 const total = computed(() => contextWindow(S.detail?.session, S.detail?.stats));
@@ -26,7 +26,7 @@ const rows = computed(() => {
     ...usageBreakdownRows(stats),
     ["Cache read", tokens(stats.cache_read_tokens)],
     ["Cache write", tokens(stats.cache_write_tokens)],
-    ["Cost", cost(stats.cost_usd)],
+    ["Cost", usageCost(stats)],
     ["Agent time", duration(stats.duration_ms)],
   ];
 });

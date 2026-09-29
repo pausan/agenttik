@@ -2,7 +2,7 @@
 import { computed } from "vue";
 
 import { S, accountLabel, contextWindow } from "../store";
-import { cost, duration, isoDate, nf, tokens, usageBreakdownRows } from "../api";
+import { duration, isoDate, nf, tokens, usageBreakdownRows, usageCost } from "../api";
 
 /* The context row is the main agent's latest prompt against its model window,
    not a task sum — see ContextPane.vue, which shows the same number as a gauge. */
@@ -36,7 +36,7 @@ const rows = computed(() => {
     ...usageBreakdownRows(stats),
     ["Cache read", tokens(stats.cache_read_tokens)],
     ["Cache write", tokens(stats.cache_write_tokens)],
-    ["Cost", cost(stats.cost_usd)],
+    ["Cost", usageCost(stats)],
   ];
 });
 </script>

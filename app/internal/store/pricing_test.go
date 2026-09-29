@@ -58,4 +58,14 @@ func TestCostEstimatePersistsAndAggregates(t *testing.T) {
 	if len(rows) != 1 || rows[0].EstimatedCostUSD != 7.8 || rows[0].EstimatedCostTurns != 1 || rows[0].CostTurns != 0 || rows[0].Model != "gpt-6-astra" {
 		t.Fatalf("rows: %+v", rows)
 	}
+	stats, err := s.SessionStats("pricing")
+	must(t, err)
+	if stats.CostUSD != 0 || stats.EstimatedCostUSD != 7.8 {
+		t.Fatalf("session stats: %+v", stats)
+	}
+	projectStats, err := s.ProjectStats(p.ID)
+	must(t, err)
+	if projectStats.CostUSD != 0 || projectStats.EstimatedCostUSD != 7.8 {
+		t.Fatalf("project stats: %+v", projectStats)
+	}
 }

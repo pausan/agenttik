@@ -153,3 +153,7 @@ export function isoLocal(ts) {
 export function cost(usd) {
   return "$" + (usd || 0).toFixed(4);
 }
+
+export function usageCost(stats) {
+  return (stats.estimated_cost_usd ? "≈" : "") + cost(stats.cost_usd + (stats.estimated_cost_usd || 0));
+}

@@ -24,7 +24,7 @@ import {
   startTask,
   stopTask,
 } from "../store";
-import { ago, cost, duration, isoDate, isoLocal, nf, tokens, usageBreakdownRows } from "../api";
+import { ago, duration, isoDate, isoLocal, nf, tokens, usageBreakdownRows, usageCost } from "../api";
 import { TASK_TIME_FILTERS, filterTaskRows, taskText } from "../task-search.js";
 import { smartSearch, refreshSmartIndex, searchTasks } from "../smart-search.js";
 import SmartSearchProgress from "./SmartSearchProgress.vue";
@@ -148,7 +148,7 @@ const statsRows = computed(() => {
     ["Task input tokens", tokens(stats.input_tokens)],
     ["Task output tokens", tokens(stats.output_tokens)],
     ...usageBreakdownRows(stats),
-    ["Cost", cost(stats.cost_usd)],
+    ["Cost", usageCost(stats)],
     ["Agent time", duration(stats.duration_ms)],
     ["Last used", isoDate(stats.last_active_at)],
   ];

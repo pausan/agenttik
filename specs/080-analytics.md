@@ -56,7 +56,8 @@ Completed Codex turns retain their selected model, effort and raw token counts,
 plus `estimated_cost_usd` and `cost_estimate_basis`. Provider-reported `cost_usd`
 remains separate and takes precedence. Analytics rows expose summed
 `estimated_cost_usd` and `estimated_cost_turns`; the page combines them with
-reported values for display and ranking. Existing turns are not repriced.
+reported values for display and ranking. Task and project stats use the same
+sum and mark totals containing estimates with `≈`. Existing turns are not repriced.
 
 The versioned rate table in `store/pricing.go` uses [OpenAI standard API
 pricing](https://developers.openai.com/api/docs/pricing), verified 2026-09-29,

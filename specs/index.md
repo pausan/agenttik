@@ -57,7 +57,7 @@ screen, **session** for the row, the route or the CLI flag.
 | Doc | What it covers |
 |-----|----------------|
 | [009](009-model-picker.md) | Cross-provider model and favourite selection |
-| [010](010-working-indicator.md) | Live turn progress in the transcript |
+| [010](010-working-indicator.md) | Live turn progress and the finished-turn summary line |
 | [011](011-prompt-bar-usage.md) | Fuzzy models, context ring, every subscription window |
 | [012](012-task-queue.md) | Queued prompts and project scheduling |
 | [020](020-task-titles.md) | Instant first-line title, refined by an isolated small model |

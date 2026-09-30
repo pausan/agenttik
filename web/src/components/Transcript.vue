@@ -10,6 +10,7 @@ import {
   updateQueuedModel,
   updateQueuedPrompt,
 } from "../store";
+import { turnSummary } from "../api";
 import { tabScroll, vTabScroll } from "../tab-scroll";
 import Message from "./Message.vue";
 import ModelSelection from "./ModelSelection.vue";
@@ -57,6 +58,17 @@ const allRows = computed(() => {
     while (i < messages.length && messages[i].role === "tool") tools.push(messages[i++]);
     i--;
     out.push({ at, tools });
+  }
+  // A finished turn closes with its time, tokens and cost under its last row.
+  // Rows streamed before the turn ended carry no turn id; the transcript is
+  // re-read when it ends, and that read supplies them.
+  const finished = new Map((S.detail?.turns || []).filter((t) => t.status !== "running").map((t) => [t.id, t]));
+  const turnOf = (row) => (row.message || row.tools.at(-1)).turn_id;
+  for (let i = 0; i < out.length; i++) {
+    const id = turnOf(out[i]);
+    if (finished.has(id) && (i === out.length - 1 || turnOf(out[i + 1]) !== id)) {
+      out[i].summary = turnSummary(finished.get(id));
+    }
   }
   return out;
 });
@@ -355,6 +367,9 @@ watch(
       <template v-for="row in rows" :key="row.at">
         <ToolGroup v-if="row.tools" :tools="row.tools" />
         <Message v-else :message="row.message" :data-human-message="row.message.role === 'user' ? row.at : undefined" />
+        <p v-if="row.summary" class="-mt-2 mb-4 text-[11px] text-dimmed tabular-nums" aria-label="Turn usage">
+          {{ row.summary }}
+        </p>
       </template>
       <div v-if="S.detail.running" class="mb-3 flex items-center gap-2 text-xs text-dimmed" aria-label="Agent working">
         <span aria-hidden="true">{{ clockFace }}</span>

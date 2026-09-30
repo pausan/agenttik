@@ -1,7 +1,7 @@
 import { strictEqual } from "node:assert/strict";
 import { test } from "node:test";
 
-import { isoDate, taskStats, usageBreakdownRows, usageCost } from "./api.js";
+import { isoDate, taskStats, turnSummary, usageBreakdownRows, usageCost } from "./api.js";
 
 test("stats dates use a locale-independent ISO timestamp", () => {
   strictEqual(isoDate(Date.UTC(2026, 8, 12, 13, 32, 11)), "2026-09-12 13:32:11");
@@ -92,4 +92,14 @@ test("diagnostics never write browser storage before privacy is known or in priv
     diagnosticStorage.setItem("errors", "normal");
     strictEqual(writes, 1);
   } finally { globalThis.localStorage = original; }
+});
+
+test("turn footers are exact under two minutes and rough after", () => {
+  const turn = (secs, input, output, cost = 0, estimate = 0) =>
+    turnSummary({ started_at: 0, ended_at: secs * 1000, input_tokens: input, output_tokens: output, cost_usd: cost, estimated_cost_usd: estimate });
+  strictEqual(turn(42, 850, 12, 0.004), "42s · 850 in / 12 out · <$0.01");
+  strictEqual(turn(95, 2400, 310, 0.1234), "1min 35s · 2.4k in / 310 out · $0.12");
+  strictEqual(turn(3790, 1_312_000, 29_400, 0, 3.219), "1h 3min · 1.3M in / 29k out · ≈$3.22");
+  strictEqual(turn(125, 0, 0), "2min · 0 in / 0 out");
+  strictEqual(turn(7200, 12_600_000, 1_000), "2h · 13M in / 1k out");
 });

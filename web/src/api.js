@@ -176,3 +176,30 @@ export function cost(usd) {
 export function usageCost(stats) {
   return (stats.estimated_cost_usd ? "≈" : "") + cost(stats.cost_usd + (stats.estimated_cost_usd || 0));
 }
+
+// A finished turn's footer is a glance, not an account: exact under two
+// minutes, rounded after that. Stats has the precise figures.
+function roughTime(ms) {
+  const s = Math.round((ms || 0) / 1000);
+  if (s < 60) return s + "s";
+  if (s < 120) return `1min ${s - 60}s`;
+  const m = Math.round(s / 60);
+  if (m < 60) return m + "min";
+  return m % 60 ? `${Math.floor(m / 60)}h ${m % 60}min` : `${m / 60}h`;
+}
+
+function roughTokens(n) {
+  if (n >= 1_000_000) return +(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1) + "M";
+  if (n >= 1000) return +(n / 1000).toFixed(n >= 10_000 ? 0 : 1) + "k";
+  return String(n || 0);
+}
+
+export function turnSummary(turn) {
+  const parts = [
+    roughTime(turn.ended_at - turn.started_at),
+    `${roughTokens(turn.input_tokens)} in / ${roughTokens(turn.output_tokens)} out`,
+  ];
+  const usd = (turn.cost_usd || 0) + (turn.estimated_cost_usd || 0);
+  if (usd) parts.push((turn.estimated_cost_usd ? "≈" : "") + (usd < 0.01 ? "<$0.01" : "$" + usd.toFixed(2)));
+  return parts.join(" · ");
+}

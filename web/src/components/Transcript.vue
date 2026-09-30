@@ -59,15 +59,17 @@ const allRows = computed(() => {
     i--;
     out.push({ at, tools });
   }
-  // A finished turn closes with its time, tokens and cost under its last row.
-  // Rows streamed before the turn ended carry no turn id; the transcript is
-  // re-read when it ends, and that read supplies them.
-  const finished = new Map((S.detail?.turns || []).filter((t) => t.status !== "running").map((t) => [t.id, t]));
+  // A finished turn closes with its time, tokens and cost under its last row,
+  // then the task's totals so far. Turns whose messages an edit removed still
+  // count, as they do in Stats. Rows streamed before the turn ended carry no
+  // turn id; the transcript is re-read when it ends, and that read supplies them.
+  const finished = (S.detail?.turns || []).filter((t) => t.status !== "running");
+  const upTo = new Map(finished.map((t, i) => [t.id, finished.slice(0, i + 1)]));
   const turnOf = (row) => (row.message || row.tools.at(-1)).turn_id;
   for (let i = 0; i < out.length; i++) {
     const id = turnOf(out[i]);
-    if (finished.has(id) && (i === out.length - 1 || turnOf(out[i + 1]) !== id)) {
-      out[i].summary = turnSummary(finished.get(id));
+    if (upTo.has(id) && (i === out.length - 1 || turnOf(out[i + 1]) !== id)) {
+      out[i].summary = turnSummary(upTo.get(id));
     }
   }
   return out;

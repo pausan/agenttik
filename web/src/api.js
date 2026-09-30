@@ -194,12 +194,22 @@ function roughTokens(n) {
   return String(n || 0);
 }
 
-export function turnSummary(turn) {
-  const parts = [
-    roughTime(turn.ended_at - turn.started_at),
-    `${roughTokens(turn.input_tokens)} in / ${roughTokens(turn.output_tokens)} out`,
-  ];
-  const usd = (turn.cost_usd || 0) + (turn.estimated_cost_usd || 0);
-  if (usd) parts.push((turn.estimated_cost_usd ? "≈" : "") + (usd < 0.01 ? "<$0.01" : "$" + usd.toFixed(2)));
+function roughUsage(ms, input, output, usd, estimated) {
+  const parts = [roughTime(ms), `${roughTokens(input)} in / ${roughTokens(output)} out`];
+  if (usd) parts.push((estimated ? "≈" : "") + (usd < 0.01 ? "<$0.01" : "$" + usd.toFixed(2)));
   return parts.join(" · ");
+}
+
+// turns is the task's finished turns up to and including this one, so the
+// line also carries the running total. The first turn has nothing to add up.
+export function turnSummary(turns) {
+  const usage = (list) => roughUsage(
+    list.reduce((sum, t) => sum + (t.ended_at - t.started_at), 0),
+    list.reduce((sum, t) => sum + (t.input_tokens || 0), 0),
+    list.reduce((sum, t) => sum + (t.output_tokens || 0), 0),
+    list.reduce((sum, t) => sum + (t.cost_usd || 0) + (t.estimated_cost_usd || 0), 0),
+    list.some((t) => t.estimated_cost_usd),
+  );
+  const line = usage(turns.slice(-1));
+  return turns.length > 1 ? `${line} — total ${usage(turns)}` : line;
 }

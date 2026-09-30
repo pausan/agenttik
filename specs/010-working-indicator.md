@@ -19,8 +19,11 @@ same animation over 2.5 seconds.
 ## Turn summary
 
 When a turn finishes, the progress line gives way to one dimmed line under the
-turn's last message: `1h 3min · 1.3M in / 29k out · $3.22`. It is a glance,
-not an account — Stats has the exact figures:
+turn's last message. From the second turn on, it also carries the task's
+totals up to that turn, so the figures grow down the transcript and the last
+line always holds the whole task:
+`2min · 300k in / 5k out · $0.40 — total 1h 3min · 1.3M in / 29k out · $3.22`.
+It is a glance, not an account — Stats has the exact figures:
 
 - Time is exact below two minutes (`42s`, `1min 35s`) and rounded to minutes
   after (`14min`, `1h 3min`).
@@ -29,6 +32,10 @@ not an account — Stats has the exact figures:
 - Cost is the reported cost plus any fallback estimate, in dollars to the
   cent, `≈` when an estimate contributes and `<$0.01` below a cent. It is left
   off when the turn reported no cost.
+
+The totals add every finished turn up to this one, including turns whose
+messages an edit removed, as Stats does. Time is the sum of turn durations,
+not wall-clock time since the first prompt.
 
 The line is placed from each message's `turn_id`. Messages streamed during a
 turn have none; the transcript is re-read when the turn ends, which supplies

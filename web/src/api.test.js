@@ -96,10 +96,18 @@ test("diagnostics never write browser storage before privacy is known or in priv
 
 test("turn footers are exact under two minutes and rough after", () => {
   const turn = (secs, input, output, cost = 0, estimate = 0) =>
-    turnSummary({ started_at: 0, ended_at: secs * 1000, input_tokens: input, output_tokens: output, cost_usd: cost, estimated_cost_usd: estimate });
+    turnSummary([{ started_at: 0, ended_at: secs * 1000, input_tokens: input, output_tokens: output, cost_usd: cost, estimated_cost_usd: estimate }]);
   strictEqual(turn(42, 850, 12, 0.004), "42s · 850 in / 12 out · <$0.01");
   strictEqual(turn(95, 2400, 310, 0.1234), "1min 35s · 2.4k in / 310 out · $0.12");
   strictEqual(turn(3790, 1_312_000, 29_400, 0, 3.219), "1h 3min · 1.3M in / 29k out · ≈$3.22");
   strictEqual(turn(125, 0, 0), "2min · 0 in / 0 out");
   strictEqual(turn(7200, 12_600_000, 1_000), "2h · 13M in / 1k out");
+});
+
+test("later turn footers add the task's totals so far", () => {
+  const turns = [
+    { started_at: 0, ended_at: 100_000, input_tokens: 1_000_000, output_tokens: 20_000, cost_usd: 3, estimated_cost_usd: 0 },
+    { started_at: 200_000, ended_at: 230_000, input_tokens: 300_000, output_tokens: 9_000, cost_usd: 0, estimated_cost_usd: 0.22 },
+  ];
+  strictEqual(turnSummary(turns), "30s · 300k in / 9k out · ≈$0.22 — total 2min · 1.3M in / 29k out · ≈$3.22");
 });

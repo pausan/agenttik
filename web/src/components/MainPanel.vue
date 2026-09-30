@@ -14,7 +14,7 @@ import {
   selectTab,
   startCurrentTask,
 } from "../store";
-import { beginDrag, showDropPosition } from "../drag";
+import { beginDrag, dropAfter, showDropPosition } from "../drag";
 import { primaryChord } from "../platform";
 import Transcript from "./Transcript.vue";
 import PromptBar from "./PromptBar.vue";
@@ -82,17 +82,14 @@ const projectRunning = computed(() => S.project?.sessions.filter(task => task.st
 
 const dragging = ref("");
 
-/* The strip reorders under the pointer, so where a tab is when it is let go
-   is where it stays. moveTab refuses to mix kinds. */
+/* The strip stays still while the line previews a drop within the same kind. */
 function onOver(e, id) {
   if (!dragging.value) return;
   const from = S.tabs.findIndex((t) => t.id === dragging.value);
   const to = S.tabs.findIndex((t) => t.id === id);
   if (from < 0 || to < 0 || S.tabs[from].kind !== S.tabs[to].kind) return;
   e.preventDefault();
-  showDropPosition(from, to);
-  if (dragging.value === id) return;
-  moveTab(dragging.value, id);
+  showDropPosition(e, from, to);
 }
 
 function onStart(e, id) {
@@ -100,10 +97,11 @@ function onStart(e, id) {
   beginDrag(e, id);
 }
 
-function onEnd() {
+function onEnd(e, overID) {
   const id = dragging.value;
   dragging.value = "";
-  persistTabOrder(id);
+  if (!id || e.type !== "drop") return;
+  if (moveTab(id, overID, dropAfter(e))) persistTabOrder(id);
 }
 
 const current = computed(() => S.tab);
@@ -154,7 +152,7 @@ const badge = computed(() => {
           @dragstart="onStart($event, item.id)"
           @dragover="onOver($event, item.id)"
           @dragend="onEnd"
-          @drop.prevent="onEnd"
+          @drop.prevent="onEnd($event, item.id)"
         >
           <StatusDot v-if="item.running" status="running" />
           <span

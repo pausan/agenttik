@@ -99,7 +99,7 @@ test("model settings reorder favourites and hide a model from every picker", asy
   await carefulHandle.focus();
   await page.keyboard.press("ArrowDown");
   await expect(rows.last()).toContainText("System · Fake Careful · High");
-  await carefulHandle.dragTo(rows.first());
+  await carefulHandle.dragTo(rows.first(), { targetPosition: { x: 50, y: 2 } });
   await expect(favourites.locator(":scope > div").first()).toContainText("System · Fake Careful · High");
   await page.getByRole("button", { name: "Done" }).click();
 

@@ -154,7 +154,7 @@ function onProjectStart(e, id) {
     return;
   }
   draggingProject.value = id;
-  beginDrag(e, id, e.currentTarget.parentElement);
+  beginDrag(e, id);
 }
 
 function onProjectOver(e, overID) {
@@ -164,14 +164,19 @@ function onProjectOver(e, overID) {
   const from = S.projects.findIndex((p) => p.id === draggingProject.value);
   const to = S.projects.findIndex((p) => p.id === overID);
   if (from < 0 || to < 0) return;
-  showDropPosition(from, to);
-  if (from === to) return;
-  S.projects.splice(to, 0, ...S.projects.splice(from, 1));
+  showDropPosition(e, from, to);
 }
 
-function onProjectDrop() {
+function onProjectDrop(e, overID) {
   if (!draggingProject.value) return;
+  const from = S.projects.findIndex((p) => p.id === draggingProject.value);
   draggingProject.value = 0;
+  if (e.type !== "drop") return;
+  const target = S.projects.findIndex((p) => p.id === overID);
+  if (from < 0 || target < 0 || S.projects[target].kind === "orchestrator") return;
+  const to = showDropPosition(e, from, target);
+  if (from === to) return;
+  S.projects.splice(to, 0, ...S.projects.splice(from, 1));
   reorderProjects(S.projects.map((p) => p.id));
 }
 
@@ -190,19 +195,25 @@ function onTaskOver(e, projectID, overID) {
   const from = project.recent_sessions.findIndex((s) => s.id === dragged.taskID);
   const to = project.recent_sessions.findIndex((s) => s.id === overID);
   if (from < 0 || to < 0) return;
-  showDropPosition(from, to);
-  if (from === to) return;
-  project.recent_sessions.splice(to, 0, ...project.recent_sessions.splice(from, 1));
+  showDropPosition(e, from, to);
 }
 
-function onTaskDrop(e) {
+function onTaskDrop(e, projectID, overID) {
   const dragged = draggingTask.value;
   if (!dragged) return;
   e.stopPropagation();
   e.preventDefault();
   draggingTask.value = null;
+  if (e.type !== "drop" || dragged.projectID !== projectID) return;
   const project = S.projects.find((p) => p.id === dragged.projectID);
-  if (project) reorderSidebarTasks(project, project.recent_sessions.map((s) => s.id));
+  if (!project) return;
+  const from = project.recent_sessions.findIndex((s) => s.id === dragged.taskID);
+  const target = project.recent_sessions.findIndex((s) => s.id === overID);
+  if (from < 0 || target < 0) return;
+  const to = showDropPosition(e, from, target);
+  if (from === to) return;
+  project.recent_sessions.splice(to, 0, ...project.recent_sessions.splice(from, 1));
+  reorderSidebarTasks(project, project.recent_sessions.map((s) => s.id));
 }
 </script>
 
@@ -238,7 +249,7 @@ function onTaskDrop(e) {
           :key="p.id"
           class="px-2.5 py-1 not-first:border-t not-first:border-muted"
           @dragover="onProjectOver($event, p.id)"
-          @drop.prevent="onProjectDrop"
+          @drop.prevent="onProjectDrop($event, p.id)"
         >
           <!-- The menu wraps the project row itself, not the block around
                it: what follows are the project's jobs and tasks, and a right
@@ -326,7 +337,7 @@ function onTaskDrop(e) {
             :draggable="renaming !== s.id"
             @dragstart.stop="onTaskStart($event, p.id, s.id)"
             @dragover="onTaskOver($event, p.id, s.id)"
-            @drop="onTaskDrop"
+            @drop="onTaskDrop($event, p.id, s.id)"
             @dragend="onTaskDrop"
           >
             <TaskRow

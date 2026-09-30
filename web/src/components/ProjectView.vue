@@ -249,23 +249,28 @@ function onStart(e, id) {
   beginDrag(e, id);
 }
 
-/* onOver moves the dragged row to where the pointer is, so the list shows the
-   result before the drop rather than after it. */
+/* Hover only previews the insertion edge. The list changes on drop. */
 function onOver(e, overID) {
   if (!dragging.value) return;
-  e.preventDefault();
   const tasks = props.tab.data.sessions;
   const from = tasks.findIndex((s) => s.id === dragging.value);
   const to = tasks.findIndex((s) => s.id === overID);
   if (from < 0 || to < 0) return;
-  showDropPosition(from, to);
-  if (from === to) return;
-  tasks.splice(to, 0, ...tasks.splice(from, 1));
+  e.preventDefault();
+  showDropPosition(e, from, to);
 }
 
-function onDrop() {
+function onDrop(e, overID) {
   if (!dragging.value) return;
+  const tasks = props.tab.data.sessions;
+  const from = tasks.findIndex((s) => s.id === dragging.value);
   dragging.value = "";
+  if (e.type !== "drop") return;
+  const target = tasks.findIndex((s) => s.id === overID);
+  if (from < 0 || target < 0) return;
+  const to = showDropPosition(e, from, target);
+  if (from === to) return;
+  tasks.splice(to, 0, ...tasks.splice(from, 1));
   reorderTasks(props.tab, props.tab.data.sessions.map((s) => s.id));
 }
 
@@ -328,7 +333,7 @@ async function doDelete() {
           :draggable="!row.archived && renaming !== row.task.id && !filtering"
           @dragstart="onStart($event, row.task.id)"
           @dragover="onOver($event, row.task.id)"
-          @drop.prevent="onDrop"
+          @drop.prevent="onDrop($event, row.task.id)"
           @dragend="onDrop"
         >
           <UIcon

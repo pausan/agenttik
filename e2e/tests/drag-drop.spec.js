@@ -10,9 +10,8 @@ import {
   test,
 } from "../fixtures.js";
 
-/* Reordering moves the source under the cursor. Keep hovering there before
-   releasing, so the browser must accept a drop onto the source itself. */
-async function dragAndRelease(page, source, target) {
+/* Hover shows the destination while every row stays in place until release. */
+async function dragAndRelease(page, source, target, cancel = false) {
   await page.evaluate(() => {
     window.dropEvents = [];
     document.addEventListener("dragstart", (e) => {
@@ -26,28 +25,36 @@ async function dragAndRelease(page, source, target) {
   await source.hover();
   const from = await source.boundingBox();
   const to = await target.boundingBox();
-  const x = to.x + to.width / 2;
-  const y = to.y + to.height / 2;
+  const tab = await source.getAttribute("role") === "tab";
+  const after = tab ? from.x < to.x : from.y < to.y;
+  const x = to.x + to.width * (tab ? (after ? 0.8 : 0.2) : 0.5);
+  const y = to.y + to.height * (tab ? 0.5 : (after ? 0.8 : 0.2));
   await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
   await page.mouse.down();
   await page.mouse.move(from.x + from.width / 2 + 8, from.y + from.height / 2, { steps: 3 });
   await page.mouse.move(x, y, { steps: 5 });
   await expect(source).toHaveCSS("opacity", "1");
-  await expect.poll(async () => {
-    const box = await source.boundingBox();
-    return box.x <= x && x < box.x + box.width && box.y <= y && y < box.y + box.height;
-  }).toBe(true);
+  expect(await source.boundingBox()).toEqual(from);
+  expect(await target.boundingBox()).toEqual(to);
   await page.mouse.move(x + 1, y);
   const marker = page.locator("[data-drop-position]");
   await expect(marker).toHaveCount(1);
-  const tab = await source.getAttribute("role") === "tab";
-  await expect(marker).toHaveAttribute("data-drop-position", (tab ? from.x < to.x : from.y < to.y) ? "after" : "before");
+  await expect(target.locator("xpath=ancestor-or-self::*[@data-drop-position]")).toHaveCount(1);
+  await expect(source.locator("xpath=ancestor-or-self::*[@data-drop-position]")).toHaveCount(0);
+  await expect(marker).toHaveAttribute("data-drop-position", after ? "after" : "before");
   expect(await marker.evaluate((el, isTab) => {
     const style = getComputedStyle(el, "::after");
     return { thickness: isTab ? style.width : style.height, events: style.pointerEvents };
   }, tab)).toEqual({ thickness: "2px", events: "none" });
+  if (cancel) await page.keyboard.press("Escape");
   await page.mouse.up();
   await expect(marker).toHaveCount(0);
+  if (cancel) {
+    expect(await source.boundingBox()).toEqual(from);
+    expect(await target.boundingBox()).toEqual(to);
+    expect(await page.evaluate(() => window.dropEvents.length)).toBe(0);
+    return;
+  }
 
   expect(await page.evaluate(() => ({
     drops: window.dropEvents.length,
@@ -56,12 +63,12 @@ async function dragAndRelease(page, source, target) {
   }))).toEqual({
     drops: 1,
     accepted: true,
-    onSource: true,
+    onSource: false,
   });
   await expect(source).toHaveCSS("opacity", "1");
 }
 
-test("sidebar projects drop immediately and keep their order after reload", async ({ page }) => {
+test("sidebar projects stay still while dragging and save their order on drop", async ({ page }) => {
   await addProject(page, REPO + "/app");
   await addProject(page, REPO + "/web");
   const rows = sidebar(page).locator('[draggable="true"]');
@@ -81,7 +88,7 @@ test("sidebar projects drop immediately and keep their order after reload", asyn
 });
 
 for (const location of ["sidebar", "project page"]) {
-  test(`${location} tasks drop immediately and keep their order after reload`, async ({ page }) => {
+  test(`${location} tasks stay still while dragging and save their order on drop`, async ({ page }) => {
     await addProject(page);
     for (const title of ["first drag task", "second drag task"]) {
       await openProject(page);
@@ -110,7 +117,7 @@ for (const location of ["sidebar", "project page"]) {
   });
 }
 
-test("file tabs drop immediately and keep their order after reload", async ({ page }) => {
+test("file tabs stay still while dragging and save their order on drop", async ({ page }) => {
   await addProject(page, REPO + "/e2e");
   await openProject(page, REPO + "/e2e");
   await sidebar(page).getByRole("tab", { name: "Tree" }).click();
@@ -127,4 +134,21 @@ test("file tabs drop immediately and keep their order after reload", async ({ pa
   })).toEqual(["playwright.config.js", "fixtures.js"]);
   await page.reload();
   await expect(rows.nth(2)).toHaveAttribute("aria-label", "fixtures.js");
+});
+
+
+test("cancelling a project drag leaves its order unchanged and sends no save", async ({ page }) => {
+  await addProject(page, REPO + "/app");
+  await addProject(page, REPO + "/web");
+  const rows = sidebar(page).locator('[draggable="true"]');
+  const orders = [];
+  page.on("request", (r) => {
+    if (r.method() === "POST" && r.url().endsWith("/api/projects/order")) orders.push(r);
+  });
+  const before = await rows.allTextContents();
+  await dragAndRelease(page, rows.filter({ hasText: REPO + "/web" }), rows.filter({ hasText: REPO + "/app" }), true);
+  expect(await rows.allTextContents()).toEqual(before);
+  await page.reload();
+  expect(await rows.allTextContents()).toEqual(before);
+  expect(orders).toHaveLength(0);
 });

@@ -16,6 +16,7 @@ import {
   toggleStar,
 } from "../../store";
 import { fuzzyAny } from "../../fuzzy";
+import { beginDrag, showDropPosition } from "../../drag";
 import ModelSelection from "../ModelSelection.vue";
 import StatusDot from "../StatusDot.vue";
 
@@ -65,31 +66,29 @@ async function setHidden(group, model, hidden) {
 }
 
 const dragging = ref(null);
-const dropTarget = ref(null);
 
 function endDrag() {
   dragging.value = null;
-  dropTarget.value = null;
 }
 
 function startDrag(event, star) {
   if (props.filter) return event.preventDefault();
   dragging.value = star;
-  event.dataTransfer.effectAllowed = "move";
-  event.dataTransfer.setData("text/plain", star.model);
+  beginDrag(event, star.model, event.currentTarget.parentElement);
 }
 
 function dragOver(event, star) {
   if (!dragging.value || props.filter) return;
   event.preventDefault();
   event.dataTransfer.dropEffect = "move";
-  dropTarget.value = star;
+  showDropPosition(event, S.stars.indexOf(dragging.value), S.stars.indexOf(star));
 }
 
-function dropFavourite(star) {
+function dropFavourite(event, star) {
   const from = S.stars.indexOf(dragging.value);
+  const to = showDropPosition(event, from, S.stars.indexOf(star));
   endDrag();
-  return moveFavourite(from, S.stars.indexOf(star));
+  return moveFavourite(from, to);
 }
 
 async function moveFavourite(index, to) {
@@ -143,11 +142,8 @@ async function removeFavourite(star) {
         :key="`${star.provider}:${star.account_id}:${star.model}:${star.effort}`"
         class="mr-3 flex min-w-0 items-center gap-1 rounded py-0.5"
         :class="{ 'opacity-50': dragging === star }"
-        :data-drop-position="dropTarget === star && dragging !== star
-          ? (S.stars.indexOf(dragging) < S.stars.indexOf(star) ? 'after' : 'before') : undefined"
         @dragover="dragOver($event, star)"
-        @dragleave="!$event.currentTarget.contains($event.relatedTarget) && dropTarget === star && (dropTarget = null)"
-        @drop.prevent="dropFavourite(star)"
+        @drop.prevent="dropFavourite($event, star)"
       >
         <UButton
           size="xs"

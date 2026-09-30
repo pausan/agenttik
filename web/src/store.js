@@ -656,7 +656,7 @@ function syncProjectSessionOrder(projectID, ids) {
 /* moveTab is a tab dragged along the strip. Only tabs of the same kind trade
    places, and the numbers follow the strip rather than the strip following
    the numbers. */
-export function moveTab(dragID, overID) {
+export function moveTab(dragID, overID, after) {
   const from = S.tabs.findIndex((t) => t.id === dragID);
   const to = S.tabs.findIndex((t) => t.id === overID);
   if (from < 0 || to < 0 || from === to) return;
@@ -669,15 +669,21 @@ export function moveTab(dragID, overID) {
     const fromSidebar = project.recent_sessions.findIndex((session) => session.id === S.tabs[from].sessionID);
     const toSidebar = project.recent_sessions.findIndex((session) => session.id === S.tabs[to].sessionID);
     if (fromSidebar < 0 || toSidebar < 0) return;
-    project.recent_sessions.splice(toSidebar, 0, ...project.recent_sessions.splice(fromSidebar, 1));
+    const boundary = toSidebar + (after ? 1 : 0);
+    const index = boundary - (fromSidebar < boundary ? 1 : 0);
+    if (fromSidebar === index) return;
+    project.recent_sessions.splice(index, 0, ...project.recent_sessions.splice(fromSidebar, 1));
     syncProjectSessionOrder(projectID, project.recent_sessions.map((session) => session.id));
-    return;
+    return true;
   }
-  S.tabs.splice(to, 0, ...S.tabs.splice(from, 1));
+  const boundary = to + (after ? 1 : 0);
+  const index = boundary - (from < boundary ? 1 : 0);
+  if (from === index) return;
+  S.tabs.splice(index, 0, ...S.tabs.splice(from, 1));
+  return true;
 }
 
-/* Session tab drags already change the sidebar order under the pointer. This
-   persists that shared order after the drag ends, rather than per hover. */
+/* A session tab drop changes the shared sidebar order before persisting it. */
 export function persistTabOrder(id) {
   const tab = S.tabs.find((candidate) => candidate.id === id);
   if (tab?.kind !== "session") return;
@@ -2026,11 +2032,8 @@ export async function removeTask(session) {
   }
 }
 
-/* reorderTasks records the order a project view was dragged into. The list
-   is put in that order first, so the drop lands where it was let go rather
-   than a request later; if the server refuses, the project is re-read, which
-   is the only reliable way back — the row has been moved under the cursor
-   since the drag began and the order it started in is gone. */
+/* A drop updates the list before saving its order. If the server refuses,
+   re-read the project to restore the saved order. */
 export async function reorderTasks(tab, ids) {
   syncProjectSessionOrder(tab.projectID, ids);
   try {

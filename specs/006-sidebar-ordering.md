@@ -20,33 +20,33 @@ the centre header; see [004](004-ui.md#tabs).
 ## Dragging
 
 Projects, and every open task under each project, are reordered with native
-browser drag and drop. The list moves below the pointer immediately and one
-request is sent on drop; if the server refuses it, the row goes back where it
-was.
+browser drag and drop. The list stays still while dragging. On a valid drop,
+the item moves immediately and one request saves the new order; if the server
+refuses it, the saved order is restored. Cancellation leaves the order unchanged
+and sends no save request.
 
 The optional orchestrator is always first and has no project drag handle.
 Other projects cannot be dragged ahead of it; its own tasks still reorder
 normally. The API enforces the same order. See [054](054-orchestrator-project.md).
 
-All draggable rows and tabs stay fully opaque. `web/src/drag.js` supplies a
-shared transparent drag preview, so the browser has no visible ghost to fade
-or animate back after release. The row stays at its current position
-immediately, including in the project task list and the centre tab strip.
-The row under the pointer accepts the drop even when it is the dragged row
-itself after reordering.
+`web/src/drag.js` uses the browser's translucent preview of the dragged row.
+The source remains in its original position, including in the project task
+list and the centre tab strip. Settings favourites use their whole row as the
+preview and dim the source to half opacity.
 
-A thin accent line marks the insertion edge of the moved row: above when
-moving up, below when moving down. Projects mark the edge of their whole
-block, including tasks. Tabs use a vertical line on the left or right edge.
-The line follows the live order without changing row sizes, disappears over
-invalid targets, and clears on drop or cancellation. Settings favourites use
-the same line on the target row and reorder only on drop.
+A thin accent line marks the hovered insertion edge. The upper half of a row
+selects before it, and the lower half selects after it. Projects mark their
+whole block, including tasks. Tabs use their left and right halves for a
+vertical line. The line changes without moving content, disappears over
+invalid targets or positions that would leave the order unchanged, and clears
+on drop or cancellation. The same rule applies to Settings favourites.
 
 `e2e/tests/drag-drop.spec.js` uses real mouse drags on sidebar projects and
-tasks, project-page tasks, and file tabs. It checks accepted drops onto the
-moved row, full opacity, the insertion line and its cleanup, one order request,
-and the order after a reload. Unit tests cover insertion edges, invalid targets
-and cancellation; the model-settings browser test covers favourite drops.
+tasks, project-page tasks, and file tabs. It checks stationary rows during
+hover, the insertion line and its cleanup, one order request on drop, saved
+order after reload, and cancellation without a save. Unit tests cover both
+insertion edges, invalid targets, previews and cancellation; the
+model-settings browser test covers favourite drops.
 
 Project order lives in `projects.position` and task order in
 `sessions.position`, which serves the sidebar and the project page alike.

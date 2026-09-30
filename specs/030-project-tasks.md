@@ -19,8 +19,9 @@ prompt remains available on hover. Search signatures are only constructed
 when Smart Search is enabled.
 
 Dragging is available with an empty text filter and All times selected.
-Reordering uses IDs against the whole open list. It updates immediately and
-persists on drop; failure reloads the saved order.
+Reordering uses IDs against the whole open list. Hover shows an insertion
+line while rows stay in place. A drop updates the list immediately and saves
+its order; failure reloads the saved order. Cancelling a drag changes nothing.
 
 ## Archived tasks
 

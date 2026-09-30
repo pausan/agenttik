@@ -16,13 +16,15 @@
    replacement.
 
    Raster images and fonts have no text to follow: their bytes come from the
-   raw endpoint. FontPreview registers a face only while it is displayed. */
+   raw endpoint. FontPreview registers a face only while it is displayed.
+   Videos stream from their own endpoint, in ranges, through VideoPreview. */
 import { computed } from "vue";
 
 import MarkdownContent from "./MarkdownContent.vue";
-import { isFont, isImage, rawURL } from "../store";
+import { isFont, isImage, isVideo, rawURL } from "../store";
 import FontPreview from "./FontPreview.vue";
 import ImageFrame from "./ImageFrame.vue";
+import VideoPreview from "./VideoPreview.vue";
 
 const props = defineProps({ tab: { type: Object, required: true } });
 const emit = defineEmits(["dimensions"]);
@@ -53,6 +55,8 @@ const svg = computed(() => "data:image/svg+xml;charset=utf-8," + encodeURICompon
   </div>
 
   <FontPreview v-else-if="isFont(tab.path)" :src="rawURL(tab)" />
+
+  <VideoPreview v-else-if="isVideo(tab.path)" :tab="tab" @dimensions="emit('dimensions', $event)" />
 
   <MarkdownContent v-else class="markdown w-full px-8 py-5" :text="text" :base-path="tab.path" />
 </template>

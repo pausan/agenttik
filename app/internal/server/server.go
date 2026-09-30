@@ -259,6 +259,8 @@ func (s *Server) routes() {
 	api.Post("/projects/:id/open", s.openEntry)
 	api.Get("/projects/:id/diff", s.projectDiff)
 	api.Get("/projects/:id/raw", s.projectRawImage)
+	api.Get("/projects/:id/video", s.projectVideo)
+	api.Get("/projects/:id/video-info", s.projectVideoInfo)
 	api.Get("/projects/:id/terminals", s.listTerminals)
 	api.Post("/projects/:id/terminals", s.openTerminalTab)
 	api.Post("/projects/:id/sessions/order", s.reorderSessions)

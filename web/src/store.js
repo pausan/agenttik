@@ -2080,10 +2080,12 @@ const PREVIEWABLE = /\.(md|markdown|html?|svg)$/i;
    the tab rather than a URL. */
 const IMAGE = /\.(png|jpe?g|gif|webp|avif|bmp|ico|apng)$/i;
 const FONT = /\.(ttf|otf|woff2?)$/i;
+// Not .ts or .mts: those are TypeScript far more often than MPEG streams.
+const VIDEO = /\.(mp4|m4v|mov|webm|ogv|mkv|avi|mpe?g|wmv|flv|3gp|m2ts)$/i;
 
 export function canPreview(path) {
   const name = String(path || "");
-  return PREVIEWABLE.test(name) || IMAGE.test(name) || FONT.test(name);
+  return PREVIEWABLE.test(name) || isMedia(name);
 }
 
 /* An image has no text: nothing to edit, and a diff that is two pictures
@@ -2094,6 +2096,16 @@ export function isImage(path) {
 
 export function isFont(path) {
   return FONT.test(String(path || ""));
+}
+
+export function isVideo(path) {
+  return VIDEO.test(String(path || ""));
+}
+
+/* Media is never read as text: no editor, no line to go to, and the bytes go
+   from the server straight into the element that renders them. */
+export function isMedia(path) {
+  return isImage(path) || isFont(path) || isVideo(path);
 }
 
 /* A path still absolute here is outside the project: resolveFileRef trims the
@@ -2112,6 +2124,13 @@ export function rawURL(tab, rev = "") {
   return apiURL(`/api/projects/${projectOfTab(tab)}/raw?path=${encodeURIComponent(tab.path)}${at}`);
 }
 
+/* videoURL streams a video in ranges or, when convert is set, converted by
+   ffmpeg from start seconds on. */
+export function videoURL(tab, convert = false, start = 0) {
+  const from = convert ? `&transcode=1&start=${start.toFixed(3)}` : "";
+  return apiURL(`/api/projects/${projectOfTab(tab)}/video?path=${encodeURIComponent(tab.path)}${from}`);
+}
+
 export function isDirty(tab) {
   return tab?.kind === "file" && tab.edited !== null && tab.edited !== tab.content;
 }
@@ -2121,7 +2140,7 @@ export function isDirty(tab) {
    rather than twenty. A double click pins the tab instead, and so does typing
    in it; a pinned tab is only closed by hand. The Tree prefers Edit, with
    Preview for media; Changes explicitly requests Diff, even for an open tab. */
-export async function openFile(path, pin = false, mode = isImage(path) || isFont(path) ? "preview" : "edit") {
+export async function openFile(path, pin = false, mode = isMedia(path) ? "preview" : "edit") {
   const projectID = currentProjectID();
   await openFileIn(projectID, S.owner?.id || "", path, { pin, mode });
   const tab = S.tabs.find((t) => t.id === `file:${projectID}:${path}`);
@@ -2196,7 +2215,7 @@ function selectOpenFile(tabID, pin, line = 0) {
    — without moving S.fileMode, which is the choice the user made and not one
    a link should make for them. A commit's file has only its diff. */
 async function gotoLine(tab, line) {
-  if (tab.commit || isImage(tab.path) || isFont(tab.path)) return;
+  if (tab.commit || isMedia(tab.path)) return;
   if (tab.mode !== "edit") {
     tab.mode = "edit";
     try {
@@ -2217,7 +2236,7 @@ function openingMode(path, line) {
   // Diff is not on offer for a file outside the project, so a strip left in
   // that view opens the next one in the view it does have.
   const remembered = isOutsideProject(path) && S.fileMode === "diff" ? "edit" : S.fileMode;
-  if (isImage(path) || isFont(path)) return remembered === "diff" ? "diff" : "preview";
+  if (isMedia(path)) return remembered === "diff" ? "diff" : "preview";
   if (line || (remembered === "preview" && !canPreview(path))) return "edit";
   return remembered;
 }
@@ -2261,9 +2280,9 @@ async function loadFileTabIn(projectID, ownerID, path, opts = {}) {
     diff: null,
     edited: null,
     // What was not read whole must never be written back over its source,
-    // images and fonts are never read as text at all, and a file outside the
+    // media is never read as text at all, and a file outside the
     // project is one the server reads but does not write.
-    readOnly: !!commit || isImage(path) || isFont(path) || isOutsideProject(path),
+    readOnly: !!commit || isMedia(path) || isOutsideProject(path),
     saving: false,
     loadError: "",
   });
@@ -2311,7 +2330,7 @@ async function loadFileTab(tab) {
     return;
   }
   if (tab.content !== null) return;
-  if (isImage(tab.path) || isFont(tab.path)) {
+  if (isMedia(tab.path)) {
     // The bytes go straight to the browser renderer. Reading a megabyte
     // of them into a string first would move it twice and display it never.
     tab.content = "";
@@ -2327,7 +2346,7 @@ async function loadFileTab(tab) {
    the tab back rather than leaving it on an empty pane. */
 export async function setFileMode(tab, mode, remember = true) {
   if (tab?.kind !== "file" || tab.commit || tab.mode === mode || !FILE_MODES.includes(mode)) return;
-  if (mode === "edit" && (isImage(tab.path) || isFont(tab.path))) return;
+  if (mode === "edit" && isMedia(tab.path)) return;
   const previous = tab.mode;
   tab.mode = mode;
   try {

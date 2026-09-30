@@ -3,7 +3,7 @@
    text, so it offers only the last two, and its diff is the two pictures
    rather than two columns of lines.
 
-   Tree selections prefer Edit, with Preview for images and fonts. Changes
+   Tree selections prefer Edit, with Preview for images, fonts and videos. Changes
    and commit file lists open Diff. The toggle changes the current tab's view.
 
    The bar underneath is the file's own: a conversation's prompt box has no
@@ -12,7 +12,7 @@
 import { computed, inject, onMounted, onUnmounted, ref, watch } from "vue";
 import { vTabScroll } from "../tab-scroll";
 
-import { canPreview, isDirty, isFont, isImage, isOutsideProject, saveFile, setFileMode } from "../store";
+import { canPreview, isDirty, isFont, isImage, isMedia, isOutsideProject, isVideo, saveFile, setFileMode } from "../store";
 import { langOf } from "../highlight";
 import { api, nf } from "../api";
 import { fileInfoLabel } from "../file-info";
@@ -41,6 +41,8 @@ onUnmounted(() => {
 
 const image = computed(() => isImage(props.tab.path));
 const font = computed(() => isFont(props.tab.path));
+const video = computed(() => isVideo(props.tab.path));
+const media = computed(() => isMedia(props.tab.path));
 const outside = computed(() => isOutsideProject(props.tab.path));
 
 const info = ref(null);
@@ -74,8 +76,8 @@ watch(
    so offering Edit or Preview would only show the wrong thing. */
 const modes = computed(() => {
   if (props.tab.commit) return [{ label: "Diff", value: "diff" }];
-  // Images and fonts have no editable text.
-  const items = image.value || font.value ? [] : [{ label: "Edit", value: "edit" }];
+  // Media has no editable text.
+  const items = media.value ? [] : [{ label: "Edit", value: "edit" }];
   // A file outside the project is in no repository of it: there is no diff.
   if (!outside.value) items.push({ label: "Diff", value: "diff" });
   if (canPreview(props.tab.path)) items.push({ label: "Preview", value: "preview" });
@@ -99,12 +101,12 @@ const body = computed(() => {
   return props.tab.mode === "preview" ? "preview" : "edit";
 });
 
-/* An iframe scrolls itself and a picture is fitted to its pane; everything
-   else scrolls in the pane. */
+/* An iframe scrolls itself and a picture or video is fitted to its pane;
+   everything else scrolls in the pane. */
 const fills = computed(
   () =>
     body.value === "images" ||
-    (body.value === "preview" && (image.value || /\.html?$/i.test(props.tab.path))),
+    (body.value === "preview" && (image.value || video.value || /\.html?$/i.test(props.tab.path))),
 );
 
 const lines = computed(() => text.value.split("\n").length);
@@ -112,7 +114,7 @@ const lines = computed(() => text.value.split("\n").length);
 /* One extra pass over a diff that has already been fetched, and only when it
    changes — cheaper than threading the count back out of the parse. */
 const stat = computed(() => {
-  if (props.tab.mode !== "diff" || !props.tab.diff || image.value || font.value) return null;
+  if (props.tab.mode !== "diff" || !props.tab.diff || media.value) return null;
   let add = 0;
   let del = 0;
   for (const line of props.tab.diff.split("\n")) {
@@ -193,9 +195,9 @@ const stat = computed(() => {
     <div
       class="flex shrink-0 items-center gap-3 border-t border-default px-5 py-1 text-xs text-dimmed"
     >
-      <span>{{ image ? "image" : font ? "font" : langOf(tab.path) || "text" }}</span>
+      <span>{{ image ? "image" : font ? "font" : video ? "video" : langOf(tab.path) || "text" }}</span>
       <span v-if="tab.commit" class="text-dimmed">committed</span>
-      <span v-else-if="image || font" class="text-dimmed">not editable</span>
+      <span v-else-if="media" class="text-dimmed">not editable</span>
       <span v-else-if="tab.readOnly" class="text-warning">read only</span>
       <span v-else-if="dirty" class="text-primary">unsaved</span>
       <span class="flex-1"></span>
@@ -203,7 +205,7 @@ const stat = computed(() => {
         <span class="text-success">+{{ nf.format(stat.add) }}</span>
         <span class="text-error">−{{ nf.format(stat.del) }}</span>
       </template>
-      <span v-else-if="!image && !font">{{ nf.format(lines) }} {{ lines === 1 ? "line" : "lines" }}</span>
+      <span v-else-if="!media">{{ nf.format(lines) }} {{ lines === 1 ? "line" : "lines" }}</span>
     </div>
   </div>
 </template>

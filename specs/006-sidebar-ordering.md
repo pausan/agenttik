@@ -35,9 +35,18 @@ immediately, including in the project task list and the centre tab strip.
 The row under the pointer accepts the drop even when it is the dragged row
 itself after reordering.
 
+A thin accent line marks the insertion edge of the moved row: above when
+moving up, below when moving down. Projects mark the edge of their whole
+block, including tasks. Tabs use a vertical line on the left or right edge.
+The line follows the live order without changing row sizes, disappears over
+invalid targets, and clears on drop or cancellation. Settings favourites use
+the same line on the target row and reorder only on drop.
+
 `e2e/tests/drag-drop.spec.js` uses real mouse drags on sidebar projects and
 tasks, project-page tasks, and file tabs. It checks accepted drops onto the
-moved row, full opacity, one order request, and the order after a reload.
+moved row, full opacity, the insertion line and its cleanup, one order request,
+and the order after a reload. Unit tests cover insertion edges, invalid targets
+and cancellation; the model-settings browser test covers favourite drops.
 
 Project order lives in `projects.position` and task order in
 `sessions.position`, which serves the sidebar and the project page alike.

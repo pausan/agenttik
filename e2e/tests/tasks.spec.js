@@ -87,7 +87,14 @@ test("model settings reorder favourites and hide a model from every picker", asy
   const favourites = page.getByRole("group", { name: "Favourite models" });
   const carefulHandle = page.getByRole("button", { name: "Reorder favourite System · Fake Careful · High" });
   const rows = favourites.locator(":scope > div");
-  await carefulHandle.dragTo(rows.first());
+  const transfer = await page.evaluateHandle(() => new DataTransfer());
+  await carefulHandle.dispatchEvent("dragstart", { dataTransfer: transfer });
+  await rows.first().dispatchEvent("dragover", { dataTransfer: transfer });
+  await expect(rows.first()).toHaveAttribute("data-drop-position", "before");
+  await expect(rows.last()).not.toHaveAttribute("data-drop-position");
+  await rows.first().dispatchEvent("drop", { dataTransfer: transfer });
+  await carefulHandle.dispatchEvent("dragend", { dataTransfer: transfer });
+  await expect(favourites.locator("[data-drop-position]")).toHaveCount(0);
   await expect(rows.first()).toContainText("System · Fake Careful · High");
   await carefulHandle.focus();
   await page.keyboard.press("ArrowDown");

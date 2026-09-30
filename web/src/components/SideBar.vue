@@ -23,7 +23,7 @@ import {
   toggleProjectTasks,
 } from "../store";
 import { isMobile, SEGMENTED } from "../ui";
-import { beginDrag } from "../drag";
+import { beginDrag, showDropPosition } from "../drag";
 import { projectDot } from "../task-attention";
 import FileTree from "./FileTree.vue";
 import ProfilePicker from "./ProfilePicker.vue";
@@ -154,17 +154,18 @@ function onProjectStart(e, id) {
     return;
   }
   draggingProject.value = id;
-  beginDrag(e, id);
+  beginDrag(e, id, e.currentTarget.parentElement);
 }
 
 function onProjectOver(e, overID) {
   if (!draggingProject.value) return;
   if (S.projects.find((p) => p.id === overID)?.kind === "orchestrator") return;
   e.preventDefault();
-  if (draggingProject.value === overID) return;
   const from = S.projects.findIndex((p) => p.id === draggingProject.value);
   const to = S.projects.findIndex((p) => p.id === overID);
   if (from < 0 || to < 0) return;
+  showDropPosition(from, to);
+  if (from === to) return;
   S.projects.splice(to, 0, ...S.projects.splice(from, 1));
 }
 
@@ -184,12 +185,13 @@ function onTaskOver(e, projectID, overID) {
   if (!dragged || dragged.projectID !== projectID) return;
   e.stopPropagation();
   e.preventDefault();
-  if (dragged.taskID === overID) return;
   const project = S.projects.find((p) => p.id === projectID);
   if (!project) return;
   const from = project.recent_sessions.findIndex((s) => s.id === dragged.taskID);
   const to = project.recent_sessions.findIndex((s) => s.id === overID);
   if (from < 0 || to < 0) return;
+  showDropPosition(from, to);
+  if (from === to) return;
   project.recent_sessions.splice(to, 0, ...project.recent_sessions.splice(from, 1));
 }
 

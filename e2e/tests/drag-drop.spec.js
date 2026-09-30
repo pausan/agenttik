@@ -38,7 +38,16 @@ async function dragAndRelease(page, source, target) {
     return box.x <= x && x < box.x + box.width && box.y <= y && y < box.y + box.height;
   }).toBe(true);
   await page.mouse.move(x + 1, y);
+  const marker = page.locator("[data-drop-position]");
+  await expect(marker).toHaveCount(1);
+  const tab = await source.getAttribute("role") === "tab";
+  await expect(marker).toHaveAttribute("data-drop-position", (tab ? from.x < to.x : from.y < to.y) ? "after" : "before");
+  expect(await marker.evaluate((el, isTab) => {
+    const style = getComputedStyle(el, "::after");
+    return { thickness: isTab ? style.width : style.height, events: style.pointerEvents };
+  }, tab)).toEqual({ thickness: "2px", events: "none" });
   await page.mouse.up();
+  await expect(marker).toHaveCount(0);
 
   expect(await page.evaluate(() => ({
     drops: window.dropEvents.length,

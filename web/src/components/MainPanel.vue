@@ -14,7 +14,7 @@ import {
   selectTab,
   startCurrentTask,
 } from "../store";
-import { beginDrag } from "../drag";
+import { beginDrag, showDropPosition } from "../drag";
 import { primaryChord } from "../platform";
 import Transcript from "./Transcript.vue";
 import PromptBar from "./PromptBar.vue";
@@ -86,7 +86,11 @@ const dragging = ref("");
    is where it stays. moveTab refuses to mix kinds. */
 function onOver(e, id) {
   if (!dragging.value) return;
+  const from = S.tabs.findIndex((t) => t.id === dragging.value);
+  const to = S.tabs.findIndex((t) => t.id === id);
+  if (from < 0 || to < 0 || S.tabs[from].kind !== S.tabs[to].kind) return;
   e.preventDefault();
+  showDropPosition(from, to);
   if (dragging.value === id) return;
   moveTab(dragging.value, id);
 }

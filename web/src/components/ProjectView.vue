@@ -28,7 +28,7 @@ import { ago, duration, isoDate, isoLocal, nf, tokens, usageBreakdownRows, usage
 import { TASK_TIME_FILTERS, filterTaskRows, taskText } from "../task-search.js";
 import { smartSearch, refreshSmartIndex, searchTasks } from "../smart-search.js";
 import SmartSearchProgress from "./SmartSearchProgress.vue";
-import { beginDrag } from "../drag";
+import { beginDrag, showDropPosition } from "../drag";
 import { isMobile } from "../ui";
 import ScheduleRow from "./ScheduleRow.vue";
 import TaskRow from "./TaskRow.vue";
@@ -254,11 +254,12 @@ function onStart(e, id) {
 function onOver(e, overID) {
   if (!dragging.value) return;
   e.preventDefault();
-  if (overID === dragging.value) return;
   const tasks = props.tab.data.sessions;
   const from = tasks.findIndex((s) => s.id === dragging.value);
   const to = tasks.findIndex((s) => s.id === overID);
   if (from < 0 || to < 0) return;
+  showDropPosition(from, to);
+  if (from === to) return;
   tasks.splice(to, 0, ...tasks.splice(from, 1));
 }
 

@@ -142,9 +142,11 @@ async function removeFavourite(star) {
         v-for="{ star, provider, label } in favouriteRows"
         :key="`${star.provider}:${star.account_id}:${star.model}:${star.effort}`"
         class="mr-3 flex min-w-0 items-center gap-1 rounded py-0.5"
-        :class="{ 'bg-elevated': dropTarget === star && dragging !== star, 'opacity-50': dragging === star }"
+        :class="{ 'opacity-50': dragging === star }"
+        :data-drop-position="dropTarget === star && dragging !== star
+          ? (S.stars.indexOf(dragging) < S.stars.indexOf(star) ? 'after' : 'before') : undefined"
         @dragover="dragOver($event, star)"
-        @dragleave="dropTarget === star && (dropTarget = null)"
+        @dragleave="!$event.currentTarget.contains($event.relatedTarget) && dropTarget === star && (dropTarget = null)"
         @drop.prevent="dropFavourite(star)"
       >
         <UButton

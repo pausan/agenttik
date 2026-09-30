@@ -93,13 +93,18 @@ func runDesktop(srv *server.Server, lock *single.Lock, defaultAddr string) error
 	defer close(finished)
 	client := remote.NewClient(proxy)
 	client.UseDesktopNavigation()
+	media, stopMedia, err := startMediaBridge(client)
+	if err != nil {
+		return err
+	}
+	defer stopMedia()
 	app := &options.App{
 		Title:            "agenttik",
 		Width:            1440,
 		Height:           900,
 		MinWidth:         900,
 		MinHeight:        600,
-		AssetServer:      &assetserver.Options{Handler: quietAborts(client)},
+		AssetServer:      &assetserver.Options{Handler: quietAborts(media.Handler())},
 		BackgroundColour: &options.RGBA{R: 17, G: 18, B: 21, A: 255},
 		OnStartup: func(ctx context.Context) {
 			win.opened(ctx)
@@ -184,9 +189,14 @@ func quietAborts(h http.Handler) http.Handler {
 // A remote window has no local database, runners, or tray to manage.
 func runRemoteDesktop(handler *remote.Client, title string) error {
 	handler.UseDesktopNavigation()
+	media, stopMedia, err := startMediaBridge(handler)
+	if err != nil {
+		return err
+	}
+	defer stopMedia()
 	app := &options.App{
 		Title: title, Width: 1440, Height: 900, MinWidth: 900, MinHeight: 600,
-		AssetServer:      &assetserver.Options{Handler: quietAborts(handler)},
+		AssetServer:      &assetserver.Options{Handler: quietAborts(media.Handler())},
 		BackgroundColour: &options.RGBA{R: 17, G: 18, B: 21, A: 255},
 	}
 	configureDesktop(app)

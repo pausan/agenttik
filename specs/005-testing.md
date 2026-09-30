@@ -10,6 +10,7 @@ Tests cover logic, browser flows and the native desktop transport.
 | Browser tests | `e2e/tests/*.spec.js` (Playwright) | `make e2e` |
 | Linux desktop image uploads | `app/cmd/agenttik/desktop_images_linux_test.go` | `make test-desktop-images` |
 | Linux desktop terminal input | `app/cmd/agenttik/desktop_terminal_linux_test.go` | `make test-desktop-terminal` |
+| Linux desktop video playback | `app/cmd/agenttik/desktop_video_linux_test.go` | `make test-desktop-video` |
 | Linux desktop scrollbar layers | `app/cmd/agenttik/desktop_scrollbars_linux_test.go` | `make test-desktop-scrollbars` |
 
 `make test` is the fast loop and runs the first two. `make e2e` builds the

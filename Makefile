@@ -80,6 +80,11 @@ test-desktop-remote:
 test-desktop-images:
 	xvfb-run -a go test -tags "$(DESKTOP_TAGS)" $(PKG) -run '^TestDesktopImageUpload$$' -count=1
 
+## test-desktop-video: native Wails/WebKit video playback through the media bridge (needs Xvfb, GStreamer, ffmpeg)
+.PHONY: test-desktop-video
+test-desktop-video:
+	xvfb-run -a go test -tags "$(DESKTOP_TAGS)" $(PKG) -run '^TestDesktopVideo$$' -count=1
+
 ## test-desktop-terminal: native Wails/WebKit terminal input regression (needs Xvfb)
 .PHONY: test-desktop-terminal
 test-desktop-terminal:

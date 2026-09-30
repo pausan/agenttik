@@ -197,7 +197,7 @@ func run() error {
 	go turns.RunQueueRetries(clocks)
 
 	if !*webOnly {
-		err := runDesktop(srv, turns, lock, cfg.Addr)
+		err := runDesktop(srv, lock, cfg.Addr)
 		if !errors.Is(err, errNoDesktop) {
 			return err
 		}

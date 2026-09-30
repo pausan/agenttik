@@ -44,6 +44,7 @@ type profileManager struct {
 	instance string
 	private  bool
 	closed   bool
+	busy     *busyTally // set by Server.OnBusy; profiles opened later join it
 }
 
 // EnableProfiles preserves the original database as Default. Each additional
@@ -150,6 +151,9 @@ func (m *profileManager) open(id string) (*profileRuntime, error) {
 	}
 	registry := agent.NewRegistry(providers...)
 	r := runner.New(db, registry, runner.NewHub())
+	if m.busy != nil {
+		r.OnBusy(m.busy.change)
+	}
 	s := New(db, registry, r)
 	s.apiRoot = m.root
 	s.SetVersion(m.root.version)
@@ -492,4 +496,46 @@ func (s *Server) Busy() bool {
 		}
 	}
 	return false
+}
+
+// busyTally folds the busy edges of several runners into one: busy while any
+// of them is. Each runner reports strictly alternating edges, starting with
+// busy, so a count of the busy ones is enough.
+type busyTally struct {
+	mu sync.Mutex
+	n  int
+	fn func(bool)
+}
+
+// change is called under the reporting runner's lock, so it only counts and
+// hands the edge on; fn follows the same rules as runner.OnBusy's listener.
+func (t *busyTally) change(busy bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	was := t.n > 0
+	if busy {
+		t.n++
+	} else {
+		t.n--
+	}
+	if now := t.n > 0; now != was {
+		t.fn(now)
+	}
+}
+
+// OnBusy registers the listener told when the first turn in any local profile
+// starts and when the last one ends. The tray pulses from it, so work in a
+// profile the window is not showing still shows. Call it once.
+func (s *Server) OnBusy(fn func(busy bool)) {
+	t := &busyTally{fn: fn}
+	s.runner.OnBusy(t.change)
+	if s.profiles == nil {
+		return
+	}
+	s.profiles.mu.Lock()
+	defer s.profiles.mu.Unlock()
+	s.profiles.busy = t
+	for _, rt := range s.profiles.running {
+		rt.server.runner.OnBusy(t.change)
+	}
 }

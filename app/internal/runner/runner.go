@@ -110,10 +110,15 @@ func (r *Runner) Hub() *Hub { return r.hub }
 // edges in the order they happened. It must not block or call back into the
 // runner: hand the change to a goroutine that already exists, as
 // traypulse.Animator does.
+//
+// A listener registered while turns are already in flight is told so at once,
+// so it never waits for the next edge to learn the runner is busy.
 func (r *Runner) OnBusy(fn func(busy bool)) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.onBusy = fn
+	r.wasBusy = false
+	r.busyChanged()
 }
 
 // Busy reports whether any turn is in flight.

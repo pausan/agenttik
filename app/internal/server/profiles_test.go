@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/pausan/agenttik/app/internal/agent"
@@ -385,6 +386,55 @@ func TestBusyIncludesEveryLocalProfile(t *testing.T) {
 	local.runner.Shutdown()
 	if s.Busy() {
 		t.Fatal("stopped profile still reported busy")
+	}
+}
+
+// The tray listens here, so work in any profile, whether it existed before
+// the listener or was created after, must reach it.
+func TestOnBusyFollowsEveryLocalProfile(t *testing.T) {
+	s := profileServer(t)
+	s.runner = runner.New(s.store, s.registry, runner.NewHub())
+	before := decode[Profile](t, do(t, s, "POST", "/api/profiles", map[string]string{"name": "Before"}))
+	var mu sync.Mutex
+	var seen []bool
+	s.OnBusy(func(busy bool) {
+		mu.Lock()
+		defer mu.Unlock()
+		seen = append(seen, busy)
+	})
+	after := decode[Profile](t, do(t, s, "POST", "/api/profiles", map[string]string{"name": "After"}))
+	start := func(id string) *Server {
+		t.Helper()
+		local := s.profiles.running[id].server
+		project, err := local.store.CreateProject("project", t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		session := &store.Session{ID: "busy-" + id, ProjectID: project.ID, Provider: "fake", Model: "fake-quick", Title: "Wait"}
+		if err := local.store.CreateSession(session); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := local.runner.Send(session.ID, "@wait 60000"); err != nil {
+			t.Fatal(err)
+		}
+		return local
+	}
+	got := func() []bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]bool(nil), seen...)
+	}
+	first, second := start(before.ID), start(after.ID)
+	if g := got(); len(g) != 1 || !g[0] {
+		t.Fatalf("two busy profiles reported %v, want [true]", g)
+	}
+	first.runner.Shutdown()
+	if g := got(); len(g) != 1 {
+		t.Fatalf("one profile still busy, but reported %v", g)
+	}
+	second.runner.Shutdown()
+	if g := got(); len(g) != 2 || g[1] {
+		t.Fatalf("every profile idle, but reported %v", g)
 	}
 }
 

@@ -67,14 +67,19 @@ still the committed ICO with its fuller set of sizes.
 A step every 250ms is as fast as it goes. Every step is an icon the host has
 to be handed — a D-Bus property and a signal on Linux, a cached temp file on
 Windows — and a breath does not need more. Nothing is sent at all while the
-app is idle: the animator blocks until the runner says work started.
+app is idle: the animator blocks until the server says work started.
 
-`Runner.OnBusy` is that signal. It takes the one listener, and reports true
-when the first turn goes in flight and false when the last one finishes;
+`Server.OnBusy` is that signal, and it covers every local profile: the tray
+pulses while any profile has a turn in flight, whichever one the window
+shows. Each profile has its own runner, and `Runner.OnBusy` reports true when
+its first turn goes in flight and false when its last one finishes;
 overlapping turns are one spell of work, and a turn that fails to start
-reports both edges. It is called while the runner holds its lock, so the two
-edges cannot arrive out of order, and the animator's `SetBusy` only stores a
-flag and pokes a channel, so nothing the tray does can block a turn.
+reports both edges. A listener registered while turns already run is told at
+once. The server counts busy runners, including profiles created later, and
+passes on only the first busy and the last idle edge. Runners call it while
+holding their lock, so edges cannot arrive out of order, and the animator's
+`SetBusy` only stores a flag and pokes a channel, so nothing the tray does can
+block a turn.
 
 A frame that fails to render is logged and leaves the tray static; the icon
 and the menu still work. The pulse only exists where the tray does, so
@@ -120,7 +125,7 @@ appears in Settings.
 
 Desktop tests cover idle exit, confirmation acceptance and cancellation, repeated
 close requests, and retrying after cancellation. Server tests cover running
-work in another local profile.
+work in another local profile, for quitting and for the pulse.
 Store/API tests cover defaults, persistence, invalid chords, web mode and
 startup error reporting. `app/internal/traypulse` tests cover the frames
 cycling through near-black, blue and white, rising monotonically in brightness without the

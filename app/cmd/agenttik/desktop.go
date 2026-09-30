@@ -23,7 +23,6 @@ import (
 
 	"github.com/pausan/agenttik/app/internal/netserver"
 	"github.com/pausan/agenttik/app/internal/remote"
-	"github.com/pausan/agenttik/app/internal/runner"
 	"github.com/pausan/agenttik/app/internal/server"
 	"github.com/pausan/agenttik/app/internal/single"
 )
@@ -34,7 +33,7 @@ import (
 // connection it can flush. defaultAddr seeds Settings › Server: the app's own
 // default, or --addr if one was given, for whenever nothing has been saved
 // yet.
-func runDesktop(srv *server.Server, turns *runner.Runner, lock *single.Lock, defaultAddr string) error {
+func runDesktop(srv *server.Server, lock *single.Lock, defaultAddr string) error {
 	// A second launch reaches this instance over the same port the window
 	// does, so the hook goes in before anything is serving on it.
 	win := &window{busy: srv.Busy, confirmQuit: confirmDesktopQuit}
@@ -116,7 +115,7 @@ func runDesktop(srv *server.Server, turns *runner.Runner, lock *single.Lock, def
 		OnBeforeClose: win.beforeClose,
 	}
 	configureDesktop(app)
-	stopTray := win.startTray(config, turns)
+	stopTray := win.startTray(config, srv)
 	defer stopTray()
 	return wails.Run(app)
 }

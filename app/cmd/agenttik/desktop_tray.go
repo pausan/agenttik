@@ -12,7 +12,7 @@ import (
 	"sync"
 
 	"github.com/cardinalby/go-systray"
-	"github.com/pausan/agenttik/app/internal/runner"
+	"github.com/pausan/agenttik/app/internal/server"
 	"github.com/pausan/agenttik/app/internal/store"
 	"github.com/pausan/agenttik/app/internal/traypulse"
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -84,7 +84,7 @@ func workingFrames() [][]byte {
 	return frames
 }
 
-func (w *window) startTray(config store.DesktopConfig, turns *runner.Runner) func() {
+func (w *window) startTray(config store.DesktopConfig, srv *server.Server) func() {
 	if !config.CloseToTray {
 		return func() {}
 	}
@@ -100,7 +100,7 @@ func (w *window) startTray(config store.DesktopConfig, turns *runner.Runner) fun
 	// The pulse is rendered before the tray exists, so a bad icon is found
 	// and reported at startup rather than the first time a turn runs.
 	pulse := traypulse.New(systray.SetIcon, restingIcon(), workingFrames())
-	turns.OnBusy(pulse.SetBusy)
+	srv.OnBusy(pulse.SetBusy)
 
 	done := make(chan struct{})
 	var ready sync.WaitGroup

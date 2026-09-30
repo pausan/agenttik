@@ -4,6 +4,10 @@ Every shared model picker caps its list at 30rem or 62% of the visual
 viewport, independently caps a long Favourites group at 11rem, and lets each
 subscription group be collapsed.
 
+The Favourites heading has a **Reorder** link on its right, on the same line.
+It closes the picker and opens Settings directly on Models, where favourites
+can be reordered. Opening settings preserves the current model and effort.
+
 A provider signed in to more than one subscription contributes one group per
 subscription — `Work · Claude Code` — and each is collapsed on its own; the
 rows beneath include the model version, such as `Opus 5.5`. API connections are one group named after the
@@ -28,8 +32,9 @@ model under its group heading.
 ## Implementation
 
 `ModelSelection.vue` owns the transient per-group expansion map and the
-command-palette search term. Only whether a search is running reaches the
-group list, so typing never rebuilds it; the search options and the palette
+command-palette search term. It uses the `openSettings` callback provided by
+`App.vue` for the favourites shortcut. Only whether a search is running reaches
+the group list, so typing never rebuilds it; the search options and the palette
 `ui` object are module constants for the same reason, since a fresh object
 would rebuild the palette's index on every keystroke. `App.vue` publishes the
 visual-viewport height as `--mobile-height` on the document element, which is
@@ -43,6 +48,7 @@ does not exist, which is what stops the palette from drawing an empty heading
 above its single row; an empty group would be dropped altogether, so the row
 is what keeps the group alive. A leading check marks the current row.
 
-`e2e/tests/model-picker.spec.js` covers the favourite heading format,
-collapsing and expanding, search reaching into a collapsed group, vendor
-compaction, and favouriting from the message editor.
+`e2e/tests/model-picker.spec.js` covers the favourite heading format, the
+one-click shortcut to model settings, collapsing and expanding, search
+reaching into a collapsed group, vendor compaction, and favouriting from the
+message editor.

@@ -2,7 +2,7 @@
 /* The one model control used by prompts, edited messages, queued prompts and
    saved jobs. It keeps model and effort separate while every model choice
    still carries its subscription and provider. */
-import { computed, ref, watch } from "vue";
+import { computed, inject, ref, watch } from "vue";
 
 import {
   S,
@@ -33,6 +33,7 @@ const props = defineProps({
   title: { type: String, default: "Choose model and subscription" },
 });
 const emit = defineEmits(["change"]);
+const openSettings = inject("openSettings");
 
 const NONE = "__default";
 
@@ -192,6 +193,11 @@ function close() {
   open.value = false;
 }
 
+function reorderFavourites() {
+  close();
+  openSettings("models");
+}
+
 watch(open, (isOpen) => {
   if (isOpen) return;
   search.value = "";
@@ -270,7 +276,13 @@ async function favourite() {
               <UIcon name="i-lucide-chevron-down" class="size-3.5 shrink-0" />
               <span class="truncate">{{ label }}</span>
             </button>
-            <span v-else class="block px-1 py-0.5 font-semibold text-highlighted">{{ label }}</span>
+            <div v-else class="flex items-center justify-between gap-2 px-1 py-0.5">
+              <span class="font-semibold text-highlighted">{{ label }}</span>
+              <button type="button" class="text-xs text-primary hover:underline"
+                aria-label="Reorder favourite models" @click.stop="reorderFavourites">
+                Reorder
+              </button>
+            </div>
           </template>
         </UCommandPalette>
       </template>

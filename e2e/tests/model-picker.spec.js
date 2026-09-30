@@ -62,6 +62,18 @@ test("favourites head the picker and the rest collapses to one row per subscript
   await modelButton(page).click();
   await expect(found).toHaveCount(0);
   await expect(groupRow(page, "System · Fake")).toBeVisible();
+
+  const reorder = palette(page).getByRole("button", { name: "Reorder favourite models" });
+  const heading = palette(page).getByText("Favourites", { exact: true });
+  const headingBox = await heading.boundingBox();
+  const linkBox = await reorder.boundingBox();
+  expect(linkBox.x).toBeGreaterThan(headingBox.x + headingBox.width);
+  expect(Math.abs(linkBox.y + linkBox.height / 2 - headingBox.y - headingBox.height / 2)).toBeLessThan(2);
+  await reorder.click();
+  await expect(palette(page)).toBeHidden();
+  const settings = page.getByRole("dialog", { name: "Settings", exact: true });
+  await expect(settings.getByRole("button", { name: "Models", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(settings.getByRole("group", { name: "Favourite models" })).toBeVisible();
 });
 
 test("without favourites every subscription stays open", async ({ page }) => {
@@ -71,6 +83,7 @@ test("without favourites every subscription stays open", async ({ page }) => {
   await modelButton(page).click();
   await expect(palette(page).getByRole("option", { name: "Fake Careful", exact: true })).toBeVisible();
   await expect(palette(page).getByRole("group", { name: "System · Fake" })).toBeVisible();
+  await expect(palette(page).getByRole("button", { name: "Reorder favourite models" })).toHaveCount(0);
 });
 
 test("a model name drops the vendor its own connection already says", async ({ page }) => {

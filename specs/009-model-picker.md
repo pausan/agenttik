@@ -25,6 +25,9 @@ accounts, disabled APIs, and their favourites are omitted from settings and
 every picker. API setup and discovery are described in
 [078](078-api-providers.md).
 
+The **Reorder** link to the right of the Favourites heading closes the picker
+and opens Settings on Models in one click.
+
 A favourite carries provider, subscription, model and effort. Picking it sets
 the whole combination. Changing the ordinary model keeps the current effort
 when the new model accepts it and otherwise returns to Default.

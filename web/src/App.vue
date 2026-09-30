@@ -131,14 +131,14 @@ watch([() => S.activeTab, () => S.activeProjectID], closePanels);
 // the common case, never flashes it.
 const bootSpinner = ref(false);
 
-/* Settings opens on the section that was asked for: the sidebar's keyboard
-   button and the launcher's shortcut entry both land on Shortcuts, and
-   everything else on General. */
+/* Settings opens on the requested section. Nested model pickers use the
+   provided callback to go straight to Models from their favourites heading. */
 function openSettings(id) {
   closePanels();
   settingsSection.value = id;
   settings.value = true;
 }
+provide("openSettings", openSettings);
 
 function openAddProject() {
   closePanels();

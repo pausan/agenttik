@@ -432,6 +432,8 @@ func errorHandler(c *fiber.Ctx, err error) error {
 		code = fiber.StatusConflict
 	case errors.Is(err, runner.ErrApprovalGone):
 		code = fiber.StatusConflict
+	case errors.Is(err, runner.ErrBadReply):
+		code = fiber.StatusBadRequest
 	case errors.Is(err, runner.ErrUnknownAccount), errors.Is(err, runner.ErrAccountSignedOut):
 		// Not a server fault: the task names a subscription that has been
 		// removed, or one nothing has signed into yet. Signing in, or picking

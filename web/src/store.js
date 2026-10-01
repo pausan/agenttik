@@ -3521,15 +3521,18 @@ export async function loadApprovals() {
   } catch { /* The next stream open tries again. */ }
 }
 
-/* answerApproval allows or denies one waiting tool call. Another window may
-   have answered first; then the server refuses this one, and the reload shows
-   the request is gone rather than reporting an error nobody needs to fix. */
-export async function answerApproval(sessionID, id, allow) {
+/* answerApproval allows or denies one waiting tool call, or answers its
+   questions: answers maps a question id to the picked labels or typed text.
+   Another window may have answered first; then the server refuses this one,
+   and the reload shows the request is gone rather than reporting an error
+   nobody needs to fix. */
+export async function answerApproval(sessionID, id, allow, answers) {
   const approval = S.approvals[sessionID]?.find((a) => a.id === id);
   if (!approval || approval.answering) return;
   approval.answering = true;
   try {
-    await api("POST", `/api/sessions/${sessionID}/approvals/${encodeURIComponent(id)}`, { allow });
+    await api("POST", `/api/sessions/${sessionID}/approvals/${encodeURIComponent(id)}`,
+      answers ? { allow, answers } : { allow });
     removeApproval(sessionID, id);
   } catch (e) {
     await loadApprovals();

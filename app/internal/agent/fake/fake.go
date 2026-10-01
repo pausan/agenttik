@@ -143,7 +143,7 @@ func nextSessionID() string {
 
 // runScript drives one real turn. The prompt is read line by line: a line
 // whose first non-blank character is "@" is a directive, and everything else
-// is the reply. Five directives exist:
+// is the reply. Six directives exist:
 //
 //	@wait <ms>      pause, cut short the moment Stop cancels the turn
 //	@tool <name> <input...>   a tool call and its canned result
@@ -157,6 +157,9 @@ func nextSessionID() string {
 //	@approve <name> <input...> ask the user to approve a tool call and wait
 //	                          for the answer; the reply gains "allowed" or
 //	                          "denied"
+//	@ask <question> | <a>, <b>  ask a question with those options (typing is
+//	                          allowed too) and wait; the reply gains
+//	                          "answer=<what was picked>" or "declined"
 //
 // Any line whose leading word is not one of these is treated as reply text,
 // not a directive — so a prompt can still contain a literal "@" without being
@@ -207,15 +210,38 @@ func runScript(ctx context.Context, req agent.TurnRequest, events chan<- agent.E
 			// Unique across turns, as a real provider's request id is.
 			id := fmt.Sprintf("approval-%d", atomic.AddInt64(&approvalCounter, 1))
 			toolName, input, _ := strings.Cut(strings.TrimSpace(rest), " ")
-			answer := make(chan bool, 1)
+			answer := make(chan agent.Reply, 1)
 			events <- agent.Event{Type: agent.EventApproval, Approval: agent.NewApproval(
-				id, toolName, "", input, func(allow bool) error { answer <- allow; return nil })}
+				id, toolName, "", input, func(r agent.Reply) error { answer <- r; return nil })}
 			select {
-			case allow := <-answer:
-				if allow {
+			case r := <-answer:
+				if r.Allow {
 					reply = append(reply, "allowed")
 				} else {
 					reply = append(reply, "denied")
+				}
+			case <-ctx.Done():
+				return
+			}
+		case "ask":
+			id := fmt.Sprintf("approval-%d", atomic.AddInt64(&approvalCounter, 1))
+			text, choices, _ := strings.Cut(rest, "|")
+			question := agent.Question{ID: "q", Question: strings.TrimSpace(text), Other: true}
+			for _, choice := range strings.Split(choices, ",") {
+				if choice = strings.TrimSpace(choice); choice != "" {
+					question.Options = append(question.Options, agent.QuestionOption{Label: choice})
+				}
+			}
+			answer := make(chan agent.Reply, 1)
+			a := agent.NewApproval(id, "Question", "", "", func(r agent.Reply) error { answer <- r; return nil })
+			a.Questions = []agent.Question{question}
+			events <- agent.Event{Type: agent.EventApproval, Approval: a}
+			select {
+			case r := <-answer:
+				if r.Allow {
+					reply = append(reply, "answer="+strings.Join(r.Answers["q"], "+"))
+				} else {
+					reply = append(reply, "declined")
 				}
 			case <-ctx.Done():
 				return
@@ -255,7 +281,7 @@ func cutDirective(line string) (name, rest string, ok bool) {
 	}
 	name, rest, _ = strings.Cut(trimmed[1:], " ")
 	switch name {
-	case "wait", "tool", "error", "account", "approve":
+	case "wait", "tool", "error", "account", "approve", "ask":
 		return name, rest, true
 	default:
 		return "", "", false

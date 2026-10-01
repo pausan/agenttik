@@ -82,7 +82,8 @@ stdin. CLI sessions resume with `--session ses_…`. JSONL text, reasoning,
 tool results and step usage map to the same events; only a completed turn
 emits `done`. Permissions are supplied with `OPENCODE_PERMISSION`: read/list
 in Plan, edits in Workspace, general tools in Full, no tools for isolated
-requests. Questions are denied because the web UI cannot answer CLI prompts.
+requests. Questions are denied: OpenCode is not bridged to the approval and question
+cards ([082](082-tool-approvals.md)).
 Automatic sharing and update checks are disabled for the child.
 
 ## Verification

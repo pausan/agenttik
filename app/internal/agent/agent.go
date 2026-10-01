@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"slices"
+	"strings"
 	"sync"
 )
 
@@ -107,8 +108,8 @@ const (
 	EventLimits         EventType = "limits"
 	EventError          EventType = "error"
 	EventDone           EventType = "done"
-	// EventApproval asks the user to allow or deny one tool call. The turn
-	// waits on it; Approval.Answer resumes it.
+	// EventApproval asks the user to allow or deny one tool call, or to
+	// answer questions. The turn waits on it; Approval.Answer resumes it.
 	EventApproval EventType = "approval"
 	// EventApprovalResolved says an approval no longer waits: it was answered,
 	// or the provider withdrew it. Approval carries only the ID.
@@ -192,30 +193,85 @@ type Event struct {
 	Approval *Approval `json:"approval,omitempty"`
 }
 
-// Approval is one tool call waiting on the user. ID is unique across turns.
+// Approval is one request a running turn waits on the user for: a tool call to
+// allow or deny, or, when Questions is set, questions to answer. ID is unique
+// across turns.
 type Approval struct {
 	ID          string `json:"id"`
 	Tool        string `json:"tool,omitempty"`
 	Description string `json:"description,omitempty"`
 	// Input is the tool's input as JSON, shown so the user knows what runs.
 	Input string `json:"input,omitempty"`
+	// Questions turns the request into a form. Allowing it means answering.
+	Questions []Question `json:"questions,omitempty"`
 	// Allowed is set on approval_resolved when the user answered it.
 	Allowed *bool `json:"allowed,omitempty"`
 
-	answer func(allow bool) error
+	answer func(Reply) error
 }
 
-// NewApproval builds an approval the provider answers through answer.
-func NewApproval(id, tool, description, input string, answer func(allow bool) error) *Approval {
+// Question is one question the agent puts to the user.
+type Question struct {
+	// ID keys the answer. Providers without ids use the question text.
+	ID       string           `json:"id"`
+	Header   string           `json:"header,omitempty"`
+	Question string           `json:"question"`
+	Options  []QuestionOption `json:"options,omitempty"`
+	// Multi allows picking more than one option.
+	Multi bool `json:"multi,omitempty"`
+	// Other allows a typed answer instead of, or without, options.
+	Other bool `json:"other,omitempty"`
+	// Secret asks the UI not to echo the typed answer.
+	Secret bool `json:"secret,omitempty"`
+}
+
+type QuestionOption struct {
+	Label       string `json:"label"`
+	Description string `json:"description,omitempty"`
+}
+
+// Reply is the user's answer to an Approval. Answers maps a question ID to
+// the chosen option labels or typed text; it is set only for questions, and
+// only when Allow is true.
+type Reply struct {
+	Allow   bool                `json:"allow"`
+	Answers map[string][]string `json:"answers,omitempty"`
+}
+
+// NewApproval builds a request the provider answers through answer.
+func NewApproval(id, tool, description, input string, answer func(Reply) error) *Approval {
 	return &Approval{ID: id, Tool: tool, Description: description, Input: input, answer: answer}
 }
 
 // Answer tells the provider the user's decision. It is called at most once.
-func (a *Approval) Answer(allow bool) error {
+func (a *Approval) Answer(r Reply) error {
 	if a.answer == nil {
 		return errors.New("approval cannot be answered")
 	}
-	return a.answer(allow)
+	return a.answer(r)
+}
+
+// CheckReply reports whether r answers every question, with an option
+// offered or, where typing is allowed, any text. A denial needs no answers.
+func (a *Approval) CheckReply(r Reply) error {
+	if !r.Allow {
+		return nil
+	}
+	for _, q := range a.Questions {
+		got := r.Answers[q.ID]
+		if len(got) == 0 || (len(got) > 1 && !q.Multi) {
+			return fmt.Errorf("question %q needs one answer", q.Question)
+		}
+		for _, answer := range got {
+			if strings.TrimSpace(answer) == "" {
+				return fmt.Errorf("question %q has an empty answer", q.Question)
+			}
+			if !q.Other && !slices.ContainsFunc(q.Options, func(o QuestionOption) bool { return o.Label == answer }) {
+				return fmt.Errorf("question %q has no option %q", q.Question, answer)
+			}
+		}
+	}
+	return nil
 }
 
 type ToolEvent struct {

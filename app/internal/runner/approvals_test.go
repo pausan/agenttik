@@ -60,7 +60,7 @@ func TestApprovalReachesEveryWindowAndFirstAnswerWins(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			errs[i] = r.Answer(sess.ID, asked.Event.Approval.ID, allow)
+			errs[i] = r.Answer(sess.ID, asked.Event.Approval.ID, agent.Reply{Allow: allow})
 		}()
 	}
 	wg.Wait()
@@ -110,7 +110,7 @@ func TestStoppedTurnWithdrawsItsApprovals(t *testing.T) {
 	if len(r.Approvals()) != 0 {
 		t.Fatal("stopped turn left an approval pending")
 	}
-	if err := r.Answer(sess.ID, asked.Event.Approval.ID, true); !errors.Is(err, ErrApprovalGone) {
+	if err := r.Answer(sess.ID, asked.Event.Approval.ID, agent.Reply{Allow: true}); !errors.Is(err, ErrApprovalGone) {
 		t.Fatalf("late answer = %v", err)
 	}
 }
@@ -123,11 +123,38 @@ func TestAnswerChecksTheSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	asked := nextOfType(t, tab, agent.EventApproval)
-	if err := r.Answer("other-session", asked.Event.Approval.ID, true); !errors.Is(err, ErrApprovalGone) {
+	if err := r.Answer("other-session", asked.Event.Approval.ID, agent.Reply{Allow: true}); !errors.Is(err, ErrApprovalGone) {
 		t.Fatalf("answer for another session = %v", err)
 	}
 	if len(r.Approvals()) != 1 {
 		t.Fatal("a wrong-session answer must leave the approval pending")
 	}
 	r.Stop(sess.ID)
+}
+
+func TestQuestionNeedsACompleteAnswer(t *testing.T) {
+	r, st, sess := setup(t, fake.New())
+	tab, unsubscribe := r.Hub().Subscribe(sess.ID)
+	defer unsubscribe()
+	if _, err := r.Send(sess.ID, "@ask Which color? | Red, Blue"); err != nil {
+		t.Fatal(err)
+	}
+	asked := nextOfType(t, tab, agent.EventApproval).Event.Approval
+	if len(asked.Questions) != 1 || len(asked.Questions[0].Options) != 2 {
+		t.Fatalf("questions = %+v", asked.Questions)
+	}
+	// An empty answer is refused and leaves the question waiting.
+	if err := r.Answer(sess.ID, asked.ID, agent.Reply{Allow: true}); !errors.Is(err, ErrBadReply) {
+		t.Fatalf("empty answer = %v", err)
+	}
+	if err := r.Answer(sess.ID, asked.ID, agent.Reply{Allow: true,
+		Answers: map[string][]string{"q": {"Green, please"}}}); err != nil {
+		t.Fatal(err)
+	}
+	nextOfType(t, tab, agent.EventDone)
+	waitFor(t, func() bool { return !r.Running(sess.ID) }, "turn should end")
+	msgs, _ := st.ListMessages(sess.ID)
+	if got := strings.TrimSpace(msgs[len(msgs)-1].Content); got != "answer=Green, please" {
+		t.Fatalf("reply = %q", got)
+	}
 }

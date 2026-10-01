@@ -378,7 +378,7 @@ watch(
       <ApprovalCard v-for="a in approvals" :key="a.id" :session-id="S.detail.session.id" :approval="a" />
       <div v-if="S.detail.running" class="mb-3 flex items-center gap-2 text-xs text-dimmed" aria-label="Agent working">
         <span aria-hidden="true">{{ clockFace }}</span>
-        <span>{{ approvals.length ? "Waiting for approval" : "Working" }} ({{ elapsedLabel }})</span>
+        <span>{{ !approvals.length ? "Working" : approvals.some((a) => a.questions?.length) ? "Waiting for your answer" : "Waiting for approval" }} ({{ elapsedLabel }})</span>
       </div>
 
       <!-- A prompt that is only waiting is still shown where it will run, so

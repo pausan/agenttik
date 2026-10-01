@@ -53,3 +53,35 @@ func TestApprovalRoutes(t *testing.T) {
 		t.Errorf("still pending: %+v", left)
 	}
 }
+
+func TestQuestionRouteChecksAnswers(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	reg := agent.NewRegistry(fake.New())
+	r := runner.New(st, reg, runner.NewHub())
+	s := New(st, reg, r)
+	p, _ := st.CreateProject("alpha", t.TempDir())
+	sess := &store.Session{ID: "sess-1", ProjectID: p.ID, Provider: "fake", Model: "fake-quick", Permission: "workspace"}
+	st.CreateSession(sess)
+	if _, err := r.Send(sess.ID, "@ask Pick one | A, B"); err != nil {
+		t.Fatal(err)
+	}
+	var pending []runner.PendingApproval
+	for deadline := time.Now().Add(2 * time.Second); len(pending) == 0 && time.Now().Before(deadline); {
+		pending = decode[[]runner.PendingApproval](t, do(t, s, "GET", "/api/approvals", nil))
+		time.Sleep(10 * time.Millisecond)
+	}
+	if len(pending) != 1 || len(pending[0].Approval.Questions) != 1 {
+		t.Fatalf("pending = %+v", pending)
+	}
+	path := "/api/sessions/sess-1/approvals/" + pending[0].Approval.ID
+	if resp := do(t, s, "POST", path, map[string]any{"allow": true, "answers": map[string][]string{"q": {"A", "B"}}}); resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("two answers to a single choice: status %d, want 400", resp.StatusCode)
+	}
+	if resp := do(t, s, "POST", path, map[string]any{"allow": true, "answers": map[string][]string{"q": {"B"}}}); resp.StatusCode != http.StatusNoContent {
+		t.Errorf("answer: status %d", resp.StatusCode)
+	}
+}

@@ -2,6 +2,7 @@ package runner
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"time"
 
@@ -38,24 +39,32 @@ func (r *Runner) Approvals() []PendingApproval {
 	return out
 }
 
-// Answer allows or denies a pending approval. Taking it out of the map before
-// answering is what makes the first answer win when several windows click at
-// once; the rest get ErrApprovalGone.
-func (r *Runner) Answer(sessionID, approvalID string, allow bool) error {
+// ErrBadReply says a reply leaves a question unanswered or picks an option
+// that was not offered. The request stays pending.
+var ErrBadReply = errors.New("reply does not answer the questions")
+
+// Answer allows, denies or answers a pending request. Taking it out of the map
+// before answering is what makes the first answer win when several windows
+// click at once; the rest get ErrApprovalGone. A reply that does not answer
+// the questions is refused before that, so it uses nothing up.
+func (r *Runner) Answer(sessionID, approvalID string, reply agent.Reply) error {
 	r.mu.Lock()
 	p, ok := r.approvals[approvalID]
-	if ok && p.SessionID == sessionID {
-		delete(r.approvals, approvalID)
-	}
-	r.mu.Unlock()
 	if !ok || p.SessionID != sessionID {
+		r.mu.Unlock()
 		return ErrApprovalGone
 	}
-	if err := p.Approval.Answer(allow); err != nil {
+	if err := p.Approval.CheckReply(reply); err != nil {
+		r.mu.Unlock()
+		return fmt.Errorf("%w: %v", ErrBadReply, err)
+	}
+	delete(r.approvals, approvalID)
+	r.mu.Unlock()
+	if err := p.Approval.Answer(reply); err != nil {
 		r.publishResolved(p, nil)
 		return ErrApprovalGone
 	}
-	r.publishResolved(p, &allow)
+	r.publishResolved(p, &reply.Allow)
 	return nil
 }
 

@@ -21,7 +21,9 @@ import (
 // is what keeps delegated work out of the main context gauge while retaining
 // it in the task totals.
 func (p *Provider) runAppServer(ctx context.Context, req agent.TurnRequest) (<-chan agent.Event, error) {
-	cmd := exec.Command(Binary, "app-server", "--stdio")
+	// Codex offers its question tool outside plan mode only behind this
+	// feature. An unknown feature is ignored with a warning, not an error.
+	cmd := exec.Command(Binary, "-c", "features.default_mode_request_user_input=true", "app-server", "--stdio")
 	cmd.Dir = req.WorkDir
 	cmd.Env = agent.HomeEnv(HomeVar, req.AccountHome)
 	process.Configure(cmd)
@@ -100,9 +102,16 @@ type appRPCMessage struct {
 }
 
 type appServerRun struct {
-	req         agent.TurnRequest
-	out         chan<- agent.Event
-	enc         *json.Encoder
+	req    agent.TurnRequest
+	out    chan<- agent.Event
+	enc    *json.Encoder
+	wmu    sync.Mutex
+	closed bool
+	// pending maps a JSON-RPC request id to the approval it was asked as.
+	pending map[string]string
+	// fileChanges remembers each file change item's paths, which its approval
+	// request does not repeat.
+	fileChanges map[string][]string
 	rootID      string
 	tracker     appUsageTracker
 	streamed    map[string]bool
@@ -123,7 +132,10 @@ func serveAppServer(
 			subagents: make(map[string]struct{})},
 		streamed:    make(map[string]bool),
 		activeTurns: make(map[string]string),
+		pending:     make(map[string]string),
+		fileChanges: make(map[string][]string),
 	}
+	defer run.closeWrites()
 	if err := run.send("initialize", 1, map[string]any{
 		"clientInfo": map[string]string{
 			"name": "agenttik", "title": "Agenttik", "version": "0.1",
@@ -164,7 +176,7 @@ func (r *appServerRun) send(method string, id int, params any) error {
 	if params != nil {
 		message["params"] = params
 	}
-	if err := r.enc.Encode(message); err != nil {
+	if err := r.write(message); err != nil {
 		return fmt.Errorf("write app-server %s: %w", method, err)
 	}
 	return nil
@@ -175,7 +187,7 @@ func (r *appServerRun) notify(method string, params any) error {
 	if params != nil {
 		message["params"] = params
 	}
-	if err := r.enc.Encode(message); err != nil {
+	if err := r.write(message); err != nil {
 		return fmt.Errorf("write app-server %s: %w", method, err)
 	}
 	return nil
@@ -234,7 +246,7 @@ func (r *appServerRun) handle(message appRPCMessage) (bool, error) {
 func threadRequest(req agent.TurnRequest) (string, map[string]any) {
 	params := map[string]any{
 		"cwd":            req.WorkDir,
-		"approvalPolicy": "never",
+		"approvalPolicy": approvalPolicy(req.Permission),
 		"sandbox":        sandboxFlag(req.Permission),
 	}
 	if req.Model != "" {
@@ -256,7 +268,13 @@ func turnRequest(req agent.TurnRequest, threadID string) map[string]any {
 			"type": "text", "text": req.Prompt, "text_elements": []any{},
 		}},
 		"cwd":            req.WorkDir,
-		"approvalPolicy": "never",
+		"approvalPolicy": approvalPolicy(req.Permission),
+	}
+	if params["approvalPolicy"] != "never" {
+		// The user's own config may hand approvals to a reviewing model
+		// (approvals_reviewer = "auto_review"); a task's requests are the
+		// user's to answer.
+		params["approvalsReviewer"] = "user"
 	}
 	if req.Model != "" {
 		params["model"] = req.Model
@@ -265,6 +283,17 @@ func turnRequest(req agent.TurnRequest, threadID string) map[string]any {
 		params["effort"] = req.Effort
 	}
 	return params
+}
+
+// approvalPolicy says whether Codex may ask. Workspace tasks run unsandboxed
+// (see sandboxFlag), so ordinary commands never need asking; what Codex still
+// escalates — MCP tool calls, rule matches — goes to the user. Plan stays
+// read-only without asking, and full has no guardrails at all.
+func approvalPolicy(p agent.Permission) string {
+	if p.Valid() == agent.PermissionWorkspace {
+		return "on-request"
+	}
+	return "never"
 }
 
 func hasRPCID(raw json.RawMessage) bool {
@@ -277,29 +306,6 @@ func rpcIntID(raw json.RawMessage) (int, bool) {
 	}
 	var id int
 	return id, json.Unmarshal(raw, &id) == nil
-}
-
-func (r *appServerRun) replyToServerRequest(message appRPCMessage) error {
-	var result any
-	switch message.Method {
-	case "item/commandExecution/requestApproval", "item/fileChange/requestApproval",
-		"applyPatchApproval", "execCommandApproval":
-		result = map[string]any{"decision": "decline"}
-	case "item/tool/requestUserInput":
-		// There is no interactive approval bridge in the web task runner.
-		// An empty answer lets the model continue and explain what it needs.
-		result = map[string]any{"answers": map[string]any{}}
-	case "mcpServer/elicitation/request":
-		result = map[string]any{"action": "decline", "content": nil, "_meta": nil}
-	default:
-		return r.enc.Encode(map[string]any{
-			"id": message.ID,
-			"error": map[string]any{
-				"code": -32601, "message": "client method not supported",
-			},
-		})
-	}
-	return r.enc.Encode(map[string]any{"id": message.ID, "result": result})
 }
 
 type appServerThread struct {
@@ -320,6 +326,9 @@ type appServerNotification struct {
 
 	Error     appServerTurnError `json:"error"`
 	WillRetry bool               `json:"willRetry"`
+
+	// serverRequest/resolved
+	RequestID json.RawMessage `json:"requestId"`
 }
 
 type appServerTurn struct {
@@ -352,6 +361,9 @@ type appServerItem struct {
 	ReceiverThreadIDs []string `json:"receiverThreadIds"`
 	AgentThreadID     string   `json:"agentThreadId"`
 	Prompt            string   `json:"prompt"`
+	Changes           []struct {
+		Path string `json:"path"`
+	} `json:"changes"`
 }
 
 func (r *appServerRun) handleNotification(
@@ -400,7 +412,14 @@ func (r *appServerRun) handleNotification(
 			r.streamed[params.ItemID] = true
 			r.out <- agent.Event{Type: agent.EventThinking, Text: params.Delta}
 		}
+	case "serverRequest/resolved":
+		r.resolved(params.RequestID)
 	case "item/started":
+		if params.Item.Type == "fileChange" {
+			for _, c := range params.Item.Changes {
+				r.fileChanges[params.Item.ID] = append(r.fileChanges[params.Item.ID], c.Path)
+			}
+		}
 		r.handleItem(params.ThreadID, params.Item, false)
 	case "item/completed":
 		r.handleItem(params.ThreadID, params.Item, true)

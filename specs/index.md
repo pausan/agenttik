@@ -60,7 +60,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [010](010-working-indicator.md) | Live turn progress and the finished-turn summary line |
 | [011](011-prompt-bar-usage.md) | Fuzzy models, context ring, every subscription window |
 | [012](012-task-queue.md) | Queued prompts and project scheduling |
-| [082](082-tool-approvals.md) | Approving or denying a tool call mid-turn, from any connected window |
+| [082](082-tool-approvals.md) | Approving tool calls and answering the agent's questions mid-turn, from any connected window |
 | [020](020-task-titles.md) | Instant first-line title, refined by an isolated small model |
 | [024](024-instant-prompt-echo.md) | Drawing sent and queued prompts on the keypress |
 | [028](028-scheduled-jobs.md) | Repeating a prompt on a clock, the tasks it spawns, and the number they share |

@@ -69,18 +69,23 @@ Cancelling the context kills the process group, which is how "stop" works.
 ## Permission modes
 
 Chosen per task; default `workspace`. The posture is set before the turn
-starts. What it leaves open, Claude Code asks the user about mid-turn
+starts. What it leaves open, Claude Code and Codex ask the user about mid-turn
 ([082](082-tool-approvals.md)); the other providers refuse it.
 
-| agenttik | claude | Codex app-server sandbox |
-|----------|--------|--------------------------|
-| `plan` | `--permission-mode plan` | `read-only` |
-| `workspace` (default) | `--permission-mode auto` | `danger-full-access` |
-| `full` | `--dangerously-skip-permissions` | `danger-full-access` |
+| agenttik | claude | Codex app-server sandbox | Codex approval policy |
+|----------|--------|--------------------------|-----------------------|
+| `plan` | `--permission-mode plan` | `read-only` | `never` |
+| `workspace` (default) | `--permission-mode auto` | `danger-full-access` | `on-request`, reviewer `user` |
+| `full` | `--dangerously-skip-permissions` | `danger-full-access` | `never` |
 
-Codex runs with its sandbox disabled and full permissions by default for now.
-Both `workspace` and `full` use `danger-full-access` with approval policy
-`never`, including resumed tasks. The exec path uses
+Codex runs with its sandbox disabled and full permissions by default for now,
+including resumed tasks. On Linux hosts that restrict unprivileged user
+namespaces (Ubuntu's AppArmor default), Codex's bubblewrap sandbox cannot start
+and `workspace-write` asks before every command, even inside the project, so
+the sandbox stays off. Workspace tasks still ask, so what Codex escalates on
+its own — MCP tool calls, rule matches — reaches the user; the reviewer is set
+to `user` because a personal config may route approvals to a reviewing model
+(`approvals_reviewer = "auto_review"`). The exec path uses
 `--dangerously-bypass-approvals-and-sandbox` for both modes. Explicit `plan`
 mode remains read-only.
 
@@ -160,7 +165,7 @@ Codex runs through the locally authenticated CLI, so agenttik never reads or
 handles the account credentials. Normal task turns use its stdio app-server:
 
 ```
-codex app-server --stdio
+codex -c features.default_mode_request_user_input=true app-server --stdio
 initialize
 thread/start | thread/resume
 turn/start
@@ -173,8 +178,11 @@ efforts are returned with the model record, so the UI never offers an effort
 that the chosen model does not support.
 
 The prompt is a text input on `turn/start`. Start and resume both receive the
-selected model, project directory, sandbox mode, and a noninteractive approval
-policy; `thread/resume` excludes historical turns from its response. The
+selected model, project directory, sandbox mode, and the approval policy above;
+`thread/resume` excludes historical turns from its response. The feature flag
+gives the model its question tool outside Codex's plan mode; an unknown flag
+is ignored with a warning. Requests app-server makes of the client are
+described in [082](082-tool-approvals.md). The
 thread id returned by start or resume is the provider session id.
 
 The app-server's JSONL stream maps as follows:

@@ -110,7 +110,7 @@ func TestAppServerResumeRequestSkipsHistory(t *testing.T) {
 	})
 	if method != "thread/resume" || params["threadId"] != "thread-1" ||
 		params["excludeTurns"] != true || params["sandbox"] != "danger-full-access" ||
-		params["approvalPolicy"] != "never" {
+		params["approvalPolicy"] != "on-request" {
 		t.Errorf("request = %s %+v", method, params)
 	}
 }
@@ -118,8 +118,22 @@ func TestAppServerResumeRequestSkipsHistory(t *testing.T) {
 func TestAppServerDefaultPermissions(t *testing.T) {
 	method, params := threadRequest(agent.TurnRequest{WorkDir: "/tmp/p"})
 	if method != "thread/start" || params["sandbox"] != "danger-full-access" ||
-		params["approvalPolicy"] != "never" {
+		params["approvalPolicy"] != "on-request" {
 		t.Errorf("request = %s %+v", method, params)
+	}
+}
+
+func TestApprovalPolicyAsksOnlyForWorkspace(t *testing.T) {
+	for perm, want := range map[agent.Permission]string{
+		agent.PermissionPlan: "never", agent.PermissionWorkspace: "on-request", agent.PermissionFull: "never",
+	} {
+		turn := turnRequest(agent.TurnRequest{Permission: perm}, "t")
+		if turn["approvalPolicy"] != want {
+			t.Errorf("%s: policy %v, want %s", perm, turn["approvalPolicy"], want)
+		}
+		if reviewer, set := turn["approvalsReviewer"]; (want == "on-request") != set || (set && reviewer != "user") {
+			t.Errorf("%s: reviewer %v", perm, turn["approvalsReviewer"])
+		}
 	}
 }
 

@@ -254,7 +254,7 @@ func (p *pipe) lines(t *testing.T) []map[string]any {
 }
 
 const approvalStream = `{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"mcp__claude_ai_Linear__create_issue","display_name":"Linear: create_issue","description":"Create an issue","input":{"title":"Bug"}}}
-{"type":"control_request","request_id":"r2","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[]}}}
+{"type":"control_request","request_id":"r2","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":"unreadable"}}}
 {"type":"control_request","request_id":"r3","request":{"subtype":"hook_callback"}}
 {"type":"control_cancel_request","request_id":"r4"}
 {"type":"result","subtype":"success","usage":{}}
@@ -282,21 +282,21 @@ func TestParseTurnsToolRequestsIntoApprovals(t *testing.T) {
 	if len(resolved) != 1 || resolved[0].ID != "r4" {
 		t.Fatalf("resolved = %+v", resolved)
 	}
-	// The question tool and the unknown request are answered at once, and the
-	// result closes stdin.
+	// Unreadable questions and the unknown request are answered at once, and
+	// the result closes stdin.
 	lines := stdin.lines(t)
 	if len(lines) != 2 || !stdin.closed {
 		t.Fatalf("host wrote %v, closed=%v", lines, stdin.closed)
 	}
 	if r := lines[0]["response"].(map[string]any); r["request_id"] != "r2" ||
 		r["response"].(map[string]any)["behavior"] != "deny" {
-		t.Errorf("AskUserQuestion answer = %v", lines[0])
+		t.Errorf("unreadable AskUserQuestion answer = %v", lines[0])
 	}
 	if r := lines[1]["response"].(map[string]any); r["request_id"] != "r3" || r["subtype"] != "error" {
 		t.Errorf("unknown request answer = %v", lines[1])
 	}
 	// Answering after the turn ended reports it instead of writing.
-	if err := approvals[0].Answer(true); err == nil {
+	if err := approvals[0].Answer(agent.Reply{Allow: true}); err == nil {
 		t.Error("answer after close should fail")
 	}
 }
@@ -309,7 +309,7 @@ func TestApprovalAnswerWritesControlResponse(t *testing.T) {
 		p := streamParser{host: h, subagents: map[string]struct{}{}}
 		p.handleLine([]byte(`{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"ls"}}}`), out)
 		ev := <-out
-		if err := ev.Approval.Answer(allow); err != nil {
+		if err := ev.Approval.Answer(agent.Reply{Allow: allow}); err != nil {
 			t.Fatal(err)
 		}
 		resp := stdin.lines(t)[0]["response"].(map[string]any)
@@ -345,5 +345,44 @@ func TestBuildArgsAsksOnlyForTaskTurns(t *testing.T) {
 	isolated := strings.Join(buildArgs(agent.TurnRequest{Isolated: true}), " ")
 	if strings.Contains(isolated, "--permission-prompt-tool") || strings.Contains(isolated, "--input-format") {
 		t.Errorf("isolated args %q must not prompt", isolated)
+	}
+}
+
+func TestAskUserQuestionBecomesQuestions(t *testing.T) {
+	stdin := &pipe{}
+	out := make(chan agent.Event, 4)
+	p := streamParser{host: &host{w: stdin}, subagents: map[string]struct{}{}}
+	p.handleLine([]byte(`{"type":"control_request","request_id":"q1","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[{"question":"Which color?","header":"Color","options":[{"label":"Red","description":"warm"},{"label":"Blue"}],"multiSelect":false},{"question":"Which sizes?","header":"Size","options":[{"label":"S"},{"label":"M"}],"multiSelect":true}]}}}`), out)
+	a := (<-out).Approval
+	if len(a.Questions) != 2 || a.Questions[0].ID != "Which color?" || a.Questions[0].Options[0].Description != "warm" ||
+		!a.Questions[1].Multi || !a.Questions[0].Other {
+		t.Fatalf("questions = %+v", a.Questions)
+	}
+	reply := agent.Reply{Allow: true, Answers: map[string][]string{"Which color?": {"Blue"}, "Which sizes?": {"S", "M"}}}
+	if err := a.CheckReply(reply); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Answer(reply); err != nil {
+		t.Fatal(err)
+	}
+	result := stdin.lines(t)[0]["response"].(map[string]any)["response"].(map[string]any)
+	input := result["updatedInput"].(map[string]any)
+	answers := input["answers"].(map[string]any)
+	if result["behavior"] != "allow" || answers["Which color?"] != "Blue" || answers["Which sizes?"] != "S, M" ||
+		len(input["questions"].([]any)) != 2 {
+		t.Errorf("answered input = %v", result)
+	}
+}
+
+func TestDeclinedQuestionDenies(t *testing.T) {
+	stdin := &pipe{}
+	out := make(chan agent.Event, 4)
+	p := streamParser{host: &host{w: stdin}, subagents: map[string]struct{}{}}
+	p.handleLine([]byte(`{"type":"control_request","request_id":"q1","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[{"question":"Go?","options":[{"label":"Yes"}]}]}}}`), out)
+	if err := (<-out).Approval.Answer(agent.Reply{}); err != nil {
+		t.Fatal(err)
+	}
+	if result := stdin.lines(t)[0]["response"].(map[string]any)["response"].(map[string]any); result["behavior"] != "deny" {
+		t.Errorf("declined question = %v", result)
 	}
 }

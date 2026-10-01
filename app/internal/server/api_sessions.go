@@ -504,16 +504,18 @@ func (s *Server) listApprovals(c *fiber.Ctx) error {
 	return c.JSON(s.runner.Approvals())
 }
 
-// answerApproval allows or denies one waiting tool call. The first answer from
-// any window wins; a later one gets 409.
+// answerApproval allows or denies one waiting tool call, or answers its
+// questions. The first answer from any window wins; a later one gets 409.
 func (s *Server) answerApproval(c *fiber.Ctx) error {
 	var body struct {
-		Allow *bool `json:"allow"`
+		Allow   *bool               `json:"allow"`
+		Answers map[string][]string `json:"answers"`
 	}
 	if err := c.BodyParser(&body); err != nil || body.Allow == nil {
 		return badRequest("allow must be true or false")
 	}
-	if err := s.runner.Answer(c.Params("id"), c.Params("approval"), *body.Allow); err != nil {
+	reply := agent.Reply{Allow: *body.Allow, Answers: body.Answers}
+	if err := s.runner.Answer(c.Params("id"), c.Params("approval"), reply); err != nil {
 		return err
 	}
 	return c.SendStatus(fiber.StatusNoContent)

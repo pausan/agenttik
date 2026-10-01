@@ -100,6 +100,7 @@ func (r *Runner) Hold(sessionID, approvalID string) error {
 	// window.
 	held := *p.Approval
 	held.ExpiresIn = 0
+	held.Held = true
 	p.Approval = &held
 	r.mu.Unlock()
 	// Sent again as a request: windows replace the card they hold by its id.

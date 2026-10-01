@@ -3,10 +3,11 @@
    answer. Every window draws the same card, and the first answer from any of
    them settles it: the others see it go when the server says so. See
    specs/082-tool-approvals.md. */
-import { computed, onUnmounted, reactive, ref, watch } from "vue";
+import { computed, reactive } from "vue";
 
 import { answersFor, emptyAnswers, pick, type } from "../questions.js";
-import { answerApproval, holdApproval } from "../store";
+import { answerApproval } from "../store";
+import ApprovalTimer from "./ApprovalTimer.vue";
 
 const props = defineProps({
   sessionId: { type: String, required: true },
@@ -29,24 +30,6 @@ const input = computed(() => {
     return raw;
   }
 });
-
-/* The countdown to agenttik answering on the user's behalf, which Settings ›
-   General turns on. The clock only ticks while there is one. */
-const now = ref(Date.now());
-let ticker = null;
-watch(
-  () => props.approval.deadline,
-  (deadline) => {
-    clearInterval(ticker);
-    ticker = deadline ? setInterval(() => (now.value = Date.now()), 250) : null;
-    now.value = Date.now();
-  },
-  { immediate: true },
-);
-onUnmounted(() => clearInterval(ticker));
-const secondsLeft = computed(() =>
-  props.approval.deadline ? Math.max(0, Math.ceil((props.approval.deadline - now.value) / 1000)) : 0,
-);
 
 function submit() {
   if (answers.value) answerApproval(props.sessionId, props.approval.id, true, answers.value);
@@ -111,12 +94,7 @@ function submit() {
           @update:model-value="type(state, q, $event)"
         />
       </fieldset>
-    <div v-if="approval.deadline" class="mt-2 flex items-center gap-2 text-xs text-muted" aria-label="Automatic answer">
-      <UIcon name="i-lucide-timer" class="size-3.5 shrink-0" aria-hidden="true" />
-      <span class="tabular-nums">Answering for you in {{ secondsLeft }}s</span>
-      <UButton size="xs" color="neutral" variant="link" label="Keep waiting" @click="holdApproval(sessionId, approval.id)" />
-    </div>
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2">
         <UButton
           type="submit"
           size="sm"
@@ -134,6 +112,7 @@ function submit() {
           :disabled="approval.answering"
           @click="answerApproval(sessionId, approval.id, false)"
         />
+        <ApprovalTimer :session-id="sessionId" :approval="approval" verb="Answering for you" />
       </div>
     </form>
   </div>
@@ -152,12 +131,7 @@ function submit() {
       v-if="input"
       class="mt-2 max-h-48 overflow-auto rounded bg-elevated px-2 py-1.5 font-mono text-xs whitespace-pre-wrap text-default wrap-anywhere"
     >{{ input }}</pre>
-    <div v-if="approval.deadline" class="mt-2 flex items-center gap-2 text-xs text-muted" aria-label="Automatic answer">
-      <UIcon name="i-lucide-timer" class="size-3.5 shrink-0" aria-hidden="true" />
-      <span class="tabular-nums">Allowing in {{ secondsLeft }}s</span>
-      <UButton size="xs" color="neutral" variant="link" label="Keep waiting" @click="holdApproval(sessionId, approval.id)" />
-    </div>
-    <div class="mt-2.5 flex items-center gap-2">
+    <div class="mt-2.5 flex flex-wrap items-center gap-2">
       <UButton
         size="sm"
         icon="i-lucide-check"
@@ -175,6 +149,7 @@ function submit() {
         :disabled="approval.answering"
         @click="answerApproval(sessionId, approval.id, false)"
       />
+      <ApprovalTimer :session-id="sessionId" :approval="approval" verb="Allowing" />
     </div>
   </div>
 </template>

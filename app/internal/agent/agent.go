@@ -214,6 +214,9 @@ type Approval struct {
 	// a time, so a window whose clock differs from the server's counts down
 	// correctly.
 	ExpiresIn int64 `json:"expires_in_ms,omitempty"`
+	// Held says someone stopped the countdown: the user will answer, and it
+	// waits for them.
+	Held bool `json:"held,omitempty"`
 
 	answer func(Reply) error
 }

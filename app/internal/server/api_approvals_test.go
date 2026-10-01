@@ -45,7 +45,7 @@ func TestApprovalRoutes(t *testing.T) {
 	if resp := do(t, s, "POST", path+"/hold", nil); resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("hold: status %d", resp.StatusCode)
 	}
-	if held := decode[[]runner.PendingApproval](t, do(t, s, "GET", "/api/approvals", nil)); held[0].Approval.ExpiresIn != 0 {
+	if held := decode[[]runner.PendingApproval](t, do(t, s, "GET", "/api/approvals", nil)); held[0].Approval.ExpiresIn != 0 || !held[0].Approval.Held {
 		t.Errorf("held request still counts down: %d", held[0].Approval.ExpiresIn)
 	}
 	if resp := do(t, s, "POST", path, map[string]any{}); resp.StatusCode != http.StatusBadRequest {

@@ -134,16 +134,18 @@ test("a request nobody answers is allowed when the timeout runs out", async ({ p
   await expect(page.getByText("allowed", { exact: true })).toBeVisible();
 });
 
-test("keep waiting from one window stops the countdown in every window", async ({ page, agenttik }) => {
+test("pausing the timer in one window stops the countdown in every window", async ({ page, agenttik }) => {
   await setApprovals(page, agenttik, { approval_mode: "timeout", approval_timeout: 4 });
   const card = await askForApproval(page, "echo held");
   const other = await page.context().newPage();
   await other.goto(agenttik.url);
   await sidebar(other).locator(".task-row").filter({ has: other.getByLabel("Waiting for you") }).locator(".task-select").click();
   const otherCard = other.getByRole("group", { name: "Tool approval" });
-  await otherCard.getByRole("button", { name: "Keep waiting" }).click();
+  await otherCard.getByRole("button", { name: "Pause timer" }).click();
   await expect(otherCard.getByLabel("Automatic answer")).toHaveCount(0);
   await expect(card.getByLabel("Automatic answer")).toHaveCount(0);
+  await expect(otherCard.getByLabel("Timer paused")).toContainText("waiting for your answer");
+  await expect(card.getByLabel("Timer paused")).toBeVisible();
   // Past the timeout, it still waits.
   await page.waitForTimeout(4500);
   await expect(card).toBeVisible();

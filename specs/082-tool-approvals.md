@@ -125,9 +125,10 @@ label contains "recommended" (case-insensitive), else the first. If any
 question has no options there is nothing to guess and the request is
 declined.
 
-`POST /api/sessions/:id/approvals/:approval/hold` stops a countdown: the
-request is published again without `expires_in_ms`, and every window drops
-its countdown. A request taken out of the map — answered, withdrawn or
+`POST /api/sessions/:id/approvals/:approval/hold` stops a countdown — the
+user saying "I will answer this, wait for me". The request is published again
+without `expires_in_ms` and with `held: true`, and every window swaps its
+countdown for "Timer paused". It then waits as under `wait`. A request taken out of the map — answered, withdrawn or
 dropped — has its timer stopped.
 
 The remaining time travels as a duration, not a time: a remote window's clock
@@ -157,7 +158,9 @@ while it was not listening is still drawn. Events keep it current after that.
   every question has an answer; Skip declines. The rules are in
   `web/src/questions.js`.
 - A counting-down request shows "Allowing in 23s" or "Answering for you in
-  23s" with **Keep waiting**, which holds it for every window.
+  23s" beside its answer buttons, with **Pause timer**, which holds it for
+  every window; a held one says "Timer paused · waiting for your answer". The
+  countdown is `ApprovalTimer.vue`, shared by both cards.
 - The working line says "Waiting for approval" or "Waiting for your answer".
 - The task's sidebar and project-list rows show a shield ("Waiting for you"),
   and the project dot counts a waiting task as needing attention, so a folded

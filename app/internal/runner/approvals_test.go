@@ -257,7 +257,7 @@ func TestWaitModeAndHoldKeepTheRequest(t *testing.T) {
 	if err := r.Hold(other.ID, asked.ID); err != nil {
 		t.Fatal(err)
 	}
-	if held := nextOfType(t, otherTab, agent.EventApproval).Event.Approval; held.ID != asked.ID || held.ExpiresIn != 0 {
+	if held := nextOfType(t, otherTab, agent.EventApproval).Event.Approval; held.ID != asked.ID || held.ExpiresIn != 0 || !held.Held {
 		t.Fatalf("held = %+v", held)
 	}
 	time.Sleep(1500 * time.Millisecond)

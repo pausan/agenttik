@@ -277,6 +277,8 @@ func (s *Server) routes() {
 	api.Patch("/sessions/:id/queue/:queuedID", s.updateQueuedMessage)
 	api.Post("/sessions/:id/queue/force", s.forceQueuedMessage)
 	api.Post("/sessions/:id/stop", s.stopSession)
+	api.Get("/approvals", s.listApprovals)
+	api.Post("/sessions/:id/approvals/:approval", s.answerApproval)
 
 	api.Get("/schedules", s.listSchedules)
 	api.Post("/schedules", s.createSchedule)
@@ -427,6 +429,8 @@ func errorHandler(c *fiber.Ctx, err error) error {
 	case errors.Is(err, runner.ErrNotRunning):
 		code = fiber.StatusConflict
 	case errors.Is(err, runner.ErrForcePending):
+		code = fiber.StatusConflict
+	case errors.Is(err, runner.ErrApprovalGone):
 		code = fiber.StatusConflict
 	case errors.Is(err, runner.ErrUnknownAccount), errors.Is(err, runner.ErrAccountSignedOut):
 		// Not a server fault: the task names a subscription that has been

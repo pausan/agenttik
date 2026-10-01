@@ -28,12 +28,60 @@ type envelope struct {
 	// type=rate_limit_event
 	RateLimitInfo *rateLimitInfo `json:"rate_limit_info"`
 
+	// type=control_request | control_cancel_request
+	RequestID string          `json:"request_id"`
+	Request   *controlRequest `json:"request"`
+
 	// type=result
 	IsError      bool                  `json:"is_error"`
 	Result       string                `json:"result"`
 	TotalCostUSD float64               `json:"total_cost_usd"`
 	Usage        usage                 `json:"usage"`
 	ModelUsage   map[string]modelUsage `json:"modelUsage"`
+}
+
+// controlRequest is the CLI asking its host something mid-turn. The only one
+// answered is can_use_tool: a tool call the permission mode did not settle.
+type controlRequest struct {
+	Subtype     string          `json:"subtype"`
+	ToolName    string          `json:"tool_name"`
+	DisplayName string          `json:"display_name"`
+	Description string          `json:"description"`
+	Input       json.RawMessage `json:"input"`
+}
+
+// controlResponse is the host's answer to a control_request, written to stdin.
+type controlResponse struct {
+	Type     string             `json:"type"`
+	Response controlResponseRef `json:"response"`
+}
+
+type controlResponseRef struct {
+	Subtype   string `json:"subtype"`
+	RequestID string `json:"request_id"`
+	Response  any    `json:"response,omitempty"`
+	Error     string `json:"error,omitempty"`
+}
+
+// permissionResult is can_use_tool's answer. Allowing hands the input back
+// unchanged; the CLI requires it.
+type permissionResult struct {
+	Behavior     string          `json:"behavior"`
+	UpdatedInput json.RawMessage `json:"updatedInput,omitempty"`
+	Message      string          `json:"message,omitempty"`
+}
+
+// userInput is the prompt as a stream-json input line.
+type userInput struct {
+	Type            string      `json:"type"`
+	Message         userMessage `json:"message"`
+	ParentToolUseID *string     `json:"parent_tool_use_id"`
+	SessionID       string      `json:"session_id"`
+}
+
+type userMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
 }
 
 // modelUsage is the per-model breakdown on a result line. Only the window and

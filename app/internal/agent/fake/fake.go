@@ -135,7 +135,7 @@ func wrapped(prompt, tag string) string {
 	return strings.TrimSpace(strings.SplitN(inner, "\n", 2)[0])
 }
 
-var sessionCounter int64
+var sessionCounter, approvalCounter int64
 
 func nextSessionID() string {
 	return fmt.Sprintf("fake-%d", atomic.AddInt64(&sessionCounter, 1))
@@ -143,7 +143,7 @@ func nextSessionID() string {
 
 // runScript drives one real turn. The prompt is read line by line: a line
 // whose first non-blank character is "@" is a directive, and everything else
-// is the reply. Four directives exist:
+// is the reply. Five directives exist:
 //
 //	@wait <ms>      pause, cut short the moment Stop cancels the turn
 //	@tool <name> <input...>   a tool call and its canned result
@@ -154,6 +154,9 @@ func nextSessionID() string {
 //	@account                  reply with the login directory this turn was
 //	                          given, which is the only way a browser test can
 //	                          see which subscription actually ran it
+//	@approve <name> <input...> ask the user to approve a tool call and wait
+//	                          for the answer; the reply gains "allowed" or
+//	                          "denied"
 //
 // Any line whose leading word is not one of these is treated as reply text,
 // not a directive — so a prompt can still contain a literal "@" without being
@@ -200,6 +203,23 @@ func runScript(ctx context.Context, req agent.TurnRequest, events chan<- agent.E
 				home = "system"
 			}
 			reply = append(reply, "account="+home)
+		case "approve":
+			// Unique across turns, as a real provider's request id is.
+			id := fmt.Sprintf("approval-%d", atomic.AddInt64(&approvalCounter, 1))
+			toolName, input, _ := strings.Cut(strings.TrimSpace(rest), " ")
+			answer := make(chan bool, 1)
+			events <- agent.Event{Type: agent.EventApproval, Approval: agent.NewApproval(
+				id, toolName, "", input, func(allow bool) error { answer <- allow; return nil })}
+			select {
+			case allow := <-answer:
+				if allow {
+					reply = append(reply, "allowed")
+				} else {
+					reply = append(reply, "denied")
+				}
+			case <-ctx.Done():
+				return
+			}
 		default:
 			reply = append(reply, line)
 		}
@@ -235,7 +255,7 @@ func cutDirective(line string) (name, rest string, ok bool) {
 	}
 	name, rest, _ = strings.Cut(trimmed[1:], " ")
 	switch name {
-	case "wait", "tool", "error", "account":
+	case "wait", "tool", "error", "account", "approve":
 		return name, rest, true
 	default:
 		return "", "", false

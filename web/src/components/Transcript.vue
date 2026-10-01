@@ -12,6 +12,7 @@ import {
 } from "../store";
 import { turnSummary } from "../api";
 import { tabScroll, vTabScroll } from "../tab-scroll";
+import ApprovalCard from "./ApprovalCard.vue";
 import Message from "./Message.vue";
 import ModelSelection from "./ModelSelection.vue";
 import ToolGroup from "./ToolGroup.vue";
@@ -23,6 +24,7 @@ const fallbackStartedAt = ref(0);
 let clock = null;
 
 const CLOCK_FACES = ["🕛", "🕐", "🕑", "🕒", "🕓", "🕔", "🕕", "🕖", "🕗", "🕘", "🕙", "🕚"];
+const approvals = computed(() => (S.detail ? S.approvals[S.detail.session.id] || [] : []));
 const runningTurn = computed(() => S.detail?.turns?.findLast((turn) => turn.status === "running"));
 const startedAt = computed(() => Number(runningTurn.value?.started_at) || fallbackStartedAt.value);
 const elapsed = computed(() =>
@@ -306,7 +308,7 @@ function onScroll() {
 }
 watch(
   () => [S.activeTab, S.detail?.messages, S.detail?.messages.length,
-    S.detail?.messages.at(-1)?.content, queued.value.length],
+    S.detail?.messages.at(-1)?.content, queued.value.length, approvals.value.length],
   async (value, previous) => {
     const tab = S.tab;
     const switched = value[0] !== previous?.[0];
@@ -373,9 +375,10 @@ watch(
           {{ row.summary }}
         </p>
       </template>
+      <ApprovalCard v-for="a in approvals" :key="a.id" :session-id="S.detail.session.id" :approval="a" />
       <div v-if="S.detail.running" class="mb-3 flex items-center gap-2 text-xs text-dimmed" aria-label="Agent working">
         <span aria-hidden="true">{{ clockFace }}</span>
-        <span>Working ({{ elapsedLabel }})</span>
+        <span>{{ approvals.length ? "Waiting for approval" : "Working" }} ({{ elapsedLabel }})</span>
       </div>
 
       <!-- A prompt that is only waiting is still shown where it will run, so

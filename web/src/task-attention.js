@@ -29,9 +29,12 @@ export function taskDot(status, unread) {
   return unread && status !== "error" && status !== "running" ? "unread" : status;
 }
 
-export function projectDot(project, unread) {
+// A task waiting on a tool approval needs the user as much as an unread one,
+// and a folded project shows no task rows to say so.
+export function projectDot(project, unread, approvals = {}) {
   const running = project.recent_sessions.some((task) => task.status === "running") ||
     project.schedules.some((schedule) => schedule.running);
-  const attention = project.recent_sessions.some((task) => taskDot(task.status, unread[task.id]) === "unread");
+  const attention = project.recent_sessions.some((task) =>
+    approvals[task.id] || taskDot(task.status, unread[task.id]) === "unread");
   return attention ? (running ? "unread-running" : "unread") : (running ? "running" : null);
 }

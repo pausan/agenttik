@@ -139,7 +139,7 @@ const taskNumber = (project, task) =>
   S.activeProjectID === project.id ? numbers.value.get(task.id) || 0 : 0;
 
 const projectDots = computed(() => new Map(
-  S.projects.map((project) => [project.id, projectDot(project, S.unreadTasks)]),
+  S.projects.map((project) => [project.id, projectDot(project, S.unreadTasks, S.approvals)]),
 ));
 
 /* The schedule tab in front, so its sidebar row is highlighted the way an
@@ -348,6 +348,7 @@ function onTaskDrop(e, projectID, overID) {
               :unread="!!S.unreadTasks[s.id]"
               @toggle-unread="toggleTaskUnread(s.id)"
               :queued="s.queue_count"
+              :approval="!!S.approvals[s.id]"
               :active="S.detail?.session.id === s.id"
               :number="taskNumber(p, s)"
               :job="s.schedule_id"

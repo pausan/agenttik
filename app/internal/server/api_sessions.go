@@ -496,3 +496,25 @@ func (s *Server) stopSession(c *fiber.Ctx) error {
 	s.sessionQueueChanged(c.Params("id"))
 	return c.SendStatus(fiber.StatusNoContent)
 }
+
+// listApprovals is every tool call waiting on the user, across all tasks. A
+// window reads it whenever its stream opens, so it shows requests published
+// while it was away. See specs/082-tool-approvals.md.
+func (s *Server) listApprovals(c *fiber.Ctx) error {
+	return c.JSON(s.runner.Approvals())
+}
+
+// answerApproval allows or denies one waiting tool call. The first answer from
+// any window wins; a later one gets 409.
+func (s *Server) answerApproval(c *fiber.Ctx) error {
+	var body struct {
+		Allow *bool `json:"allow"`
+	}
+	if err := c.BodyParser(&body); err != nil || body.Allow == nil {
+		return badRequest("allow must be true or false")
+	}
+	if err := s.runner.Answer(c.Params("id"), c.Params("approval"), *body.Allow); err != nil {
+		return err
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}

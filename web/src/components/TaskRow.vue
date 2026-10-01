@@ -40,6 +40,8 @@ const props = defineProps({
   // not pass it, so nothing there grows a destructive button unasked.
   deletable: Boolean,
   queued: { type: Number, default: 0 },
+  // The running turn waits on the user to allow a tool call.
+  approval: Boolean,
   stoppable: Boolean,
 });
 
@@ -130,6 +132,13 @@ defineExpose({ edit });
               >{{ number || "" }}</span
             >
             <StatusDot :status="taskDot(status, unread)" />
+            <UIcon
+              v-if="approval"
+              name="i-lucide-shield-alert"
+              class="size-3.5 shrink-0 text-warning"
+              title="Waiting for your approval"
+              aria-label="Waiting for your approval"
+            />
             <span v-if="queued" class="shrink-0" title="Queued prompt">🕒</span>
             <span class="task-title truncate" :class="{ 'font-bold': unread }">{{ title || "Untitled task" }}</span>
           </span>

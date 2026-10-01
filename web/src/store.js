@@ -93,6 +93,10 @@ export const S = reactive({
      that tab. */
   drafts: {},
   unreadTasks: {},
+  /* sessionID -> tool calls its running turn waits on the user to allow.
+     Server state: read whole when the stream opens, then kept by events, so
+     every window shows the same ones. See specs/082-tool-approvals.md. */
+  approvals: {},
   sessions: [],
   schedules: [], // repeating prompts, drawn above the sessions in both lists
   tabs: [], // every open view, of every project
@@ -2939,6 +2943,10 @@ function resubscribe() {
     if (refreshOnOpen || opened) {
       for (const tab of S.tabs) if (tab.kind === "session") syncMessages(tab, true);
     }
+    // Every open, the first too: requests published while no stream was
+    // listening — between two subscriptions, or across a dropped connection
+    // — would otherwise never be drawn.
+    loadApprovals();
     if (opened) {
       reloadLists();
       reloadProjects();
@@ -3027,6 +3035,16 @@ function onEvent(msg) {
   // lists that hold open tasks are left alone. See specs/051-task-outcomes.md.
   if (msg.event?.type === "session_summarized") {
     reloadProjects();
+    return;
+  }
+  // A tool call waits on the user, or stopped waiting. Both topics carry it,
+  // so it arrives twice; keyed by id, the repeat changes nothing.
+  if (msg.event?.type === "approval") {
+    addApproval(msg.session_id, { ...msg.event.approval, turn_id: msg.turn_id });
+    return;
+  }
+  if (msg.event?.type === "approval_resolved") {
+    removeApproval(msg.session_id, msg.event.approval?.id);
     return;
   }
   const turnMoved = ["started", "done"].includes(msg.event?.type);
@@ -3470,6 +3488,55 @@ export async function stopTask(sessionID) {
     reloadProjects();
   } catch (e) {
     fail(e);
+  }
+}
+
+/* ------------------------------------------------------------- approvals */
+
+function addApproval(sessionID, approval) {
+  if (!sessionID || !approval?.id) return;
+  const list = S.approvals[sessionID] || [];
+  if (list.some((a) => a.id === approval.id)) return;
+  S.approvals[sessionID] = [...list, approval];
+}
+
+function removeApproval(sessionID, id) {
+  const list = (S.approvals[sessionID] || []).filter((a) => a.id !== id);
+  if (list.length) S.approvals[sessionID] = list;
+  else delete S.approvals[sessionID];
+}
+
+/* loadApprovals replaces the whole map with the server's. A stale read can
+   race a live event; the next stream open settles it, and an answer to a
+   request that is gone is refused, not run. */
+export async function loadApprovals() {
+  try {
+    const pending = await api("GET", "/api/approvals");
+    const next = {};
+    for (const p of pending || []) {
+      (next[p.session_id] ||= []).push({ ...p.approval, turn_id: p.turn_id });
+    }
+    for (const id of Object.keys(S.approvals)) if (!next[id]) delete S.approvals[id];
+    Object.assign(S.approvals, next);
+  } catch { /* The next stream open tries again. */ }
+}
+
+/* answerApproval allows or denies one waiting tool call. Another window may
+   have answered first; then the server refuses this one, and the reload shows
+   the request is gone rather than reporting an error nobody needs to fix. */
+export async function answerApproval(sessionID, id, allow) {
+  const approval = S.approvals[sessionID]?.find((a) => a.id === id);
+  if (!approval || approval.answering) return;
+  approval.answering = true;
+  try {
+    await api("POST", `/api/sessions/${sessionID}/approvals/${encodeURIComponent(id)}`, { allow });
+    removeApproval(sessionID, id);
+  } catch (e) {
+    await loadApprovals();
+    if (S.approvals[sessionID]?.some((a) => a.id === id)) {
+      approval.answering = false;
+      fail(e);
+    }
   }
 }
 

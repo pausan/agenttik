@@ -14,8 +14,9 @@ import (
 
 var ErrNotImplemented = errors.New("provider not implemented")
 
-// Permission is how much the agent may do without being asked. A web UI cannot
-// answer an interactive approval, so this is decided before the turn starts.
+// Permission is how much the agent may do without being asked. Anything beyond
+// it is refused, or, for providers that support it, put to the user as an
+// approval event (see 082-tool-approvals.md).
 type Permission string
 
 const (
@@ -106,6 +107,12 @@ const (
 	EventLimits         EventType = "limits"
 	EventError          EventType = "error"
 	EventDone           EventType = "done"
+	// EventApproval asks the user to allow or deny one tool call. The turn
+	// waits on it; Approval.Answer resumes it.
+	EventApproval EventType = "approval"
+	// EventApprovalResolved says an approval no longer waits: it was answered,
+	// or the provider withdrew it. Approval carries only the ID.
+	EventApprovalResolved EventType = "approval_resolved"
 )
 
 // RateLimitWindow is one rolling subscription allowance window, exactly as the
@@ -181,6 +188,34 @@ type Event struct {
 	Limits []RateLimit `json:"limits,omitempty"`
 	// ProviderSessionID is set on session_started.
 	ProviderSessionID string `json:"provider_session_id,omitempty"`
+	// Approval is set on approval and approval_resolved events.
+	Approval *Approval `json:"approval,omitempty"`
+}
+
+// Approval is one tool call waiting on the user. ID is unique across turns.
+type Approval struct {
+	ID          string `json:"id"`
+	Tool        string `json:"tool,omitempty"`
+	Description string `json:"description,omitempty"`
+	// Input is the tool's input as JSON, shown so the user knows what runs.
+	Input string `json:"input,omitempty"`
+	// Allowed is set on approval_resolved when the user answered it.
+	Allowed *bool `json:"allowed,omitempty"`
+
+	answer func(allow bool) error
+}
+
+// NewApproval builds an approval the provider answers through answer.
+func NewApproval(id, tool, description, input string, answer func(allow bool) error) *Approval {
+	return &Approval{ID: id, Tool: tool, Description: description, Input: input, answer: answer}
+}
+
+// Answer tells the provider the user's decision. It is called at most once.
+func (a *Approval) Answer(allow bool) error {
+	if a.answer == nil {
+		return errors.New("approval cannot be answered")
+	}
+	return a.answer(allow)
 }
 
 type ToolEvent struct {

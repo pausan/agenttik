@@ -53,12 +53,10 @@ func (p *Provider) Available() error {
 // permissionFlag maps our posture onto the CLI's --permission-mode.
 //
 // Workspace uses `auto`, not `acceptEdits`. Both auto-approve file edits, but
-// acceptEdits still asks before running a command, and under `-p` there is no
-// prompt to answer, so every Bash call is refused — the agent can edit files
-// but never build, test, or commit. `auto` is the mode the IDE extensions use
-// for their Auto setting: it approves ordinary work and keeps asking for the
-// genuinely destructive things, which under `-p` means those are refused
-// instead of everything.
+// acceptEdits still asks before running every command, which would put each
+// build and test to the user. `auto` is the mode the IDE extensions use for
+// their Auto setting: it approves ordinary work and asks only about the
+// genuinely destructive things, as approval events (082-tool-approvals.md).
 func permissionFlag(p agent.Permission) []string {
 	switch p.Valid() {
 	case agent.PermissionPlan:
@@ -77,6 +75,12 @@ func buildArgs(req agent.TurnRequest) []string {
 		"--output-format", "stream-json",
 		"--include-partial-messages",
 		"--verbose",
+	}
+	if !req.Isolated {
+		// Task turns take their prompt and approval answers as JSON lines, and
+		// the CLI asks over stdout about any tool call the permission mode
+		// does not settle. See 082-tool-approvals.md.
+		args = append(args, "--input-format", "stream-json", "--permission-prompt-tool", "stdio")
 	}
 	if req.Isolated {
 		args = append(args, "--no-session-persistence", "--safe-mode", "--setting-sources", "user")
@@ -130,9 +134,16 @@ func (p *Provider) Run(ctx context.Context, req agent.TurnRequest) (<-chan agent
 	if err := req.CheckWorkDir(); err != nil {
 		return nil, err
 	}
-	cmd, stdout, stderr, err := start(req)
+	cmd, stdin, stdout, stderr, err := start(req)
 	if err != nil {
 		return nil, err
+	}
+	var h *host
+	if stdin != nil {
+		h = &host{w: stdin}
+		// Written beside the stdout reader: a long prompt can fill the pipe
+		// before the CLI starts reading, and stdout must keep draining.
+		go h.sendPrompt(req.Prompt)
 	}
 
 	events := make(chan agent.Event, 64)
@@ -157,7 +168,10 @@ func (p *Provider) Run(ctx context.Context, req agent.TurnRequest) (<-chan agent
 		}()
 		defer stop()
 
-		parse(stdout, req.Model, events)
+		parse(stdout, req.Model, h, events)
+		if h != nil {
+			h.close()
+		}
 
 		if err := cmd.Wait(); err != nil && ctx.Err() == nil {
 			msg := strings.TrimSpace(stderr.String())
@@ -173,42 +187,57 @@ func (p *Provider) Run(ctx context.Context, req agent.TurnRequest) (<-chan agent
 // start recreates the command once when the CLI disappears between LookPath
 // and exec. Claude Code replaces its versioned executable while updating, so a
 // short ENOENT window should not fail an otherwise valid turn.
-func start(req agent.TurnRequest) (*exec.Cmd, io.ReadCloser, *strings.Builder, error) {
+//
+// stdin is nil for an isolated request, whose prompt is the whole of its
+// input; a task turn's caller writes the prompt and answers through it.
+func start(req agent.TurnRequest) (*exec.Cmd, io.WriteCloser, io.ReadCloser, *strings.Builder, error) {
 	for attempt := 0; attempt < 2; attempt++ {
 		cmd := exec.Command(Binary, buildArgs(req)...)
 		cmd.Dir = req.WorkDir
 		cmd.Env = buildEnv(req)
 		// The prompt goes in on stdin, never as an argv element.
-		cmd.Stdin = strings.NewReader(req.Prompt)
+		var stdin io.WriteCloser
+		if req.Isolated {
+			cmd.Stdin = strings.NewReader(req.Prompt)
+		} else {
+			var err error
+			if stdin, err = cmd.StdinPipe(); err != nil {
+				return nil, nil, nil, nil, fmt.Errorf("stdin pipe: %w", err)
+			}
+		}
 		// Own process group so cancelling kills the CLI's children too.
 		process.Configure(cmd)
 
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("stdout pipe: %w", err)
+			return nil, nil, nil, nil, fmt.Errorf("stdout pipe: %w", err)
 		}
 		var stderr strings.Builder
 		cmd.Stderr = &stderr
 
-		if err := cmd.Start(); err == nil {
-			return cmd, stdout, &stderr, nil
-		} else if attempt == 0 && errors.Is(err, fs.ErrNotExist) {
-			stdout.Close()
-			continue
-		} else {
-			stdout.Close()
-			return nil, nil, nil, fmt.Errorf("start %s: %w", Binary, err)
+		err = cmd.Start()
+		if err == nil {
+			return cmd, stdin, stdout, &stderr, nil
 		}
+		stdout.Close()
+		if stdin != nil {
+			stdin.Close()
+		}
+		if attempt == 0 && errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		return nil, nil, nil, nil, fmt.Errorf("start %s: %w", Binary, err)
 	}
 	panic("unreachable")
 }
 
 // parse turns the CLI's JSONL stream into provider-neutral events. model is
 // the alias the turn asked for, which the result line's per-model breakdown is
-// read against.
-func parse(r io.Reader, model string, out chan<- agent.Event) {
+// read against. h is nil for an isolated request, which is never asked
+// anything.
+func parse(r io.Reader, model string, h *host, out chan<- agent.Event) {
 	br := bufio.NewReaderSize(r, 64*1024)
-	p := streamParser{model: model, subagents: make(map[string]struct{})}
+	p := streamParser{model: model, host: h, subagents: make(map[string]struct{})}
 	for {
 		line, err := readLine(br)
 		if len(line) > 0 {
@@ -222,6 +251,7 @@ func parse(r io.Reader, model string, out chan<- agent.Event) {
 
 type streamParser struct {
 	model         string
+	host          *host
 	main          usage
 	subagentsUsed usage
 	subagents     map[string]struct{}
@@ -258,6 +288,13 @@ func (p *streamParser) handleLine(line []byte, out chan<- agent.Event) {
 		}
 	case "stream_event":
 		handleStreamEvent(env.Event, out)
+	case "control_request":
+		p.handleControl(env, out)
+	case "control_cancel_request":
+		// The CLI stopped waiting, so nobody should still be asked.
+		if env.RequestID != "" {
+			out <- agent.Event{Type: agent.EventApprovalResolved, Approval: &agent.Approval{ID: env.RequestID}}
+		}
 	case "rate_limit_event":
 		// The CLI names its own subscription allowance here. It is the only
 		// place it does, and it only appears once a bucket is near its
@@ -317,6 +354,11 @@ func (p *streamParser) handleLine(line []byte, out chan<- agent.Event) {
 			UsageBreakdown:           p.hasBreakdown,
 		}
 		out <- agent.Event{Type: agent.EventDone, Usage: &usage}
+		// One prompt makes one result. Closing stdin is what lets a
+		// stream-json CLI exit instead of waiting for another prompt.
+		if p.host != nil {
+			p.host.close()
+		}
 	}
 }
 

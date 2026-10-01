@@ -24,11 +24,13 @@ export function createTaskSounds(storage, AudioContext = globalThis.AudioContext
   }
   function onEvent(msg) {
     const type = msg.event?.type;
-    if (type !== "error" && !(type === "done" && msg.stats)) return;
+    const approval = type === "approval" && msg.event.approval?.id;
+    if (!approval && type !== "error" && !(type === "done" && msg.stats)) return;
     if (!msg.session_id || !msg.turn_id) return;
     // Error and final completion belong to the same alert, even when other
-    // tasks' events arrive between duplicate project/session deliveries.
-    const key = `${msg.session_id}:${msg.turn_id}`;
+    // tasks' events arrive between duplicate project/session deliveries. An
+    // approval request is its own alert: the turn is waiting on the user.
+    const key = approval ? `approval:${approval}` : `${msg.session_id}:${msg.turn_id}`;
     if (seen.has(key)) return;
     seen.add(key);
     if (seen.size > 1024) seen.delete(seen.values().next().value);

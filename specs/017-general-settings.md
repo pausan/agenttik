@@ -113,7 +113,8 @@ The choice is stored as `agenttik.taskSounds` in browser/profile preferences and
 Reset defaults turns it off. The filter matches sound, ding, notifications,
 completion, attention, and error. Audio is initialized only when enabled and
 unlocked by a click or key press; browser autoplay restrictions can keep it silent
-until that interaction. There is no interactive approval bridge in the task runner.
+until that interaction. A tool approval request ([082](082-tool-approvals.md))
+dings once per request.
 
 ## Database
 

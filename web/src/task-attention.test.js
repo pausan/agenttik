@@ -112,4 +112,6 @@ test("project dots combine unread task attention with task and scheduled job act
   project.recent_sessions[0].status = "idle";
   assert.equal(projectDot(project, { a: -1 }), "unread");
   assert.equal(projectDot({ recent_sessions: [], schedules: [] }, unread), null);
+  assert.equal(projectDot({ recent_sessions: [{ id: "a", status: "running" }], schedules: [] }, {}, { a: [{ id: "x" }] }),
+    "unread-running");
 });

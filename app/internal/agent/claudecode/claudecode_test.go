@@ -1,6 +1,8 @@
 package claudecode
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"slices"
 	"strings"
@@ -87,7 +89,7 @@ not json at all
 func collect(t *testing.T, stream string) []agent.Event {
 	t.Helper()
 	out := make(chan agent.Event, 64)
-	parse(strings.NewReader(stream), "opus", out)
+	parse(strings.NewReader(stream), "opus", nil, out)
 	close(out)
 	var got []agent.Event
 	for ev := range out {
@@ -227,5 +229,121 @@ func TestIsolatedConflictResolutionAllowsTools(t *testing.T) {
 		if hasToolsFlag != (permission == agent.PermissionPlan) {
 			t.Fatal(args)
 		}
+	}
+}
+
+// pipe is a stdin stand-in that records what the host writes.
+type pipe struct {
+	bytes.Buffer
+	closed bool
+}
+
+func (p *pipe) Close() error { p.closed = true; return nil }
+
+func (p *pipe) lines(t *testing.T) []map[string]any {
+	t.Helper()
+	var out []map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(p.String()), "\n") {
+		var v map[string]any
+		if err := json.Unmarshal([]byte(line), &v); err != nil {
+			t.Fatalf("host wrote %q: %v", line, err)
+		}
+		out = append(out, v)
+	}
+	return out
+}
+
+const approvalStream = `{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"mcp__claude_ai_Linear__create_issue","display_name":"Linear: create_issue","description":"Create an issue","input":{"title":"Bug"}}}
+{"type":"control_request","request_id":"r2","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[]}}}
+{"type":"control_request","request_id":"r3","request":{"subtype":"hook_callback"}}
+{"type":"control_cancel_request","request_id":"r4"}
+{"type":"result","subtype":"success","usage":{}}
+`
+
+func TestParseTurnsToolRequestsIntoApprovals(t *testing.T) {
+	stdin := &pipe{}
+	h := &host{w: stdin}
+	out := make(chan agent.Event, 16)
+	parse(strings.NewReader(approvalStream), "opus", h, out)
+	close(out)
+	var approvals, resolved []*agent.Approval
+	for ev := range out {
+		switch ev.Type {
+		case agent.EventApproval:
+			approvals = append(approvals, ev.Approval)
+		case agent.EventApprovalResolved:
+			resolved = append(resolved, ev.Approval)
+		}
+	}
+	if len(approvals) != 1 || approvals[0].ID != "r1" || approvals[0].Tool != "Linear: create_issue" ||
+		approvals[0].Input != `{"title":"Bug"}` {
+		t.Fatalf("approvals = %+v", approvals)
+	}
+	if len(resolved) != 1 || resolved[0].ID != "r4" {
+		t.Fatalf("resolved = %+v", resolved)
+	}
+	// The question tool and the unknown request are answered at once, and the
+	// result closes stdin.
+	lines := stdin.lines(t)
+	if len(lines) != 2 || !stdin.closed {
+		t.Fatalf("host wrote %v, closed=%v", lines, stdin.closed)
+	}
+	if r := lines[0]["response"].(map[string]any); r["request_id"] != "r2" ||
+		r["response"].(map[string]any)["behavior"] != "deny" {
+		t.Errorf("AskUserQuestion answer = %v", lines[0])
+	}
+	if r := lines[1]["response"].(map[string]any); r["request_id"] != "r3" || r["subtype"] != "error" {
+		t.Errorf("unknown request answer = %v", lines[1])
+	}
+	// Answering after the turn ended reports it instead of writing.
+	if err := approvals[0].Answer(true); err == nil {
+		t.Error("answer after close should fail")
+	}
+}
+
+func TestApprovalAnswerWritesControlResponse(t *testing.T) {
+	for _, allow := range []bool{true, false} {
+		stdin := &pipe{}
+		h := &host{w: stdin}
+		out := make(chan agent.Event, 4)
+		p := streamParser{host: h, subagents: map[string]struct{}{}}
+		p.handleLine([]byte(`{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"ls"}}}`), out)
+		ev := <-out
+		if err := ev.Approval.Answer(allow); err != nil {
+			t.Fatal(err)
+		}
+		resp := stdin.lines(t)[0]["response"].(map[string]any)
+		result := resp["response"].(map[string]any)
+		if resp["request_id"] != "r1" || resp["subtype"] != "success" {
+			t.Errorf("response = %v", resp)
+		}
+		if allow && (result["behavior"] != "allow" || result["updatedInput"].(map[string]any)["command"] != "ls") {
+			t.Errorf("allow result = %v", result)
+		}
+		if !allow && (result["behavior"] != "deny" || result["message"] == "") {
+			t.Errorf("deny result = %v", result)
+		}
+	}
+}
+
+func TestPromptIsAStreamJSONLine(t *testing.T) {
+	stdin := &pipe{}
+	if err := (&host{w: stdin}).sendPrompt("hi\nthere"); err != nil {
+		t.Fatal(err)
+	}
+	line := stdin.lines(t)[0]
+	if line["type"] != "user" || line["message"].(map[string]any)["content"] != "hi\nthere" {
+		t.Errorf("prompt line = %v", line)
+	}
+}
+
+func TestBuildArgsAsksOnlyForTaskTurns(t *testing.T) {
+	task := strings.Join(buildArgs(agent.TurnRequest{}), " ")
+	if !strings.Contains(task, "--input-format stream-json --permission-prompt-tool stdio") {
+		t.Errorf("task turn args %q should prompt over stdio", task)
+	}
+	isolated := strings.Join(buildArgs(agent.TurnRequest{Isolated: true}), " ")
+	if strings.Contains(isolated, "--permission-prompt-tool") || strings.Contains(isolated, "--input-format") {
+		t.Errorf("isolated args %q must not prompt", isolated)
 	}
 }

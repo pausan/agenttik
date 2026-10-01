@@ -68,6 +68,18 @@ test("errors and completions ding once per turn despite interleaved duplicate de
   assert.equal(calls.tones, 3);
 });
 
+test("each approval request dings once, apart from the turn's own end", () => {
+  const { sounds, calls } = fixture("1");
+  const ask = (id) => ({ session_id: 1, turn_id: 1, event: { type: "approval", approval: { id } } });
+  sounds.onEvent(ask("a"));
+  sounds.onEvent(ask("a"));
+  sounds.onEvent({ session_id: 1, turn_id: 1, event: { type: "approval_resolved", approval: { id: "a" } } });
+  assert.equal(calls.tones, 1);
+  sounds.onEvent(ask("b"));
+  sounds.onEvent(done());
+  assert.equal(calls.tones, 3);
+});
+
 test("unavailable audio and storage cannot interrupt task handling", () => {
   const sounds = createTaskSounds({ getItem() { throw Error(); }, setItem() { throw Error(); } }, class {
     constructor() { throw Error("Unavailable"); }

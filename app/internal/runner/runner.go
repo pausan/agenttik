@@ -77,9 +77,10 @@ type Runner struct {
 	turns          sync.WaitGroup
 	transfer       sync.RWMutex // excludes new turns and schedule ticks during a project move
 	mu             sync.Mutex
-	active         map[string]activeTurn // session id -> turn in flight
-	sched          map[int64]*sync.Mutex // project id -> serializes queue dispatch
-	forced         map[string]int64      // session id -> queued message to run next
+	active         map[string]activeTurn       // session id -> turn in flight
+	sched          map[int64]*sync.Mutex       // project id -> serializes queue dispatch
+	forced         map[string]int64            // session id -> queued message to run next
+	approvals      map[string]*PendingApproval // approval id -> tool call waiting on the user
 
 	// forcedScheduleRuns marks a session started by RunScheduleNow: its run
 	// spends no counter when it finishes, since asking for an extra run by
@@ -97,7 +98,8 @@ func New(s *store.Store, reg *agent.Registry, hub *Hub) *Runner {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Runner{store: s, registry: reg, hub: hub, lifetime: ctx, cancelLifetime: cancel,
 		active: make(map[string]activeTurn), sched: make(map[int64]*sync.Mutex),
-		forced: make(map[string]int64), forcedScheduleRuns: make(map[string]bool)}
+		forced: make(map[string]int64), forcedScheduleRuns: make(map[string]bool),
+		approvals: make(map[string]*PendingApproval)}
 }
 
 func (r *Runner) Hub() *Hub { return r.hub }
@@ -750,11 +752,27 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 		case agent.EventError:
 			failure = ev.Text
 			r.store.AddMessage(sess.ID, turn.ID, store.RoleError, ev.Text)
+		case agent.EventApproval:
+			if ev.Approval == nil {
+				continue
+			}
+			// Prose so far goes in first, so the transcript reads in order.
+			flushText()
+			r.addApproval(sess, turn, ev.Approval)
+		case agent.EventApprovalResolved:
+			if ev.Approval == nil || !r.withdrawApproval(ev.Approval.ID) {
+				continue
+			}
 		}
-		r.hub.Publish(sess.ID, Event{SessionID: sess.ID, ProjectID: sess.ProjectID,
-			TurnID: turn.ID, Event: ev})
+		out := Event{SessionID: sess.ID, ProjectID: sess.ProjectID, TurnID: turn.ID, Event: ev}
+		r.hub.Publish(sess.ID, out)
+		// The sidebar marks a task waiting on the user, open tab or not.
+		if ev.Type == agent.EventApproval || ev.Type == agent.EventApprovalResolved {
+			r.hub.Publish(ProjectTopic(sess.ProjectID), out)
+		}
 	}
 	flushText()
+	r.dropApprovals(sess.ID)
 
 	turn.Status = "ok"
 	sessionStatus := store.StatusIdle

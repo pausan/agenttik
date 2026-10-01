@@ -61,8 +61,10 @@ Why one process per turn rather than one long-lived process per session:
   processes are the shape both providers support.
 - Cheap. Idle sessions cost nothing. Dozens can be open at once.
 
-The cost is per-turn CLI startup (~1s) and no mid-turn interaction. Approvals are
-therefore decided up front by the session's permission mode, not asked mid-flight.
+The cost is per-turn CLI startup (~1s). The permission mode decides most tool
+calls up front; Claude Code keeps its stdin open for the turn and asks about
+the rest mid-flight, which any connected window can answer
+([082](082-tool-approvals.md)).
 
 ## Packages
 

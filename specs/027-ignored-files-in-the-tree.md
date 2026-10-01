@@ -31,15 +31,19 @@ reading it.
 The cap is spent in order: tracked files, untracked files, ignored files,
 then empty folders. Git prints untracked files before tracked ones when asked
 for both, so they are separate calls, and a folder not yet in `.gitignore`
-cannot push the project out. Each git listing is read line by line, and git is
-stopped once it prints more than what is left, so millions of untracked or
-ignored files cost no more than the cap. A listing that runs past git's time
-limit is cut the same way. A cut listing names no empty folders, since it
+cannot push the project out. A cut listing names no empty folders, since it
 cannot tell an empty folder from one whose files fell past the cut.
 
-The walk outside a repository goes a level at a time. A folder too large to
-list whole keeps its upper levels: a home directory shows its own folders
-rather than the first files of `~/.cache`.
+Every listing is cut by level, never by depth-first order. A folder too large
+to list whole keeps its upper levels: a home directory shows its own folders
+rather than the first files of `~/.cache`, and a repository shows `src/`
+rather than the first files of `node_modules/`. The walk outside a repository
+and the empty-folder walk go a level at a time and stop at the cap. Git prints
+in byte order, which is depth first, so each git listing is read to its end,
+keeping at most what is left of the cap: the least nested paths, the first in
+byte order within the deepest level kept. Millions of untracked or ignored
+files cost git's full listing time but no more memory than the cap. A listing
+that runs past git's 5-second limit is cut with what was read by then.
 
 A truncated Tree says so above its rows, and Go to file, finding nothing, says
 it searched only the listed part. It is not re-read on `files_changed` (see
@@ -57,5 +61,5 @@ match count during filtering. Filtering temporarily opens ordinary matching fold
 expansion. Ignored folders open if saved as expanded or toggled in the filter. Clicking an ignored file opens it normally.
 
 Regression tests cover listings beyond 20,000 entries, the order the cap is
-spent in, the level-by-level walk, alphabetical order at multiple levels, and
+spent in, level-by-level cuts with and without git, alphabetical order at multiple levels, and
 ignored entries remaining visible and marked after filtering.

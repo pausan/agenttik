@@ -174,6 +174,65 @@ func TestTreeWalkStopsAtTheCapLevelByLevel(t *testing.T) {
 	}
 }
 
+// Git lists in byte order, which is depth first, so a repository cut at the
+// cap keeps its shallowest paths rather than git's first ones — for what it
+// tracks and for what it ignores alike.
+func TestTreeGitCapKeepsUpperLevels(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := runGit(dir, "init"); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{
+		".gitignore", "a/b/c/deep.txt", "a/b/mid.txt", "top.txt", "z/near.txt",
+		"cache/x/y/deep.bin", "cache/x/mid.bin", "cache/top.bin", "z.log",
+	} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("cache/\n*.log\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runGit(dir, "add", "."); err != nil {
+		t.Fatal(err)
+	}
+
+	got := listTree(dir, 4)
+	if want := []string{".gitignore", "a/b/mid.txt", "top.txt", "z/near.txt"}; !slices.Equal(got.Files, want) || !got.Truncated {
+		t.Errorf("cut files = %v, truncated %v; want %v, truncated", got.Files, got.Truncated, want)
+	}
+	got = listTree(dir, 7)
+	if want := []string{"cache/top.bin", "z.log"}; !slices.Equal(got.Ignored, want) || !got.Truncated {
+		t.Errorf("cut ignored = %v, truncated %v; want %v, truncated", got.Ignored, got.Truncated, want)
+	}
+	if got := listTree(dir, 9); len(got.Files)+len(got.Ignored) != 9 || got.Truncated {
+		t.Errorf("listing at the cap = %v + %v, truncated %v; want all nine", got.Files, got.Ignored, got.Truncated)
+	}
+}
+
+func TestShallowestKeepsLeastNested(t *testing.T) {
+	for _, tc := range []struct {
+		max  int
+		want []string
+	}{
+		{0, []string{}},
+		{1, []string{"b"}},
+		{2, []string{"a/x", "b"}},
+		{3, []string{"a/x", "b", "c/y"}},
+	} {
+		keep := shallowest{max: tc.max}
+		for _, path := range []string{"a/deep/1", "a/x", "b", "c/y"} {
+			keep.add(path)
+		}
+		if got := keep.list(); !slices.Equal(got, tc.want) || !keep.cut {
+			t.Errorf("max %d: %v, cut %v; want %v, cut", tc.max, got, keep.cut, tc.want)
+		}
+	}
+}
+
 // A transcript names files the project does not hold — another checkout, a log
 // under /tmp — and following that link reads the file where it is. What is
 // written, and what a revision can answer for, stay inside the project.

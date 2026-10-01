@@ -254,22 +254,20 @@ func walkFiles(root string, max int) ([]string, bool) {
 // all ignored is already in the tree through those files and is neither named
 // here nor walked, which is what keeps `node_modules` out of both.
 //
-// It names at most max folders and says whether there were more.
+// It goes a level at a time, like walkFiles, names at most max folders and
+// says whether there were more.
 func emptyDirs(root string, files, ignored []string, max int) ([]string, bool) {
 	out := []string{}
-	cut := false
 	files, ignored = sorted(files), sorted(ignored)
-
-	var walk func(dir, rel string)
-	walk = func(dir, rel string) {
-		entries, err := os.ReadDir(dir)
+	queue := []string{""}
+	for len(queue) > 0 {
+		rel := queue[0]
+		queue = queue[1:]
+		entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(rel)))
 		if err != nil {
-			return // unreadable is simply a folder we cannot report on
+			continue // unreadable is simply a folder we cannot report on
 		}
 		for _, e := range entries {
-			if cut {
-				return
-			}
 			// A symlink is not an IsDir, which is deliberate: following one
 			// would leave the project and could loop.
 			if !e.IsDir() || e.Name() == ".git" {
@@ -279,22 +277,19 @@ func emptyDirs(root string, files, ignored []string, max int) ([]string, bool) {
 			if rel != "" {
 				child = rel + "/" + e.Name()
 			}
-			holdsFiles := hasUnder(files, child)
-			if !holdsFiles {
+			if !hasUnder(files, child) {
 				if hasUnder(ignored, child) {
 					continue
 				}
 				if len(out) == max {
-					cut = true
-					return
+					return out, true
 				}
 				out = append(out, child)
 			}
-			walk(filepath.Join(dir, e.Name()), child)
+			queue = append(queue, child)
 		}
 	}
-	walk(root, "")
-	return out, cut
+	return out, false
 }
 
 // hasUnder reports whether any listed path lives inside dir. The lists are in
@@ -618,10 +613,14 @@ func runGitWithTimeout(dir string, timeout time.Duration, args ...string) (strin
 	return stdout.String(), nil
 }
 
-// gitList runs a git listing and keeps its first max lines. Git is stopped
-// once there is one more than that, so a repository holding millions of
-// untracked or ignored files costs what the cap does rather than what git
-// would have printed. Running out of time cuts a listing the same way.
+// gitList runs a git listing and keeps at most max of its paths, the shallowest
+// ones: a listing too large to carry whole keeps its upper levels, as walkFiles
+// does, rather than git's first lines. Git prints in byte order, which is depth
+// first — node_modules/ would fill the cap before a single file of src/.
+//
+// Which paths are shallowest is only known at the end, so git is read to the
+// end, holding no more than max lines on the way. Running out of time cuts the
+// listing with what was read by then.
 func gitList(dir string, max int, args ...string) ([]string, bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
 	defer cancel()
@@ -636,26 +635,82 @@ func gitList(dir string, max int, args ...string) ([]string, bool, error) {
 	if err := cmd.Start(); err != nil {
 		return nil, false, err
 	}
-	lines := []string{}
+	keep := shallowest{max: max}
 	scan := bufio.NewScanner(stdout)
 	for scan.Scan() {
-		if len(lines) == max {
-			// Git is still writing the rest, and dies of being stopped:
-			// that exit status says nothing about the lines already read.
-			cancel()
-			_ = cmd.Wait()
-			return lines, true, nil
-		}
-		lines = append(lines, scan.Text())
+		keep.add(scan.Text())
 	}
 	if err := cmd.Wait(); err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			return lines, true, nil
+			return keep.list(), true, nil
 		}
 		return nil, false, fmt.Errorf("git %s: %v: %s", strings.Join(args, " "), err,
 			strings.TrimSpace(stderr.String()))
 	}
-	return lines, false, nil
+	return keep.list(), keep.cut, nil
+}
+
+// shallowest keeps the max least nested of the paths it is given. Until there
+// are more than that it is a plain list in the order given. Past it, paths are
+// held by depth, and one deeper than everything kept is dropped while a
+// shallower one pushes out the last of the deepest.
+type shallowest struct {
+	max     int
+	lines   []string
+	byDepth [][]string
+	deepest int
+	cut     bool
+}
+
+func (s *shallowest) add(path string) {
+	if !s.cut {
+		if len(s.lines) < s.max {
+			s.lines = append(s.lines, path)
+			return
+		}
+		s.cut = true
+		for _, line := range s.lines {
+			s.put(line)
+		}
+		s.lines = nil
+	}
+	if strings.Count(path, "/") >= s.deepest {
+		return
+	}
+	s.put(path)
+	last := s.byDepth[s.deepest]
+	s.byDepth[s.deepest] = last[:len(last)-1]
+	for len(s.byDepth[s.deepest]) == 0 {
+		s.deepest--
+	}
+}
+
+func (s *shallowest) put(path string) {
+	depth := strings.Count(path, "/")
+	for len(s.byDepth) <= depth {
+		s.byDepth = append(s.byDepth, nil)
+	}
+	s.byDepth[depth] = append(s.byDepth[depth], path)
+	if depth > s.deepest {
+		s.deepest = depth
+	}
+}
+
+// list is the kept paths in byte order, which is how git gave them and what
+// hasUnder searches.
+func (s *shallowest) list() []string {
+	if !s.cut {
+		if s.lines == nil {
+			return []string{}
+		}
+		return s.lines
+	}
+	out := []string{}
+	for _, level := range s.byDepth {
+		out = append(out, level...)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func splitLines(s string) []string {

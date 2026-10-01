@@ -29,3 +29,24 @@ func TestCheckReply(t *testing.T) {
 		t.Errorf("plain approval: %v", err)
 	}
 }
+
+func TestAutoReply(t *testing.T) {
+	if r := (&Approval{Tool: "Bash"}).AutoReply(); !r.Allow || r.Answers != nil {
+		t.Errorf("tool call = %+v", r)
+	}
+	a := &Approval{Questions: []Question{
+		{ID: "db", Options: []QuestionOption{{Label: "Redis"}, {Label: "SQLite (Recommended)"}}},
+		{ID: "color", Options: []QuestionOption{{Label: "Red"}, {Label: "Blue"}}, Multi: true},
+	}}
+	r := a.AutoReply()
+	if !r.Allow || r.Answers["db"][0] != "SQLite (Recommended)" || r.Answers["color"][0] != "Red" {
+		t.Errorf("questions = %+v", r)
+	}
+	if err := a.CheckReply(r); err != nil {
+		t.Errorf("auto reply does not check: %v", err)
+	}
+	typed := &Approval{Questions: []Question{{ID: "db", Options: []QuestionOption{{Label: "A"}}}, {ID: "name", Other: true}}}
+	if r := typed.AutoReply(); r.Allow {
+		t.Errorf("a question with no options should be declined, got %+v", r)
+	}
+}

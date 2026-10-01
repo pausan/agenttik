@@ -106,8 +106,33 @@ both topics, with `allowed` set when the user answered. When a turn ends —
 finished, failed or stopped — whatever it left pending is withdrawn the same
 way.
 
-There is no timeout. A turn waiting on the user holds its project's queue the
-way any long turn does; Stop ends it.
+## Answering for the user
+
+Settings › General ([017](017-general-settings.md)) decides what happens to a
+request nobody answers, read when the request arrives:
+
+- `wait` — it waits. A turn waiting on the user holds its project's queue the
+  way any long turn does; Stop ends it.
+- `timeout` (default, 30 s) — the runner starts a timer with the request and
+  sends it with `expires_in_ms`. When the timer fires, agenttik answers through
+  the same path as a click, so a click and the timer race safely: whichever
+  takes the request first wins. The resolution carries `auto: true`.
+- `immediate` — agenttik answers in the consume loop, before publishing; no
+  window sees the request.
+
+`AutoReply` is the answer: allow a tool call; for questions, the option whose
+label contains "recommended" (case-insensitive), else the first. If any
+question has no options there is nothing to guess and the request is
+declined.
+
+`POST /api/sessions/:id/approvals/:approval/hold` stops a countdown: the
+request is published again without `expires_in_ms`, and every window drops
+its countdown. A request taken out of the map — answered, withdrawn or
+dropped — has its timer stopped.
+
+The remaining time travels as a duration, not a time: a remote window's clock
+can differ from the server's. `GET /api/approvals` reports what is left as of
+the call, and a window turns it into a local deadline on receipt.
 
 ## HTTP
 
@@ -115,6 +140,7 @@ way any long turn does; Stop ends it.
 |--------|------|-|
 | GET | `/api/approvals` | every pending request: `session_id`, `project_id`, `turn_id`, `created_at`, `approval` |
 | POST | `/api/sessions/:id/approvals/:approval` | `{allow, answers?}` — 204; 400 if the answers are incomplete; 409 if already answered or withdrawn |
+| POST | `/api/sessions/:id/approvals/:approval/hold` | stop its countdown — 204, or 409 if gone |
 
 ## UI
 
@@ -130,6 +156,8 @@ while it was not listening is still drawn. Events keep it current after that.
   replaces the pick and picking clears the text. Answer stays disabled until
   every question has an answer; Skip declines. The rules are in
   `web/src/questions.js`.
+- A counting-down request shows "Allowing in 23s" or "Answering for you in
+  23s" with **Keep waiting**, which holds it for every window.
 - The working line says "Waiting for approval" or "Waiting for your answer".
 - The task's sidebar and project-list rows show a shield ("Waiting for you"),
   and the project dot counts a waiting task as needing attention, so a folded
@@ -143,9 +171,11 @@ and answer the same requests.
 
 Tests: `agent` (reply checking), `claudecode` and `codex`
 (`appserver_requests_test.go`) for the protocols, `runner/approvals_test.go`
-(fan-out, first answer wins, stop withdraws, incomplete answers),
+(fan-out, first answer wins, stop withdraws, incomplete answers, the three
+modes and holding),
 `server/api_approvals_test.go` (routes), `web/src/questions.test.js`, and
-`e2e/tests/approvals.spec.js` (two windows, reload, stop, questions). The fake
+`e2e/tests/approvals.spec.js` (two windows, reload, stop, questions, the
+setting, a timeout, holding from another window, answering at once). The fake
 provider's `@approve <tool> <input>` asks for approval and replies `allowed`
 or `denied`; `@ask <question> | <a>, <b>` asks a question and replies
 `answer=<picks>` or `declined`.

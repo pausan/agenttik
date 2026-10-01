@@ -758,7 +758,10 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 			}
 			// Prose so far goes in first, so the transcript reads in order.
 			flushText()
-			r.addApproval(sess, turn, ev.Approval)
+			if r.askUser(sess, turn, ev.Approval) {
+				// Answered at once, as the settings say: nobody is asked.
+				continue
+			}
 		case agent.EventApprovalResolved:
 			if ev.Approval == nil || !r.withdrawApproval(ev.Approval.ID) {
 				continue

@@ -158,3 +158,112 @@ func TestQuestionNeedsACompleteAnswer(t *testing.T) {
 		t.Fatalf("reply = %q", got)
 	}
 }
+
+func setApprovalMode(t *testing.T, st *store.Store, mode string, seconds int) {
+	t.Helper()
+	if err := st.SetGeneralConfig(store.GeneralConfig{NewItemPosition: "top",
+		ApprovalMode: mode, ApprovalTimeout: seconds}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func lastReply(t *testing.T, r *Runner, st *store.Store, sessionID string) string {
+	t.Helper()
+	waitFor(t, func() bool { return !r.Running(sessionID) }, "turn should end")
+	msgs, _ := st.ListMessages(sessionID)
+	return strings.TrimSpace(msgs[len(msgs)-1].Content)
+}
+
+func TestTimedOutApprovalIsAllowedForTheUser(t *testing.T) {
+	r, st, sess := setup(t, fake.New())
+	setApprovalMode(t, st, store.ApprovalTimeout, 1)
+	sidebar, unsubscribe := r.Hub().Subscribe(ProjectTopic(sess.ProjectID))
+	defer unsubscribe()
+	if _, err := r.Send(sess.ID, "@approve Bash ls"); err != nil {
+		t.Fatal(err)
+	}
+	asked := nextOfType(t, sidebar, agent.EventApproval).Event.Approval
+	if asked.ExpiresIn != 1000 {
+		t.Fatalf("expires in %d ms, want 1000", asked.ExpiresIn)
+	}
+	if left := r.Approvals()[0].Approval.ExpiresIn; left <= 0 || left > 1000 {
+		t.Fatalf("listed with %d ms left", left)
+	}
+	resolved := nextOfType(t, sidebar, agent.EventApprovalResolved).Event.Approval
+	if !resolved.Auto || resolved.Allowed == nil || !*resolved.Allowed {
+		t.Fatalf("resolved = %+v", resolved)
+	}
+	if got := lastReply(t, r, st, sess.ID); got != "allowed" {
+		t.Fatalf("reply = %q", got)
+	}
+}
+
+func TestTimedOutQuestionPicksTheRecommendedOption(t *testing.T) {
+	r, st, sess := setup(t, fake.New())
+	setApprovalMode(t, st, store.ApprovalTimeout, 1)
+	if _, err := r.Send(sess.ID, "@ask Which store? | Redis, SQLite (Recommended)"); err != nil {
+		t.Fatal(err)
+	}
+	if got := lastReply(t, r, st, sess.ID); got != "answer=SQLite (Recommended)" {
+		t.Fatalf("reply = %q", got)
+	}
+}
+
+func TestImmediateModeAsksNobody(t *testing.T) {
+	r, st, sess := setup(t, fake.New())
+	setApprovalMode(t, st, store.ApprovalImmediate, 30)
+	tab, unsubscribe := r.Hub().Subscribe(sess.ID)
+	defer unsubscribe()
+	if _, err := r.Send(sess.ID, "@approve Bash ls"); err != nil {
+		t.Fatal(err)
+	}
+	for ev := range tab {
+		if ev.Event.Type == agent.EventApproval {
+			t.Fatal("an immediate answer should not be shown")
+		}
+		if ev.Event.Type == agent.EventDone {
+			break
+		}
+	}
+	if got := lastReply(t, r, st, sess.ID); got != "allowed" {
+		t.Fatalf("reply = %q", got)
+	}
+}
+
+func TestWaitModeAndHoldKeepTheRequest(t *testing.T) {
+	r, st, sess := setup(t, fake.New())
+	setApprovalMode(t, st, store.ApprovalWait, 1)
+	tab, unsubscribe := r.Hub().Subscribe(sess.ID)
+	defer unsubscribe()
+	if _, err := r.Send(sess.ID, "@approve Bash ls"); err != nil {
+		t.Fatal(err)
+	}
+	if asked := nextOfType(t, tab, agent.EventApproval).Event.Approval; asked.ExpiresIn != 0 {
+		t.Fatalf("wait mode counts down: %d", asked.ExpiresIn)
+	}
+
+	setApprovalMode(t, st, store.ApprovalTimeout, 1)
+	// A second task, asked under the timeout, is held before it runs out.
+	other := &store.Session{ID: "sess-2", ProjectID: sess.ProjectID, Provider: "fake", Model: "m1", Permission: "workspace"}
+	if err := st.CreateSession(other); err != nil {
+		t.Fatal(err)
+	}
+	otherTab, unsubscribeOther := r.Hub().Subscribe(other.ID)
+	defer unsubscribeOther()
+	if _, err := r.Send(other.ID, "@approve Bash ls"); err != nil {
+		t.Fatal(err)
+	}
+	asked := nextOfType(t, otherTab, agent.EventApproval).Event.Approval
+	if err := r.Hold(other.ID, asked.ID); err != nil {
+		t.Fatal(err)
+	}
+	if held := nextOfType(t, otherTab, agent.EventApproval).Event.Approval; held.ID != asked.ID || held.ExpiresIn != 0 {
+		t.Fatalf("held = %+v", held)
+	}
+	time.Sleep(1500 * time.Millisecond)
+	if n := len(r.Approvals()); n != 2 {
+		t.Fatalf("%d pending after the timeout passed, want both still waiting", n)
+	}
+	r.Stop(sess.ID)
+	r.Stop(other.ID)
+}

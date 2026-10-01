@@ -279,6 +279,7 @@ func (s *Server) routes() {
 	api.Post("/sessions/:id/stop", s.stopSession)
 	api.Get("/approvals", s.listApprovals)
 	api.Post("/sessions/:id/approvals/:approval", s.answerApproval)
+	api.Post("/sessions/:id/approvals/:approval/hold", s.holdApproval)
 
 	api.Get("/schedules", s.listSchedules)
 	api.Post("/schedules", s.createSchedule)

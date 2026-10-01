@@ -103,6 +103,23 @@ are scoped to their project; archived items count toward both bounds.
 Sidebar and project task lists share these positions. Schedule rows and
 archive history keep their own ordering.
 
+## Tool approvals and questions
+
+What happens when an agent asks to run a tool or asks a question and nobody
+answers ([082](082-tool-approvals.md)):
+
+- **Wait for me** — the request waits until someone answers it.
+- **Answer after a timeout (default)** — agenttik answers once the timeout
+  passes, 30 seconds unless changed (1 to 86400).
+- **Answer at once** — agenttik answers without showing the request.
+
+Answering for the user allows a tool call, and picks each question's option
+marked recommended, else its first; a question with no options is skipped.
+The setting lives in `general_config` as `approval_mode` (`wait`, `timeout`,
+`immediate`) and `approval_timeout` (seconds), shared by all windows, and
+applies from the next request. `PUT /api/general` takes any subset of the
+fields and keeps the rest.
+
 ## Task sounds
 
 **Play task sounds** is off by default. When enabled, this window plays a short
@@ -135,7 +152,8 @@ Confirmation restores blue/zinc colors, System mode, keyboard shortcuts, prompt
 submission, folding, layout widths, file/diff modes, task list choices, remembered
 model and schedule choices, and fuzzy search in this browser. It clears model
 favourites and visibility overrides, resets default subscription choices, restores
-top insertion and default tray settings for all windows. Tray changes need a restart.
+top insertion, the 30-second approval timeout and default tray settings for
+all windows. Tray changes need a restart.
 `POST /api/general/reset` updates these database preferences in one transaction.
 Only named browser preference keys are removed; authentication, accounts, server
 configuration, project/task data, open tabs, files and drafts are preserved.

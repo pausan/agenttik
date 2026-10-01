@@ -1,6 +1,10 @@
 package store
 
-import "testing"
+import (
+	"slices"
+	"strings"
+	"testing"
+)
 
 func TestAnalyticsWindowAndAttribution(t *testing.T) {
 	s := testStore(t)
@@ -65,7 +69,11 @@ func TestAnalyticsMigrationBackfillsLegacyTurns(t *testing.T) {
 		_, err = s.db.Exec(query)
 		must(t, err)
 	}
-	must(t, applyMigrations(s.db, len(migrations)-2, migrations[:len(migrations)-1]))
+	// Found by content, so later migrations do not move it.
+	at := slices.IndexFunc(migrations, func(m string) bool {
+		return strings.Contains(m, "ALTER TABLE turns ADD COLUMN provider")
+	})
+	must(t, applyMigrations(s.db, at, migrations[:at+1]))
 	must(t, s.SetSessionModel("old", "codex", 0, "m", "", true))
 	rows, err := s.Analytics(0, 2)
 	must(t, err)

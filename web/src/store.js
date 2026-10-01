@@ -3493,11 +3493,22 @@ export async function stopTask(sessionID) {
 
 /* ------------------------------------------------------------- approvals */
 
+/* withDeadline turns the server's "this much time left" into a local time,
+   so the countdown is right whatever this machine's clock says. */
+function withDeadline(approval) {
+  return { ...approval, deadline: approval.expires_in_ms ? Date.now() + approval.expires_in_ms : 0 };
+}
+
+/* A request already shown is replaced: that is how a hold from another
+   window stops this one's countdown. The repeat delivery of the same event
+   to both topics replaces it with itself. */
 function addApproval(sessionID, approval) {
   if (!sessionID || !approval?.id) return;
   const list = S.approvals[sessionID] || [];
-  if (list.some((a) => a.id === approval.id)) return;
-  S.approvals[sessionID] = [...list, approval];
+  const next = withDeadline(approval);
+  const at = list.findIndex((a) => a.id === approval.id);
+  if (at >= 0 && list[at].deadline === 0 && next.deadline === 0) return;
+  S.approvals[sessionID] = at >= 0 ? list.map((a, i) => (i === at ? next : a)) : [...list, next];
 }
 
 function removeApproval(sessionID, id) {
@@ -3514,7 +3525,7 @@ export async function loadApprovals() {
     const pending = await api("GET", "/api/approvals");
     const next = {};
     for (const p of pending || []) {
-      (next[p.session_id] ||= []).push({ ...p.approval, turn_id: p.turn_id });
+      (next[p.session_id] ||= []).push(withDeadline({ ...p.approval, turn_id: p.turn_id }));
     }
     for (const id of Object.keys(S.approvals)) if (!next[id]) delete S.approvals[id];
     Object.assign(S.approvals, next);
@@ -3540,6 +3551,17 @@ export async function answerApproval(sessionID, id, allow, answers) {
       approval.answering = false;
       fail(e);
     }
+  }
+}
+
+/* holdApproval stops a request's countdown for every window, so it waits for
+   an answer however long that takes. */
+export async function holdApproval(sessionID, id) {
+  try {
+    await api("POST", `/api/sessions/${sessionID}/approvals/${encodeURIComponent(id)}/hold`);
+  } catch {
+    // Answered or gone in the meantime; the reload shows which.
+    await loadApprovals();
   }
 }
 

@@ -38,7 +38,16 @@ func TestApprovalRoutes(t *testing.T) {
 	if len(pending) != 1 || pending[0].Approval.Tool != "Bash" {
 		t.Fatalf("pending = %+v", pending)
 	}
+	if pending[0].Approval.ExpiresIn <= 0 {
+		t.Errorf("default settings should count down, got %d ms", pending[0].Approval.ExpiresIn)
+	}
 	path := "/api/sessions/sess-1/approvals/" + pending[0].Approval.ID
+	if resp := do(t, s, "POST", path+"/hold", nil); resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("hold: status %d", resp.StatusCode)
+	}
+	if held := decode[[]runner.PendingApproval](t, do(t, s, "GET", "/api/approvals", nil)); held[0].Approval.ExpiresIn != 0 {
+		t.Errorf("held request still counts down: %d", held[0].Approval.ExpiresIn)
+	}
 	if resp := do(t, s, "POST", path, map[string]any{}); resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("missing allow: status %d, want 400", resp.StatusCode)
 	}
@@ -51,6 +60,9 @@ func TestApprovalRoutes(t *testing.T) {
 	}
 	if left := decode[[]runner.PendingApproval](t, do(t, s, "GET", "/api/approvals", nil)); len(left) != 0 {
 		t.Errorf("still pending: %+v", left)
+	}
+	if resp := do(t, s, "POST", path+"/hold", nil); resp.StatusCode != http.StatusConflict {
+		t.Errorf("hold after answer: status %d, want 409", resp.StatusCode)
 	}
 }
 

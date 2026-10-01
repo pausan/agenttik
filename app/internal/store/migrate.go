@@ -378,6 +378,8 @@ UPDATE turns SET provider = (SELECT provider FROM sessions WHERE id = session_id
 CREATE INDEX idx_turns_started ON turns(started_at);`,
 	`ALTER TABLE turns ADD COLUMN estimated_cost_usd REAL NOT NULL DEFAULT 0;
 ALTER TABLE turns ADD COLUMN cost_estimate_basis TEXT NOT NULL DEFAULT '';`,
+	`ALTER TABLE general_config ADD COLUMN approval_mode TEXT NOT NULL DEFAULT 'timeout';
+ALTER TABLE general_config ADD COLUMN approval_timeout INTEGER NOT NULL DEFAULT 30;`,
 }
 
 func migrate(db *sql.DB, path string) error {

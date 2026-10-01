@@ -25,6 +25,8 @@ async function resetDefaults() {
     await resetPreferences();
     colorPreference.value = "auto";
     position.value = "top";
+    approvalMode.value = "timeout";
+    approvalTimeout.value = 30;
     desktopVersion.value++;
     confirmingReset.value = false;
     resetDone.value = true;
@@ -49,6 +51,8 @@ onMounted(async () => {
   try {
     const config = await api("GET", "/api/general");
     position.value = config.new_item_position;
+    approvalMode.value = config.approval_mode;
+    approvalTimeout.value = config.approval_timeout;
     database.value = config;
     positionReady.value = true;
   } catch (e) {
@@ -70,6 +74,42 @@ const positionRows = computed(() =>
     ? [
         { value: "top", label: "At the top (default)", description: "New tasks and projects appear first" },
         { value: "bottom", label: "At the bottom", description: "New tasks and projects appear last" },
+      ]
+    : [],
+);
+
+/* What happens to a tool approval or an agent's question nobody answers. The
+   server keeps the setting and the clock, so it holds for every window and
+   for a request no window is open to see. See specs/082-tool-approvals.md. */
+const approvalMode = ref("timeout");
+const approvalTimeout = ref(30);
+const savingApprovals = ref(false);
+async function saveApprovals(change) {
+  savingApprovals.value = true;
+  try {
+    const saved = await api("PUT", "/api/general", change);
+    approvalMode.value = saved.approval_mode;
+    approvalTimeout.value = saved.approval_timeout;
+  } catch (e) {
+    fail(e);
+  } finally {
+    savingApprovals.value = false;
+  }
+}
+function saveTimeout(value) {
+  const seconds = Math.round(Number(value));
+  if (!Number.isFinite(seconds) || seconds < 1 || seconds > 86400) {
+    fail(new Error("The timeout must be between 1 and 86400 seconds"));
+    return;
+  }
+  if (seconds !== approvalTimeout.value) saveApprovals({ approval_timeout: seconds });
+}
+const approvalRows = computed(() =>
+  fuzzyAny(["general", "approvals", "approve", "auto", "questions", "answer", "timeout", "wait", "tools", "permission"], props.filter) !== null
+    ? [
+        { value: "wait", label: "Wait for me", description: "A request waits until someone answers it" },
+        { value: "timeout", label: "Answer after a timeout (default)", description: "Answer for you when nobody has within the time below" },
+        { value: "immediate", label: "Answer at once", description: "Answer for you without asking" },
       ]
     : [],
 );
@@ -115,7 +155,7 @@ const searchRows = computed(() => fuzzyAny(["general", "project", "tasks", "smar
   { value: false, label: "Fuzzy Search (default)", description: "Match task titles as you type" },
   { value: true, label: "Smart Search", description: "Find related tasks by meaning, across languages" },
 ] : []);
-watchEffect(() => emit("count", Number(showSounds.value) + Number(showReset.value) + Number(showDatabase.value) + desktopCount.value + promptRows.value.length + foldRows.value.length + positionRows.value.length + searchRows.value.length));
+watchEffect(() => emit("count", approvalRows.value.length + Number(showSounds.value) + Number(showReset.value) + Number(showDatabase.value) + desktopCount.value + promptRows.value.length + foldRows.value.length + positionRows.value.length + searchRows.value.length));
 
 const chosen = computed({
   get: () => enterDoes(),
@@ -181,6 +221,37 @@ const folding = computed({
       :ui="{ item: 'py-1' }"
       @update:model-value="setPosition"
     />
+  </section>
+  <section v-if="approvalRows.length" :class="(promptRows.length || foldRows.length || positionRows.length) && 'mt-5'">
+    <div class="mb-0.5 font-semibold text-highlighted">Tool approvals and questions</div>
+    <p class="mb-2 text-xs text-dimmed">
+      What happens when an agent asks to run a tool or asks you a question and nobody answers.
+      Answering for you allows the tool call, and picks the recommended option of each question,
+      or the first; a question with no options is skipped. Applies to all windows, from the next request.
+    </p>
+    <URadioGroup
+      :model-value="approvalMode"
+      :items="approvalRows"
+      :disabled="!positionReady || savingApprovals"
+      size="sm"
+      :ui="{ item: 'py-1' }"
+      @update:model-value="saveApprovals({ approval_mode: $event })"
+    />
+    <label v-if="approvalMode === 'timeout'" class="mt-2 flex items-center gap-2 text-sm">
+      <span>Answer after</span>
+      <UInput
+        type="number"
+        size="sm"
+        class="w-24"
+        :min="1"
+        :max="86400"
+        aria-label="Seconds before answering"
+        :model-value="approvalTimeout"
+        :disabled="!positionReady || savingApprovals"
+        @change="saveTimeout($event.target.value)"
+      />
+      <span>seconds</span>
+    </label>
   </section>
   <section v-if="searchRows.length" class="mt-5">
     <div class="mb-0.5 font-semibold text-highlighted">Project task search</div>

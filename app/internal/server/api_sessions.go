@@ -520,3 +520,11 @@ func (s *Server) answerApproval(c *fiber.Ctx) error {
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
+
+// holdApproval stops a request's countdown, so it waits for an answer.
+func (s *Server) holdApproval(c *fiber.Ctx) error {
+	if err := s.runner.Hold(c.Params("id"), c.Params("approval")); err != nil {
+		return err
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}

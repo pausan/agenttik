@@ -204,8 +204,16 @@ type Approval struct {
 	Input string `json:"input,omitempty"`
 	// Questions turns the request into a form. Allowing it means answering.
 	Questions []Question `json:"questions,omitempty"`
-	// Allowed is set on approval_resolved when the user answered it.
+	// Allowed is set on approval_resolved when it was answered.
 	Allowed *bool `json:"allowed,omitempty"`
+	// Auto is set on approval_resolved when agenttik answered it, because
+	// nobody did in time.
+	Auto bool `json:"auto,omitempty"`
+	// ExpiresIn is how many milliseconds are left before agenttik answers it,
+	// as of when it was sent. Zero waits for the user. A duration rather than
+	// a time, so a window whose clock differs from the server's counts down
+	// correctly.
+	ExpiresIn int64 `json:"expires_in_ms,omitempty"`
 
 	answer func(Reply) error
 }
@@ -249,6 +257,31 @@ func (a *Approval) Answer(r Reply) error {
 		return errors.New("approval cannot be answered")
 	}
 	return a.answer(r)
+}
+
+// AutoReply is the answer agenttik gives when nobody answers: allow a tool
+// call; for questions, pick the option marked recommended, else the first. A
+// question with nothing to pick has no answer to guess, so the request is
+// declined and the agent carries on without it.
+func (a *Approval) AutoReply() Reply {
+	if len(a.Questions) == 0 {
+		return Reply{Allow: true}
+	}
+	answers := make(map[string][]string, len(a.Questions))
+	for _, q := range a.Questions {
+		if len(q.Options) == 0 {
+			return Reply{}
+		}
+		pick := q.Options[0].Label
+		for _, o := range q.Options {
+			if strings.Contains(strings.ToLower(o.Label), "recommended") {
+				pick = o.Label
+				break
+			}
+		}
+		answers[q.ID] = []string{pick}
+	}
+	return Reply{Allow: true, Answers: answers}
 }
 
 // CheckReply reports whether r answers every question, with an option

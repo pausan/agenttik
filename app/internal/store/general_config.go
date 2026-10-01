@@ -2,16 +2,32 @@ package store
 
 type GeneralConfig struct {
 	NewItemPosition string `json:"new_item_position"`
+	// ApprovalMode is what happens to a tool approval or a question nobody
+	// answers: ApprovalWait, ApprovalTimeout or ApprovalImmediate. See
+	// specs/082-tool-approvals.md.
+	ApprovalMode string `json:"approval_mode"`
+	// ApprovalTimeout is how many seconds ApprovalTimeout waits.
+	ApprovalTimeout int `json:"approval_timeout"`
 }
+
+const (
+	ApprovalWait      = "wait"
+	ApprovalTimeout   = "timeout"
+	ApprovalImmediate = "immediate"
+
+	DefaultApprovalTimeout = 30
+)
 
 func (s *Store) GetGeneralConfig() (GeneralConfig, error) {
 	var c GeneralConfig
-	err := s.db.QueryRow(`SELECT new_item_position FROM general_config WHERE id = 1`).Scan(&c.NewItemPosition)
+	err := s.db.QueryRow(`SELECT new_item_position, approval_mode, approval_timeout FROM general_config WHERE id = 1`).
+		Scan(&c.NewItemPosition, &c.ApprovalMode, &c.ApprovalTimeout)
 	return c, err
 }
 
 func (s *Store) SetGeneralConfig(c GeneralConfig) error {
-	_, err := s.db.Exec(`UPDATE general_config SET new_item_position = ? WHERE id = 1`, c.NewItemPosition)
+	_, err := s.db.Exec(`UPDATE general_config SET new_item_position = ?, approval_mode = ?, approval_timeout = ? WHERE id = 1`,
+		c.NewItemPosition, c.ApprovalMode, c.ApprovalTimeout)
 	return err
 }
 
@@ -23,7 +39,7 @@ func (s *Store) ResetPreferences() error {
 	}
 	defer tx.Rollback()
 	for _, query := range []string{
-		`UPDATE general_config SET new_item_position = 'top' WHERE id = 1`,
+		`UPDATE general_config SET new_item_position = 'top', approval_mode = 'timeout', approval_timeout = 30 WHERE id = 1`,
 		`UPDATE desktop_config SET close_to_tray = 0, toggle_shortcut = 'Ctrl+Shift+A' WHERE id = 1`,
 		`DELETE FROM starred_models`,
 		`DELETE FROM action_models`,

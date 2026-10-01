@@ -5,7 +5,7 @@ import "testing"
 func TestResetPreferencesPreservesAccountsAndWork(t *testing.T) {
 	s := testStore(t)
 	for _, q := range []string{
-		`UPDATE general_config SET new_item_position = 'bottom'`,
+		`UPDATE general_config SET new_item_position = 'bottom', approval_mode = 'wait', approval_timeout = 5`,
 		`UPDATE desktop_config SET close_to_tray = 1, toggle_shortcut = 'Alt+B'`,
 		`INSERT INTO provider_accounts (provider, alias, home, is_default, created_at) VALUES ('test', 'personal', '/account', 1, 1)`,
 		`INSERT INTO starred_models (provider, model, created_at) VALUES ('test', 'model', 1)`,
@@ -29,6 +29,8 @@ func TestResetPreferencesPreservesAccountsAndWork(t *testing.T) {
 		}
 		for query, want := range map[string]string{
 			`SELECT new_item_position FROM general_config`:  "top",
+			`SELECT approval_mode FROM general_config`:      "timeout",
+			`SELECT approval_timeout FROM general_config`:   "30",
 			`SELECT toggle_shortcut FROM desktop_config`:    "Ctrl+Shift+A",
 			`SELECT close_to_tray FROM desktop_config`:      "0",
 			`SELECT COUNT(*) FROM starred_models`:           "0",

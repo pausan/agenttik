@@ -1,4 +1,4 @@
-import { addProject, expect, newTask, openProject, pickModel, sendPrompt, sidebar, test } from "../fixtures.js";
+import { addProject, expect, newTask, openProject, openSettings, pickModel, sendPrompt, sidebar, test } from "../fixtures.js";
 
 /* A tool approval is server state: every window connected to the server
    shows it, any of them can answer, and the first answer settles it for all.
@@ -99,4 +99,66 @@ test("a typed answer replaces the pick, and a question can be skipped", async ({
   await next.getByRole("button", { name: "Skip" }).click();
   await expect(next).toHaveCount(0);
   await expect(page.getByText("declined", { exact: true })).toBeVisible();
+});
+
+/* Settings › General decides what happens to a request nobody answers. */
+async function setApprovals(page, agenttik, change) {
+  const resp = await page.request.put(agenttik.url + "/api/general", { data: change });
+  expect(resp.ok()).toBeTruthy();
+}
+
+test("settings choose between waiting, a timeout and answering at once", async ({ page }) => {
+  await openSettings(page);
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("radio", { name: /Answer after a timeout/ })).toBeChecked();
+  const seconds = dialog.getByLabel("Seconds before answering");
+  await expect(seconds).toHaveValue("30");
+  await seconds.fill("45");
+  await seconds.press("Enter");
+  await seconds.blur();
+  await dialog.getByRole("radio", { name: /Wait for me/ }).click();
+  await expect(seconds).toHaveCount(0);
+
+  await page.reload();
+  await openSettings(page);
+  await expect(page.getByRole("dialog").getByRole("radio", { name: /Wait for me/ })).toBeChecked();
+  await page.getByRole("dialog").getByRole("radio", { name: /Answer after a timeout/ }).click();
+  await expect(page.getByRole("dialog").getByLabel("Seconds before answering")).toHaveValue("45");
+});
+
+test("a request nobody answers is allowed when the timeout runs out", async ({ page, agenttik }) => {
+  await setApprovals(page, agenttik, { approval_mode: "timeout", approval_timeout: 2 });
+  const card = await askForApproval(page, "echo timed");
+  await expect(card.getByLabel("Automatic answer")).toContainText(/Allowing in [12]s/);
+  await expect(card).toHaveCount(0, { timeout: 5000 });
+  await expect(page.getByText("allowed", { exact: true })).toBeVisible();
+});
+
+test("keep waiting from one window stops the countdown in every window", async ({ page, agenttik }) => {
+  await setApprovals(page, agenttik, { approval_mode: "timeout", approval_timeout: 4 });
+  const card = await askForApproval(page, "echo held");
+  const other = await page.context().newPage();
+  await other.goto(agenttik.url);
+  await sidebar(other).locator(".task-row").filter({ has: other.getByLabel("Waiting for you") }).locator(".task-select").click();
+  const otherCard = other.getByRole("group", { name: "Tool approval" });
+  await otherCard.getByRole("button", { name: "Keep waiting" }).click();
+  await expect(otherCard.getByLabel("Automatic answer")).toHaveCount(0);
+  await expect(card.getByLabel("Automatic answer")).toHaveCount(0);
+  // Past the timeout, it still waits.
+  await page.waitForTimeout(4500);
+  await expect(card).toBeVisible();
+  await card.getByRole("button", { name: "Deny" }).click();
+  await expect(page.getByText("denied", { exact: true })).toBeVisible();
+  await other.close();
+});
+
+test("answering at once shows no card", async ({ page, agenttik }) => {
+  await setApprovals(page, agenttik, { approval_mode: "immediate" });
+  await addProject(page);
+  await openProject(page);
+  await newTask(page);
+  await pickModel(page);
+  await sendPrompt(page, "@ask Which store? | Redis, SQLite (Recommended)");
+  await expect(page.getByText("answer=SQLite (Recommended)", { exact: true })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Agent question" })).toHaveCount(0);
 });

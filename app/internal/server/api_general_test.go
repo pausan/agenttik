@@ -44,6 +44,32 @@ func TestGeneralConfigAPI(t *testing.T) {
 	}
 }
 
+func TestApprovalModeSettings(t *testing.T) {
+	s, _ := newTestServer(t)
+	cfg := decode[store.GeneralConfig](t, do(t, s, "GET", "/api/general", nil))
+	if cfg.ApprovalMode != "timeout" || cfg.ApprovalTimeout != 30 {
+		t.Fatalf("defaults = %+v", cfg)
+	}
+	for _, bad := range []map[string]any{
+		{"approval_mode": "sometimes"},
+		{"approval_timeout": 0},
+		{"approval_timeout": 86401},
+	} {
+		if resp := do(t, s, "PUT", "/api/general", bad); resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("%v: status %d, want 400", bad, resp.StatusCode)
+		}
+	}
+	cfg = decode[store.GeneralConfig](t, do(t, s, "PUT", "/api/general", map[string]any{"approval_mode": "wait", "approval_timeout": 90}))
+	if cfg.ApprovalMode != "wait" || cfg.ApprovalTimeout != 90 || cfg.NewItemPosition != "top" {
+		t.Fatalf("saved = %+v", cfg)
+	}
+	// A body naming one setting leaves the others as they were.
+	cfg = decode[store.GeneralConfig](t, do(t, s, "PUT", "/api/general", map[string]any{"new_item_position": "bottom"}))
+	if cfg.ApprovalMode != "wait" || cfg.ApprovalTimeout != 90 {
+		t.Fatalf("partial update reset approvals: %+v", cfg)
+	}
+}
+
 func TestGeneralDatabaseInfo(t *testing.T) {
 	s, st := newTestServer(t)
 	path := filepath.Join(st.Dir(), "t.db")

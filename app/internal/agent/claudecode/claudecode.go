@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -101,6 +102,27 @@ func buildArgs(req agent.TurnRequest) []string {
 	return args
 }
 
+// buildEnv picks the subscription that answers the turn and makes MCP servers
+// ready before it starts. Under `-p` the CLI connects them in the background by
+// default, so a claude.ai connector still connecting when the first request
+// goes out looks disconnected to the model for the whole turn. Waiting is
+// capped by the CLI's MCP_CONNECT_TIMEOUT_MS (5s by default). Metadata requests
+// use no tools and skip the wait; a value the user set wins.
+func buildEnv(req agent.TurnRequest) []string {
+	// Nil for the machine's own login, which is exec's "inherit mine".
+	env := agent.HomeEnv(HomeVar, req.AccountHome)
+	if req.Isolated {
+		return env
+	}
+	if _, set := os.LookupEnv("MCP_CONNECTION_NONBLOCKING"); set {
+		return env
+	}
+	if env == nil {
+		env = os.Environ()
+	}
+	return append(env, "MCP_CONNECTION_NONBLOCKING=0")
+}
+
 func (p *Provider) Run(ctx context.Context, req agent.TurnRequest) (<-chan agent.Event, error) {
 	if err := p.Available(); err != nil {
 		return nil, err
@@ -155,9 +177,7 @@ func start(req agent.TurnRequest) (*exec.Cmd, io.ReadCloser, *strings.Builder, e
 	for attempt := 0; attempt < 2; attempt++ {
 		cmd := exec.Command(Binary, buildArgs(req)...)
 		cmd.Dir = req.WorkDir
-		// Which subscription answers the turn. Nil for the machine's own
-		// login, which is exec's "inherit mine".
-		cmd.Env = agent.HomeEnv(HomeVar, req.AccountHome)
+		cmd.Env = buildEnv(req)
 		// The prompt goes in on stdin, never as an argv element.
 		cmd.Stdin = strings.NewReader(req.Prompt)
 		// Own process group so cancelling kills the CLI's children too.

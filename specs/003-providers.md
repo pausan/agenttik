@@ -114,6 +114,13 @@ a conversation under the task's id and refuses to be given it again ("Session
 ID ... is already in use"), so it picks the new one itself and reports it in
 `init`.
 
+Task turns run with `MCP_CONNECTION_NONBLOCKING=0`. Under `-p` the CLI otherwise
+connects MCP servers in the background, so a claude.ai connector still
+connecting when the first request goes out looks disconnected to the model for
+the whole turn. The wait is capped by the CLI's `MCP_CONNECT_TIMEOUT_MS` (5s by
+default). Metadata requests skip it, and a value set in agenttik's own
+environment wins.
+
 Events consumed from stdout JSONL:
 
 | Line | Mapped to |

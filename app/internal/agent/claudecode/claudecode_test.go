@@ -1,6 +1,8 @@
 package claudecode
 
 import (
+	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -34,6 +36,25 @@ func TestBuildArgsResumesWithProviderSessionID(t *testing.T) {
 	}
 	if strings.Contains(got, "--session-id") {
 		t.Errorf("resume must not also set --session-id: %q", got)
+	}
+}
+
+func TestBuildEnvWaitsForMCPServers(t *testing.T) {
+	t.Setenv("MCP_CONNECTION_NONBLOCKING", "")
+	os.Unsetenv("MCP_CONNECTION_NONBLOCKING")
+	if !slices.Contains(buildEnv(agent.TurnRequest{}), "MCP_CONNECTION_NONBLOCKING=0") {
+		t.Error("turns should wait for MCP servers")
+	}
+	if env := buildEnv(agent.TurnRequest{AccountHome: "/x"}); !slices.Contains(env, "MCP_CONNECTION_NONBLOCKING=0") ||
+		!slices.Contains(env, HomeVar+"=/x") {
+		t.Errorf("account turn env missing home or MCP wait: %v", env)
+	}
+	if env := buildEnv(agent.TurnRequest{Isolated: true}); env != nil {
+		t.Errorf("metadata requests should inherit the env untouched: %v", env)
+	}
+	t.Setenv("MCP_CONNECTION_NONBLOCKING", "1")
+	if env := buildEnv(agent.TurnRequest{}); env != nil {
+		t.Errorf("a user-set value should win: %v", env)
 	}
 }
 

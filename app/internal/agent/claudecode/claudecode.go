@@ -250,8 +250,13 @@ func parse(r io.Reader, model string, h *host, out chan<- agent.Event) {
 }
 
 type streamParser struct {
-	model         string
-	host          *host
+	model string
+	host  *host
+	// background is how many background tasks are still running. While any
+	// are, a result does not end the turn: the CLI wakes the agent when one
+	// finishes and it replies again, as long as stdin is open.
+	background    int
+	total         usage
 	main          usage
 	subagentsUsed usage
 	subagents     map[string]struct{}
@@ -283,8 +288,13 @@ func (p *streamParser) handleLine(line []byte, out chan<- agent.Event) {
 	}
 	switch env.Type {
 	case "system":
-		if env.Subtype == "init" && env.SessionID != "" {
-			out <- agent.Event{Type: agent.EventSessionStarted, ProviderSessionID: env.SessionID}
+		switch env.Subtype {
+		case "init":
+			if env.SessionID != "" {
+				out <- agent.Event{Type: agent.EventSessionStarted, ProviderSessionID: env.SessionID}
+			}
+		case "background_tasks_changed":
+			p.background = len(env.Tasks)
 		}
 	case "stream_event":
 		handleStreamEvent(env.Event, out)
@@ -334,11 +344,14 @@ func (p *streamParser) handleLine(line []byte, out chan<- agent.Event) {
 			}
 			out <- agent.Event{Type: agent.EventError, Text: msg}
 		}
+		// Each reply's result counts only its own tokens, while its cost is
+		// the whole process's so far. The last done carries the turn's totals.
+		p.total.add(env.Usage)
 		usage := agent.Usage{
-			InputTokens:              env.Usage.InputTokens,
-			OutputTokens:             env.Usage.OutputTokens,
-			CacheReadTokens:          env.Usage.CacheReadInputTokens,
-			CacheWriteTokens:         env.Usage.CacheCreationInputTokens,
+			InputTokens:              p.total.InputTokens,
+			OutputTokens:             p.total.OutputTokens,
+			CacheReadTokens:          p.total.CacheReadInputTokens,
+			CacheWriteTokens:         p.total.CacheCreationInputTokens,
 			CostUSD:                  env.TotalCostUSD,
 			ContextTokens:            p.contextTokens,
 			ContextWindow:            env.contextWindow(p.model),
@@ -354,9 +367,11 @@ func (p *streamParser) handleLine(line []byte, out chan<- agent.Event) {
 			UsageBreakdown:           p.hasBreakdown,
 		}
 		out <- agent.Event{Type: agent.EventDone, Usage: &usage}
-		// One prompt makes one result. Closing stdin is what lets a
-		// stream-json CLI exit instead of waiting for another prompt.
-		if p.host != nil {
+		// Closing stdin is what lets a stream-json CLI exit instead of
+		// waiting for another prompt. It also kills the background tasks the
+		// agent said it would wait for, so stdin stays open until a reply
+		// ends with none running.
+		if p.host != nil && p.background == 0 {
 			p.host.close()
 		}
 	}
@@ -372,10 +387,7 @@ func (p *streamParser) addUsage(parentToolUseID string, u usage) {
 		dst = &p.subagentsUsed
 		p.subagents[parentToolUseID] = struct{}{}
 	}
-	dst.InputTokens += u.InputTokens
-	dst.OutputTokens += u.OutputTokens
-	dst.CacheReadInputTokens += u.CacheReadInputTokens
-	dst.CacheCreationInputTokens += u.CacheCreationInputTokens
+	dst.add(u)
 }
 
 func handleStreamEvent(ev *streamEvent, out chan<- agent.Event) {

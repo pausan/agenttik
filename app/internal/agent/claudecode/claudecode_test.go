@@ -301,6 +301,58 @@ func TestParseTurnsToolRequestsIntoApprovals(t *testing.T) {
 	}
 }
 
+// A reply that ends with background work running does not end the turn: the
+// CLI wakes the agent when the work finishes, which needs stdin still open.
+// Stdin closes at the first reply that leaves nothing running.
+func TestParseWaitsForBackgroundTasks(t *testing.T) {
+	stdin := &pipe{}
+	p := streamParser{host: &host{w: stdin}, subagents: map[string]struct{}{}}
+	out := make(chan agent.Event, 16)
+	feed := func(lines ...string) {
+		for _, l := range lines {
+			p.handleLine([]byte(l), out)
+		}
+	}
+	done := func() *agent.Usage {
+		t.Helper()
+		for {
+			select {
+			case ev := <-out:
+				if ev.Type == agent.EventDone {
+					return ev.Usage
+				}
+			default:
+				t.Fatal("no done event")
+			}
+		}
+	}
+
+	// The build runs in the background; the agent says it will wait.
+	feed(`{"type":"system","subtype":"background_tasks_changed","tasks":[{"task_id":"b1"}]}`,
+		`{"type":"result","subtype":"success","total_cost_usd":0.1,"usage":{"input_tokens":10,"output_tokens":1}}`)
+	if u := done(); u.OutputTokens != 1 || stdin.closed {
+		t.Fatalf("first reply: usage=%+v closed=%v", u, stdin.closed)
+	}
+	// The build finishes; the agent starts the emulator and waits again.
+	feed(`{"type":"system","subtype":"background_tasks_changed","tasks":[]}`,
+		`{"type":"system","subtype":"init","session_id":"s"}`,
+		`{"type":"system","subtype":"background_tasks_changed","tasks":[{"task_id":"b2"}]}`,
+		`{"type":"result","subtype":"success","total_cost_usd":0.2,"usage":{"input_tokens":20,"output_tokens":2}}`)
+	if done(); stdin.closed {
+		t.Fatal("stdin closed while the emulator still runs")
+	}
+	// The emulator is up; the last reply leaves nothing running.
+	feed(`{"type":"system","subtype":"background_tasks_changed","tasks":[]}`,
+		`{"type":"result","subtype":"success","total_cost_usd":0.3,"usage":{"input_tokens":30,"output_tokens":3}}`)
+	u := done()
+	if !stdin.closed {
+		t.Fatal("stdin still open after the last reply")
+	}
+	if u.InputTokens != 60 || u.OutputTokens != 6 || u.CostUSD != 0.3 {
+		t.Errorf("turn totals = %+v", u)
+	}
+}
+
 func TestApprovalAnswerWritesControlResponse(t *testing.T) {
 	for _, allow := range []bool{true, false} {
 		stdin := &pipe{}

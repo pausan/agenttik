@@ -28,6 +28,10 @@ type envelope struct {
 	// type=rate_limit_event
 	RateLimitInfo *rateLimitInfo `json:"rate_limit_info"`
 
+	// type=system, subtype=background_tasks_changed: every background task
+	// still running. Only the count is read.
+	Tasks []json.RawMessage `json:"tasks"`
+
 	// type=control_request | control_cancel_request
 	RequestID string          `json:"request_id"`
 	Request   *controlRequest `json:"request"`
@@ -227,6 +231,13 @@ type usage struct {
 // prompt, whether it was cached or sent again.
 func (u usage) contextTokens() int64 {
 	return u.InputTokens + u.CacheReadInputTokens + u.CacheCreationInputTokens
+}
+
+func (u *usage) add(o usage) {
+	u.InputTokens += o.InputTokens
+	u.OutputTokens += o.OutputTokens
+	u.CacheReadInputTokens += o.CacheReadInputTokens
+	u.CacheCreationInputTokens += o.CacheCreationInputTokens
 }
 
 func (u usage) hasTokens() bool {

@@ -724,6 +724,9 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 				turn.RateLimits = string(body)
 			}
 		case agent.EventDone:
+			// A turn can hold several replies, one per background task the
+			// agent waited on. Each is its own message.
+			flushText()
 			if ev.Usage != nil {
 				turn.InputTokens = ev.Usage.InputTokens
 				turn.OutputTokens = ev.Usage.OutputTokens

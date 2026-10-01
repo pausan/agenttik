@@ -38,7 +38,8 @@ own "Other" is. Skipping denies the call.
 
 A `control_cancel_request` withdraws a request. The `result` line closes
 stdin, which is what lets the CLI exit; without it a stream-json CLI waits for
-another prompt. Any other control request subtype gets an error response, so
+another prompt. A result with background tasks running leaves stdin open
+([003](003-providers.md#claude-code)). Any other control request subtype gets an error response, so
 the CLI never waits on something agenttik cannot answer. Isolated requests
 (titles, outcomes, commit messages) keep plain text stdin and are never asked
 anything.

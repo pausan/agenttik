@@ -9,16 +9,21 @@ from the user's interactive login shell (`$SHELL`, defaulting to `/bin/zsh` on
 macOS and `/bin/sh` on Linux). This includes shell-configured Homebrew and
 version-manager paths when opened from Finder, the Dock or a desktop launcher.
 
-The shell runs once in the user's home directory, with a two-second timeout.
+The shell runs once in the user's home directory, with a five-second timeout.
 Only `PATH` is imported; existing entries retain priority, new absolute entries
 are deduplicated, and shell banners are ignored. Lookup failure is logged and
-leaves the inherited path intact. CLI children inherit the recovered path too,
-so scripts can find runtimes such as `node`.
+leaves the inherited path intact. Whether or not the shell answered, the usual
+install directories that exist are appended last: `~/.local/bin` (Claude Code's
+native installer), `~/.claude/local`, `/opt/homebrew/bin` and `/usr/local/bin`.
+A slow or broken shell startup therefore cannot hide a natively installed
+`claude`. CLI children inherit the recovered path too, so scripts can find
+runtimes such as `node`.
 
 Terminal environments, explicit `--web` launches, web-only builds and Windows
 keep their inherited path. Remote clients and command-only invocations do not
 start the shell. Tests simulate a desktop path, verify both discovery and CLI
-execution, and cover failed, incomplete and timed-out shell probes.
+execution, and cover failed, incomplete and timed-out shell probes, and the install
+directories found without a shell.
 
 ## Interface
 

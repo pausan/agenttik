@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/pausan/agenttik/app/internal/agent"
 )
@@ -32,9 +33,12 @@ func (p *Provider) DefaultHome() string {
 	return filepath.Join(home, ".claude")
 }
 
-// AccountStatus reads the two non-secret fields Claude Code records beside
-// the token — which plan the login is on — and nothing else. The tokens in
-// the same file are not decoded, not logged and never leave the CLI.
+// AccountStatus reads which plan a login is on and nothing else. The token
+// itself is never decoded, logged or passed on.
+//
+// Linux and Windows keep the login in .credentials.json. macOS keeps it in
+// the Keychain, so there the sign is the account Claude Code records in its
+// config file on every platform.
 func (p *Provider) AccountStatus(home string) agent.AccountStatus {
 	if home == "" {
 		home = p.DefaultHome()
@@ -42,25 +46,49 @@ func (p *Provider) AccountStatus(home string) agent.AccountStatus {
 	if home == "" {
 		return agent.AccountStatus{}
 	}
-	body, err := os.ReadFile(filepath.Join(home, ".credentials.json"))
+	if body, err := os.ReadFile(filepath.Join(home, ".credentials.json")); err == nil {
+		var file struct {
+			OAuth *struct {
+				SubscriptionType string `json:"subscriptionType"`
+			} `json:"claudeAiOauth"`
+		}
+		if err := json.Unmarshal(body, &file); err != nil || file.OAuth == nil {
+			// A file we cannot read is still a login the CLI may well accept,
+			// so this reports it as present without a name for it.
+			return agent.AccountStatus{SignedIn: true}
+		}
+		return agent.AccountStatus{SignedIn: true, Detail: planDetail(file.OAuth.SubscriptionType)}
+	}
+	body, err := os.ReadFile(configFile(home))
 	if err != nil {
 		return agent.AccountStatus{}
 	}
-	var file struct {
-		OAuth *struct {
-			SubscriptionType string `json:"subscriptionType"`
-		} `json:"claudeAiOauth"`
+	var config struct {
+		Account *struct {
+			OrganizationType string `json:"organizationType"`
+		} `json:"oauthAccount"`
 	}
-	if err := json.Unmarshal(body, &file); err != nil || file.OAuth == nil {
-		// A file we cannot read is still a login the CLI may well accept, so
-		// this reports it as present without a name for it.
-		return agent.AccountStatus{SignedIn: true}
+	if json.Unmarshal(body, &config) != nil || config.Account == nil {
+		return agent.AccountStatus{}
 	}
-	detail := file.OAuth.SubscriptionType
-	if detail != "" {
-		detail += " plan"
+	plan := strings.TrimPrefix(config.Account.OrganizationType, "claude_")
+	return agent.AccountStatus{SignedIn: true, Detail: planDetail(plan)}
+}
+
+// configFile is Claude Code's .claude.json for a config directory. The
+// default directory, ~/.claude, keeps it in the home directory instead.
+func configFile(dir string) string {
+	if home, err := os.UserHomeDir(); err == nil && dir == filepath.Join(home, ".claude") {
+		return filepath.Join(home, ".claude.json")
 	}
-	return agent.AccountStatus{SignedIn: true, Detail: detail}
+	return filepath.Join(dir, ".claude.json")
+}
+
+func planDetail(plan string) string {
+	if plan == "" {
+		return ""
+	}
+	return plan + " plan"
 }
 
 // LoginCommand signs one directory in. `/login` is the CLI's own command for

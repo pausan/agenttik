@@ -20,7 +20,7 @@ per profile.
 
 | Provider | Account selection | Login location |
 |---|---|---|
-| Claude Code | `CLAUDE_CONFIG_DIR` | `<dir>/.credentials.json` |
+| Claude Code | `CLAUDE_CONFIG_DIR` | `<dir>/.credentials.json`; on macOS the Keychain, with `oauthAccount` in `.claude.json` (`~/.claude.json` for the default `~/.claude`) identifying the account |
 | Codex | `CODEX_HOME` | `<dir>/auth.json` |
 | GitHub Copilot | `--config-dir` | OS vault; `<dir>/config.json` identifies the account |
 | OpenCode Go | `XDG_DATA_HOME` for CLI; direct file lookup | `<dir>/opencode/auth.json` |

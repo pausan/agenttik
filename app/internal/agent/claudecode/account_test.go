@@ -28,6 +28,44 @@ func TestAccountStatusReadsThePlanAndNotTheToken(t *testing.T) {
 	}
 }
 
+// macOS keeps the token in the Keychain, so a login there leaves no
+// .credentials.json, only the account in the config file.
+func TestAccountStatusWithoutCredentialsFileReadsTheConfig(t *testing.T) {
+	dir := t.TempDir()
+	body := `{"oauthAccount":{"emailAddress":"a@b.c","organizationType":"claude_max"}}`
+	if err := os.WriteFile(filepath.Join(dir, ".claude.json"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	status := New().AccountStatus(dir)
+	if !status.SignedIn || status.Detail != "max plan" {
+		t.Errorf("status = %+v, want signed in on the max plan", status)
+	}
+}
+
+func TestAccountStatusDefaultHomeReadsConfigBesideIt(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv(HomeVar, "")
+	body := `{"oauthAccount":{"organizationType":"claude_pro"}}`
+	if err := os.WriteFile(filepath.Join(home, ".claude.json"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	status := New().AccountStatus("")
+	if !status.SignedIn || status.Detail != "pro plan" {
+		t.Errorf("status = %+v, want signed in on the pro plan", status)
+	}
+}
+
+func TestAccountStatusConfigWithoutAccountIsSignedOut(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".claude.json"), []byte(`{"numStartups":3}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if New().AccountStatus(dir).SignedIn {
+		t.Error("a config with no account reads as signed in")
+	}
+}
+
 func TestAccountStatusOnAnEmptyDirectory(t *testing.T) {
 	status := New().AccountStatus(t.TempDir())
 	if status.SignedIn {

@@ -47,6 +47,11 @@ func TestModelsLabelsCachedAndAliasesPreserved(t *testing.T) {
 	Binary = binary
 	t.Cleanup(func() { Binary = old })
 	p := New()
+	// The first ask answers at once and fetches in the background.
+	if got := p.Models()[1]; got.Label != "Opus (version unknown)" {
+		t.Fatalf("first answer = %+v", got)
+	}
+	p.cache.pending.Wait()
 	models := p.Models()
 	if models[1].ID != "opus" || models[1].Label != "Opus 5.5" {
 		t.Fatalf("opus = %+v", models[1])
@@ -58,10 +63,15 @@ func TestModelsLabelsCachedAndAliasesPreserved(t *testing.T) {
 		t.Fatalf("cache = %+v", got)
 	}
 	p.cache.asked = time.Now().Add(-11 * time.Minute)
+	p.Models()
+	p.cache.pending.Wait()
 	if got := p.Models(); !reflect.DeepEqual(got, models) {
 		t.Fatalf("failed refresh = %+v", got)
 	}
-	if got := New().Models()[1]; got.ID != "opus" || got.Label != "Opus (version unknown)" {
+	fresh := New()
+	fresh.Models()
+	fresh.cache.pending.Wait()
+	if got := fresh.Models()[1]; got.ID != "opus" || got.Label != "Opus (version unknown)" {
 		t.Fatalf("fallback = %+v", got)
 	}
 }

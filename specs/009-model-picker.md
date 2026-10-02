@@ -45,8 +45,9 @@ the selected provider, its availability, and that the model belongs to it.
 Codex discovers its visible models and reasoning efforts through the installed
 CLI's `app-server` `model/list` endpoint, following all pages in CLI order.
 The provider-wide catalog uses the CLI's default login and configuration.
-Results are cached for ten minutes and refreshed on the next catalog request
-(for example, reloading the app). Discovery starts no conversation or model
+Discovery runs at startup and in the background, never inside a request: a
+request reads the cached list, and one finding it over ten minutes old starts a
+refresh and answers with what it has. Discovery starts no conversation or model
 turn and times out after ten seconds. Failed or empty replies retain the last
 successful list; before any success, the bundled list is the fallback.
 New model ids and effort levels need no app update. Context-window sizes are

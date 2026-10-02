@@ -165,8 +165,8 @@ func run() error {
 		restoreDesktopPath()
 	}
 
-	github := copilot.New()
-	providers := []agent.Provider{claudecode.New(), codex.New(), github, opencode.New()}
+	claude, openai, github := claudecode.New(), codex.New(), copilot.New()
+	providers := []agent.Provider{claude, openai, github, opencode.New()}
 	// Registered only for the end-to-end suite, which sets this; a normal
 	// launch never does, so it never appears in a release. See
 	// app/internal/agent/fake.
@@ -176,8 +176,11 @@ func run() error {
 	providers = append(providers, apiprovider.All(db.Dir())...)
 	registry := agent.NewRegistry(providers...)
 
-	// Copilot reports its own model list, and asking costs a CLI start. Ask
-	// now so the UI's first request finds the answer already cached.
+	// Each CLI reports its own models, and asking costs a CLI start. Ask now
+	// so the UI's first request finds the answers already cached. Claude and
+	// Codex ask in the background on their own; Copilot waits for its answer.
+	claude.Models()
+	openai.Models()
 	go github.Models()
 
 	turns := runner.New(db, registry, runner.NewHub())

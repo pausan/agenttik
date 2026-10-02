@@ -19,26 +19,41 @@ type modelCache struct {
 	mu     sync.Mutex
 	asked  time.Time
 	models []agent.Model
+	// pending is the refresh in flight, which tests wait on.
+	pending sync.WaitGroup
 }
 
 // Models uses the CLI's catalog, including model-specific reasoning levels.
-// Keep the last successful catalog during outages and throttle failed attempts.
+// Asking costs a CLI start, so the answer is cached and refreshed in the
+// background: the caller gets what is known now, the fallback list until the
+// first answer arrives. The last good catalog outlives an outage, and a failed
+// ask waits modelsTTL before the next one.
 func (p *Provider) Models() []agent.Model {
 	c := &p.cache
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if time.Since(c.asked) >= modelsTTL {
 		c.asked = time.Now()
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if models, err := fetchModels(ctx); err == nil && len(models) > 0 {
-			c.models = models
-		}
+		c.pending.Add(1)
+		go c.refresh()
 	}
 	if len(c.models) == 0 {
-		c.models = fallbackModels()
+		return fallbackModels()
 	}
 	return c.models
+}
+
+func (c *modelCache) refresh() {
+	defer c.pending.Done()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	models, err := fetchModels(ctx)
+	if err != nil || len(models) == 0 {
+		return
+	}
+	c.mu.Lock()
+	c.models = models
+	c.mu.Unlock()
 }
 
 type modelPage struct {

@@ -17,28 +17,41 @@ type modelCache struct {
 	mu     sync.Mutex
 	asked  time.Time
 	labels map[string]string
+	// pending is the refresh in flight, which tests wait on.
+	pending sync.WaitGroup
 }
 
-// Ask only for initialization metadata, never a model turn. Cache the labels
-// so opening a picker does not repeatedly start Claude Code.
+// Ask only for initialization metadata, never a model turn. Asking costs a
+// CLI start, so the labels are cached and refreshed in the background: the
+// caller gets what is known now, and no labels until the first answer.
 func (p *Provider) modelLabels() map[string]string {
 	c := &p.cache
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if time.Since(c.asked) >= 10*time.Minute {
 		c.asked = time.Now()
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		cmd := exec.CommandContext(ctx, Binary, "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--no-session-persistence", "--safe-mode", "--setting-sources", "user")
-		cmd.Dir = os.TempDir()
-		cmd.Stdin = strings.NewReader("{\"type\":\"control_request\",\"request_id\":\"models\",\"request\":{\"subtype\":\"initialize\"}}\n")
-		if data, err := cmd.Output(); err == nil {
-			if labels := parseModelLabels(string(data)); len(labels) > 0 {
-				c.labels = labels
-			}
-		}
+		c.pending.Add(1)
+		go c.refresh()
 	}
 	return c.labels
+}
+
+func (c *modelCache) refresh() {
+	defer c.pending.Done()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, Binary, "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--no-session-persistence", "--safe-mode", "--setting-sources", "user")
+	cmd.Dir = os.TempDir()
+	cmd.Stdin = strings.NewReader("{\"type\":\"control_request\",\"request_id\":\"models\",\"request\":{\"subtype\":\"initialize\"}}\n")
+	data, err := cmd.Output()
+	if err != nil {
+		return
+	}
+	if labels := parseModelLabels(string(data)); len(labels) > 0 {
+		c.mu.Lock()
+		c.labels = labels
+		c.mu.Unlock()
+	}
 }
 
 var versionedModel = regexp.MustCompile(`^claude-(fable|opus|sonnet|haiku)-(\d+)(?:[.-](\d{1,2}))?(?:-\d{8})?(?:\[1m\])?$`)

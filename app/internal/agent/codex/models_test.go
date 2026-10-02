@@ -47,20 +47,26 @@ read -r request
 `)
 	p := New()
 	want := []agent.Model{{ID: "gpt-6-sol", Label: "GPT-6 Sol", Efforts: []string{"high", "ultra"}}, {ID: "future-model", Label: "future-model"}}
+	// The first ask answers at once and fetches in the background.
+	if got := p.Models(); !reflect.DeepEqual(got, fallbackModels()) {
+		t.Fatalf("first answer = %+v", got)
+	}
+	p.cache.pending.Wait()
 	if got := p.Models(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("models = %+v", got)
 	}
 	if err := os.Remove(binary); err != nil {
 		t.Fatal(err)
 	}
-	if got := p.Models(); !reflect.DeepEqual(got, want) {
-		t.Fatalf("cache = %+v", got)
-	}
 	p.cache.asked = time.Now().Add(-modelsTTL)
+	p.Models()
+	p.cache.pending.Wait()
 	if got := p.Models(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("failed refresh = %+v", got)
 	}
 	fresh := New()
+	fresh.Models()
+	fresh.cache.pending.Wait()
 	if got := fresh.Models(); !reflect.DeepEqual(got, fallbackModels()) {
 		t.Fatalf("fallback = %+v", got)
 	}
@@ -70,10 +76,14 @@ read -r request
 `), 0700); err != nil {
 		t.Fatal(err)
 	}
+	fresh.Models()
+	fresh.cache.pending.Wait()
 	if got := fresh.Models(); !reflect.DeepEqual(got, fallbackModels()) {
 		t.Fatal("failed discovery was not cached")
 	}
 	p.cache.asked = time.Now().Add(-modelsTTL)
+	p.Models()
+	p.cache.pending.Wait()
 	if got := p.Models(); len(got) != 1 || got[0].ID != "next-release" {
 		t.Fatalf("refresh = %+v", got)
 	}
@@ -88,7 +98,10 @@ func TestModelsDiscoveryErrors(t *testing.T) {
 	} {
 		t.Run(response, func(t *testing.T) {
 			modelFixture(t, modelHandshake+"printf '%s\\n' '"+response+"'\n")
-			if got := New().Models(); !reflect.DeepEqual(got, fallbackModels()) {
+			p := New()
+			p.Models()
+			p.cache.pending.Wait()
+			if got := p.Models(); !reflect.DeepEqual(got, fallbackModels()) {
 				t.Fatalf("fallback = %+v", got)
 			}
 		})

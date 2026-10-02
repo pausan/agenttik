@@ -163,8 +163,10 @@ Models are aliases (`fable`, `opus`, `sonnet`, `haiku`) so they track the latest
 release without a code change. Labels include the version reported by the
 installed CLI's initialization metadata, such as `Opus 5.5`. A prompt-free
 initialization query runs outside the project with safe mode and user settings
-only. Labels are cached for ten minutes; a failed refresh retains the last
-successful labels. Until a version is known, the label says `version unknown`.
+only. It runs at startup and in the background, never inside a request: a
+request reads the cached labels, and one finding them over ten minutes old
+starts a refresh and answers with what it has. A failed refresh retains the
+last successful labels. Until a version is known, the label says `version unknown`.
 Model IDs remain aliases, preserving saved selections and favorites. This
 catalogue describes the machine's default Claude configuration; account-specific
 overrides and runtime fallback can still change the model used for a turn.

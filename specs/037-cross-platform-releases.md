@@ -53,11 +53,13 @@ Every build links in the version the binary reports, on top of whatever
 
 ## macOS application bundle
 
-macOS builds retain the standalone executable and also produce `agenttik.app`
-and an `agenttik_<tag>_darwin_arm64.app.zip` release asset. `make build` on macOS
-creates `bin/agenttik.app` and `bin/agenttik_darwin.app.zip`;
-`make build-macos-arm64` creates `dist/agenttik.app` and
-`dist/agenttik_darwin_arm64.app.zip` alongside its executable.
+macOS builds retain the standalone executable and also produce `agenttik.app`,
+plus `agenttik_<tag>_darwin_arm64.app.zip` and `agenttik_<tag>_darwin_arm64.dmg`
+release assets. `make build` on macOS creates `bin/agenttik.app`,
+`bin/agenttik_darwin.app.zip` and `bin/agenttik_darwin.dmg`;
+`make build-macos-arm64` creates `dist/agenttik.app`,
+`dist/agenttik_darwin_arm64.app.zip` and `dist/agenttik_darwin_arm64.dmg`
+alongside its executable.
 
 `scripts/package-macos.sh` supplies an Info.plist with stable bundle identifier
 `com.pausan.agenttik`, executable, icon and version metadata. Commit builds use
@@ -65,10 +67,19 @@ numeric bundle version `0.0.0` and retain the commit in the informational string
 and `--version`. The bundle uses free ad-hoc signing (`codesign --sign -`), with
 no Apple account or signing secrets. It is not notarized: downloaded copies may
 require **System Settings → Privacy & Security → Open Anyway** after the first
-launch attempt. Extract the ZIP and move `agenttik.app` to Applications.
+launch attempt.
+
+The DMG is for manual installs. It holds `agenttik.app` next to an
+`Applications` symlink, so users drag one onto the other, as in
+[syncthing-macos](https://github.com/syncthing/syncthing-macos). It is a
+compressed (UDZO) HFS+ image made with `hdiutil`, with volume name `agenttik`
+and no custom window layout or background. The ZIP stays because the updater
+installs from it.
 
 The packager validates the plist and signature, archives with `ditto`, then
 extracts the ZIP and verifies the extracted signature and executable version.
+It also verifies the DMG checksum, mounts it read-only, and checks the
+`Applications` link, the app's signature and its version.
 CI runs it on the native macOS runner, along with tray shortcut fallback tests.
 Finder launch and tray/Accessibility behavior still require a live Mac check.
 

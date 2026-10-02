@@ -81,8 +81,8 @@ For the desktop app, install the native build dependencies (`make deps` on
 Debian/Ubuntu), then run `make run`. `make build-windows-amd64` cross-compiles
 the Windows x64 binary and ZIP (requires Python 3.11+); build the macOS ARM64 target on macOS with
 `make build-macos-arm64`. macOS builds also create an ad-hoc-signed
-`agenttik.app` and a ZIP (`bin/` for `make build`, `dist/` for the ARM64 target).
-Extract the release ZIP and move the app to Applications. No Apple developer
+`agenttik.app`, a ZIP and a DMG (`bin/` for `make build`, `dist/` for the ARM64
+target). Open the release DMG and drag agenttik onto Applications. No Apple developer
 account is needed to build it. Downloaded builds are not notarized; after a
 blocked launch, use System Settings → Privacy & Security → Open Anyway.
 

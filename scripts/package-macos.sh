@@ -2,22 +2,23 @@
 # Package an existing native binary. Uses only tools included with macOS/Xcode.
 set -euo pipefail
 
-if [[ $# != 4 || $(uname -s) != Darwin ]]; then
-  echo "Usage (on macOS): $0 binary output.app version output.zip" >&2
+if [[ $# != 5 || $(uname -s) != Darwin ]]; then
+  echo "Usage (on macOS): $0 binary output.app version output.zip output.dmg" >&2
   exit 1
 fi
 binary=$1
 app=$2
 version=$3
 archive=$4
-if [[ $app != *.app || $archive != *.zip || ! $version =~ ^[A-Za-z0-9.-]+$ ]]; then
-  echo "Expected an .app path, a .zip path and an alphanumeric version (dots/dashes allowed)" >&2
+dmg=$5
+if [[ $app != *.app || $archive != *.zip || $dmg != *.dmg || ! $version =~ ^[A-Za-z0-9.-]+$ ]]; then
+  echo "Expected an .app path, a .zip path, a .dmg path and an alphanumeric version (dots/dashes allowed)" >&2
   exit 1
 fi
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 staging=$(mktemp -d)
-trap 'rm -rf "$staging"' EXIT
+trap 'hdiutil detach "$staging/mounted" -quiet 2>/dev/null || true; rm -rf "$staging"' EXIT
 bundle="$staging/agenttik.app"
 mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources"
 cp "$binary" "$bundle/Contents/MacOS/agenttik"
@@ -69,3 +70,20 @@ ditto -x -k "$archive" "$staging/unpacked"
 extracted="$staging/unpacked/$(basename "$app")"
 codesign --verify --strict --verbose=2 "$extracted"
 test "$("$extracted/Contents/MacOS/agenttik" --version)" = "agenttik $version"
+
+# The disk image holds the app next to a link to /Applications, so users
+# install by dragging one onto the other. HFS+ keeps it readable on older macOS.
+mkdir "$staging/dmg"
+ditto "$app" "$staging/dmg/$(basename "$app")"
+ln -s /Applications "$staging/dmg/Applications"
+mkdir -p "$(dirname "$dmg")"
+hdiutil create -quiet -ov -volname agenttik -fs HFS+ -format UDZO -srcfolder "$staging/dmg" "$dmg"
+
+# Verify the mounted image the same way as the ZIP.
+hdiutil verify -quiet "$dmg"
+hdiutil attach -quiet -readonly -nobrowse -noautoopen -mountpoint "$staging/mounted" "$dmg"
+test "$(readlink "$staging/mounted/Applications")" = /Applications
+mounted="$staging/mounted/$(basename "$app")"
+codesign --verify --strict --verbose=2 "$mounted"
+test "$("$mounted/Contents/MacOS/agenttik" --version)" = "agenttik $version"
+hdiutil detach -quiet "$staging/mounted"

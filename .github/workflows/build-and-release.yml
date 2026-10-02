@@ -203,14 +203,14 @@ jobs:
         shell: bash
         run: python scripts/package-windows.py dist/agenttik_*.exe
 
-      - name: Package and verify macOS app
+      - name: Package and verify macOS app and disk image
         if: matrix.platform == 'darwin'
         shell: bash
         env:
           VERSION: ${{ needs.release-tag.outputs.version }}
         run: |
           binary=(dist/agenttik_*)
-          bash scripts/package-macos.sh "${binary[0]}" dist/agenttik.app "${VERSION:-${GITHUB_SHA::12}}" "${binary[0]}.app.zip"
+          bash scripts/package-macos.sh "${binary[0]}" dist/agenttik.app "${VERSION:-${GITHUB_SHA::12}}" "${binary[0]}.app.zip" "${binary[0]}.dmg"
 
       - name: Upload release asset
         if: needs.release-tag.outputs.is_release == 'true'

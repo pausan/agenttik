@@ -41,7 +41,7 @@ ui-dev:
 build: ui
 	go build -ldflags "$(VERSION_LDFLAGS)" -tags "$(DESKTOP_TAGS)" -o $(BIN) $(PKG)
 ifeq ($(shell uname -s),Darwin)
-	bash scripts/package-macos.sh $(BIN) $(BIN).app "$(VERSION)" $(BIN)_darwin.app.zip
+	bash scripts/package-macos.sh $(BIN) $(BIN).app "$(VERSION)" $(BIN)_darwin.app.zip $(BIN)_darwin.dmg
 endif
 
 ## build-web: web server only, no cgo and no system dependencies beyond node
@@ -54,11 +54,11 @@ build-windows-amd64: ui
 	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-H=windowsgui $(VERSION_LDFLAGS)" -tags "desktop production" -o $(DIST)/agenttik_windows_amd64.exe $(PKG)
 	python3 scripts/package-windows.py $(DIST)/agenttik_windows_amd64.exe
 
-## build-macos-arm64: macOS ARM64 binary, signed .app and ZIP (run on macOS)
+## build-macos-arm64: macOS ARM64 binary, signed .app, ZIP and DMG (run on macOS)
 build-macos-arm64: ui
 	mkdir -p $(DIST)
 	GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 go build -trimpath -ldflags "$(VERSION_LDFLAGS)" -tags "desktop production" -o $(DIST)/agenttik_darwin_arm64 $(PKG)
-	bash scripts/package-macos.sh $(DIST)/agenttik_darwin_arm64 $(DIST)/agenttik.app "$(VERSION)" $(DIST)/agenttik_darwin_arm64.app.zip
+	bash scripts/package-macos.sh $(DIST)/agenttik_darwin_arm64 $(DIST)/agenttik.app "$(VERSION)" $(DIST)/agenttik_darwin_arm64.app.zip $(DIST)/agenttik_darwin_arm64.dmg
 
 run: build
 	./$(BIN)

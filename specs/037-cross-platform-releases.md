@@ -69,17 +69,36 @@ no Apple account or signing secrets. It is not notarized: downloaded copies may
 require **System Settings → Privacy & Security → Open Anyway** after the first
 launch attempt.
 
-The DMG is for manual installs. It holds `agenttik.app` next to an
-`Applications` symlink, so users drag one onto the other, as in
-[syncthing-macos](https://github.com/syncthing/syncthing-macos). It is a
-compressed (UDZO) HFS+ image made with `hdiutil`, with volume name `agenttik`
-and no custom window layout or background. The ZIP stays because the updater
-installs from it.
+The app icon comes from `scripts/macos/icon.png`, a 1024px render of
+`web/public/agenttik.svg` on the macOS icon grid; `sips` and `iconutil` turn it
+into every `.icns` size from 16 to 1024 pixels.
+
+The DMG is for manual installs and copies the
+[KeePassXC](https://github.com/keepassxreboot/keepassxc) look: a 660×400
+window with no toolbar, `agenttik.app` on the left, an `Applications` symlink
+on the right, both at 156 points, and a chevron between them on a light
+background. It is a compressed (UDZO) HFS+ image made with `hdiutil`, volume
+name `agenttik`. No Finder scripting runs at build time, so it works on
+headless CI. Instead the image carries committed files from `scripts/macos/`:
+
+- `DS_Store`, copied to `.DS_Store`, holds the window, icon size and positions.
+  `make-ds-store.py` writes it (needs the `ds_store` and `mac_alias` Python
+  packages). It finds the background through an alias to
+  `agenttik:.background:background.tiff`, so the volume name and that path
+  must not change.
+- `dmg-background.png` and `dmg-background@2x.png` are merged by `tiffutil`
+  into `.background/background.tiff` for normal and Retina screens.
+  `render-images.mjs` draws them and the icon with the e2e Playwright Chromium.
+
+If another volume named `agenttik` is already mounted, Finder may show the
+image without its background; the drag-to-install still works. The ZIP stays
+because the updater installs from it.
 
 The packager validates the plist and signature, archives with `ditto`, then
 extracts the ZIP and verifies the extracted signature and executable version.
 It also verifies the DMG checksum, mounts it read-only, and checks the
-`Applications` link, the app's signature and its version.
+`Applications` link, the layout and background files, the app's signature and
+its version. Whether Finder shows the layout still requires a live Mac check.
 CI runs it on the native macOS runner, along with tray shortcut fallback tests.
 Finder launch and tray/Accessibility behavior still require a live Mac check.
 

@@ -48,11 +48,12 @@ cat > "$bundle/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
+# scripts/macos/render-images.mjs renders the 1024px icon from the web logo.
 mkdir "$staging/agenttik.iconset"
-sips -z 16 16 "$root/app/cmd/agenttik/tray.png" --out "$staging/agenttik.iconset/icon_16x16.png" >/dev/null
-sips -z 32 32 "$root/app/cmd/agenttik/tray.png" --out "$staging/agenttik.iconset/icon_32x32.png" >/dev/null
-cp "$staging/agenttik.iconset/icon_32x32.png" "$staging/agenttik.iconset/icon_16x16@2x.png"
-cp "$root/app/cmd/agenttik/tray.png" "$staging/agenttik.iconset/icon_32x32@2x.png"
+for size in 16 32 128 256 512; do
+  sips -z $size $size "$root/scripts/macos/icon.png" --out "$staging/agenttik.iconset/icon_${size}x${size}.png" >/dev/null
+  sips -z $((size * 2)) $((size * 2)) "$root/scripts/macos/icon.png" --out "$staging/agenttik.iconset/icon_${size}x${size}@2x.png" >/dev/null
+done
 iconutil -c icns "$staging/agenttik.iconset" -o "$bundle/Contents/Resources/agenttik.icns"
 plutil -lint "$bundle/Contents/Info.plist"
 codesign --force --sign - "$bundle"
@@ -72,10 +73,16 @@ codesign --verify --strict --verbose=2 "$extracted"
 test "$("$extracted/Contents/MacOS/agenttik" --version)" = "agenttik $version"
 
 # The disk image holds the app next to a link to /Applications, so users
-# install by dragging one onto the other. HFS+ keeps it readable on older macOS.
-mkdir "$staging/dmg"
-ditto "$app" "$staging/dmg/$(basename "$app")"
+# install by dragging one onto the other. Like KeePassXC's, it carries a
+# prebuilt Finder layout (scripts/macos/make-ds-store.py) and a 1x/2x
+# background; Finder finds that background by volume name and path, so both
+# must stay as they are. HFS+ keeps it readable on older macOS.
+mkdir -p "$staging/dmg/.background"
+ditto "$bundle" "$staging/dmg/agenttik.app"
 ln -s /Applications "$staging/dmg/Applications"
+cp "$root/scripts/macos/DS_Store" "$staging/dmg/.DS_Store"
+tiffutil -cathidpicheck "$root/scripts/macos/dmg-background.png" "$root/scripts/macos/dmg-background@2x.png" \
+  -out "$staging/dmg/.background/background.tiff"
 mkdir -p "$(dirname "$dmg")"
 hdiutil create -quiet -ov -volname agenttik -fs HFS+ -format UDZO -srcfolder "$staging/dmg" "$dmg"
 
@@ -83,7 +90,9 @@ hdiutil create -quiet -ov -volname agenttik -fs HFS+ -format UDZO -srcfolder "$s
 hdiutil verify -quiet "$dmg"
 hdiutil attach -quiet -readonly -nobrowse -noautoopen -mountpoint "$staging/mounted" "$dmg"
 test "$(readlink "$staging/mounted/Applications")" = /Applications
-mounted="$staging/mounted/$(basename "$app")"
+cmp "$staging/mounted/.DS_Store" "$root/scripts/macos/DS_Store"
+test -s "$staging/mounted/.background/background.tiff"
+mounted="$staging/mounted/agenttik.app"
 codesign --verify --strict --verbose=2 "$mounted"
 test "$("$mounted/Contents/MacOS/agenttik" --version)" = "agenttik $version"
 hdiutil detach -quiet "$staging/mounted"

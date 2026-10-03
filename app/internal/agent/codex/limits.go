@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -85,6 +86,11 @@ func (p *Provider) SubscriptionLimits(ctx context.Context, home string) ([]agent
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, Binary, "app-server")
+	// A probe has no project. Run from the app's own folder — / from Finder,
+	// wherever a terminal was — a CLI can look through the folders around it,
+	// and macOS asks the user to let agenttik into Desktop, Documents or
+	// Downloads.
+	cmd.Dir = os.TempDir()
 	// The allowance belongs to one subscription, so the ask carries the same
 	// account the turns do.
 	cmd.Env = agent.HomeEnv(HomeVar, home)

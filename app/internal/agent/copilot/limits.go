@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"sort"
 	"strings"
@@ -76,6 +77,11 @@ func serverQuery(ctx context.Context, timeout time.Duration, method, home string
 	args := append([]string{"--headless", "--no-auto-update",
 		"--log-level", "error", "--stdio"}, homeArgs(home)...)
 	cmd := exec.CommandContext(ctx, Binary, args...)
+	// A probe has no project. Run from the app's own folder — / from Finder,
+	// wherever a terminal was — a CLI can look through the folders around it,
+	// and macOS asks the user to let agenttik into Desktop, Documents or
+	// Downloads.
+	cmd.Dir = os.TempDir()
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, fmt.Errorf("copilot server stdin: %w", err)

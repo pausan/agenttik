@@ -72,7 +72,11 @@ OpenCode CLI is installed.
 `Metered.SubscriptionLimits(ctx, home)` asks about one login. Remembered
 readings and browser caches are keyed by `(provider, account_id)` so two
 subscriptions never display each other's allowances. Signed-out named
-accounts have no bars. See [011](011-prompt-bar-usage.md).
+accounts have no bars. Every probe that belongs to no project — allowances and
+model lists — runs its CLI from the temporary directory. From the app's own
+folder (`/` when Finder starts it) a CLI may look through the folders around
+it, and macOS would ask the user to let agenttik into Desktop, Documents or
+Downloads. See [011](011-prompt-bar-usage.md).
 
 Every picker uses `modelPickerGroups` and values in the form
 `model:<provider>:<account>:<model>`. Entries and buttons include the account

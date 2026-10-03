@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { markdown } from "./markdown.js";
+import { COPY_BUTTON, markdown } from "./markdown.js";
+
+const code = (pre) => `<div class="code">${pre}${COPY_BUTTON}</div>`;
 
 test("pasted image references open the stored image instead of the project editor", () => {
   const url = `/api/attachments/${"a".repeat(64)}.png`;
@@ -28,16 +30,16 @@ test("html in the source is escaped, never emitted", () => {
   assert.equal(markdown('<img src=x onerror="alert(1)">'),
     "<p>&lt;img src=x onerror=&quot;alert(1)&quot;&gt;</p>");
   assert.equal(markdown("```\n<script>bad()</script>\n```"),
-    "<pre><code>&lt;script&gt;bad()&lt;/script&gt;</code></pre>");
+    code("<pre><code>&lt;script&gt;bad()&lt;/script&gt;</code></pre>"));
 });
 
 test("a fenced block keeps its text and names its language", () => {
   assert.equal(markdown("```go\nfunc main() {}\n```"),
-    '<pre><code class="language-go">func main() {}</code></pre>');
+    code('<pre><code class="language-go">func main() {}</code></pre>'));
 });
 
 test("an unclosed fence still renders", () => {
-  assert.equal(markdown("```\nstill here"), "<pre><code>still here</code></pre>");
+  assert.equal(markdown("```\nstill here"), code("<pre><code>still here</code></pre>"));
 });
 
 test("headings and rules", () => {

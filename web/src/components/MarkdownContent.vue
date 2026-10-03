@@ -27,7 +27,20 @@ function openFile(file, system = false) {
   }
 }
 
+// The tick shows on the button that was clicked until the next render
+// replaces it or the timer takes it off.
+async function copyCode(button) {
+  if (!(await copyText(button.parentElement.querySelector("code").textContent))) return;
+  button.classList.add("copied");
+  window.setTimeout(() => button.classList.remove("copied"), 1200);
+}
+
 function onClick(e) {
+  const copy = e.target.closest("button.copy");
+  if (copy) {
+    copyCode(copy);
+    return;
+  }
   const link = e.target.closest("a[href]");
   if (link && openExternal(link.href)) {
     e.preventDefault();

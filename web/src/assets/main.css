@@ -350,7 +350,7 @@ button[draggable="true"]:active { cursor: grabbing; }
 .markdown ul,
 .markdown ol,
 .markdown blockquote,
-.markdown pre,
+.markdown .code,
 .markdown table { margin: 0 0 0.7em; }
 .markdown h1, .markdown h2, .markdown h3,
 .markdown h4, .markdown h5, .markdown h6 {
@@ -395,6 +395,34 @@ button[draggable="true"]:active { cursor: grabbing; }
   background: var(--ui-bg-muted);
   box-shadow: inset 0 0 0 1px var(--ui-border);
 }
+/* The copy button floats in the block's top-right corner, over the code if a
+   line runs under it, so it carries the block's own background. */
+.markdown .code { position: relative; }
+.markdown button.copy {
+  position: absolute;
+  top: 0.35em;
+  right: 0.35em;
+  display: grid;
+  padding: 0.3em;
+  border-radius: calc(var(--ui-radius) * 0.75);
+  background: var(--ui-bg-muted);
+  box-shadow: inset 0 0 0 1px var(--ui-border);
+  color: var(--ui-text-muted);
+  cursor: pointer;
+}
+.markdown button.copy:hover { color: var(--ui-text-highlighted); background: var(--ui-bg-accented); }
+.markdown button.copy svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.markdown button.copy svg + svg,
+.markdown button.copy.copied svg:first-child { display: none; }
+.markdown button.copy.copied svg + svg { display: block; }
 /* Inside a block the frame belongs to the pre, not to every line. */
 .markdown pre code {
   padding: 0;

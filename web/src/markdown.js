@@ -119,10 +119,20 @@ function startsBlock(lines, i) {
   );
 }
 
+/* A code block carries its own copy button, which MarkdownContent.vue
+   answers. It sits beside the pre rather than in it, so it stays put while the
+   code scrolls sideways. The icons are Lucide's copy and check, inline because
+   v-html gives no component a chance to draw them. */
+export const COPY_BUTTON =
+  '<button type="button" class="copy" title="Copy" aria-label="Copy code">' +
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2"/>' +
+  '<path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>' +
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>';
+
 function codeBlock(body, lang) {
   // The class is only emitted for a plain word, so lang needs no escaping.
   const cls = /^[\w+#.-]+$/.test(lang) ? ` class="language-${lang}"` : "";
-  return `<pre><code${cls}>${esc(body)}</code></pre>`;
+  return `<div class="code"><pre><code${cls}>${esc(body)}</code></pre>${COPY_BUTTON}</div>`;
 }
 
 /* list collects one list and returns it with the line to carry on from.

@@ -91,7 +91,13 @@ for (const mobile of [false, true]) {
     const pinned = page.getByLabel("Pinned human prompt", { exact: true });
     const pinnedText = pinned.locator(".line-clamp-3");
     await expect(pinnedText).toHaveText(lastPrompt);
-    await expect(pinned.getByText("[... continues ...]", { exact: true })).toBeVisible();
+    const showMore = pinned.getByText("Show more", { exact: true });
+    await expect(showMore).toBeVisible();
+    const textBox = await pinnedText.boundingBox();
+    const labelBox = await showMore.boundingBox();
+    expect(labelBox.y).toBeGreaterThan(textBox.y + textBox.height / 2);
+    expect(labelBox.y + labelBox.height).toBeLessThanOrEqual(textBox.y + textBox.height + 1);
+    expect(labelBox.x + labelBox.width).toBeLessThanOrEqual(textBox.x + textBox.width + 1);
     expect(await pinnedText.evaluate(el => el.clientHeight / parseFloat(getComputedStyle(el).lineHeight))).toBeLessThanOrEqual(3.1);
     expect(await pinned.evaluate(el => el.getBoundingClientRect().top) - await transcript.evaluate(el => el.getBoundingClientRect().top)).toBeLessThan(2);
 
@@ -101,7 +107,7 @@ for (const mobile of [false, true]) {
         el.scrollTop += node.getBoundingClientRect().bottom - el.getBoundingClientRect().top - el.clientTop + distance;
       }, { index, distance });
     };
-    await pinned.getByRole("button", { name: "Show original human prompt" }).click();
+    await showMore.click();
     await expect(pinned).toBeHidden();
     await expect.poll(() => transcript.evaluate(el => Math.abs(
       el.querySelector('[data-human-message="40"]').getBoundingClientRect().top - el.getBoundingClientRect().top - el.clientTop,
@@ -114,10 +120,10 @@ for (const mobile of [false, true]) {
 
     await scrollPast(20, 10);
     await expect(pinnedText).toHaveText("Earlier short prompt");
-    await expect(pinned.getByText("[... continues ...]", { exact: true })).toHaveCount(0);
+    await expect(showMore).toHaveCount(0);
     await scrollPast(0, 10);
     await expect(pinnedText).toHaveText("First prompt\n\nThird line\nFourth line\nFifth line");
-    await expect(pinned.getByText("[... continues ...]", { exact: true })).toBeVisible();
+    await expect(showMore).toBeVisible();
     await transcript.evaluate(el => { el.scrollTop = 0; });
     await expect(pinned).toBeHidden();
   });

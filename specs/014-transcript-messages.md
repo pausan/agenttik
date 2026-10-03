@@ -14,7 +14,9 @@ While reading replies, the most recent human prompt above the viewport stays
 at the top in a compact bubble once its original bubble is fully out of view.
 Scrolling through older turns shows the prompt for that part of the transcript.
 Queued prompts are excluded. The copy preserves plain text and line breaks,
-shows at most three wrapped lines, and adds `[... continues ...]` when clipped.
+shows at most three wrapped lines, and places `… Show more` at the end of the
+last visible line when clipped. A short fade separates the text from the label;
+the label adds no extra line or bubble height.
 Clicking it scrolls to the full original prompt and pauses following live output.
 That prompt stays unpinned until its bottom is half a viewport above the top.
 Task switches reset this dismissal. The overlay does not shift transcript rows

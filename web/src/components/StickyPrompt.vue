@@ -30,8 +30,10 @@ onUnmounted(() => observer?.disconnect());
         aria-label="Show original human prompt"
         @click="emit('reveal')"
       >
-        <span ref="text" class="line-clamp-3 whitespace-pre-wrap wrap-anywhere">{{ message.content }}</span>
-        <span v-if="truncated" class="mt-1 block text-xs text-primary">[... continues ...]</span>
+        <span class="relative block">
+          <span ref="text" class="line-clamp-3 whitespace-pre-wrap wrap-anywhere">{{ message.content }}</span>
+          <span v-if="truncated" aria-hidden="true" class="absolute bottom-0 right-0 whitespace-nowrap bg-elevated pl-1 before:absolute before:inset-y-0 before:right-full before:w-4 before:bg-linear-to-r before:from-transparent before:to-elevated"><span class="text-dimmed">… </span><span class="text-primary">Show more</span></span>
+        </span>
       </button>
     </div>
   </div>

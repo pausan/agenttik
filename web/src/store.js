@@ -3058,11 +3058,18 @@ function onEvent(msg) {
   // A tool call waits on the user, or stopped waiting. Both topics carry it,
   // so it arrives twice; keyed by id, the repeat changes nothing.
   if (msg.event?.type === "approval") {
+    const tab = S.tabs.find((t) => t.kind === "session" && t.sessionID === msg.session_id);
+    if (tab) endLive(tab);
     addApproval(msg.session_id, { ...msg.event.approval, turn_id: msg.turn_id });
     return;
   }
   if (msg.event?.type === "approval_resolved") {
     removeApproval(msg.session_id, msg.event.approval?.id);
+    const tab = S.tabs.find((t) => t.kind === "session" && t.sessionID === msg.session_id);
+    if (tab && msg.message && !tab.detail.messages.some((m) => m.id === msg.message.id)) {
+      endLive(tab);
+      tab.detail.messages.push(msg.message);
+    }
     return;
   }
   const turnMoved = ["started", "done"].includes(msg.event?.type);

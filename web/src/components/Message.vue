@@ -18,7 +18,7 @@ import ModelSelection from "./ModelSelection.vue";
 
 const props = defineProps({ message: { type: Object, required: true } });
 
-const WHO = { user: "You", assistant: "Agent", tool: "Tool", thinking: "Thinking", error: "Error" };
+const WHO = { user: "You", assistant: "Agent", tool: "Tool", thinking: "Thinking", error: "Error", question: "Question", answer: "Your answer", automatic_answer: "Automatic answer" };
 
 /* What the agent writes is markdown, so it is rendered. What you typed is
    shown as you typed it, and a tool line is a literal command. */
@@ -27,6 +27,9 @@ const RENDERED = { assistant: true, thinking: true };
 const BUBBLE = {
   user: "max-w-[85%] whitespace-pre-wrap rounded-[var(--ui-radius)] bg-elevated px-3 py-2 text-highlighted",
   assistant: "markdown text-highlighted",
+  answer: "whitespace-pre-wrap rounded-[var(--ui-radius)] bg-elevated px-3 py-2 text-highlighted",
+  question: "whitespace-pre-wrap rounded-[var(--ui-radius)] bg-elevated px-3 py-2 text-highlighted",
+  automatic_answer: "whitespace-pre-wrap rounded-[var(--ui-radius)] bg-elevated px-3 py-2 text-highlighted",
   thinking: "markdown text-dimmed italic",
   tool: "max-h-[9em] overflow-auto whitespace-pre-wrap rounded-[var(--ui-radius)] bg-muted px-2.5 py-1.5 font-mono text-xs text-muted inset-ring inset-ring-default",
   error:

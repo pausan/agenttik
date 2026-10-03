@@ -78,6 +78,14 @@ tool exists outside Codex's plan mode only behind
 Approvals reach the client only under the workspace policy
 ([003](003-providers.md#permission-modes)), with the reviewer forced to `user`.
 
+Codex also posts `agentMessage` items with `delivery: "async"` and
+`questions` (title and optional string options). Completed root-thread items
+become the same question cards, with typed answers allowed. Codex keeps
+working while the card is open. Replies are sent through `turn/steer`, with
+the thread and expected active turn id, as question-and-answer text. Only an
+acknowledged reply is recorded as answered; rejection or process shutdown
+withdraws the card. A question whose turn finishes first is withdrawn.
+
 ## Provider-neutral shape
 
 A provider emits `approval` with an `agent.Approval` and `approval_resolved`
@@ -95,7 +103,8 @@ option that was not offered where typing is not allowed.
 ## Runner
 
 Pending requests live in the runner's memory, keyed by id: they exist only
-while their turn's process does, so nothing goes in the store. Each one is
+while their turn's process does. Settled question answers are stored as
+transcript messages; pending requests are not. Each one is
 published to the session topic and to the project topic, so the sidebar of
 every window marks the task whether or not its tab is open.
 
@@ -119,7 +128,7 @@ request nobody answers, read when the request arrives:
   the same path as a click, so a click and the timer race safely: whichever
   takes the request first wins. The resolution carries `auto: true`.
 - `immediate` — agenttik answers in the consume loop, before publishing; no
-  window sees the request.
+  window sees a pending request. Answered questions still appear in history.
 
 `AutoReply` is the answer: allow a tool call; for questions, the option whose
 label contains "recommended" (case-insensitive), else the first. If any
@@ -172,6 +181,16 @@ while it was not listening is still drawn. Events keep it current after that.
 A remote window ([064](064-remote-connections.md)) and a browser on the
 exposed server ([043](043-exposed-server.md)) use the same routes, so they see
 and answer the same requests.
+
+When a question is answered or skipped, its question text and answer remain
+in the transcript, labeled **Your answer** or **Automatic answer**. Automatic
+means agenttik applied the configured option selection, rather than the model
+choosing an answer. Secret answers are replaced with `[hidden]` in history.
+The resolution event carries the stored message to every window; its id
+prevents duplicates from the session and project topics. History survives
+reloads and restarts. Withdrawn questions remain labeled **Question**, with
+"Closed without an accepted answer". Earlier replies were not stored and cannot be recovered
+from agenttik's history.
 
 Tests: `agent` (reply checking), `claudecode` and `codex`
 (`appserver_requests_test.go`) for the protocols, `runner/approvals_test.go`

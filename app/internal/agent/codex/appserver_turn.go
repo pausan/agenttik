@@ -107,6 +107,9 @@ type appServerRun struct {
 	enc    *json.Encoder
 	wmu    sync.Mutex
 	closed bool
+	// answerResults waits for acknowledgements of asynchronous question replies.
+	// Protected by wmu along with writes and process shutdown.
+	answerResults map[string]chan error
 	// pending maps a JSON-RPC request id to the approval it was asked as.
 	pending map[string]string
 	// fileChanges remembers each file change item's paths, which its approval
@@ -215,6 +218,9 @@ func (r *appServerRun) handle(message appRPCMessage) (bool, error) {
 			return false, r.replyToServerRequest(message)
 		}
 		return r.handleNotification(message.Method, message.Params)
+	}
+	if r.resolveAsyncAnswer(message) {
+		return false, nil
 	}
 
 	id, ok := rpcIntID(message.ID)
@@ -358,9 +364,14 @@ type appServerTurnError struct {
 }
 
 type appServerItem struct {
-	Type             string          `json:"type"`
-	ID               string          `json:"id"`
-	Text             string          `json:"text"`
+	Type      string `json:"type"`
+	ID        string `json:"id"`
+	Text      string `json:"text"`
+	Delivery  string `json:"delivery"`
+	Questions []struct {
+		Title   string   `json:"title"`
+		Options []string `json:"options"`
+	} `json:"questions"`
 	Summary          []string        `json:"summary"`
 	Command          string          `json:"command"`
 	AggregatedOutput string          `json:"aggregatedOutput"`
@@ -525,6 +536,10 @@ func (r *appServerRun) handleItem(threadID string, item appServerItem, completed
 
 	switch item.Type {
 	case "agentMessage":
+		if item.Delivery == "async" && len(item.Questions) > 0 {
+			r.askAsyncUserInput(item)
+			return
+		}
 		if item.Text != "" && !r.streamed[item.ID] {
 			r.out <- agent.Event{Type: agent.EventText, Text: item.Text}
 		}

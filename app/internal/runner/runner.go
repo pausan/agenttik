@@ -58,6 +58,7 @@ type Event struct {
 	Turn    *store.Turn    `json:"turn,omitempty"`
 	Session *store.Session `json:"session,omitempty"`
 	Prompt  string         `json:"prompt,omitempty"`
+	Message *store.Message `json:"message,omitempty"`
 }
 
 // activeTurn is a turn in flight. It carries the project so scanning for

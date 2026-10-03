@@ -171,7 +171,56 @@ func lastReply(t *testing.T, r *Runner, st *store.Store, sessionID string) strin
 	t.Helper()
 	waitFor(t, func() bool { return !r.Running(sessionID) }, "turn should end")
 	msgs, _ := st.ListMessages(sessionID)
-	return strings.TrimSpace(msgs[len(msgs)-1].Content)
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role == store.RoleAssistant {
+			return strings.TrimSpace(msgs[i].Content)
+		}
+	}
+	t.Fatal("no assistant reply")
+	return ""
+}
+
+func TestQuestionAnswerHistory(t *testing.T) {
+	for _, mode := range []string{store.ApprovalWait, store.ApprovalTimeout, store.ApprovalImmediate} {
+		t.Run(mode, func(t *testing.T) {
+			r, st, sess := setup(t, fake.New())
+			setApprovalMode(t, st, mode, 1)
+			tab, unsubscribe := r.Hub().Subscribe(sess.ID)
+			defer unsubscribe()
+			if _, err := r.Send(sess.ID, "@ask Language? | English, Spanish"); err != nil {
+				t.Fatal(err)
+			}
+			want, role := "English", store.RoleAutomaticAnswer
+			if mode == store.ApprovalWait {
+				a := nextOfType(t, tab, agent.EventApproval).Event.Approval
+				want, role = "Spanish", store.RoleAnswer
+				if err := r.Answer(sess.ID, a.ID, agent.Reply{Allow: true, Answers: map[string][]string{"q": {want}}}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			resolved := nextOfType(t, tab, agent.EventApprovalResolved)
+			if resolved.Message == nil || resolved.Message.Role != role || resolved.Message.Content != "Language?\n"+want {
+				t.Fatalf("resolution = %+v", resolved)
+			}
+			stored, err := st.GetMessage(resolved.Message.ID)
+			if err != nil || *stored != *resolved.Message {
+				t.Fatalf("stored = %+v, %v", stored, err)
+			}
+			lastReply(t, r, st, sess.ID)
+		})
+	}
+}
+
+func TestQuestionHistoryHidesSecretsAndRecordsSkips(t *testing.T) {
+	r, st, sess := setup(t, fake.New())
+	p := &PendingApproval{SessionID: sess.ID, ProjectID: sess.ProjectID, Approval: &agent.Approval{ID: "secret", Questions: []agent.Question{{ID: "password", Question: "Password?", Secret: true}}}}
+	r.publishReply(p, agent.Reply{Allow: true, Answers: map[string][]string{"password": {"very-secret"}}}, false)
+	r.publishReply(p, agent.Reply{}, true)
+	r.publishResolved(p, nil, false)
+	msgs, err := st.ListMessages(sess.ID)
+	if err != nil || len(msgs) != 3 || msgs[0].Content != "Password?\n[hidden]" || msgs[1].Content != "Password?\nSkipped" || msgs[2].Role != store.RoleQuestion || msgs[2].Content != "Password?\nClosed without an accepted answer" {
+		t.Fatalf("messages = %+v, %v", msgs, err)
+	}
 }
 
 func TestTimedOutApprovalIsAllowedForTheUser(t *testing.T) {

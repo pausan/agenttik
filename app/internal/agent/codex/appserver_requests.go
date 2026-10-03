@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -33,7 +34,83 @@ func (r *appServerRun) write(v any) error {
 func (r *appServerRun) closeWrites() {
 	r.wmu.Lock()
 	r.closed = true
+	for id, result := range r.answerResults {
+		result <- errors.New("turn has ended")
+		delete(r.answerResults, id)
+	}
 	r.wmu.Unlock()
+}
+
+// Async questions are agent messages, rather than server requests. Their
+// answers enter the active turn as steering input. Wait for its acknowledgement
+// so a failed or late reply is never shown as an accepted answer.
+func (r *appServerRun) askAsyncUserInput(item appServerItem) {
+	threadID, turnID := r.rootID, r.activeTurns[r.rootID]
+	a := agent.NewApproval(newID(), "Question", "", "", func(reply agent.Reply) error {
+		var lines []string
+		for _, q := range item.Questions {
+			answer := "Skipped"
+			if reply.Allow {
+				answer = strings.Join(reply.Answers[q.Title], ", ")
+			}
+			lines = append(lines, q.Title+"\n"+answer)
+		}
+		return r.sendAsyncAnswer(threadID, turnID, strings.Join(lines, "\n\n"))
+	})
+	for _, q := range item.Questions {
+		question := agent.Question{ID: q.Title, Question: q.Title, Other: true}
+		for _, label := range q.Options {
+			question.Options = append(question.Options, agent.QuestionOption{Label: label})
+		}
+		a.Questions = append(a.Questions, question)
+	}
+	r.out <- agent.Event{Type: agent.EventApproval, Approval: a}
+}
+
+func (r *appServerRun) sendAsyncAnswer(threadID, turnID, text string) error {
+	if turnID == "" {
+		return errors.New("no active turn to answer")
+	}
+	id := "answer-" + newID()
+	result := make(chan error, 1)
+	r.wmu.Lock()
+	if r.closed {
+		r.wmu.Unlock()
+		return errors.New("turn has ended")
+	}
+	if r.answerResults == nil {
+		r.answerResults = make(map[string]chan error)
+	}
+	r.answerResults[strconv.Quote(id)] = result
+	err := r.enc.Encode(map[string]any{"id": id, "method": "turn/steer", "params": map[string]any{
+		"threadId": threadID, "expectedTurnId": turnID,
+		"input": []map[string]any{{"type": "text", "text": text, "text_elements": []any{}}},
+	}})
+	if err != nil {
+		delete(r.answerResults, strconv.Quote(id))
+	}
+	r.wmu.Unlock()
+	if err != nil {
+		return err
+	}
+	return <-result
+}
+
+func (r *appServerRun) resolveAsyncAnswer(message appRPCMessage) bool {
+	r.wmu.Lock()
+	defer r.wmu.Unlock()
+	key := rpcKey(message.ID)
+	result, ok := r.answerResults[key]
+	if !ok {
+		return false
+	}
+	delete(r.answerResults, key)
+	var err error
+	if message.Error != nil {
+		err = fmt.Errorf("answer rejected: %s", message.Error.Message)
+	}
+	result <- err
+	return true
 }
 
 // rpcKey is a request id as a map key. Ids are numbers or strings.

@@ -83,6 +83,11 @@ test("a question is answered from another window with an option", async ({ page,
   await expect(card).toHaveCount(0);
   await expect(otherCard).toHaveCount(0);
   await expect(page.getByText("answer=Blue", { exact: true })).toBeVisible();
+  await expect(page.getByText("Your answer", { exact: true })).toBeVisible();
+  await expect(page.getByText("Which color?\nBlue", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("Your answer", { exact: true })).toBeVisible();
+  await expect(page.getByText("Which color?\nBlue", { exact: true })).toBeVisible();
   await other.close();
 });
 
@@ -132,6 +137,17 @@ test("a request nobody answers is allowed when the timeout runs out", async ({ p
   await expect(card.getByLabel("Automatic answer")).toContainText(/Allowing in [12]s/);
   await expect(card).toHaveCount(0, { timeout: 5000 });
   await expect(page.getByText("allowed", { exact: true })).toBeVisible();
+});
+
+test("an automatic question answer stays in the transcript after reload", async ({ page, agenttik }) => {
+  await setApprovals(page, agenttik, { approval_mode: "timeout", approval_timeout: 2 });
+  const card = await askQuestion(page, "@ask Language? | English, Spanish");
+  await expect(card).toHaveCount(0, { timeout: 5000 });
+  await expect(page.getByText("Automatic answer", { exact: true })).toBeVisible();
+  await expect(page.getByText("Language?\nEnglish", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("Automatic answer", { exact: true })).toBeVisible();
+  await expect(page.getByText("Language?\nEnglish", { exact: true })).toBeVisible();
 });
 
 test("pausing the timer in one window stops the countdown in every window", async ({ page, agenttik }) => {

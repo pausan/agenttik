@@ -408,9 +408,12 @@ const (
 
 // Message roles.
 const (
-	RoleUser      = "user"
-	RoleAssistant = "assistant"
-	RoleThinking  = "thinking"
-	RoleTool      = "tool"
-	RoleError     = "error"
+	RoleUser            = "user"
+	RoleAssistant       = "assistant"
+	RoleThinking        = "thinking"
+	RoleTool            = "tool"
+	RoleError           = "error"
+	RoleAnswer          = "answer"
+	RoleQuestion        = "question"
+	RoleAutomaticAnswer = "automatic_answer"
 )

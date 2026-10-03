@@ -3,11 +3,80 @@ package codex
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pausan/agenttik/app/internal/agent"
 )
+
+func TestAsyncQuestionUsesSteeringAndWaitsForAcknowledgement(t *testing.T) {
+	for _, outcome := range []string{"accepted", "rejected", "closed"} {
+		t.Run(outcome, func(t *testing.T) {
+			run, _, out := requestRun()
+			run.rootID = "root"
+			run.activeTurns["root"] = "turn"
+			reader, writer := io.Pipe()
+			defer reader.Close()
+			defer writer.Close()
+			run.enc = json.NewEncoder(writer)
+			params := json.RawMessage(`{"threadId":"root","item":{"type":"agentMessage","id":"question","delivery":"async","text":"Language?","questions":[{"title":"Language?","options":["English","Spanish"]}]}}`)
+			run.handleNotification("item/started", params)
+			if len(out) != 0 {
+				t.Fatal("question published before completion")
+			}
+			run.handleNotification("item/completed", params)
+			a := (<-out).Approval
+			if a == nil || len(a.Questions) != 1 || len(a.Questions[0].Options) != 2 || !a.Questions[0].Other {
+				t.Fatalf("approval = %+v", a)
+			}
+			done := make(chan error, 1)
+			go func() {
+				done <- a.Answer(agent.Reply{Allow: true, Answers: map[string][]string{"Language?": {"Spanish"}}})
+			}()
+			var request struct {
+				ID     json.RawMessage
+				Method string
+				Params struct {
+					ThreadID       string `json:"threadId"`
+					ExpectedTurnID string `json:"expectedTurnId"`
+					Input          []struct{ Text string }
+				}
+			}
+			if err := json.NewDecoder(reader).Decode(&request); err != nil {
+				t.Fatal(err)
+			}
+			if request.Method != "turn/steer" || request.Params.ThreadID != "root" || request.Params.ExpectedTurnID != "turn" || request.Params.Input[0].Text != "Language?\nSpanish" {
+				t.Fatalf("request = %+v", request)
+			}
+			select {
+			case err := <-done:
+				t.Fatalf("settled before acknowledgement: %v", err)
+			default:
+			}
+			if outcome == "closed" {
+				run.closeWrites()
+			} else {
+				message := appRPCMessage{ID: request.ID, Result: json.RawMessage(`{"turnId":"turn"}`)}
+				if outcome == "rejected" {
+					json.Unmarshal([]byte(`{"error":{"code":-1,"message":"turn ended"}}`), &message)
+				}
+				if _, err := run.handle(message); err != nil {
+					t.Fatal(err)
+				}
+			}
+			select {
+			case err := <-done:
+				if (err == nil) != (outcome == "accepted") {
+					t.Fatalf("answer error = %v", err)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("answer did not settle")
+			}
+		})
+	}
+}
 
 // requestRun is an app-server run whose writes land in a buffer.
 func requestRun() (*appServerRun, *bytes.Buffer, chan agent.Event) {

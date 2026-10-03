@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/pausan/agenttik/app/internal/agent"
@@ -77,7 +78,7 @@ func (r *Runner) Answer(sessionID, approvalID string, reply agent.Reply) error {
 		r.publishResolved(p, nil, false)
 		return ErrApprovalGone
 	}
-	r.publishResolved(p, &reply.Allow, false)
+	r.publishReply(p, reply, false)
 	return nil
 }
 
@@ -124,12 +125,17 @@ func (r *Runner) approvalPolicy() (string, time.Duration) {
 // publishes it.
 func (r *Runner) askUser(sess *store.Session, turn *store.Turn, a *agent.Approval) bool {
 	mode, wait := r.approvalPolicy()
-	if mode == store.ApprovalImmediate {
-		a.Answer(a.AutoReply())
-		return true
-	}
 	p := &PendingApproval{SessionID: sess.ID, ProjectID: sess.ProjectID,
 		TurnID: turn.ID, CreatedAt: time.Now().UnixMilli(), Approval: a}
+	if mode == store.ApprovalImmediate {
+		reply := a.AutoReply()
+		if err := a.Answer(reply); err == nil {
+			r.publishReply(p, reply, true)
+		} else {
+			r.publishResolved(p, nil, false)
+		}
+		return true
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if mode == store.ApprovalTimeout && wait > 0 {
@@ -159,7 +165,7 @@ func (r *Runner) autoAnswer(id string) {
 		r.publishResolved(p, nil, false)
 		return
 	}
-	r.publishResolved(p, &reply.Allow, true)
+	r.publishReply(p, reply, true)
 }
 
 // take removes a pending request and stops its countdown. The caller holds
@@ -210,7 +216,45 @@ func (r *Runner) publishApproval(p *PendingApproval, a *agent.Approval) {
 }
 
 func (r *Runner) publishResolved(p *PendingApproval, allowed *bool, auto bool) {
+	var message *store.Message
+	if len(p.Approval.Questions) > 0 {
+		var lines []string
+		for _, q := range p.Approval.Questions {
+			lines = append(lines, q.Question+"\nClosed without an accepted answer")
+		}
+		message, _ = r.store.AddMessage(p.SessionID, p.TurnID, store.RoleQuestion, strings.Join(lines, "\n\n"))
+	}
+	r.publishResolution(p, allowed, auto, message)
+}
+
+// Keep the question and its answer together after the pending card disappears.
+// Secret answers go to the provider, but never to the store or other windows.
+func (r *Runner) publishReply(p *PendingApproval, reply agent.Reply, auto bool) {
+	var message *store.Message
+	if len(p.Approval.Questions) > 0 {
+		var lines []string
+		for _, q := range p.Approval.Questions {
+			answer := "Skipped"
+			if reply.Allow {
+				answer = strings.Join(reply.Answers[q.ID], ", ")
+				if q.Secret {
+					answer = "[hidden]"
+				}
+			}
+			lines = append(lines, q.Question+"\n"+answer)
+		}
+		role := store.RoleAnswer
+		if auto {
+			role = store.RoleAutomaticAnswer
+		}
+		message, _ = r.store.AddMessage(p.SessionID, p.TurnID, role, strings.Join(lines, "\n\n"))
+	}
+	r.publishResolution(p, &reply.Allow, auto, message)
+}
+
+func (r *Runner) publishResolution(p *PendingApproval, allowed *bool, auto bool, message *store.Message) {
 	ev := Event{SessionID: p.SessionID, ProjectID: p.ProjectID, TurnID: p.TurnID,
+		Message: message,
 		Event: agent.Event{Type: agent.EventApprovalResolved,
 			Approval: &agent.Approval{ID: p.Approval.ID, Allowed: allowed, Auto: auto}}}
 	r.hub.Publish(p.SessionID, ev)

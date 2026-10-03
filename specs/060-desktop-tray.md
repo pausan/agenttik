@@ -15,7 +15,9 @@ action toggles visibility regardless of which application has focus. Its label
 ends with the show/hide shortcut, e.g. `(Cmd+Shift+A)`, when that shortcut is
 registered; on macOS, where the tray can start without it, the label omits it. Quit
 bypasses close-to-tray and runs the normal shutdown. A second launch restores
-a hidden window through the existing foreground hook. Disabling Close to tray
+a hidden window through the existing foreground hook; on macOS so does a
+click on the Dock icon, and Quit from the Dock or the App menu quits rather
+than hiding (see [081](081-macos-integration.md)). Disabling Close to tray
 and restarting removes the tray and releases the shortcut; closing then exits.
 `Ctrl+Q`, or `Cmd+Q` on macOS, is a fixed app-window quit shortcut: it exits
 the process from the focused window even when Close to tray is enabled. It is

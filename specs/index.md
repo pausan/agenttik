@@ -27,6 +27,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [055](055-mobile-layout.md) | Phone navigation, drawers, touch controls and viewport sizing |
 | [005](005-testing.md) | The three test layers and how they are isolated |
 | [080](080-analytics.md) | Usage cost estimates, provider/model/effort breakdowns, date windows |
+| [081](081-macos-integration.md) | macOS menu bar, dark appearance, About, runtime icon, Dock reopen and Quit |
 | [079](079-ui-performance.md) | Interaction benchmarks, archive memory and editor rendering |
 | [052](052-launch-budget.md) | One-second cold/warm UI gate, concurrent reads, and deferred data |
 

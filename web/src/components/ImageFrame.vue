@@ -9,16 +9,20 @@
    same size when they are not.
    A vector has no pixels to blur, so `fit` lets an SVG fill the pane.
 
-   A `zoomable` frame, the preview's, also zooms: Ctrl or Cmd with +, - and 0
-   as in a browser, Ctrl with the wheel or a trackpad pinch, and a two-finger
-   pinch on a touch screen. The point under the pointer or the fingers stays
+   A `zoomable` frame also zooms: by its buttons, Ctrl with the wheel or a
+   trackpad pinch, and a two-finger pinch on a touch screen. In the desktop
+   window Ctrl or Cmd with +, - and 0 do too; in a browser those stay the
+   browser's own page zoom. The point under the pointer or the fingers stays
    put, and a picture larger than its pane scrolls. Fit is where it starts and
    where the middle button returns to; 0 is the image's own pixels.
+
+   A diff of two pictures the same size hands both frames one `view`, so they
+   zoom and scroll as one. Only one of them, `keys`, answers the chords.
 
    A source that fails to load is ordinary on one side of a diff — a file just
    added, or one deleted — so it reads as a note rather than as a broken
    image. */
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onUnmounted, reactive, ref, shallowRef, watch } from "vue";
 
 import { clampZoom, stepZoom, wheelZoom, zoomKey } from "../image-zoom";
 import { primaryChord } from "../platform";
@@ -28,6 +32,9 @@ const props = defineProps({
   label: { type: String, default: "" },
   fit: { type: Boolean, default: false },
   zoomable: { type: Boolean, default: false },
+  keys: { type: Boolean, default: true },
+  // { scale, left, top } shared with another frame; a frame alone keeps its own.
+  view: { type: Object, default: null },
   missing: { type: String, default: "Cannot show this image." },
 });
 
@@ -36,11 +43,14 @@ const emit = defineEmits(["dimensions"]);
 const failed = ref(false);
 const pane = ref(null);
 const img = ref(null);
-// null is fitted to the pane; a number is the scale against the image's own size.
-const scale = ref(null);
+// scale is null when fitted to the pane, else the scale against the image's own size.
+const own = reactive({ scale: null, left: 0, top: 0 });
+const state = computed(() => props.view ?? own);
+const scale = computed(() => state.value.scale);
 // The size a scale of 1 draws at. An SVG with only a viewBox has none of its
 // own, so it is measured as fitted instead.
-let base = null;
+const base = shallowRef(null);
+const desktop = () => !!window.runtime;
 
 /* The same component serves the next file opened in the tab, so the size, the
    failure and the zoom belong to the source that produced them. */
@@ -49,8 +59,8 @@ watch(
   () => {
     size.value = "";
     failed.value = false;
-    scale.value = null;
-    base = null;
+    state.value.scale = null;
+    base.value = null;
   },
 );
 
@@ -59,12 +69,13 @@ watch(
 function onLoad(e) {
   const { naturalWidth: w, naturalHeight: h } = e.target;
   size.value = w && h ? `${w} × ${h}` : "";
+  if (w && h) base.value = { width: w, height: h };
   emit("dimensions", { width: w, height: h });
 }
 
-const zoomed = computed(() => scale.value !== null);
+const zoomed = computed(() => scale.value !== null && base.value !== null);
 const drawn = computed(() =>
-  zoomed.value ? { width: `${base.width * scale.value}px`, height: `${base.height * scale.value}px` } : undefined,
+  zoomed.value ? { width: `${base.value.width * scale.value}px`, height: `${base.value.height * scale.value}px` } : undefined,
 );
 const percent = computed(() => (scale.value === null ? "Fit" : `${Math.round(scale.value * 100)}%`));
 
@@ -76,7 +87,7 @@ function current() {
   const width = el?.naturalWidth || el?.clientWidth;
   const height = el?.naturalHeight || el?.clientHeight;
   if (!width || !height) return 1;
-  base = { width, height };
+  base.value = { width, height };
   return Math.min(el.clientWidth / width, el.clientHeight / height);
 }
 
@@ -85,19 +96,38 @@ function current() {
 async function zoomTo(next, x, y) {
   const el = img.value;
   current();
-  if (!el || !base) return;
+  if (!el || !base.value) return;
   const box = pane.value.getBoundingClientRect();
   x ??= box.left + box.width / 2;
   y ??= box.top + box.height / 2;
   const before = el.getBoundingClientRect();
   const fx = (x - before.left) / before.width;
   const fy = (y - before.top) / before.height;
-  scale.value = next === null ? null : clampZoom(next);
+  state.value.scale = next === null ? null : clampZoom(next);
   await nextTick();
   const after = el.getBoundingClientRect();
   pane.value.scrollLeft += after.left + fx * after.width - x;
   pane.value.scrollTop += after.top + fy * after.height - y;
+  onScroll();
 }
+
+/* A shared view carries the scroll across. Each frame writes where it is and
+   follows where the other went; a position already held ends the exchange. */
+function onScroll() {
+  if (!props.view || !pane.value) return;
+  props.view.left = pane.value.scrollLeft;
+  props.view.top = pane.value.scrollTop;
+}
+
+watch(
+  () => props.view && [props.view.left, props.view.top],
+  (to) => {
+    const el = pane.value;
+    if (!to || !el) return;
+    if (Math.abs(el.scrollLeft - to[0]) >= 1) el.scrollLeft = to[0];
+    if (Math.abs(el.scrollTop - to[1]) >= 1) el.scrollTop = to[1];
+  },
+);
 
 const zoomIn = () => zoomTo(stepZoom(current(), 1));
 const zoomOut = () => zoomTo(stepZoom(current(), -1));
@@ -106,7 +136,7 @@ const zoomOut = () => zoomTo(stepZoom(current(), -1));
    they act on the picture in front without a click on it first. */
 function onKey(e) {
   const action = zoomKey(e);
-  if (!action || e.defaultPrevented || failed.value) return;
+  if (!action || !desktop() || e.defaultPrevented || failed.value) return;
   const t = e.target;
   if (t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
   if (!pane.value?.offsetParent) return;
@@ -142,7 +172,12 @@ function onTouchEnd(e) {
   if (e.touches.length < 2) pinch = null;
 }
 
-onMounted(() => props.zoomable && window.addEventListener("keydown", onKey));
+// A diff learns only once both pictures load whether they zoom together.
+watch(
+  () => props.zoomable && props.keys,
+  (on) => (on ? window.addEventListener("keydown", onKey) : window.removeEventListener("keydown", onKey)),
+  { immediate: true },
+);
 onUnmounted(() => window.removeEventListener("keydown", onKey));
 </script>
 
@@ -156,6 +191,7 @@ onUnmounted(() => window.removeEventListener("keydown", onKey));
       class="flex min-h-0 w-full flex-1"
       :class="zoomable && 'image-zoom-pane overflow-auto'"
       @wheel="zoomable && onWheel($event)"
+      @scroll.passive="zoomable && onScroll()"
       @touchstart.passive="zoomable && onTouchStart($event)"
       @touchmove.passive="zoomable && onTouchMove($event)"
       @touchend.passive="zoomable && onTouchEnd($event)"
@@ -175,13 +211,13 @@ onUnmounted(() => window.removeEventListener("keydown", onKey));
     <div class="flex h-4 shrink-0 items-center gap-3 font-mono text-xs text-dimmed">
       <span>{{ size }}</span>
       <span v-if="zoomable && !failed" class="flex items-center gap-1">
-        <button type="button" class="hover:text-default" :title="`Zoom out (${primaryChord('-')})`" aria-label="Zoom out" @click="zoomOut">
+        <button type="button" class="hover:text-default" :title="desktop() ? `Zoom out (${primaryChord('-')})` : 'Zoom out'" aria-label="Zoom out" @click="zoomOut">
           <UIcon name="i-lucide-minus" class="block size-3.5" />
         </button>
         <button type="button" class="min-w-10 hover:text-default" title="Fit to the pane" @click="zoomTo(null)">
           {{ percent }}
         </button>
-        <button type="button" class="hover:text-default" :title="`Zoom in (${primaryChord('+')})`" aria-label="Zoom in" @click="zoomIn">
+        <button type="button" class="hover:text-default" :title="desktop() ? `Zoom in (${primaryChord('+')})` : 'Zoom in'" aria-label="Zoom in" @click="zoomIn">
           <UIcon name="i-lucide-plus" class="block size-3.5" />
         </button>
       </span>

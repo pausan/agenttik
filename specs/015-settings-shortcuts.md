@@ -41,7 +41,7 @@ Five kinds of row are shown but not rebindable, marked `fixed` in the registry:
 the two families (`Alt+1…9`, `Alt+A…H`), the divider arrows, the editing
 conventions the textareas answer to themselves (Tab, undo/redo, Shift+Enter),
 and the browser's own zoom chords an [image preview](026-image-preview.md)
-answers to. A family is one binding standing for nine actions, and an editor
+answers to in the desktop window. A family is one binding standing for nine actions, and an editor
 that does not undo with the platform's usual primary modifier is a worse editor.
 
 A chord bound to two actions is not refused — it is labelled, on both rows,

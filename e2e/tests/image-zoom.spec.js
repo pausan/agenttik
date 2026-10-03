@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -30,8 +31,18 @@ test("an image preview zooms by keys, wheel and pinch, and scrolls when larger t
     await expect.poll(width).toBeLessThan(3000);
     expect(await scrolls()).toBe(false);
 
-    // Keys act from anywhere outside a text field.
+    // In a browser the chords stay the browser's own page zoom.
     await page.locator("body").click({ position: { x: 1, y: 1 } });
+    const prevented = await page.evaluate(() => {
+      const e = new KeyboardEvent("keydown", { key: "0", ctrlKey: true, bubbles: true, cancelable: true });
+      document.body.dispatchEvent(e);
+      return e.defaultPrevented;
+    });
+    expect(prevented).toBe(false);
+    await expect(level).toHaveText("Fit");
+
+    // In the desktop window they zoom the picture, from anywhere outside a text field.
+    await page.evaluate(() => { window.runtime = {}; });
     await page.keyboard.press("Control+0");
     await expect(level).toHaveText("100%");
     await expect.poll(width).toBe(3000);
@@ -81,6 +92,78 @@ test("an image preview zooms by keys, wheel and pinch, and scrolls when larger t
       fire("touchend", []);
     });
     await expect.poll(width).toBeCloseTo(fitted * 2, 0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("a diff of two pictures the same size zooms and scrolls both sides as one", async ({ page }) => {
+  const dir = await mkdtemp(join(tmpdir(), "agenttik-image-diff-zoom-"));
+  const git = (...args) => execFileSync("git", args, { cwd: dir, encoding: "utf8" });
+  const png = (w, h, color) => page.evaluate(([w, h, color]) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, w, h);
+    return canvas.toDataURL("image/png").split(",")[1];
+  }, [w, h, color]).then((b) => Buffer.from(b, "base64"));
+  try {
+    git("init", "-q");
+    git("config", "user.name", "Test");
+    git("config", "user.email", "test@example.com");
+    await writeFile(join(dir, "same.png"), await png(3000, 2000, "#c33"));
+    await writeFile(join(dir, "other.png"), await png(3000, 2000, "#c33"));
+    git("add", ".");
+    git("commit", "-qm", "pictures");
+    await writeFile(join(dir, "same.png"), await png(3000, 2000, "#33c"));
+    await writeFile(join(dir, "other.png"), await png(2000, 3000, "#33c"));
+    await addProject(page, dir);
+    await openProject(page, dir);
+    await sidebar(page).getByRole("tab", { name: "Tree" }).click();
+    await sidebar(page).getByRole("button", { name: "same.png", exact: true }).click();
+    await page.getByRole("tab", { name: "Diff", exact: true }).click();
+
+    const left = page.getByRole("img", { name: "HEAD", exact: true });
+    const right = page.getByRole("img", { name: "working tree", exact: true });
+    const width = (img) => img.evaluate((el) => el.getBoundingClientRect().width);
+    const scroll = (img) => img.locator("..").evaluate((el) => [el.scrollLeft, el.scrollTop]);
+    const levels = page.getByTitle("Fit to the pane", { exact: true });
+    await expect(levels).toHaveCount(2);
+
+    await page.getByRole("button", { name: "Zoom in", exact: true }).last().click();
+    await expect(levels).toHaveText([/%$/, /%$/]);
+    await expect.poll(() => width(left)).toBeGreaterThan(0);
+    expect(await width(left)).toBe(await width(right));
+    await levels.first().evaluate((el) => el.click());
+    await page.evaluate(() => { window.runtime = {}; });
+    await page.keyboard.press("Control+0");
+    await expect(levels).toHaveText(["100%", "100%"]);
+    await expect.poll(() => width(left)).toBe(3000);
+    await expect.poll(() => width(right)).toBe(3000);
+
+    // Scrolling one side scrolls the other to the same spot.
+    await right.locator("..").evaluate((el) => el.scrollTo(700, 400));
+    await expect.poll(() => scroll(left)).toEqual([700, 400]);
+    await left.locator("..").evaluate((el) => el.scrollTo(100, 50));
+    await expect.poll(() => scroll(right)).toEqual([100, 50]);
+
+    // Ctrl with the wheel over one side zooms both.
+    const box = await right.locator("..").boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.keyboard.down("Control");
+    await page.mouse.wheel(0, 100);
+    await page.keyboard.up("Control");
+    await expect.poll(() => width(right)).toBeLessThan(3000);
+    expect(await width(left)).toBe(await width(right));
+    expect(await scroll(left)).toEqual(await scroll(right));
+
+    // Pictures of different sizes stay fitted.
+    await sidebar(page).getByRole("button", { name: "other.png", exact: true }).click();
+    await page.getByRole("tab", { name: "Diff", exact: true }).click();
+    await expect(page.getByText("2000 × 3000")).toBeVisible();
+    await expect(levels).toHaveCount(0);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

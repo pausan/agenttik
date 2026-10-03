@@ -8,8 +8,12 @@
    side can be absent, which is what an added or a deleted image looks like.
 
    Both sides are one request each, straight from the raw endpoint into an
-   <img>: nothing about a picture is worth routing through JSON. */
-import { computed } from "vue";
+   <img>: nothing about a picture is worth routing through JSON.
+
+   Two pictures the same size zoom and scroll as one, so the same spot sits
+   under the same place on both sides. Two of different sizes have no such
+   spot and stay fitted. A side alone zooms as a preview does. */
+import { computed, reactive, ref, watch } from "vue";
 
 import { rawURL } from "../store";
 import ImageFrame from "./ImageFrame.vue";
@@ -25,6 +29,26 @@ const after = computed(() => props.tab.commit || "");
    saves asking for bytes that can only come back as a not found. */
 const added = computed(() => /^new file mode /m.test(props.tab.diff || ""));
 const deleted = computed(() => /^deleted file mode /m.test(props.tab.diff || ""));
+
+const sizes = reactive({ before: null, after: null });
+const view = reactive({ scale: null, left: 0, top: 0 });
+const alone = computed(() => added.value || deleted.value);
+const linked = computed(() => {
+  const { before: b, after: a } = sizes;
+  return !alone.value && !!b && !!a && b.width === a.width && b.height === a.height;
+});
+watch(
+  () => [rawURL(props.tab, before.value), rawURL(props.tab, after.value)],
+  () => {
+    sizes.before = sizes.after = null;
+    Object.assign(view, { scale: null, left: 0, top: 0 });
+  },
+);
+
+function onSize(side, size) {
+  sizes[side] = size;
+  if (side === "after" || deleted.value) emit("dimensions", size);
+}
 </script>
 
 <template>
@@ -36,7 +60,10 @@ const deleted = computed(() => /^deleted file mode /m.test(props.tab.diff || "")
         :src="rawURL(tab, before)"
         :label="tab.commit ? 'before' : 'HEAD'"
         missing="No image on this side."
-        @dimensions="deleted && emit('dimensions', $event)"
+        :zoomable="deleted || linked"
+        :keys="deleted"
+        :view="linked ? view : null"
+        @dimensions="onSize('before', $event)"
       />
     </div>
     <div class="flex min-h-0 min-w-0 flex-1">
@@ -46,7 +73,9 @@ const deleted = computed(() => /^deleted file mode /m.test(props.tab.diff || "")
         :src="rawURL(tab, after)"
         :label="tab.commit ? 'after' : 'working tree'"
         missing="No image on this side."
-        @dimensions="emit('dimensions', $event)"
+        :zoomable="added || linked"
+        :view="linked ? view : null"
+        @dimensions="onSize('after', $event)"
       />
     </div>
   </div>

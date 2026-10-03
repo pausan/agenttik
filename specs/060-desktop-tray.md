@@ -102,7 +102,9 @@ it fires, rather than mirroring focus events from the UI, because a webview
 reports focus late and misses window manager changes altogether. Linux reads
 `_NET_ACTIVE_WINDOW` and its `_NET_WM_PID` over the same X11 connection that
 holds the grab; Windows compares the process behind `GetForegroundWindow` with
-its own; macOS asks `NSRunningApplication`. A check that cannot answer counts
+its own; macOS asks whether the app is active and still has a window on
+screen, since hiding to the tray leaves it active. The tray's status item is a
+window too, so only windows that can become main count. A check that cannot answer counts
 as not in front, so the shortcut shows the window.
 
 Linux configures JavaScriptCore to use signal 34 before WebKit starts when the

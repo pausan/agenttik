@@ -4,10 +4,6 @@
 #import <Cocoa/Cocoa.h>
 #include "_cgo_export.h"
 
-bool appIsFrontmost(void) {
-	return [[NSRunningApplication currentApplication] isActive];
-}
-
 static OSStatus onHotKey(EventHandlerCallRef next, EventRef event, void *data) {
 	EventHotKeyID hotKey;
 	if (GetEventParameter(event, kEventParamDirectObject, typeEventHotKeyID, NULL, sizeof hotKey, NULL, &hotKey) != noErr) {
@@ -25,6 +21,26 @@ static void onMainThread(dispatch_block_t block) {
 	} else {
 		dispatch_sync(dispatch_get_main_queue(), block);
 	}
+}
+
+// A window hidden to the tray leaves the app active, so being active is not
+// enough: one of its windows must be on screen too. The tray's own status item
+// is a window that is always visible, but it can never become the main one.
+// A minimised window is not visible either.
+bool appIsFrontmost(void) {
+	__block bool front = false;
+	onMainThread(^{
+		if (![NSApp isActive]) {
+			return;
+		}
+		for (NSWindow *window in [NSApp windows]) {
+			if ([window isVisible] && [window canBecomeMainWindow]) {
+				front = true;
+				return;
+			}
+		}
+	});
+	return front;
 }
 
 void *registerHotKey(uint32_t code, uint32_t modifiers, uint32_t id, int *status) {

@@ -31,8 +31,8 @@ const (
 // holds the chord.
 const eventHotKeyExistsErr = -9878
 
-// appIsForeground reports whether this application is the active one, which is
-// what macOS calls the app whose window the desktop has in front.
+// appIsForeground reports whether this application is the active one and
+// still has a window on screen, which is what the desktop has in front.
 func appIsForeground() bool { return bool(C.appIsFrontmost()) }
 
 // carbonHotkey is a global shortcut registered with Carbon's

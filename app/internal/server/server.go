@@ -178,7 +178,11 @@ func (s *Server) routes() {
 		if err != nil {
 			return err
 		}
-		return c.JSON(remote.Info{Application: "agenttik", Version: version, Name: name})
+		id, err := s.store.MachineID()
+		if err != nil {
+			return err
+		}
+		return c.JSON(remote.Info{Application: "agenttik", Version: version, Name: name, ID: id})
 	})
 	s.app.Post(remote.ConnectPath, adaptor.HTTPHandler(remote.ConnectHandler(func(u *url.URL) string { return u.String() + "/" })))
 	s.app.Post(remote.CheckPath, adaptor.HTTPHandler(remote.ConnectHandler(func(u *url.URL) string { return u.String() + "/" })))

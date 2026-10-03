@@ -20,6 +20,8 @@ const CheckPath = "/api/remote/check"
 const ConnectPath = "/api/remote/connect"
 
 type Info struct {
+	// ID is the server's machine identifier. Older servers omit it.
+	ID          string `json:"id,omitempty"`
 	Name        string `json:"name,omitempty"`
 	Application string `json:"application"`
 	Version     string `json:"version"`

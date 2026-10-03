@@ -47,6 +47,7 @@ type Server struct {
 	updateContext context.Context
 
 	profiles *profileManager
+	remotes  *remoteManager // nil on added profiles; the catalog is the instance's
 	apiRoot  *Server
 	app      *fiber.App
 	version  string
@@ -135,6 +136,8 @@ func New(s *store.Store, reg *agent.Registry, r *runner.Runner) *Server {
 	srv.search = smartsearch.New(filepath.Join(s.Dir(), "smart-search"), func() ([]store.Session, error) {
 		return s.ListSessions(store.SessionFilter{})
 	})
+	srv.remotes = newRemoteManager(s.Dir(), s.MachineID)
+	app.Use(srv.routeRemote)
 	app.Use(srv.routeProfile)
 	srv.routes()
 
@@ -191,6 +194,14 @@ func (s *Server) routes() {
 	api.Post("/updates/ignore", s.ignoreUpdate)
 	api.Post("/updates/install", s.installUpdate)
 	api.Put("/server/name", s.putServerName)
+	api.Get("/remotes", s.listRemotes)
+	api.Post("/remotes", s.addRemote)
+	api.Delete("/remotes/:id", s.deleteRemote)
+	api.Post("/remotes/:id/connect", s.connectRemote)
+	api.Post("/remotes/:id/login", s.signInRemote)
+	api.Post("/remotes/:id/find", s.findRemote)
+	api.Get("/remotes/:id/find", s.findRemoteStatus)
+	api.Delete("/remotes/:id/find", s.stopFindRemote)
 	api.Get("/profiles", s.listProfiles)
 	api.Put("/profiles/order", s.reorderProfiles)
 	api.Post("/profiles", s.createProfile)
@@ -332,6 +343,9 @@ func (s *Server) Shutdown() error {
 		s.tunnel.Stop() // tell the edge first, while the backend still answers
 	}
 	s.CloseProfiles()
+	if s.remotes != nil {
+		s.remotes.stop()
+	}
 	s.terminals.Shutdown()
 	s.closeOnce.Do(func() { close(s.closing); s.search.Close() })
 	return s.app.ShutdownWithTimeout(shutdownTimeout)

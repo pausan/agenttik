@@ -155,6 +155,7 @@ func (m *profileManager) open(id string) (*profileRuntime, error) {
 		r.OnBusy(m.busy.change)
 	}
 	s := New(db, registry, r)
+	s.remotes = nil
 	s.apiRoot = m.root
 	s.SetVersion(m.root.version)
 	// CLI calls from this profile's orchestrator discover its own endpoint.
@@ -215,6 +216,11 @@ func (s *Server) routeProfile(c *fiber.Ctx) error {
 		return c.Next()
 	}
 	id := c.Query("profile", "default")
+	// A remote's profile ID means nothing here, and only instance paths
+	// reach this far with one (routeRemote forwards the rest).
+	if c.Query("remote") != "" {
+		id = "default"
+	}
 	if m.private || id != "default" {
 		c.Set("X-Agenttik-Instance", m.instance)
 	} else {
@@ -237,7 +243,7 @@ func (s *Server) routeProfile(c *fiber.Ctx) error {
 	if id != "default" && m.running[id] == nil {
 		return fiber.NewError(404, "Profile no longer exists")
 	}
-	if (c.Method() == "POST" && strings.HasPrefix(path, "/api/providers/") && strings.HasSuffix(path, "/api")) || id == "default" || strings.HasPrefix(path, "/api/updates") || path == "/api/foreground" || path == "/api/desktop" || strings.HasPrefix(path, "/api/server") || strings.HasPrefix(path, "/api/remote/") || path == "/api/version" {
+	if (c.Method() == "POST" && strings.HasPrefix(path, "/api/providers/") && strings.HasSuffix(path, "/api")) || id == "default" || strings.HasPrefix(path, "/api/updates") || path == "/api/foreground" || path == "/api/desktop" || strings.HasPrefix(path, "/api/server") || strings.HasPrefix(path, "/api/remote/") || strings.HasPrefix(path, "/api/remotes") || path == "/api/version" {
 		return c.Next()
 	}
 	m.running[id].server.app.Handler()(c.Context())

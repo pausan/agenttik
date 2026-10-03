@@ -25,7 +25,7 @@ const background = `<body style="margin:0"><svg width="660" height="400" viewBox
 
 const browser = await chromium.launch()
 for (const [html, width, height, scale, file] of [
-  [icon, 1024, 1024, 1, 'icon.png'],
+  [icon, 1024, 1024, 1, '../../app/cmd/agenttik/appicon.png'],
   [background, 660, 400, 1, 'dmg-background.png'],
   [background, 660, 400, 2, 'dmg-background@2x.png'],
 ]) {

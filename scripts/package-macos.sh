@@ -51,8 +51,8 @@ PLIST
 # scripts/macos/render-images.mjs renders the 1024px icon from the web logo.
 mkdir "$staging/agenttik.iconset"
 for size in 16 32 128 256 512; do
-  sips -z $size $size "$root/scripts/macos/icon.png" --out "$staging/agenttik.iconset/icon_${size}x${size}.png" >/dev/null
-  sips -z $((size * 2)) $((size * 2)) "$root/scripts/macos/icon.png" --out "$staging/agenttik.iconset/icon_${size}x${size}@2x.png" >/dev/null
+  sips -z $size $size "$root/app/cmd/agenttik/appicon.png" --out "$staging/agenttik.iconset/icon_${size}x${size}.png" >/dev/null
+  sips -z $((size * 2)) $((size * 2)) "$root/app/cmd/agenttik/appicon.png" --out "$staging/agenttik.iconset/icon_${size}x${size}@2x.png" >/dev/null
 done
 iconutil -c icns "$staging/agenttik.iconset" -o "$bundle/Contents/Resources/agenttik.icns"
 plutil -lint "$bundle/Contents/Info.plist"

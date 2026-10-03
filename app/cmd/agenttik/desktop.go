@@ -108,6 +108,7 @@ func runDesktop(srv *server.Server, lock *single.Lock, defaultAddr string) error
 		BackgroundColour: &options.RGBA{R: 17, G: 18, B: 21, A: 255},
 		OnStartup: func(ctx context.Context) {
 			win.opened(ctx)
+			setAppIcon()
 			go func() {
 				select {
 				case <-stop:

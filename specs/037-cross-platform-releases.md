@@ -69,9 +69,11 @@ no Apple account or signing secrets. It is not notarized: downloaded copies may
 require **System Settings → Privacy & Security → Open Anyway** after the first
 launch attempt.
 
-The app icon comes from `scripts/macos/icon.png`, a 1024px render of
+The app icon comes from `app/cmd/agenttik/appicon.png`, a 1024px render of
 `web/public/agenttik.svg` on the macOS icon grid; `sips` and `iconutil` turn it
-into every `.icns` size from 16 to 1024 pixels.
+into every `.icns` size from 16 to 1024 pixels. The macOS binary also embeds it
+and sets it as the application icon at startup, so the Dock and the Cmd+Tab
+switcher show it even when the binary runs outside a bundle.
 
 The DMG is for manual installs and copies the
 [KeePassXC](https://github.com/keepassxreboot/keepassxc) look: a 660×400

@@ -10,6 +10,17 @@ cursor. Queued prompts and tool messages are not human-message stops.
 Navigating to a human message pauses following live output; navigating to the
 end resumes it. The prompt draft is unchanged.
 
+While reading replies, the most recent human prompt above the viewport stays
+at the top in a compact bubble once its original bubble is fully out of view.
+Scrolling through older turns shows the prompt for that part of the transcript.
+Queued prompts are excluded. The copy preserves plain text and line breaks,
+shows at most three wrapped lines, and adds `[... continues ...]` when clipped.
+Clicking it scrolls to the full original prompt and pauses following live output.
+That prompt stays unpinned until its bottom is half a viewport above the top.
+Task switches reset this dismissal. The overlay does not shift transcript rows
+or saved scroll positions. Human nodes are cached when rows change; scrolling
+uses a binary search, and resize observations handle wrapping and growing output.
+
 Every message in a transcript can be copied. Hovering a bubble reveals the
 actions beside its role label; they occupy the layout at all times, so nothing
 shifts when the pointer arrives. The copy icon becomes a tick for a moment so

@@ -16,10 +16,12 @@ import ApprovalCard from "./ApprovalCard.vue";
 import BackgroundTasks from "./BackgroundTasks.vue";
 import Message from "./Message.vue";
 import ModelSelection from "./ModelSelection.vue";
+import StickyPrompt from "./StickyPrompt.vue";
 import ToolGroup from "./ToolGroup.vue";
 
 const emit = defineEmits(["start-tour"]);
 const box = ref(null);
+const content = ref(null);
 const now = ref(Date.now());
 const fallbackStartedAt = ref(0);
 let clock = null;
@@ -81,6 +83,65 @@ const allRows = computed(() => {
 const rows = computed(() =>
   allRows.value.length > shown.value ? allRows.value.slice(-shown.value) : allRows.value,
 );
+
+/* Keep the prompt for the replies being read once its whole bubble has left
+   the viewport. Cache the human nodes when rows change; a scroll needs only
+   a binary search, and never parses or copies message text. */
+const pinned = ref(null);
+let humanNodes = [];
+let dismissedPrompt = null;
+let pinFrame = 0;
+let pinObserver;
+
+function updatePinnedPrompt() {
+  pinFrame = 0;
+  const el = box.value;
+  if (!el) return;
+  const top = el.getBoundingClientRect().top + el.clientTop;
+  let lo = 0;
+  let hi = humanNodes.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (humanNodes[mid].getBoundingClientRect().top <= top + 2) lo = mid + 1;
+    else hi = mid;
+  }
+  const node = humanNodes[lo - 1];
+  const at = node ? Number(node.dataset.humanMessage) : null;
+  const bottom = node?.getBoundingClientRect().bottom;
+  // Expanding gives the original room to scroll out naturally, plus half a
+  // viewport, before its compact copy can return.
+  if (at === dismissedPrompt && bottom <= top - el.clientHeight / 2) dismissedPrompt = null;
+  const message = node && bottom <= top && at !== dismissedPrompt ? S.detail?.messages[at] : null;
+  if ((pinned.value?.at ?? null) !== (message ? at : null) || (pinned.value?.message ?? null) !== message) {
+    pinned.value = message ? { at, message } : null;
+  }
+}
+
+function schedulePinnedPrompt() {
+  if (!pinFrame) pinFrame = requestAnimationFrame(updatePinnedPrompt);
+}
+
+watch(rows, () => {
+  humanNodes = [...(box.value?.querySelectorAll('[data-human-message]') || [])];
+  if (content.value) pinObserver?.observe(content.value);
+  schedulePinnedPrompt();
+}, { flush: "post" });
+
+async function revealPinnedPrompt() {
+  const prompt = pinned.value;
+  if (!prompt) return;
+  dismissedPrompt = prompt.at;
+  pinned.value = null;
+  follow = false;
+  const node = humanNodes.find(node => Number(node.dataset.humanMessage) === prompt.at);
+  if (!node || !box.value) return;
+  const el = box.value;
+  el.scrollTop += node.getBoundingClientRect().top - el.getBoundingClientRect().top - el.clientTop;
+  navigationTarget = prompt.at;
+  navigationTop = el.scrollTop;
+  await nextTick();
+  node.querySelector('button')?.focus({ preventScroll: true });
+}
 
 /* Paint the newest rows first, then add at most one screenful per frame.
    Yielding between batches lets typing and tab changes interrupt a long
@@ -256,10 +317,17 @@ watch(
 
 onMounted(() => {
   clock = window.setInterval(() => (now.value = Date.now()), 250);
+  humanNodes = [...box.value.querySelectorAll('[data-human-message]')];
+  pinObserver = new ResizeObserver(schedulePinnedPrompt);
+  pinObserver.observe(box.value);
+  if (content.value) pinObserver.observe(content.value);
+  schedulePinnedPrompt();
 });
 onUnmounted(() => {
   reveal++;
   window.clearInterval(clock);
+  pinObserver?.disconnect();
+  cancelAnimationFrame(pinFrame);
 });
 
 /* Follow new output only while reading the bottom. A tab switch restores
@@ -270,6 +338,10 @@ let navigationTop = null;
 watch(() => S.detail?.session.id, () => {
   navigationTarget = null;
   navigationTop = null;
+  dismissedPrompt = null;
+  pinned.value = null;
+  pinObserver?.disconnect();
+  if (box.value) pinObserver?.observe(box.value);
 });
 
 async function navigateMessage(direction) {
@@ -302,6 +374,7 @@ async function navigateMessage(direction) {
 defineExpose({ navigateMessage });
 function onScroll() {
   const el = box.value;
+  schedulePinnedPrompt();
   if (navigationTop !== null && Math.abs(el.scrollTop - navigationTop) < 2) return;
   navigationTarget = null;
   navigationTop = null;
@@ -331,11 +404,14 @@ watch(
 
 <template>
   <div ref="box" v-tab-scroll="[S.tab, '', true]" class="min-h-0 flex-1 overflow-auto" @scroll="onScroll">
+    <div class="sticky top-0 z-10 h-0" data-find-ignore>
+      <StickyPrompt v-if="pinned" :message="pinned.message" @reveal="revealPinnedPrompt" />
+    </div>
     <div v-if="!S.detail" class="pt-[18vh] text-center text-dimmed">
       <p>Pick a task, or a project to start one.</p>
       <UButton class="mt-4" label="Take the Quick Start Tour" icon="i-lucide-graduation-cap" @click="emit('start-tour')" />
     </div>
-    <div v-else class="mx-auto max-w-[860px] px-6 pt-5 pb-2 max-md:px-3 max-md:pt-3">
+    <div v-else ref="content" class="mx-auto max-w-[860px] px-6 pt-5 pb-2 max-md:px-3 max-md:pt-3">
       <!-- The project's own prompt went in ahead of the first thing asked
            here, so the conversation says so at the point it happened: what was
            added, on hover, and the page it is set on, on click. It is drawn

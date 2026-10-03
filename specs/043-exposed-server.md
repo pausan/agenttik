@@ -202,4 +202,5 @@ in the clear, and so does everything the app does afterwards. On a home or
 office LAN that is the same exposure the unlocked server already had, with a
 lock added in front of it; across the open internet it is not enough on its
 own, and the address wants a TLS-terminating proxy or a tunnel in front of
-it. Nothing in the pane sets one up.
+it. The pane's **Public internet address** is such a tunnel, HTTPS end to end
+to Cloudflare, behind this same lock — see [084](084-quick-tunnel.md).

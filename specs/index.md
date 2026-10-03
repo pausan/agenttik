@@ -103,6 +103,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [037](037-cross-platform-releases.md) | Cross-platform releases, macOS app bundles, stripping and UPX compression |
 | [039](039-single-instance.md) | One app per data directory, and the window a second launch raises |
 | [043](043-exposed-server.md) | Serving the window's UI to a browser too, on a chosen host and port, behind an optional password and code |
+| [084](084-quick-tunnel.md) | Public trycloudflare.com address with a built-in tunnel client, kept across restarts, SSE carried over websockets |
 | [044](044-command-line.md) | Long options, `--init`, `--help`, and the version a release tag builds in |
 
 ## Providers

@@ -29,6 +29,23 @@ natural size rather than stretched to its pane: two images both filled to their
 half would look the same size when they are not. A vector has no pixels to
 blur, so an SVG preview does fill the pane (`fit`).
 
+**A preview zooms; a diff does not.** `ImageFrame` takes `zoomable`, and only
+`FilePreview` passes it, for raster images and SVG alike. The picture opens
+fitted to its pane. `Ctrl`/`Cmd` with `+` or `=` and `-` or `_` step along
+`ZOOMS` in `image-zoom.js` (5% to 3200%), and `0` sets 100%, the image's own
+pixels. The chords are read on the window, so they act without a click on the
+picture first, but not while a text field, editor or terminal has focus, and
+not while the frame is hidden. `Ctrl` with the wheel zooms smoothly and so does
+a trackpad pinch, which browsers send as that same event; the wheel alone still
+scrolls. On a touch screen two fingers pinch: the pane sets `touch-action:
+pan-x pan-y`, so the page itself does not zoom and one finger still scrolls.
+Every zoom keeps the point under the pointer, the fingers' midpoint, or the
+pane's middle where it was, and a picture larger than the pane scrolls in both
+directions. Under the picture, `−`, the level and `+` do the same by click; the
+level reads `Fit` until the first zoom and a click on it fits again. An SVG
+with only a `viewBox` has no size of its own, so its 100% is its fitted size.
+A new source opens fitted.
+
 `GET /api/projects/:id/raw?path=&rev=` serves the bytes. `rev` is optional and
 reads the file from a revision instead of the working tree — that is what the
 baseline side of a diff asks for. A side that does not exist is a plain 404 and

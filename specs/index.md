@@ -82,7 +82,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [019](019-file-watching.md) | Tree and Changed following the disk as it moves |
 | [022](022-transcript-file-links.md) | Web link actions and local file tabs/system opening in transcripts and previews |
 | [023](023-tool-call-groups.md) | Collapsing a run of tool calls to its latest |
-| [026](026-image-preview.md) | Previewing an SVG or an image, and diffing two pictures |
+| [026](026-image-preview.md) | Previewing an SVG or an image, zooming it, and diffing two pictures |
 | [058](058-font-preview.md) | Font samples, custom text, size controls and glyph squares |
 | [081](081-video-preview.md) | Video player controls, ranged streaming and ffmpeg conversion |
 | [059](059-file-information.md) | File byte sizes, image dimensions and color depth in the central header |

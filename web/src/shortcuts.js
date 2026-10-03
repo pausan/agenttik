@@ -38,6 +38,7 @@ export const ACTIONS = [
   { id: "file.save", group: "Files", what: "Save the file in front", keys: [primaryChord("S")] },
   { id: "file.indent", group: "Files", what: "Indent, with the caret in a file", keys: ["Tab"], fixed: true },
   { id: "edit.undo", group: "Files", what: "Undo / redo file and draft edits", keys: [primaryChord("Z"), primaryChord("Y")], fixed: true },
+  { id: "image.zoom", group: "Files", what: "Zoom a previewed image in, out, or to its own pixels", keys: [primaryChord("+"), primaryChord("-"), primaryChord("0")], fixed: true },
 
   { id: "prompt.send", group: "Prompt", what: "Send", keys: [primaryChord("Enter")] },
   { id: "prompt.enqueue", group: "Prompt", what: "Enqueue", keys: ["Enter"] },

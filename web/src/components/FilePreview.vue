@@ -50,8 +50,8 @@ const svg = computed(() => "data:image/svg+xml;charset=utf-8," + encodeURICompon
   ></iframe>
 
   <div v-else-if="isSVG || image" class="flex h-full min-h-0 px-5 py-4">
-    <ImageFrame v-if="isSVG" :src="svg" fit missing="This is not an SVG a browser can draw." @dimensions="emit('dimensions', $event)" />
-    <ImageFrame v-else :src="rawURL(tab)" @dimensions="emit('dimensions', $event)" />
+    <ImageFrame v-if="isSVG" :src="svg" fit zoomable missing="This is not an SVG a browser can draw." @dimensions="emit('dimensions', $event)" />
+    <ImageFrame v-else :src="rawURL(tab)" zoomable @dimensions="emit('dimensions', $event)" />
   </div>
 
   <FontPreview v-else-if="isFont(tab.path)" :src="rawURL(tab)" />

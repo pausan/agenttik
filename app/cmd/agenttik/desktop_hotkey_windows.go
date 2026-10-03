@@ -20,6 +20,14 @@ var (
 	procGetWindowThreadProcessId = user32.NewProc("GetWindowThreadProcessId")
 )
 
+func newGlobalHotkey(mods []hotkey.Modifier, key hotkey.Key) (globalHotkey, error) {
+	hk := hotkey.New(mods, key)
+	if err := hk.Register(); err != nil {
+		return nil, err
+	}
+	return hk, nil
+}
+
 // appIsForeground reports whether the window the desktop has in front belongs
 // to this process.
 func appIsForeground() bool {

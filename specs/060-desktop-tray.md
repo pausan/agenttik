@@ -43,7 +43,7 @@ A missing tray host leaves close-to-tray inactive and reports an error in
 Settings and the process log; closing still exits normally. Shortcut registration
 failure does the same on Linux and Windows. On macOS, it leaves the tray, menu,
 pulse and close-to-tray active, with an error explaining that only the shortcut
-is unavailable. Grant Accessibility permission and restart to enable the shortcut.
+is unavailable, such as another application already holding the chord.
 
 ## The working pulse
 
@@ -116,10 +116,15 @@ and stops the reader; the known nil-event diagnostic from the XGB dependency is
 not shown, while other XGB diagnostics remain visible. Linux requires an X11
 session and a tray host (e.g. GNOME's AppIndicator extension); Wayland is
 currently unsupported.
-Windows and macOS use `golang.design/x/hotkey`. On macOS, stored `Ctrl` tray
-chords from earlier versions are registered and displayed with `Cmd`. macOS
-requires Accessibility permission for its event tap; registration failure
-appears in Settings.
+Windows uses `golang.design/x/hotkey`. macOS registers through Carbon's
+`RegisterEventHotKey`, which needs no permission; the library's macOS event tap
+needs Accessibility permission and, registered from the main thread where the
+tray starts, waits forever on the main queue. Registration runs on the main
+thread, and the Carbon handler only hands the event to a buffered channel so
+the native loop never blocks. The library's key and modifier values are
+Carbon's own and are reused. On macOS, stored `Ctrl` tray chords from earlier
+versions are registered and displayed with `Cmd`. Registration failure appears
+in Settings.
 
 ## Verification
 

@@ -11,6 +11,14 @@ import (
 
 func checkTray() error { return nil }
 
+// globalHotkey is a registered system-wide chord. On Windows it is
+// golang.design/x/hotkey's own; macOS registers through Carbon instead.
+type globalHotkey interface {
+	Keydown() <-chan hotkey.Event
+	Keyup() <-chan hotkey.Event
+	Unregister() error
+}
+
 func registerToggle(chord string, toggle func(foreground bool)) (func(), error) {
 	parts := strings.Split(chord, "+")
 	var mods []hotkey.Modifier
@@ -37,8 +45,8 @@ func registerToggle(chord string, toggle func(foreground bool)) (func(), error) 
 		if name != parts[len(parts)-1] {
 			continue
 		}
-		hk := hotkey.New(mods, keys[i])
-		if err := hk.Register(); err != nil {
+		hk, err := newGlobalHotkey(mods, keys[i])
+		if err != nil {
 			return nil, err
 		}
 		done := make(chan struct{})

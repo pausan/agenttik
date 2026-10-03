@@ -86,9 +86,8 @@ target). Open the release DMG and drag agenttik onto Applications. No Apple deve
 account is needed to build it. Downloaded builds are not notarized; after a
 blocked launch, use System Settings → Privacy & Security → Open Anyway.
 
-On macOS, Close to tray works even without Accessibility permission. The global
-show/hide shortcut needs that permission; grant it in System Settings → Privacy
-& Security → Accessibility, then restart agenttik. Shortcut failures appear in
+On macOS, Close to tray and the global show/hide shortcut need no extra
+permission. Shortcut failures, such as another app holding the chord, appear in
 agenttik's desktop settings while the tray menu remains usable.
 
 **Local access by default:** agenttik binds to loopback. Anyone who can reach an

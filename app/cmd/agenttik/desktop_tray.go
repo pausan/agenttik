@@ -97,6 +97,8 @@ func (w *window) startTray(config store.DesktopConfig, srv *server.Server) func(
 	if stopToggle == nil {
 		return func() {}
 	}
+	// A macOS tray can start without its shortcut; only name a working one.
+	toggleTitle := trayToggleTitle(config.ToggleShortcut, w.trayStatus() == "")
 	// The pulse is rendered before the tray exists, so a bad icon is found
 	// and reported at startup rather than the first time a turn runs.
 	pulse := traypulse.New(systray.SetIcon, restingIcon(), workingFrames())
@@ -109,7 +111,7 @@ func (w *window) startTray(config store.DesktopConfig, srv *server.Server) func(
 		defer ready.Done()
 		systray.SetIcon(restingIcon())
 		systray.SetTooltip("agenttik")
-		toggle := systray.AddMenuItem("Show / Hide agenttik", config.ToggleShortcut)
+		toggle := systray.AddMenuItem(toggleTitle, config.ToggleShortcut)
 		systray.AddSeparator()
 		quit := systray.AddMenuItem("Quit", "Stop agenttik")
 		w.mu.Lock()
@@ -162,6 +164,15 @@ func (w *window) startTrayShortcut(chord, goos string, register func(string, fun
 	}
 	w.trayFailed(err)
 	return nil
+}
+
+// trayToggleTitle names the shortcut in the menu item itself, since the tray
+// menu has no accelerator column and tooltips rarely show on menu items.
+func trayToggleTitle(chord string, registered bool) string {
+	if !registered || chord == "" {
+		return "Show / Hide agenttik"
+	}
+	return "Show / Hide agenttik (" + chord + ")"
 }
 
 func desktopShortcutForOS(chord, goos string) string {

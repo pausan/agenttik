@@ -54,6 +54,15 @@ func TestMacOSDesktopShortcutUsesCommand(t *testing.T) {
 	}
 }
 
+func TestTrayToggleTitle(t *testing.T) {
+	if got := trayToggleTitle("Cmd+Shift+A", true); got != "Show / Hide agenttik (Cmd+Shift+A)" {
+		t.Fatalf("title = %q", got)
+	}
+	if got := trayToggleTitle("Cmd+Shift+A", false); got != "Show / Hide agenttik" {
+		t.Fatalf("title without shortcut = %q", got)
+	}
+}
+
 func TestTrayShortcutFailure(t *testing.T) {
 	for _, goos := range []string{"darwin", "linux", "windows"} {
 		t.Run(goos, func(t *testing.T) {

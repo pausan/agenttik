@@ -11,7 +11,9 @@ application, minimised, or already in the tray — it shows the window and
 brings it to the front. Holding the shortcut acts once.
 
 The tray menu provides **Show / Hide agenttik** and **Quit**. Its Show / Hide
-action toggles visibility regardless of which application has focus. Quit
+action toggles visibility regardless of which application has focus. Its label
+ends with the show/hide shortcut, e.g. `(Cmd+Shift+A)`, when that shortcut is
+registered; on macOS, where the tray can start without it, the label omits it. Quit
 bypasses close-to-tray and runs the normal shutdown. A second launch restores
 a hidden window through the existing foreground hook. Disabling Close to tray
 and restarting removes the tray and releases the shortcut; closing then exits.

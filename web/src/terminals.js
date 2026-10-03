@@ -11,6 +11,7 @@
 */
 
 import { apiURL } from "./api.js";
+import { openEventStream } from "./eventStream.js";
 
 /* Every view currently on screen, by terminal id. `at` is how many bytes of
    that shell this view has drawn, which is what the server resumes from. */
@@ -58,7 +59,7 @@ function open() {
   }
   if (!views.size) return;
   const ids = [...views.entries()].map(([id, view]) => `${id}:${view.at}`).join(",");
-  const es = new EventSource(apiURL("/api/stream/terminals?ids=" + encodeURIComponent(ids)));
+  const es = openEventStream(apiURL("/api/stream/terminals?ids=" + encodeURIComponent(ids)));
   stream = es;
   es.onmessage = (e) => {
     let frame;

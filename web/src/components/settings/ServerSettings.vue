@@ -14,6 +14,7 @@ import {
   resetServerTOTP,
   setServerAuth,
   setServerConfig,
+  setServerTunnel,
 } from "../../store";
 import { api } from "../../api";
 import { fuzzyAny } from "../../fuzzy";
@@ -27,7 +28,8 @@ const emit = defineEmits(["count"]);
 const rows = computed(() =>
   fuzzyAny(
     ["Server", "name", "instance", "network", "expose", "browser", "host", "port", "0.0.0.0", "127.0.0.1", "localhost", "lan",
-     "login", "password", "totp", "2fa", "authenticator", "qr", "seed", "secure"],
+     "login", "password", "totp", "2fa", "authenticator", "qr", "seed", "secure",
+     "public", "internet", "tunnel", "cloudflare", "trycloudflare", "https"],
     props.filter,
   ) !== null
     ? [1]
@@ -83,14 +85,16 @@ const mode = ref("127.0.0.1");
 const customHost = ref("");
 const port = ref(7717);
 
+/* Only the address itself resets the fields: the tunnel's status is polled
+   into the same object, and must not undo a port being typed. */
 watch(
-  () => S.serverConfig,
-  (c) => {
-    mode.value = ["0.0.0.0", "127.0.0.1"].includes(c.host) ? c.host : "custom";
-    if (mode.value === "custom") customHost.value = c.host || "";
-    port.value = c.port || 7717;
+  () => [S.serverConfig.host, S.serverConfig.port],
+  ([host, p]) => {
+    mode.value = ["0.0.0.0", "127.0.0.1"].includes(host) ? host : "custom";
+    if (mode.value === "custom") customHost.value = host || "";
+    port.value = p || 7717;
   },
-  { immediate: true, deep: true },
+  { immediate: true },
 );
 
 function chooseMode(value) {
@@ -253,6 +257,53 @@ watch(
   },
   { immediate: true },
 );
+
+/* The public address. Coming up takes a few seconds and the connection can
+   drop and come back later, so while this pane is visible and the switch is
+   on, its status is re-read: every second until the address is ready, every
+   five after. */
+const tunnel = computed(() => S.serverConfig.tunnel || {});
+const tunnelBusy = ref(false);
+async function applyTunnel(patch) {
+  tunnelBusy.value = true;
+  try {
+    await setServerTunnel(patch);
+  } finally {
+    tunnelBusy.value = false;
+  }
+}
+watch(
+  () => [props.active, rows.value.length, tunnel.value.enabled, tunnel.value.ready],
+  ([active, visible, on, ready], _, onCleanup) => {
+    let stopped = false;
+    let timer;
+    onCleanup(() => {
+      stopped = true;
+      clearTimeout(timer);
+    });
+    if (!active || !visible || !on) return;
+    timer = setTimeout(async function refresh() {
+      try {
+        const fresh = await api("GET", "/api/server");
+        if (stopped) return;
+        S.serverConfig.tunnel = fresh.tunnel;
+      } catch {
+        /* the next tick tries again */
+      }
+      if (!stopped) timer = setTimeout(refresh, S.serverConfig.tunnel?.ready ? 5000 : 1000);
+    }, ready ? 5000 : 1000);
+  },
+  { immediate: true },
+);
+function followTunnel(e) {
+  if (openExternal(tunnel.value.url)) e.preventDefault();
+}
+const tunnelCopied = ref(false);
+async function copyTunnel() {
+  if (!(await copyText(tunnel.value.url))) return;
+  tunnelCopied.value = true;
+  window.setTimeout(() => (tunnelCopied.value = false), 1200);
+}
 
 /* The QR is an endpoint rather than a data URI, so the seed itself is the
    cache key: it changes exactly when the picture has to. */
@@ -485,6 +536,78 @@ const qr = computed(() =>
           title="Copy remote command"
           @click="copyCommand"
         />
+      </div>
+
+      <div class="mt-4 border-t border-default pt-3.5">
+        <USwitch
+          :model-value="!!tunnel.enabled"
+          :disabled="tunnelBusy"
+          label="Public internet address"
+          @update:model-value="applyTunnel({ enabled: $event })"
+        />
+        <p class="mt-1 text-xs text-dimmed">
+          A random https://….trycloudflare.com address that reaches this machine from anywhere, through
+          Cloudflare's free Quick Tunnels: no account, no open port, nothing else to install. It is behind
+          the password above. Quick Tunnels have no uptime guarantee and are subject to Cloudflare's terms.
+        </p>
+        <p
+          v-if="!S.serverConfig.auth_enabled || !S.serverConfig.has_password"
+          class="mt-2 text-xs"
+          :class="tunnel.enabled ? 'text-error' : 'text-warning'"
+        >
+          There is no login. Anyone who finds the address can run commands on this machine through
+          agenttik. Turn on the password and 2FA first.
+        </p>
+        <p v-else-if="!S.serverConfig.totp_enabled" class="mt-2 text-xs text-warning">
+          Only a password stands between the internet and this machine. Turning on 2FA is recommended.
+        </p>
+
+        <template v-if="tunnel.enabled">
+          <template v-if="tunnel.ready">
+            <p class="mt-3 text-xs text-dimmed">
+              Public at{{ tunnel.location ? ` (via Cloudflare ${tunnel.location.toUpperCase()})` : "" }}
+            </p>
+            <div class="flex items-center gap-1 text-xs">
+              <a
+                :href="tunnel.url"
+                target="_blank"
+                rel="noreferrer noopener"
+                class="font-mono break-all text-primary hover:underline"
+                @click="followTunnel"
+              >{{ tunnel.url }}</a>
+              <UButton
+                :icon="tunnelCopied ? 'i-lucide-check' : 'i-lucide-copy'"
+                size="xs"
+                color="neutral"
+                variant="ghost"
+                aria-label="Copy the public address"
+                title="Copy link"
+                @click="copyTunnel"
+              />
+            </div>
+          </template>
+          <p v-else-if="tunnel.connected" class="mt-3 text-xs text-dimmed">
+            Publishing <span class="font-mono">{{ tunnel.url }}</span>…
+          </p>
+          <p v-else-if="tunnel.error" class="mt-3 text-xs text-error">
+            Not connected: {{ tunnel.error }}. Retrying.
+          </p>
+          <p v-else class="mt-3 text-xs text-dimmed">Connecting to Cloudflare…</p>
+          <UButton
+            label="New address"
+            icon="i-lucide-refresh-cw"
+            size="xs"
+            color="neutral"
+            variant="subtle"
+            class="mt-2"
+            :disabled="tunnelBusy"
+            @click="applyTunnel({ enabled: true, renew: true })"
+          />
+          <p class="mt-1 max-w-96 text-xs text-dimmed">
+            The address is kept across restarts while Cloudflare still knows it. A new one leaves the old
+            address dead.
+          </p>
+        </template>
       </div>
     </template>
   </section>

@@ -23,6 +23,7 @@ import { ACTIONS, matches } from "./shortcuts";
 import { platformChord, primaryChord } from "./platform";
 import { initSmartSearch, setSmartSearch } from "./smart-search.js";
 import { compactModelLabel as compact } from "./model-labels.js";
+import { openEventStream } from "./eventStream.js";
 
 /* Sidebar widths are the user's, so they are kept across reloads. */
 const LAYOUT_KEY = "agenttik.layout";
@@ -87,7 +88,7 @@ export const S = reactive({
   // specs/043-exposed-server.md.
   instanceInfo: { name: "", version: "" },
   serverConfig: { available: false, enabled: false, host: "", port: 0, listening: false,
-    auth_enabled: false, totp_enabled: true, has_password: false, totp_secret: "", totp_uri: "" },
+    auth_enabled: false, totp_enabled: true, has_password: false, totp_secret: "", totp_uri: "", tunnel: null },
   /* sessionID -> unsent prompt, for a conversation with no tab of its own.
      A project has one context slot, so opening anything else in it drops the
      session tab the text was typed into; the text is the user's and outlives
@@ -444,6 +445,17 @@ export async function setServerAuth(patch) {
    once, so the pane re-draws its QR straight after. */
 export async function resetServerTOTP() {
   S.serverConfig = await api("POST", "/api/server/auth/totp", {});
+}
+
+/* setServerTunnel turns the public trycloudflare.com address on or off; renew
+   asks for a new address instead of the last one. It answers before the
+   tunnel is up, so the pane polls GET /api/server until it is. */
+export async function setServerTunnel(patch) {
+  try {
+    S.serverConfig = await api("PUT", "/api/server/tunnel", { enabled: !!S.serverConfig.tunnel?.enabled, ...patch });
+  } catch (e) {
+    fail(e);
+  }
 }
 
 /* contextWindow is how many tokens the session's model holds, which the
@@ -2933,7 +2945,7 @@ function resubscribe() {
     stream = null;
   }
   if (!url) return;
-  const es = new EventSource(apiURL(url));
+  const es = openEventStream(apiURL(url));
   stream = es;
   const refreshOnOpen = initialized;
   let opened = false;

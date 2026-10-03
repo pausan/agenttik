@@ -47,3 +47,90 @@ test("a remote machine's profiles open through this instance and wait for it whe
     if (!stopped) await other.stop();
   }
 });
+
+test("remote discovery can pause, continue, restart and connect to different machines", async ({ page }) => {
+  const office = await startServer();
+  const lab = await startServer();
+  try {
+    const machines = [];
+    for (const [server, name] of [[office, "Office"], [lab, "Lab"]]) {
+      await page.request.put(`${server.url}/api/server/name`, { data: { name } });
+      const version = await (await page.request.get(`${server.url}/api/version`)).json();
+      machines.push({ id: version.id, name, address: server.url, version: version.version });
+    }
+    // Keep discovery deterministic without probing the test runner's LAN.
+    // Adding and switching machines still uses the two real remote servers.
+    let state = { running: false, machines: [] };
+    const requests = [];
+    await page.route(/\/api\/remotes\/discovery(?:\?|$)/, async route => {
+      const method = route.request().method();
+      requests.push(method);
+      if (method === "POST") {
+        const body = route.request().postDataJSON();
+        if (!state.total || body.restart) {
+          state = { running: true, complete: false, probed: 0, total: 256, port: body.port, machines: body.restart ? [] : machines };
+        } else {
+          state.running = true;
+          state.probed += 10;
+        }
+      } else if (method === "DELETE") state.running = false;
+      await route.fulfill({ json: state });
+    });
+    await openSettings(page, "Profiles");
+    await page.getByRole("button", { name: "Search for machines", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Connect to Office", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Pause search", exact: true }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Search paused" })).toBeVisible();
+    await page.getByRole("button", { name: "Continue search", exact: true }).click();
+    await expect(page.getByRole("status").filter({ hasText: "10 of 256" })).toBeVisible();
+
+    // Closing Settings pauses and reopening it keeps progress and matches.
+    await page.getByRole("dialog", { name: "Settings", exact: true }).getByRole("button", { name: "Close", exact: true }).click();
+    await expect.poll(() => state.running).toBe(false);
+    await openSettings(page, "Profiles");
+    await expect(page.getByRole("button", { name: "Connect to Lab", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Continue search", exact: true }).click();
+    await page.getByRole("button", { name: "Restart search", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Connect to Office", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("status").filter({ hasText: "0 of 256" })).toBeVisible();
+    state.machines = machines;
+    await expect(page.getByRole("button", { name: "Connect to Office", exact: true })).toBeVisible();
+
+    // A discovered machine that asks for sign-in must still open its profile
+    // after sign-in, rather than leave the user in Settings.
+    let officeConnection;
+    await page.route(/\/api\/remotes(?:\?|$)/, async route => {
+      if (route.request().method() !== "POST" || route.request().postDataJSON().address !== office.url) {
+        await route.continue();
+        return;
+      }
+      officeConnection = await (await route.fetch()).json();
+      await route.fulfill({ json: { ...officeConnection, status: "signin", remote: { ...officeConnection.remote, profiles: [] } } });
+    });
+    await page.route(/\/api\/remotes\/[^/]+\/login(?:\?|$)/, async route => {
+      expect(route.request().postDataJSON().password).toBe("test password");
+      await route.fulfill({ json: officeConnection });
+    });
+    const added = [];
+    page.on("request", request => {
+      if (request.method() === "POST" && new URL(request.url()).pathname === "/api/remotes") {
+        added.push({ address: request.postDataJSON().address, searching: state.running });
+      }
+    });
+    await page.getByRole("button", { name: "Connect to Office", exact: true }).click();
+    const signin = page.getByRole("dialog", { name: "Office", exact: true });
+    await signin.getByRole("textbox", { name: "Remote password", exact: true }).fill("test password");
+    await signin.getByRole("button", { name: "Sign in", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Profile: Office › Default", exact: true })).toBeVisible();
+    await openSettings(page, "Profiles");
+    await expect(page.getByRole("button", { name: "Continue search", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Continue search", exact: true }).click();
+    await page.getByRole("button", { name: "Connect to Lab", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Profile: Lab › Default", exact: true })).toBeVisible();
+    expect(added).toEqual([{ address: office.url, searching: false }, { address: lab.url, searching: false }]);
+    expect(requests.filter(method => method === "DELETE").length).toBeGreaterThanOrEqual(4);
+  } finally {
+    await office.stop();
+    await lab.stop();
+  }
+});

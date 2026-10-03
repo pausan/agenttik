@@ -47,6 +47,7 @@ type remoteView struct {
 }
 
 type remoteScan struct {
+	done    chan struct{}
 	id      string
 	cancel  context.CancelFunc
 	probed  atomic.Uint64
@@ -62,10 +63,12 @@ type remoteManager struct {
 	networks func() ([]netip.Prefix, error)
 	client   *http.Client
 
-	mu      sync.Mutex
-	loaded  bool
-	remotes []savedRemote
-	scan    *remoteScan
+	mu          sync.Mutex
+	loaded      bool
+	remotes     []savedRemote
+	scan        *remoteScan
+	discoveryMu sync.Mutex
+	discovery   *machineDiscovery
 }
 
 func newRemoteManager(dir string, self func() (string, error)) *remoteManager {
@@ -222,6 +225,7 @@ func (s *Server) addRemote(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
+	m.pauseDiscovery()
 	var body struct {
 		Address string `json:"address"`
 	}
@@ -299,6 +303,7 @@ func (s *Server) connectRemote(c *fiber.Ctx) error {
 // connect checks that the saved address still reaches the same machine and
 // refreshes its profile list. Only an explicit switch or check calls it.
 func (m *remoteManager) connect(parent context.Context, id string) remoteState {
+	m.pauseDiscovery()
 	r, err := m.get(id)
 	if err != nil {
 		return remoteState{Status: "unreachable", Error: err.Error()}
@@ -466,15 +471,17 @@ func (s *Server) findRemote(c *fiber.Ctx) error {
 	if len(networks) == 0 {
 		return badRequest("no active private IPv4 networks found")
 	}
+	m.discoveryMu.Lock()
+	defer m.discoveryMu.Unlock()
+	m.pauseDiscoveryLocked()
+	m.stopFindLocked()
 	ctx, cancel := context.WithCancel(context.Background())
-	scan := &remoteScan{id: r.ID, cancel: cancel, total: remote.Hosts(networks), running: true}
+	scan := &remoteScan{done: make(chan struct{}), id: r.ID, cancel: cancel, total: remote.Hosts(networks), running: true}
 	m.mu.Lock()
-	if m.scan != nil {
-		m.scan.cancel()
-	}
 	m.scan = scan
 	m.mu.Unlock()
 	go func() {
+		defer close(scan.done)
 		err := remote.Scan(ctx, networks, port, &scan.probed, func(target *url.URL, info remote.Info) error {
 			if info.ID != r.ID {
 				return nil
@@ -532,11 +539,10 @@ func (s *Server) stopFindRemote(c *fiber.Ctx) error {
 }
 
 func (m *remoteManager) stop() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.scan != nil {
-		m.scan.cancel()
-	}
+	m.discoveryMu.Lock()
+	defer m.discoveryMu.Unlock()
+	m.pauseDiscoveryLocked()
+	m.stopFindLocked()
 }
 
 // Paths that belong to this window's own instance even while it shows a

@@ -1,8 +1,9 @@
 <script setup>
 import { computed, ref, watchEffect } from "vue";
 import { api, remoteID } from "../../api";
-import { checkRemote, isCurrentProfile, profiles, loadProfiles, switchProfile } from "../../profiles";
+import { checkRemote, connected, isCurrentProfile, profiles, loadProfiles, switchProfile } from "../../profiles";
 import ProfileIcon from "../ProfileIcon.vue";
+import RemoteMachineSearch from "./RemoteMachineSearch.vue";
 import { fail } from "../../store";
 import { fuzzyAny } from "../../fuzzy";
 
@@ -16,7 +17,7 @@ const draft = ref("");
 const address = ref("");
 const removingRemote = ref(null);
 const show = computed(() => fuzzyAny([
-  "profiles", "local", "add", "rename", "edit", "remove", "order", "reorder", "remote", "machine", "network",
+  "profiles", "local", "add", "rename", "edit", "remove", "order", "reorder", "remote", "machine", "network", "search", "pause", "continue", "restart", "discovery",
   ...profiles.items.map(p => p.name), ...profiles.remotes.flatMap(r => [r.name, ...r.profiles.map(p => p.name)]),
 ], props.filter) !== null);
 watchEffect(() => emit("count", show.value ? 1 : 0));
@@ -64,13 +65,16 @@ async function add() {
   finally { busy.value = false; }
 }
 // A machine that wants a password opens the sign-in dialog over Settings.
-async function addRemote() {
+async function addRemote(target = address.value, connect = false) {
   busy.value = true;
   try {
-    const state = await api("POST", "/api/remotes", { address: address.value });
+    const state = await api("POST", "/api/remotes", { address: target });
     address.value = "";
     await loadProfiles();
-    if (state.status !== "ok") profiles.connecting = { remote: state.remote.id, profile: null, state, current: false, shown: true };
+    if (connect || state.status !== "ok") {
+      profiles.connecting = { remote: state.remote.id, profile: connect ? state.remote.profiles[0]?.id || "default" : null, state, current: false };
+      connected(profiles.connecting, state);
+    }
   } catch (e) { fail(e); }
   finally { busy.value = false; }
 }
@@ -140,10 +144,11 @@ async function remove() {
 
     <div class="mt-6 mb-1 font-semibold text-highlighted">Remote machines</div>
     <p class="mb-4 text-xs text-dimmed">List the profiles of another agenttik on your network beside these. Their tasks run on that machine, and this computer keeps the sign-in. A machine is contacted only when you open or check one of its profiles; if it moved, it can be found again by its machine ID. Profiles are managed on their own machine.</p>
-    <form class="mb-4 flex gap-2" @submit.prevent="addRemote">
+    <form class="mb-4 flex gap-2" @submit.prevent="addRemote()">
       <UInput v-model="address" placeholder="host:7717" aria-label="Remote address" class="min-w-0 flex-1" />
       <UButton type="submit" label="Add machine" :disabled="!address.trim() || busy" :loading="busy" />
     </form>
+    <RemoteMachineSearch :busy="busy" @connect="machine => addRemote(machine.address, true)" />
     <div v-for="r in profiles.remotes" :key="r.id" class="border-t border-default py-2">
       <div class="flex items-center gap-2">
         <ProfileIcon remote />

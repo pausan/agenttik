@@ -17,6 +17,32 @@ refresh button checks the machine and reloads its profile list. Remove forgets
 the machine and its sign-in; its data stays on that machine. Profiles are
 added, renamed and removed on their own machine.
 
+## Searching for machines
+
+Settings → Profiles → **Search for machines** scans the same private ranges
+as `--find-remotes`, using port 7717 by default. The port can be changed before
+starting or restarting. Progress and matches appear as the scan runs. Results
+exclude this instance and servers without a machine ID, and list each ID once.
+Discovery does not save machines or fetch their profiles.
+
+**Pause search** cancels active probes. **Continue search** keeps the results
+and continues with unfinished addresses, including interrupted probes.
+**Restart search** clears discovery results and progress, reads the active
+networks again, and starts on the chosen port. Saved machines stay saved.
+Connecting to a result pauses first, saves the machine, and opens its first
+profile (or asks for sign-in). Other matches remain available for connecting
+to more machines. Adding, opening or checking a saved remote also pauses
+discovery.
+Closing Settings pauses it; reopening Settings, including after switching to
+a remote profile, restores progress and results. Search state lasts until
+this instance shuts down. One search is shared by this instance's windows.
+
+The scan uses 128 workers with 500 ms probe deadlines and keeps only its
+network cursor, interrupted addresses and matches in memory. A paused scan
+has no active workers. The UI polls progress only while scanning; shutdown
+cancels the scan. General discovery and finding a saved machine share the
+same network scope and never run together.
+
 ## The picker
 
 Once a machine is saved, the profile picker groups profiles under machine
@@ -84,6 +110,7 @@ temporary root.
 |--------|------|------|
 | GET | `/api/remotes` | Saved machines, without cookies |
 | POST | `/api/remotes` | `{address}`: check and save; answers like connect |
+| POST/GET/DELETE | `/api/remotes/discovery` | Start or continue (`{port?, restart?}`), read `{running, complete, port, probed, total, machines, error}`, pause |
 | DELETE | `/api/remotes/:id` | Forget the machine |
 | POST | `/api/remotes/:id/connect` | `{status: ok\|signin\|unreachable\|moved, error, code_required, remote, busy}` |
 | POST | `/api/remotes/:id/login` | `{password, code}`; 401 with the remote's reason |
@@ -99,4 +126,7 @@ Validation: Go tests cover forwarding, local-only paths, persistence, refusing
 this instance's own address, password and code sign-in, cookie privacy, a
 moved machine, finding it on a loopback network, and streaming. A browser
 test adds a second real instance, switches to and from its profile, and opens
-it after it stopped.
+it after it stopped. Discovery tests cover pause, resume without skipped or
+repeated addresses, restart, deduplication, filtering, connection-triggered
+pause and shutdown. A browser test exercises the controls and connects to
+two real machines with deterministic discovery results.

@@ -76,4 +76,47 @@ func TestModelsLabelsCachedAndAliasesPreserved(t *testing.T) {
 	}
 }
 
+func TestModelsRememberedAcrossLaunches(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell fixture")
+	}
+	dir := t.TempDir()
+	binary := filepath.Join(dir, "claude")
+	script := "#!/bin/sh\ncat >/dev/null\ncat <<'JSON'\n" + compactJSON(modelMetadata) + "\nJSON\n"
+	if err := os.WriteFile(binary, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	old := Binary
+	Binary = binary
+	t.Cleanup(func() { Binary = old })
+	file := filepath.Join(dir, "claude-models.json")
+	if err := os.WriteFile(file, []byte(`{"opus":"Opus 5"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	changes := 0
+	p := New()
+	p.RememberModels(file, func() { changes++ })
+	// The previous session's answer shows while the CLI is asked again.
+	if got := p.Models()[1]; got.Label != "Opus 5" {
+		t.Fatalf("first answer = %+v", got)
+	}
+	p.cache.pending.Wait()
+	if got := p.Models()[1]; got.Label != "Opus 5.5" || changes != 1 {
+		t.Fatalf("refreshed = %+v after %d changes", got, changes)
+	}
+
+	// The next launch starts from the new answer, and hearing it again is
+	// no news.
+	next := New()
+	next.RememberModels(file, func() { changes++ })
+	if got := next.Models()[1]; got.Label != "Opus 5.5" {
+		t.Fatalf("next launch = %+v", got)
+	}
+	next.cache.pending.Wait()
+	if changes != 1 {
+		t.Fatalf("unchanged answer reported, %d changes", changes)
+	}
+}
+
 func compactJSON(s string) string { return strings.ReplaceAll(s, "\n", "") }

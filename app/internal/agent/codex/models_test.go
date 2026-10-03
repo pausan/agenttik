@@ -89,6 +89,39 @@ read -r request
 	}
 }
 
+func TestModelsRememberedAcrossLaunches(t *testing.T) {
+	modelFixture(t, modelHandshake+`printf '%s\n' '{"id":1,"result":{"data":[{"model":"gpt-6-sol"}]}}'
+read -r request
+`)
+	file := filepath.Join(t.TempDir(), "codex-models.json")
+	agent.SaveRemembered(file, []agent.Model{{ID: "gpt-6", Label: "GPT-6"}})
+
+	changes := 0
+	p := New()
+	p.RememberModels(file, func() { changes++ })
+	// The previous session's catalog shows while the CLI is asked again.
+	if got := p.Models(); len(got) != 1 || got[0].ID != "gpt-6" {
+		t.Fatalf("first answer = %+v", got)
+	}
+	p.cache.pending.Wait()
+	want := []agent.Model{{ID: "gpt-6-sol", Label: "gpt-6-sol"}}
+	if got := p.Models(); !reflect.DeepEqual(got, want) || changes != 1 {
+		t.Fatalf("refreshed = %+v after %d changes", got, changes)
+	}
+
+	// The next launch starts from the new catalog, and hearing it again is
+	// no news.
+	next := New()
+	next.RememberModels(file, func() { changes++ })
+	if got := next.Models(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("next launch = %+v", got)
+	}
+	next.cache.pending.Wait()
+	if changes != 1 {
+		t.Fatalf("unchanged answer reported, %d changes", changes)
+	}
+}
+
 func TestModelsDiscoveryErrors(t *testing.T) {
 	for _, response := range []string{
 		`{"id":1,"error":{"message":"unavailable"}}`,

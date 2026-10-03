@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -176,15 +177,19 @@ func run() error {
 	providers = append(providers, apiprovider.All(db.Dir())...)
 	registry := agent.NewRegistry(providers...)
 
+	turns := runner.New(db, registry, runner.NewHub())
+	srv := server.New(db, registry, turns)
+
 	// Each CLI reports its own models, and asking costs a CLI start. Ask now
 	// so the UI's first request finds the answers already cached. Claude and
-	// Codex ask in the background on their own; Copilot waits for its answer.
+	// Codex start from the previous session's answer and ask again in the
+	// background, telling open windows if it changed; Copilot waits for its
+	// answer.
+	claude.RememberModels(filepath.Join(db.Dir(), "claude-models.json"), srv.ProvidersChanged)
+	openai.RememberModels(filepath.Join(db.Dir(), "codex-models.json"), srv.ProvidersChanged)
 	claude.Models()
 	openai.Models()
 	go github.Models()
-
-	turns := runner.New(db, registry, runner.NewHub())
-	srv := server.New(db, registry, turns)
 	srv.SetVersion(version)
 	defer turns.Shutdown()
 	defer srv.Shutdown()

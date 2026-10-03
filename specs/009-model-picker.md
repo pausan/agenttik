@@ -49,7 +49,10 @@ Discovery runs at startup and in the background, never inside a request: a
 request reads the cached list, and one finding it over ten minutes old starts a
 refresh and answers with what it has. Discovery starts no conversation or model
 turn and times out after ten seconds. Failed or empty replies retain the last
-successful list; before any success, the bundled list is the fallback.
+successful list; before any success, the bundled list is the fallback. The
+list is kept in `codex-models.json` in the data directory, so a launch starts
+from the previous session's catalog; a different answer is saved and sends
+`providers_changed`, which makes every window re-read `/api/providers`.
 New model ids and effort levels need no app update. Context-window sizes are
 unknown until turn usage reports them because this endpoint does not provide
 those sizes. Saved model choices are not migrated.

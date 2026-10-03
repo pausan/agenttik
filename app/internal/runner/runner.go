@@ -173,6 +173,11 @@ const ProjectsTopic = "projects"
 // sidebar re-reads its list whole, as it does for the file watcher's event.
 const EventProjectsChanged agent.EventType = "projects_changed"
 
+// EventProvidersChanged also travels on ProjectsTopic, since every window
+// listens there: a CLI answered with a model list other than the one shown,
+// and the pickers re-read the providers whole.
+const EventProvidersChanged agent.EventType = "providers_changed"
+
 // EventSessionChanged carries an API edit, or a deletion when Session is nil.
 const EventSessionChanged agent.EventType = "session_changed"
 

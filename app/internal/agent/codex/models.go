@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"reflect"
 	"sync"
 	"time"
 
@@ -19,8 +20,22 @@ type modelCache struct {
 	mu     sync.Mutex
 	asked  time.Time
 	models []agent.Model
+	// file keeps the catalog across launches; changed hears of a new answer.
+	file    string
+	changed func()
 	// pending is the refresh in flight, which tests wait on.
 	pending sync.WaitGroup
+}
+
+// RememberModels keeps the catalog in path, so a launch shows the previous
+// session's models while the CLI is asked again, and calls changed when an
+// answer differs from them. Call it before the first Models.
+func (p *Provider) RememberModels(path string, changed func()) {
+	c := &p.cache
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.file, c.changed = path, changed
+	agent.LoadRemembered(path, &c.models)
 }
 
 // Models uses the CLI's catalog, including model-specific reasoning levels.
@@ -52,8 +67,19 @@ func (c *modelCache) refresh() {
 		return
 	}
 	c.mu.Lock()
+	if reflect.DeepEqual(models, c.models) {
+		c.mu.Unlock()
+		return
+	}
 	c.models = models
+	file, changed := c.file, c.changed
 	c.mu.Unlock()
+	if file != "" {
+		agent.SaveRemembered(file, models)
+	}
+	if changed != nil {
+		changed()
+	}
 }
 
 type modelPage struct {

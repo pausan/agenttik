@@ -166,7 +166,11 @@ initialization query runs outside the project with safe mode and user settings
 only. It runs at startup and in the background, never inside a request: a
 request reads the cached labels, and one finding them over ten minutes old
 starts a refresh and answers with what it has. A failed refresh retains the
-last successful labels. Until a version is known, the label says `version unknown`.
+last successful labels. The labels are kept in `claude-models.json` in the data
+directory, so a launch shows the previous session's versions while it asks
+again; an answer that differs is saved and announced to every window as a
+`providers_changed` event on the projects topic, and the window re-reads
+`/api/providers`. Until a version is known, the label says `version unknown`.
 Model IDs remain aliases, preserving saved selections and favorites. This
 catalogue describes the machine's default Claude configuration; account-specific
 overrides and runtime fallback can still change the model used for a turn.

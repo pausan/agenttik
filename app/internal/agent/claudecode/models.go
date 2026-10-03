@@ -3,6 +3,7 @@ package claudecode
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"os"
 	"os/exec"
 	"regexp"
@@ -17,8 +18,22 @@ type modelCache struct {
 	mu     sync.Mutex
 	asked  time.Time
 	labels map[string]string
+	// file keeps labels across launches; changed hears of a new answer.
+	file    string
+	changed func()
 	// pending is the refresh in flight, which tests wait on.
 	pending sync.WaitGroup
+}
+
+// RememberModels keeps the labels in path, so a launch shows the previous
+// session's versions while the CLI is asked again, and calls changed when an
+// answer differs from them. Call it before the first Models.
+func (p *Provider) RememberModels(path string, changed func()) {
+	c := &p.cache
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.file, c.changed = path, changed
+	agent.LoadRemembered(path, &c.labels)
 }
 
 // Ask only for initialization metadata, never a model turn. Asking costs a
@@ -47,10 +62,20 @@ func (c *modelCache) refresh() {
 	if err != nil {
 		return
 	}
-	if labels := parseModelLabels(string(data)); len(labels) > 0 {
-		c.mu.Lock()
-		c.labels = labels
+	labels := parseModelLabels(string(data))
+	c.mu.Lock()
+	if len(labels) == 0 || maps.Equal(labels, c.labels) {
 		c.mu.Unlock()
+		return
+	}
+	c.labels = labels
+	file, changed := c.file, c.changed
+	c.mu.Unlock()
+	if file != "" {
+		agent.SaveRemembered(file, labels)
+	}
+	if changed != nil {
+		changed()
 	}
 }
 

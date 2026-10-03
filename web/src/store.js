@@ -2999,6 +2999,11 @@ function onEvent(msg) {
     if (S.orchestrator) loadOrchestratorConfig().catch(() => {});
     return;
   }
+  // A CLI's model list came back different from the one shown at launch.
+  if (msg.event?.type === "providers_changed") {
+    loadProviders().catch(() => {});
+    return;
+  }
   if (msg.event?.type === "session_changed") {
     const tab = S.tabs.find((t) => t.kind === "session" && t.sessionID === msg.session_id);
     if (msg.session) {

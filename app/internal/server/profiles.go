@@ -523,6 +523,22 @@ func (t *busyTally) change(busy bool) {
 	}
 }
 
+// ProvidersChanged tells every window of every running profile that the
+// providers' model lists moved on. The CLI providers are shared, so a new
+// answer from one is news to all of them.
+func (s *Server) ProvidersChanged() {
+	ev := runner.Event{Event: agent.Event{Type: runner.EventProvidersChanged}}
+	s.runner.Hub().Publish(runner.ProjectsTopic, ev)
+	if s.profiles == nil {
+		return
+	}
+	s.profiles.mu.Lock()
+	defer s.profiles.mu.Unlock()
+	for _, rt := range s.profiles.running {
+		rt.server.runner.Hub().Publish(runner.ProjectsTopic, ev)
+	}
+}
+
 // OnBusy registers the listener told when the first turn in any local profile
 // starts and when the last one ends. The tray pulses from it, so work in a
 // profile the window is not showing still shows. Call it once.

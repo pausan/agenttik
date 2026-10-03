@@ -51,3 +51,13 @@ launches a program on the machine running it. That is not a fresh exposure:
 the same server already reads, writes and deletes any file in a project, and
 runs agent turns that can do anything at all. It is bounded to the project
 folder for the same reason those are.
+
+**Its output goes nowhere.** The server's opener leaves the child's stdout and
+stderr unset, which exec points at `/dev/null`. A web link clicked in the
+desktop window takes the other path, Wails' own `BrowserOpenURL`, which on
+Linux runs `xdg-open` through `pkg/browser` with agenttik's own stdout and
+stderr. A browser that was not running yet is started by it and keeps them,
+so its log lines would land in agenttik's terminal for as long as the browser
+lives. The desktop shell points `pkg/browser` at `/dev/null` too. It uses an
+`*os.File` rather than `io.Discard` so that exec hands over the descriptor
+directly instead of a pipe the browser would keep open.

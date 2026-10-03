@@ -16,6 +16,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/pkg/browser"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/linux"
 
@@ -26,12 +27,27 @@ const jscSignalForGC = 34
 
 func configureDesktop(app *options.App) {
 	configureJSCSignalForGC()
+	quietBrowserOpener()
 	app.Linux = &linux.Options{
 		Icon: appIcon(),
 		// Wails only picks this default while Linux options are nil, and
 		// the webview goes blank on some drivers with acceleration on.
 		WebviewGpuPolicy: linux.WebviewGpuPolicyNever,
 	}
+}
+
+// quietBrowserOpener keeps a link opened from the window from tying the
+// browser to this terminal. Wails runs xdg-open through pkg/browser, which
+// hands it our own stdout and stderr; a browser that was not yet running is
+// started by it and keeps them, so its log lines land here for as long as it
+// lives. An *os.File rather than io.Discard, so exec passes the descriptor
+// straight through instead of a pipe the browser would hold open.
+func quietBrowserOpener() {
+	null, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		return
+	}
+	browser.Stdout, browser.Stderr = null, null
 }
 
 func jscSignalForGCValue() int {

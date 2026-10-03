@@ -13,8 +13,9 @@
    trackpad pinch, and a two-finger pinch on a touch screen. In the desktop
    window Ctrl or Cmd with +, - and 0 do too; in a browser those stay the
    browser's own page zoom. The point under the pointer or the fingers stays
-   put, and a picture larger than its pane scrolls. Fit is where it starts and
-   where the middle button returns to; 0 is the image's own pixels.
+   put, and a picture larger than its pane scrolls by dragging with a mouse
+   or one finger. Fit is where it starts and where the middle button returns
+   to; 0 is the image's own pixels.
 
    A diff of two pictures the same size hands both frames one `view`, so they
    zoom and scroll as one. Only one of them, `keys`, answers the chords.
@@ -57,6 +58,7 @@ const desktop = () => !!window.runtime;
 watch(
   () => props.src,
   () => {
+    stopPan();
     size.value = "";
     failed.value = false;
     state.value.scale = null;
@@ -132,6 +134,33 @@ watch(
 const zoomIn = () => zoomTo(stepZoom(current(), 1));
 const zoomOut = () => zoomTo(stepZoom(current(), -1));
 
+/* Touch uses the pane's native scrolling. A mouse or pen grabs the picture;
+   capture keeps the drag going even when the pointer leaves the pane. */
+const pan = shallowRef(null);
+
+function onPointerDown(e) {
+  if (!zoomed.value || e.pointerType === "touch" || e.button !== 0 || !e.isPrimary) return;
+  const el = pane.value;
+  pan.value = { id: e.pointerId, x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop };
+  el.setPointerCapture(e.pointerId);
+  e.preventDefault();
+}
+
+function onPointerMove(e) {
+  const start = pan.value;
+  if (!start || e.pointerId !== start.id) return;
+  pane.value.scrollLeft = start.left + start.x - e.clientX;
+  pane.value.scrollTop = start.top + start.y - e.clientY;
+  onScroll();
+}
+
+function stopPan(e) {
+  const start = pan.value;
+  if (!start || (e && e.pointerId !== start.id)) return;
+  pan.value = null;
+  if (pane.value?.hasPointerCapture(start.id)) pane.value.releasePointerCapture(start.id);
+}
+
 /* The chords work wherever focus is, except in a field that types them, so
    they act on the picture in front without a click on it first. */
 function onKey(e) {
@@ -178,7 +207,10 @@ watch(
   (on) => (on ? window.addEventListener("keydown", onKey) : window.removeEventListener("keydown", onKey)),
   { immediate: true },
 );
-onUnmounted(() => window.removeEventListener("keydown", onKey));
+onUnmounted(() => {
+  stopPan();
+  window.removeEventListener("keydown", onKey);
+});
 </script>
 
 <template>
@@ -189,8 +221,13 @@ onUnmounted(() => window.removeEventListener("keydown", onKey));
       v-else
       ref="pane"
       class="flex min-h-0 w-full flex-1"
-      :class="zoomable && 'image-zoom-pane overflow-auto'"
+      :class="zoomable && ['image-zoom-pane overflow-auto', zoomed && 'image-pan', pan && 'image-panning']"
       @wheel="zoomable && onWheel($event)"
+      @pointerdown="zoomable && onPointerDown($event)"
+      @pointermove="onPointerMove"
+      @pointerup="stopPan"
+      @pointercancel="stopPan"
+      @lostpointercapture="stopPan"
       @scroll.passive="zoomable && onScroll()"
       @touchstart.passive="zoomable && onTouchStart($event)"
       @touchmove.passive="zoomable && onTouchMove($event)"
@@ -204,6 +241,7 @@ onUnmounted(() => window.removeEventListener("keydown", onKey));
         :style="drawn"
         :src="src"
         :alt="label || 'preview'"
+        :draggable="!zoomable"
         @load="onLoad"
         @error="failed = true"
       />
@@ -229,5 +267,14 @@ onUnmounted(() => window.removeEventListener("keydown", onKey));
 /* Pinching is the picture's, not the page's; one finger still scrolls it. */
 .image-zoom-pane {
   touch-action: pan-x pan-y;
+}
+
+.image-pan {
+  cursor: grab;
+  user-select: none;
+}
+
+.image-panning {
+  cursor: grabbing;
 }
 </style>

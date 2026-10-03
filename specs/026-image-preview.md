@@ -38,7 +38,13 @@ browsers send as that same event; the wheel alone still scrolls. On a touch
 screen two fingers pinch: the pane sets `touch-action: pan-x pan-y`, so the
 page itself does not zoom and one finger still scrolls. Every zoom keeps the
 point under the pointer, the fingers' midpoint, or the pane's middle where it
-was, and a picture larger than the pane scrolls in both directions. An SVG
+was, and a picture larger than the pane scrolls in both directions. A zoomed
+picture can be dragged with the primary mouse button or a pen: the cursor is
+an open hand at rest and a closed hand while dragging. Pointer capture keeps
+the drag going outside the pane; release, cancellation or opening a new source
+ends it. The image's native file drag is disabled in zoomable frames. One finger
+uses native touch scrolling, including momentum, while two fingers pinch.
+Dragging either side of a linked diff scrolls both sides. An SVG
 with only a `viewBox` has no size of its own, so its 100% is its fitted size.
 A new source opens fitted.
 

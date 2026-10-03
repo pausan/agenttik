@@ -28,6 +28,7 @@ test("an image preview zooms by keys, wheel and pinch, and scrolls when larger t
     const width = () => img.evaluate((el) => el.getBoundingClientRect().width);
     const scrolls = () => pane.evaluate((el) => el.scrollWidth > el.clientWidth && el.scrollHeight > el.clientHeight);
     await expect(level).toHaveText("Fit");
+    await expect(pane).not.toHaveCSS("cursor", "grab");
     await expect.poll(width).toBeLessThan(3000);
     expect(await scrolls()).toBe(false);
 
@@ -47,6 +48,28 @@ test("an image preview zooms by keys, wheel and pinch, and scrolls when larger t
     await expect(level).toHaveText("100%");
     await expect.poll(width).toBe(3000);
     expect(await scrolls()).toBe(true);
+
+    // Grab the picture in both directions, including outside the pane.
+    const scroll = () => pane.evaluate((el) => [el.scrollLeft, el.scrollTop]);
+    await pane.evaluate((el) => el.scrollTo(400, 300));
+    await expect(pane).toHaveCSS("cursor", "grab");
+    expect(await img.getAttribute("draggable")).toBe("false");
+    const dragBox = await pane.boundingBox();
+    const x = dragBox.x + dragBox.width / 2;
+    const y = dragBox.y + dragBox.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await expect(pane).toHaveCSS("cursor", "grabbing");
+    await page.mouse.move(x - 80, y - 60, { steps: 5 });
+    await expect.poll(scroll).toEqual([480, 360]);
+    await page.mouse.move(dragBox.x - 20, y - 60, { steps: 5 });
+    await expect.poll(async () => (await scroll())[0]).toBeGreaterThan(480);
+    await page.mouse.up();
+    await expect(pane).toHaveCSS("cursor", "grab");
+    const released = await scroll();
+    await page.mouse.move(x, y);
+    expect(await scroll()).toEqual(released);
+
     await page.keyboard.press("Control+=");
     await expect(level).toHaveText("125%");
     await expect.poll(width).toBe(3750);
@@ -64,6 +87,7 @@ test("an image preview zooms by keys, wheel and pinch, and scrolls when larger t
     await expect(level).toHaveText("100%");
     await level.click();
     await expect(level).toHaveText("Fit");
+    await expect(pane).not.toHaveCSS("cursor", "grab");
     const fitted = await width();
 
     // Ctrl with the wheel zooms about the pointer; the wheel alone does not.
@@ -149,6 +173,17 @@ test("a diff of two pictures the same size zooms and scrolls both sides as one",
     await left.locator("..").evaluate((el) => el.scrollTo(100, 50));
     await expect.poll(() => scroll(right)).toEqual([100, 50]);
 
+    // Grabbing one side pans both images.
+    const dragBox = await left.locator("..").boundingBox();
+    const x = dragBox.x + dragBox.width / 2;
+    const y = dragBox.y + dragBox.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x - 80, y - 60, { steps: 5 });
+    await page.mouse.up();
+    await expect.poll(() => scroll(left)).toEqual([180, 110]);
+    await expect.poll(() => scroll(right)).toEqual([180, 110]);
+
     // Ctrl with the wheel over one side zooms both.
     const box = await right.locator("..").boundingBox();
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -167,4 +202,59 @@ test("a diff of two pictures the same size zooms and scrolls both sides as one",
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test.describe("touch image scrolling", () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+
+  test("one finger pans a zoomed picture in both directions on a phone", async ({ page, agenttik }) => {
+    const dir = await mkdtemp(join(tmpdir(), "agenttik-image-touch-"));
+    try {
+      await writeFile(join(dir, "big.svg"), '<svg xmlns="http://www.w3.org/2000/svg" width="3000" height="2000"><rect width="3000" height="2000" fill="#c33"/></svg>');
+      const response = await page.request.post(`${agenttik.url}/api/projects`, { data: { name: "Pictures", path: dir } });
+      expect(response.ok()).toBeTruthy();
+      await page.reload();
+      const projects = page.getByRole("button", { name: "Projects and tasks", exact: true });
+      const drawer = page.getByRole("dialog", { name: "Projects and tasks", exact: true });
+      await projects.tap();
+      await drawer.getByRole("button", { name: /Pictures/ }).tap();
+      await expect(drawer).toBeHidden();
+      await projects.tap();
+      await drawer.getByRole("tab", { name: "Tree" }).tap();
+      await drawer.getByRole("button", { name: "big.svg", exact: true }).tap();
+      await expect(drawer).toBeHidden();
+      await page.getByRole("tab", { name: "Preview", exact: true }).tap();
+      const img = page.getByRole("img", { name: "preview", exact: true });
+      const pane = img.locator("..");
+      const level = page.getByTitle("Fit to the pane", { exact: true });
+      await expect(level).toHaveText("Fit");
+      for (let i = 0; i < 15 && (await level.textContent()) !== "100%"; i++) {
+        await page.getByRole("button", { name: "Zoom in", exact: true }).tap();
+      }
+      await expect(level).toHaveText("100%");
+      await pane.evaluate((el) => el.scrollTo(400, 300));
+      const scroll = () => pane.evaluate((el) => [el.scrollLeft, el.scrollTop]);
+      await expect.poll(scroll).toEqual([400, 300]);
+
+      // Real touch input lets the browser perform native scrolling.
+      const client = await page.context().newCDPSession(page);
+      const box = await pane.boundingBox();
+      const x = Math.round(box.x + box.width / 2);
+      const y = Math.round(box.y + box.height / 2);
+      for (const direction of [-1, 1]) {
+        await client.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] });
+        const before = await scroll();
+        for (let i = 1; i <= 8; i++) {
+          await client.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: x + direction * i * 10, y: y + direction * i * 10 }] });
+        }
+        await expect.poll(async () => direction * (before[0] - (await scroll())[0])).toBeGreaterThan(40);
+        await expect.poll(async () => direction * (before[1] - (await scroll())[1])).toBeGreaterThan(40);
+        await client.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      }
+      await expect(level).toHaveText("100%");
+      expect(await page.evaluate(() => window.visualViewport.scale)).toBe(1);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });

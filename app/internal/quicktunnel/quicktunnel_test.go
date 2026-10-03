@@ -96,11 +96,11 @@ func TestDecodeConnectionResponse(t *testing.T) {
 		t.Fatalf("details: %q %v", loc, err)
 	}
 	_, err = decodeConnectionResponse(results(0, func(s capnp.Struct) { s.SetText(0, "busy"); s.SetBit(64, true) }))
-	if err == nil || errors.Is(err, errRejected) {
+	if !errors.Is(err, errRefused) || errors.Is(err, errRejected) {
 		t.Fatalf("retryable error: %v", err)
 	}
 	_, err = decodeConnectionResponse(results(0, func(s capnp.Struct) { s.SetText(0, "Unauthorized") }))
-	if !errors.Is(err, errRejected) {
+	if !errors.Is(err, errRejected) || !errors.Is(err, errRefused) {
 		t.Fatalf("permanent error: %v", err)
 	}
 }

@@ -77,6 +77,11 @@ func decodeResponse(status int, body io.Reader) (Credentials, error) {
 	return data.Result, nil
 }
 
-// errRejected is a registration the edge refused outright — the tunnel no
-// longer exists, typically — as opposed to a network failure worth retrying.
-var errRejected = errors.New("edge rejected the tunnel")
+// errRefused is any registration the edge answered with an error rather
+// than a connection; errRejected is one it also said not to retry. A tunnel
+// that no longer exists is refused as retryable for half a minute or more
+// before it is rejected, so run does not wait for the rejection.
+var (
+	errRefused  = errors.New("edge refused the connection")
+	errRejected = errors.New("edge rejected the tunnel")
+)

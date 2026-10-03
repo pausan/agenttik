@@ -19,9 +19,13 @@ while it is on without 2FA. Turning the tunnel on does not turn the lock on.
 - The last tunnel's credentials are saved (`server_config.tunnel_credentials`,
   JSON, never sent to the UI). Turning the tunnel on, or restarting the app,
   reconnects with them, so **the address stays the same** while Cloudflare
-  still knows the tunnel. In testing, a saved tunnel reconnected after
-  5 minutes offline. If the edge refuses the tunnel outright, a new one
-  (with a new address) is requested and saved.
+  still knows the tunnel. In testing, a tunnel came back on its address after
+  10 minutes offline; after 20 it had been deleted.
+- A deleted tunnel is replaced by a new one (new address), which is saved.
+  Cloudflare refuses a missing tunnel as *retryable* for half a minute or
+  more before saying not to retry, so three refusals in a row for a tunnel
+  that has not connected since start are enough. Asking for a new tunnel
+  skips the backoff; the replacement takes about 10 s.
 - **New address** forgets the saved tunnel and requests a new one. The old
   address stops working.
 - Turning it off unregisters from the edge and keeps the credentials.
@@ -29,11 +33,13 @@ while it is on without 2FA. Turning the tunnel on does not turn the lock on.
   carries `tunnel: {enabled, url, connected, ready, location, error}`. The
   pane re-reads it every second until `ready`, then every five seconds, and
   only while visible.
-- The link is shown only once the hostname resolves. A new hostname takes a
-  few seconds to appear in DNS, and a resolver that is asked too early
-  caches the miss for at least a minute (the zone's negative TTL is 60 s).
-  So `ready` is checked against trycloudflare.com's own nameservers, which
-  no browser shares.
+- The link is shown only once it works (`ready`). Two things lag behind
+  registration by seconds: the hostname appearing in DNS, and the edge
+  routing it (until then it answers `530`, error 1033). A resolver asked
+  before the name exists caches the miss for at least a minute (the zone's
+  negative TTL is 60 s), so the name is looked up on trycloudflare.com's own
+  nameservers, which no browser shares, and a `HEAD /` is sent to the
+  address they return until the answer is not `530`.
 
 ## Protocol
 
@@ -92,7 +98,8 @@ The backend never sees a websocket.
   serialization, the response writer and the SSE→websocket bridge, offline.
 - `QUICKTUNNEL_LIVE=1 go test ./app/internal/quicktunnel -run Live` opens a
   real tunnel. It checks plain requests, the visitor address, the bridged
-  stream arriving event by event, and reconnecting on the same address.
+  stream arriving event by event, reconnecting on the same address, and a
+  deleted tunnel being replaced.
 - `QUICKTUNNEL_LIVE=1 go test ./app/internal/server -run TunnelLive` runs the
   whole stack: API on, locked, signed in from outside, and a project event
   read through the tunnel.

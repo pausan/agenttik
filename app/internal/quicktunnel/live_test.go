@@ -96,6 +96,29 @@ func TestLive(t *testing.T) {
 	getWithRetry(t, url+"/hello")
 }
 
+// TestLiveStaleTunnel starts on a tunnel Cloudflare does not know, which is
+// what a saved one looks like after a long time offline, and expects a new
+// one to replace it within seconds rather than after the edge's own
+// half-minute of retryable refusals.
+func TestLiveStaleTunnel(t *testing.T) {
+	if os.Getenv("QUICKTUNNEL_LIVE") == "" {
+		t.Skip("set QUICKTUNNEL_LIVE=1 to open a real tunnel")
+	}
+	c := New("127.0.0.1:9", nil, "test")
+	stale := Credentials{ID: "2d8f2f26-6f2b-4c39-9c0b-9b7a1f0e3c11", AccountTag: "x", Secret: []byte("0123456789abcdef0123456789abcdef"), Hostname: "gone.trycloudflare.com"}
+	renewed := make(chan Credentials, 1)
+	c.Start(stale, func(cr Credentials) { renewed <- cr })
+	defer c.Stop()
+	select {
+	case cr := <-renewed:
+		if cr.Hostname == stale.Hostname {
+			t.Fatalf("kept %s", cr.Hostname)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatalf("not replaced: %+v", c.Status())
+	}
+}
+
 // websocketEvents opens path on host as a websocket and yields each text
 // message until the server closes it.
 func websocketEvents(t *testing.T, host, path string) <-chan string {

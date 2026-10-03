@@ -40,8 +40,8 @@ type registerParams struct {
 }
 
 // register calls registerConnection over stream and returns where the
-// connection landed, as an airport code. A refusal the edge says not to
-// retry comes back wrapped in errRejected.
+// connection landed, as an airport code. A refusal comes back wrapped in
+// errRefused, and also in errRejected when the edge says not to retry.
 func register(ctx context.Context, stream io.ReadWriteCloser, p registerParams) (*registration, string, error) {
 	conn := rpc.NewConn(rpc.StreamTransport(stream), rpc.ConnLog(quietLog{}))
 	reg := &registration{conn: conn, boot: conn.Bootstrap(ctx)}
@@ -147,11 +147,10 @@ func decodeConnectionResponse(results capnp.Struct) (string, error) {
 	switch resp.Uint16(0) {
 	case 0:
 		cause, _ := s.Ptr(0)
-		err := fmt.Errorf("edge refused the connection: %s", cause.Text())
 		if !s.Bit(64) { // shouldRetry
-			err = fmt.Errorf("%w: %s", errRejected, cause.Text())
+			return "", fmt.Errorf("%w: %w: %s", errRejected, errRefused, cause.Text())
 		}
-		return "", err
+		return "", fmt.Errorf("%w: %s", errRefused, cause.Text())
 	case 1:
 		loc, _ := s.Ptr(1)
 		return loc.Text(), nil

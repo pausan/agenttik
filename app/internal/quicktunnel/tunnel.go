@@ -125,17 +125,25 @@ func (c *Client) update(f func(*Status)) {
 	c.mu.Unlock()
 }
 
+// staleAfter is how many refusals in a row replace a tunnel that has not
+// carried a connection since this run started: on a restart that is what a
+// tunnel Cloudflare has already deleted looks like.
+const staleAfter = 3
+
 // run connects, and reconnects after a delay that doubles up to a minute,
-// until ctx ends. A tunnel the edge refuses outright is replaced by a new one.
+// until ctx ends. A tunnel the edge rejects, or keeps refusing before it ever
+// connected, is replaced by a new one, asked for at once.
 func (c *Client) run(ctx context.Context, creds Credentials, save func(Credentials)) {
 	wait := time.Second
 	var attempts uint8
+	proven, refusals := false, 0 // whether creds connected in this run; refusals since
 	for i := 0; ctx.Err() == nil; i++ {
 		var err error
 		if creds.ID == "" {
 			creds, err = Request(ctx, "agenttik/"+c.version)
 			if err == nil {
 				save(creds)
+				proven, refusals = false, 0
 			}
 		}
 		connected := false
@@ -150,13 +158,16 @@ func (c *Client) run(ctx context.Context, creds Credentials, save func(Credentia
 		if ctx.Err() != nil {
 			return
 		}
-		if errors.Is(err, errRejected) {
-			creds = Credentials{}
-		}
 		if connected {
-			wait, attempts = time.Second, 0
+			wait, attempts, proven, refusals = time.Second, 0, true, 0
 		} else if attempts < math.MaxUint8 {
 			attempts++
+		}
+		if errors.Is(err, errRefused) {
+			refusals++
+		}
+		if errors.Is(err, errRejected) || (!proven && refusals >= staleAfter) {
+			creds, wait, attempts = Credentials{}, time.Second, 0
 		}
 		c.update(func(s *Status) { s.Connected, s.Ready, s.Location, s.Error = false, false, "", err.Error() })
 		select {
@@ -164,14 +175,19 @@ func (c *Client) run(ctx context.Context, creds Credentials, save func(Credentia
 			return
 		case <-time.After(wait):
 		}
-		wait = min(wait*2, time.Minute)
+		if creds.ID != "" {
+			wait = min(wait*2, time.Minute)
+		}
 	}
 }
 
-// awaitPublished marks the status ready once hostname resolves. A new
-// tunnel's name takes a few seconds to appear, and a resolver asked before
-// then remembers the miss for a minute or more, so the name is asked of
-// trycloudflare.com's own nameservers, which no other lookup shares.
+// awaitPublished marks the status ready once the public address answers.
+// Two things lag behind registration by seconds: the hostname appearing in
+// DNS, and the edge routing it to this connection (until then it answers
+// 530, error 1033). A resolver asked before the name exists remembers the
+// miss for a minute or more, so the name is asked of trycloudflare.com's own
+// nameservers, which no other lookup shares, and the probe dials the address
+// they gave.
 func (c *Client) awaitPublished(ctx context.Context, hostname string) {
 	for ctx.Err() == nil {
 		if published(ctx, hostname) {
@@ -190,7 +206,7 @@ func (c *Client) awaitPublished(ctx context.Context, hostname string) {
 }
 
 func published(ctx context.Context, hostname string) bool {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	ns, err := net.DefaultResolver.LookupNS(ctx, "trycloudflare.com")
 	if err != nil || len(ns) == 0 {
@@ -200,7 +216,25 @@ func published(ctx context.Context, hostname string) bool {
 		return (&net.Dialer{}).DialContext(ctx, network, net.JoinHostPort(ns[0].Host, "53"))
 	}}
 	addrs, err := authoritative.LookupHost(ctx, hostname+".")
-	return err == nil && len(addrs) > 0
+	if err != nil || len(addrs) == 0 {
+		return false
+	}
+	probe := &http.Client{Transport: &http.Transport{
+		DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, network, net.JoinHostPort(addrs[0], "443"))
+		},
+	}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, "https://"+hostname+"/", nil)
+	if err != nil {
+		return false
+	}
+	resp, err := probe.Do(req)
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	probe.CloseIdleConnections()
+	return resp.StatusCode != 530 // Cloudflare's "origin unreachable"
 }
 
 // connect holds one connection to the edge until it drops or ctx ends, and

@@ -385,3 +385,30 @@ func TestPasswordOnlyAndReenableTOTP(t *testing.T) {
 		t.Fatalf("missing code accepted after reenabling: %d", login.StatusCode)
 	}
 }
+
+// TestTunnelOffKeepsItsAddress checks turning the public address off keeps
+// the last tunnel for next time, renewing forgets it, and neither touches
+// the listener or the lock. Turning it on needs the internet, so the live
+// half is quicktunnel's own TestLive.
+func TestTunnelOffKeepsItsAddress(t *testing.T) {
+	s, _ := exposed(t)
+	lockTheServer(t, s)
+	saved := `{"id":"x","hostname":"a-b.trycloudflare.com"}`
+	if err := s.store.SetServerTunnel(true, saved); err != nil {
+		t.Fatal(err)
+	}
+
+	info := decode[serverConfigInfo](t, do(t, s, "PUT", "/api/server/tunnel", map[string]any{"enabled": false}))
+	if info.Tunnel == nil || info.Tunnel.Enabled || info.Tunnel.Connected || !info.AuthEnabled {
+		t.Fatalf("after turning it off: %+v %+v", info, info.Tunnel)
+	}
+	cfg, err := s.store.GetServerConfig()
+	if err != nil || cfg.TunnelEnabled || cfg.TunnelCredentials != saved || !cfg.AuthEnabled {
+		t.Fatalf("saved %+v, %v", cfg, err)
+	}
+
+	do(t, s, "PUT", "/api/server/tunnel", map[string]any{"enabled": false, "renew": true})
+	if cfg, _ := s.store.GetServerConfig(); cfg.TunnelCredentials != "" {
+		t.Fatalf("renew kept %q", cfg.TunnelCredentials)
+	}
+}

@@ -588,6 +588,38 @@ func TestServerConfigAndAuthAreWrittenApart(t *testing.T) {
 	}
 }
 
+// TestServerTunnelIsWrittenApart checks the tunnel's columns and the other
+// two writers' leave each other alone.
+func TestServerTunnelIsWrittenApart(t *testing.T) {
+	s := testStore(t)
+	if err := s.SetServerTunnel(true, `{"id":"x"}`); err != nil {
+		t.Fatalf("set tunnel: %v", err)
+	}
+	if err := s.SetServerConfig(ServerConfig{Enabled: true, Host: "127.0.0.1", Port: 9000}); err != nil {
+		t.Fatalf("set config: %v", err)
+	}
+	if err := s.SetServerAuth(ServerConfig{AuthEnabled: true, PasswordHash: "h"}); err != nil {
+		t.Fatalf("set auth: %v", err)
+	}
+	got, err := s.GetServerConfig()
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if !got.TunnelEnabled || got.TunnelCredentials != `{"id":"x"}` {
+		t.Errorf("the tunnel was lost: %+v", got)
+	}
+	if err := s.SetServerTunnel(false, ""); err != nil {
+		t.Fatalf("clear tunnel: %v", err)
+	}
+	got, err = s.GetServerConfig()
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.TunnelEnabled || !got.Enabled || got.Port != 9000 || got.PasswordHash != "h" {
+		t.Errorf("after clearing the tunnel: %+v", got)
+	}
+}
+
 // TestSetServerAuthOnAFreshRow checks the lock can be the first thing ever
 // written, which is what happens when somebody turns it on before ever
 // touching the host or the port.

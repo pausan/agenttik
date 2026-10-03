@@ -1,6 +1,8 @@
 package server
 
 import (
+	"encoding/json"
+	"log"
 	"net"
 	"os"
 	"strconv"
@@ -11,6 +13,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/pausan/agenttik/app/internal/netauth"
+	"github.com/pausan/agenttik/app/internal/quicktunnel"
 	"github.com/pausan/agenttik/app/internal/store"
 )
 
@@ -39,6 +42,19 @@ type serverConfigInfo struct {
 	HasPassword bool   `json:"has_password"`
 	TOTPSecret  string `json:"totp_secret,omitempty"`
 	TOTPURI     string `json:"totp_uri,omitempty"`
+
+	Tunnel *tunnelInfo `json:"tunnel,omitempty"`
+}
+
+// tunnelInfo is the public trycloudflare.com address: whether it is wanted,
+// and what the tunnel is doing about it right now.
+type tunnelInfo struct {
+	Enabled   bool   `json:"enabled"`
+	URL       string `json:"url,omitempty"`
+	Connected bool   `json:"connected"`
+	Ready     bool   `json:"ready"`
+	Location  string `json:"location,omitempty"`
+	Error     string `json:"error,omitempty"`
 }
 
 func (s *Server) getServerConfig(c *fiber.Ctx) error {
@@ -112,7 +128,67 @@ func (s *Server) serverConfigInfo(cfg store.ServerConfig) serverConfigInfo {
 	if cfg.TOTPSecret != "" {
 		info.TOTPURI = netauth.URI(cfg.TOTPSecret, totpIssuer, totpAccount())
 	}
+	ts := s.tunnel.Status()
+	info.Tunnel = &tunnelInfo{Enabled: cfg.TunnelEnabled, URL: ts.URL, Connected: ts.Connected, Ready: ts.Ready, Location: ts.Location, Error: ts.Error}
 	return info
+}
+
+// putServerTunnel turns the public address on or off. Turning it on reuses
+// the last tunnel, so the address stays the same, unless renew asks for a new
+// one; turning it off keeps that tunnel for next time. Coming up takes
+// seconds, so this answers at once and GET /api/server follows it. Even an
+// unchanged "on" restarts the connection, which is how a failing one is
+// retried now rather than at the end of its backoff.
+func (s *Server) putServerTunnel(c *fiber.Ctx) error {
+	if s.network == nil {
+		return badRequest("nothing to configure: this is a web launch, already serving on its own address")
+	}
+	var body struct {
+		Enabled bool `json:"enabled"`
+		Renew   bool `json:"renew"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return badRequest("invalid body: %v", err)
+	}
+	// Stopped before reading: a tunnel coming up saves its credentials as it
+	// gets them, and must not write "on" back after this turns it off.
+	s.tunnel.Stop()
+	cfg, err := s.store.GetServerConfig()
+	if err != nil {
+		return err
+	}
+	if body.Renew {
+		cfg.TunnelCredentials = ""
+	}
+	cfg.TunnelEnabled = body.Enabled
+	if err := s.store.SetServerTunnel(cfg.TunnelEnabled, cfg.TunnelCredentials); err != nil {
+		return err
+	}
+	if cfg.TunnelEnabled {
+		s.startTunnel(cfg.TunnelCredentials)
+	}
+	return c.JSON(s.serverConfigInfo(cfg))
+}
+
+// startTunnel brings the tunnel up on saved, the JSON of the last one handed
+// out, or a new one when that is blank or unreadable; whichever tunnel it
+// ends up on is saved for next time.
+func (s *Server) startTunnel(saved string) {
+	var creds quicktunnel.Credentials
+	if saved != "" {
+		if err := json.Unmarshal([]byte(saved), &creds); err != nil {
+			creds = quicktunnel.Credentials{}
+		}
+	}
+	s.tunnel.Start(creds, func(fresh quicktunnel.Credentials) {
+		b, err := json.Marshal(fresh)
+		if err == nil {
+			err = s.store.SetServerTunnel(true, string(b))
+		}
+		if err != nil {
+			log.Printf("server: save tunnel: %v", err)
+		}
+	})
 }
 
 // totpIssuer is the name the authenticator app files the entry under, and

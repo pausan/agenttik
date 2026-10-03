@@ -41,6 +41,9 @@ type Manager struct {
 // desktop window's own view is already served from.
 func New(target string) *Manager { return &Manager{target: target} }
 
+// Target is the loopback address every request is proxied to.
+func (m *Manager) Target() string { return m.target }
+
 // Use puts h in front of the proxy, for every listener this manager opens
 // from here on. Call it during wiring, before Start; nothing guards the
 // field afterwards.

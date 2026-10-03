@@ -12,9 +12,11 @@ import (
 func (s *Store) GetServerConfig() (ServerConfig, error) {
 	var c ServerConfig
 	err := s.db.QueryRow(
-		`SELECT enabled, host, port, auth_enabled, password_hash, totp_secret, totp_disabled
+		`SELECT enabled, host, port, auth_enabled, password_hash, totp_secret, totp_disabled,
+		        tunnel_enabled, tunnel_credentials
 		   FROM server_config WHERE id = 1`).
-		Scan(&c.Enabled, &c.Host, &c.Port, &c.AuthEnabled, &c.PasswordHash, &c.TOTPSecret, &c.TOTPDisabled)
+		Scan(&c.Enabled, &c.Host, &c.Port, &c.AuthEnabled, &c.PasswordHash, &c.TOTPSecret, &c.TOTPDisabled,
+			&c.TunnelEnabled, &c.TunnelCredentials)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ServerConfig{}, nil
 	}
@@ -53,6 +55,20 @@ func (s *Store) SetServerAuth(c ServerConfig) error {
 		c.AuthEnabled, c.PasswordHash, c.TOTPSecret, c.TOTPDisabled)
 	if err != nil {
 		return fmt.Errorf("set server auth: %w", err)
+	}
+	return nil
+}
+
+// SetServerTunnel replaces the quick tunnel's switch and its last
+// credentials, leaving the listener and the lock alone.
+func (s *Store) SetServerTunnel(enabled bool, credentials string) error {
+	_, err := s.db.Exec(
+		`INSERT INTO server_config (id, tunnel_enabled, tunnel_credentials) VALUES (1, ?, ?)
+		 ON CONFLICT(id) DO UPDATE SET tunnel_enabled     = excluded.tunnel_enabled,
+		                               tunnel_credentials = excluded.tunnel_credentials`,
+		enabled, credentials)
+	if err != nil {
+		return fmt.Errorf("set server tunnel: %w", err)
 	}
 	return nil
 }

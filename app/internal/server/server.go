@@ -31,6 +31,7 @@ import (
 	"github.com/pausan/agenttik/app/internal/agent"
 	"github.com/pausan/agenttik/app/internal/netauth"
 	"github.com/pausan/agenttik/app/internal/netserver"
+	"github.com/pausan/agenttik/app/internal/quicktunnel"
 	"github.com/pausan/agenttik/app/internal/remote"
 	"github.com/pausan/agenttik/app/internal/runner"
 	"github.com/pausan/agenttik/app/internal/smartsearch"
@@ -79,6 +80,9 @@ type Server struct {
 	network            *netserver.Manager
 	networkDefaultHost string
 	networkDefaultPort int
+	// tunnel is the optional public trycloudflare.com address in front of
+	// that same backend and lock; nil wherever network is.
+	tunnel *quicktunnel.Client
 
 	// auth is the lock that listener can be put behind. It exists in every
 	// mode so the routes that set it up have something to call; only the
@@ -225,6 +229,7 @@ func (s *Server) routes() {
 	api.Post("/server/auth/totp", s.resetServerTOTP)
 	api.Get("/server/auth/totp.png", s.serverTOTPQR)
 	api.Get("/server/auth/code", s.serverTOTPCode)
+	api.Put("/server/tunnel", s.putServerTunnel)
 	api.Get("/orchestrator", s.getOrchestratorConfig)
 	api.Put("/orchestrator", s.putOrchestratorConfig)
 	api.Post("/orchestrator/prompt/reset", s.resetOrchestratorPrompt)
@@ -319,6 +324,9 @@ func (s *Server) Listener(ln net.Listener) error { return s.app.Listener(ln) }
 // remaining connections. The timeout is a backstop: a stuck client must never
 // keep the app alive after the window is closed.
 func (s *Server) Shutdown() error {
+	if s.tunnel != nil {
+		s.tunnel.Stop() // tell the edge first, while the backend still answers
+	}
 	s.CloseProfiles()
 	s.terminals.Shutdown()
 	s.closeOnce.Do(func() { close(s.closing); s.search.Close() })
@@ -340,6 +348,11 @@ func (s *Server) OnForeground(raise func() bool) { s.foreground = raise }
 func (s *Server) SetNetworkManager(m *netserver.Manager, defaultHost string, defaultPort int) {
 	m.Use(s.auth.Wrap)
 	s.network = m
+	version := s.version
+	if version == "" {
+		version = "dev"
+	}
+	s.tunnel = quicktunnel.New(m.Target(), s.auth.Wrap, version)
 	s.networkDefaultHost = defaultHost
 	s.networkDefaultPort = defaultPort
 }
@@ -355,10 +368,15 @@ func (s *Server) ApplyStoredNetworkConfig() {
 		return
 	}
 	cfg, err := s.store.GetServerConfig()
-	if err != nil || !cfg.Enabled {
+	if err != nil {
 		return
 	}
-	s.network.Start(net.JoinHostPort(s.withDefaults(cfg)))
+	if cfg.Enabled {
+		s.network.Start(net.JoinHostPort(s.withDefaults(cfg)))
+	}
+	if cfg.TunnelEnabled {
+		s.startTunnel(cfg.TunnelCredentials)
+	}
 }
 
 // credentials is what the gate on the exposed listener checks a login

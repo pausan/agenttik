@@ -367,6 +367,14 @@ type ServerConfig struct {
 	AuthEnabled  bool   `json:"auth_enabled"`
 	PasswordHash string `json:"-"`
 	TOTPSecret   string `json:"-"`
+
+	// The public trycloudflare.com address, a third way in that needs no
+	// open port. TunnelCredentials is the last tunnel handed out, as
+	// quicktunnel's JSON, kept so the next start can ask for the same
+	// address back; it holds that tunnel's secret and never leaves the
+	// process. See 084-quick-tunnel.md.
+	TunnelEnabled     bool   `json:"-"`
+	TunnelCredentials string `json:"-"`
 }
 
 // Session status values. Waiting is idle with a reason: the session has a

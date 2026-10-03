@@ -37,7 +37,7 @@ async function computeTestPath() {
 /* Every test gets its own server, on its own port, over its own database, so
    nothing one test adds is visible to another and they can run in parallel.
    Port 0 lets the OS pick; the server prints the URL it settled on. */
-async function startServer() {
+export async function startServer() {
   try {
     await access(BIN);
   } catch {

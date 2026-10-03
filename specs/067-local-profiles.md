@@ -1,6 +1,7 @@
 # Local profiles
 
-Profiles are local to a data directory on this computer. Settings → Profiles adds,
+Profiles are local to a data directory on this computer. Another machine's
+profiles can be listed beside them; see [085](085-remote-profiles.md). Settings → Profiles adds,
 renames, reorders, and removes profiles. Up/down buttons save the shared order
 for Settings and profile pickers, including the built-in profile. The built-in
 profile, initially named Default, holds existing data and cannot be removed. Names are trimmed, unique ignoring

@@ -542,8 +542,8 @@ func (m *remoteManager) stop() {
 // Paths that belong to this window's own instance even while it shows a
 // remote profile: the profile and remote catalogs, the window, and updates.
 func remoteStaysLocal(path string) bool {
-	for _, prefix := range []string{"/api/remotes", "/api/remote/", "/api/profiles", "/api/updates", "/api/desktop", "/api/foreground"} {
-		if path == prefix || strings.HasPrefix(path, prefix+"/") || (strings.HasSuffix(prefix, "/") && strings.HasPrefix(path, prefix)) {
+	for _, prefix := range []string{"/api/remotes", "/api/remote", "/api/profiles", "/api/updates", "/api/desktop", "/api/foreground"} {
+		if path == prefix || strings.HasPrefix(path, prefix+"/") {
 			return true
 		}
 	}
@@ -596,14 +596,13 @@ func (s *Server) routeRemote(c *fiber.Ctx) error {
 	}
 	for name, values := range res.Header {
 		switch http.CanonicalHeaderKey(name) {
-		case "Set-Cookie", "Connection", "Transfer-Encoding", "Content-Length", "Content-Encoding", "X-Agenttik-Instance", "Location":
+		case "Set-Cookie", "Connection", "Transfer-Encoding", "Content-Length", "Content-Encoding", "X-Agenttik-Instance", "X-Agenttik-Remote", "Location":
 			continue
 		}
 		for _, v := range values {
 			c.Response().Header.Add(name, v)
 		}
 	}
-	c.Set("X-Agenttik-Remote", "machine:"+r.ID)
 	if res.StatusCode == http.StatusUnauthorized {
 		c.Set("X-Agenttik-Remote-Auth", "required")
 	}

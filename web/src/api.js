@@ -8,12 +8,24 @@ let remoteInstance = "";
 let localInstance = "";
 let privateMode = false;
 let privacyKnown = false;
-export const profileID = new URLSearchParams(globalThis.location?.search || "").get("profile") || "default";
+const params = new URLSearchParams(globalThis.location?.search || "");
+export const profileID = params.get("profile") || "default";
+// A remote profile is one of another machine's profiles, reached through this
+// instance. The server keeps its own catalogs and window paths local.
+export const remoteID = params.get("remote") || "";
 
 export function apiURL(path) {
-  if (profileID === "default" || !path.startsWith("/api/")) return path;
-  return `${path}${path.includes("?") ? "&" : "?"}profile=${encodeURIComponent(profileID)}`;
+  if (!path.startsWith("/api/")) return path;
+  const query = [];
+  if (remoteID) query.push(`remote=${encodeURIComponent(remoteID)}`);
+  if (profileID !== "default") query.push(`profile=${encodeURIComponent(profileID)}`);
+  if (!query.length) return path;
+  return `${path}${path.includes("?") ? "&" : "?"}${query.join("&")}`;
 }
+
+// The remote asked for sign-in mid-use; the app shows its sign-in dialog.
+let remoteSignIn = () => {};
+export function onRemoteSignIn(fn) { remoteSignIn = fn; }
 
 export function setPrivateMode(value) { privateMode = value; privacyKnown = true; }
 
@@ -34,7 +46,7 @@ export const diagnosticStorage = {
 };
 
 export function instanceKey(key) {
-  const scope = [remoteInstance, localInstance, profileID === "default" ? "" : profileID].filter(Boolean).join(":");
+  const scope = [remoteInstance, localInstance, remoteID && `remote-${remoteID}`, profileID === "default" ? "" : profileID].filter(Boolean).join(":");
   return scope ? `${key}:${scope}` : key;
 }
 
@@ -61,6 +73,10 @@ export async function api(method, path, body) {
     // never asks for one. The session has lapsed mid-use, so the page is
     // reloaded into the login form rather than left showing a toast on a UI
     // that can no longer load anything. See specs/043-exposed-server.md.
+    if (res.status === 401 && res.headers.get("X-Agenttik-Remote-Auth")) {
+      remoteSignIn();
+      throw new Error("Sign in to the remote machine");
+    }
     if (res.status === 401) {
       window.location.reload();
       throw new Error("Signed out");

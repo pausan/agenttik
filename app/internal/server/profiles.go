@@ -255,8 +255,14 @@ func (s *Server) listProfiles(c *fiber.Ctx) error {
 		Profile
 		Busy bool `json:"busy"`
 	}
+	// The picker heads this machine's profiles with its name once remote
+	// machines are listed beside them.
+	name, err := s.store.ServerName()
+	if err != nil {
+		return err
+	}
 	if s.profiles == nil {
-		return c.JSON(fiber.Map{"profiles": []profileStatus{{Profile: Profile{ID: "default", Name: "Default"}, Busy: s.runner.Busy()}}, "private": false})
+		return c.JSON(fiber.Map{"profiles": []profileStatus{{Profile: Profile{ID: "default", Name: "Default"}, Busy: s.runner.Busy()}}, "private": false, "name": name})
 	}
 	// routeProfile already holds the read lock for this request.
 	profiles := make([]profileStatus, 0, len(s.profiles.profiles))
@@ -267,7 +273,7 @@ func (s *Server) listProfiles(c *fiber.Ctx) error {
 		}
 		profiles = append(profiles, profileStatus{Profile: p, Busy: r.Busy()})
 	}
-	return c.JSON(fiber.Map{"profiles": profiles, "private": s.profiles.private})
+	return c.JSON(fiber.Map{"profiles": profiles, "private": s.profiles.private, "name": name})
 }
 
 func (s *Server) createProfile(c *fiber.Ctx) error {

@@ -1,12 +1,12 @@
 import { recordError } from "./diagnostics.js";
-import { diagnosticStorage } from "./api";
+import { diagnosticStorage, remoteID } from "./api";
 import { createApp } from "vue";
 import { createRouter, createWebHistory } from "vue-router";
 import { _api as iconApi } from "@iconify/vue";
 import ui from "@nuxt/ui/vue-plugin";
 
 import { loadColorMode } from "./color-mode";
-import { loadProfiles } from "./profiles";
+import { checkRemote, loadProfiles } from "./profiles";
 import { needsCSSScrollbars } from "./platform";
 import App from "./App.vue";
 import { loadColors } from "./store";
@@ -36,7 +36,9 @@ const router = createRouter({
 document.documentElement.classList.toggle("desktop-linux", needsCSSScrollbars());
 window.addEventListener("error", event => recordError(event.error, { source: "runtime" }, diagnosticStorage));
 window.addEventListener("unhandledrejection", event => recordError(event.reason, { source: "promise" }, diagnosticStorage));
-loadProfiles().then(() => {
+// A window on a remote profile checks that machine first. If it does not
+// answer, App shows the remote dialog instead of loading the workspace.
+loadProfiles().then(() => remoteID && checkRemote(remoteID, true)).then(() => {
   loadColorMode();
   loadColors();
   const app = createApp(App).use(router).use(ui);

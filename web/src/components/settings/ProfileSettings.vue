@@ -1,7 +1,8 @@
 <script setup>
 import { computed, ref, watchEffect } from "vue";
-import { api, profileID } from "../../api";
-import { profiles, loadProfiles, switchProfile } from "../../profiles";
+import { api, remoteID } from "../../api";
+import { checkRemote, isCurrentProfile, profiles, loadProfiles, switchProfile } from "../../profiles";
+import ProfileIcon from "../ProfileIcon.vue";
 import { fail } from "../../store";
 import { fuzzyAny } from "../../fuzzy";
 
@@ -12,7 +13,12 @@ const busy = ref(false);
 const removing = ref(null);
 const editing = ref(null);
 const draft = ref("");
-const show = computed(() => fuzzyAny(["profiles", "local", "add", "rename", "edit", "remove", "order", "reorder", ...profiles.items.map(p => p.name)], props.filter) !== null);
+const address = ref("");
+const removingRemote = ref(null);
+const show = computed(() => fuzzyAny([
+  "profiles", "local", "add", "rename", "edit", "remove", "order", "reorder", "remote", "machine", "network",
+  ...profiles.items.map(p => p.name), ...profiles.remotes.flatMap(r => [r.name, ...r.profiles.map(p => p.name)]),
+], props.filter) !== null);
 watchEffect(() => emit("count", show.value ? 1 : 0));
 
 function startEdit(p) {
@@ -57,13 +63,35 @@ async function add() {
   } catch (e) { fail(e); }
   finally { busy.value = false; }
 }
+// A machine that wants a password opens the sign-in dialog over Settings.
+async function addRemote() {
+  busy.value = true;
+  try {
+    const state = await api("POST", "/api/remotes", { address: address.value });
+    address.value = "";
+    await loadProfiles();
+    if (state.status !== "ok") profiles.connecting = { remote: state.remote.id, profile: null, state, current: false, shown: true };
+  } catch (e) { fail(e); }
+  finally { busy.value = false; }
+}
+async function removeRemote() {
+  busy.value = true;
+  try {
+    const id = removingRemote.value.id;
+    await api("DELETE", `/api/remotes/${encodeURIComponent(id)}`);
+    removingRemote.value = null;
+    if (id === remoteID) switchProfile("default");
+    else await loadProfiles();
+  } catch (e) { fail(e); }
+  finally { busy.value = false; }
+}
 async function remove() {
   busy.value = true;
   try {
     const id = removing.value.id;
     await api("DELETE", `/api/profiles/${id}`);
     removing.value = null;
-    if (id === profileID) switchProfile("default");
+    if (isCurrentProfile(id)) switchProfile("default");
     else await loadProfiles();
   } catch (e) { fail(e); }
   finally { busy.value = false; }
@@ -104,11 +132,41 @@ async function remove() {
           @click="startEdit(p)"
         />
       </template>
-      <span v-if="p.id === profileID" class="text-xs text-dimmed">Current</span>
+      <span v-if="isCurrentProfile(p.id)" class="text-xs text-dimmed">Current</span>
       <UButton v-else color="neutral" variant="ghost" label="Switch" :aria-label="`Switch to ${p.name}`" @click="switchProfile(p.id)" />
       <UButton v-if="p.id !== 'default'" color="error" variant="ghost" icon="i-lucide-trash-2" :aria-label="`Remove ${p.name}`" :disabled="busy" @click="removing = p" />
     </div>
     <p class="mt-2 text-xs text-dimmed">The built-in profile cannot be removed.</p>
+
+    <div class="mt-6 mb-1 font-semibold text-highlighted">Remote machines</div>
+    <p class="mb-4 text-xs text-dimmed">List the profiles of another agenttik on your network beside these. Their tasks run on that machine, and this computer keeps the sign-in. A machine is contacted only when you open or check one of its profiles; if it moved, it can be found again by its machine ID. Profiles are managed on their own machine.</p>
+    <form class="mb-4 flex gap-2" @submit.prevent="addRemote">
+      <UInput v-model="address" placeholder="host:7717" aria-label="Remote address" class="min-w-0 flex-1" />
+      <UButton type="submit" label="Add machine" :disabled="!address.trim() || busy" :loading="busy" />
+    </form>
+    <div v-for="r in profiles.remotes" :key="r.id" class="border-t border-default py-2">
+      <div class="flex items-center gap-2">
+        <ProfileIcon remote />
+        <div class="min-w-0 flex-1">
+          <div class="truncate font-medium">{{ r.name }}</div>
+          <div class="truncate text-xs text-dimmed">{{ r.address }}<template v-if="r.version"> · agenttik {{ r.version }}</template></div>
+        </div>
+        <UButton color="neutral" variant="ghost" icon="i-lucide-refresh-cw" :aria-label="`Check ${r.name}`" title="Check the machine and refresh its profiles" :disabled="busy" @click="checkRemote(r.id)" />
+        <UButton color="error" variant="ghost" icon="i-lucide-trash-2" :aria-label="`Remove ${r.name}`" :disabled="busy" @click="removingRemote = r" />
+      </div>
+      <div v-for="p in r.profiles" :key="p.id" class="ml-7 flex items-center gap-2 py-1">
+        <span class="min-w-0 flex-1 truncate text-sm">{{ p.name }}</span>
+        <span v-if="isCurrentProfile(p.id, r.id)" class="text-xs text-dimmed">Current</span>
+        <UButton v-else color="neutral" variant="ghost" label="Switch" :aria-label="`Switch to ${r.name} ${p.name}`" @click="switchProfile(p.id, r.id)" />
+      </div>
+    </div>
+    <UModal :open="!!removingRemote" title="Remove remote machine?" @update:open="v => { if (!v && !busy) removingRemote = null; }">
+      <template #body><p>Stop listing {{ removingRemote?.name }} and forget its sign-in? Its profiles and tasks stay on that machine.</p></template>
+      <template #footer>
+        <UButton color="neutral" variant="ghost" label="Cancel" :disabled="busy" @click="removingRemote = null" />
+        <UButton color="error" label="Remove machine" :loading="busy" @click="removeRemote" />
+      </template>
+    </UModal>
     <UModal :open="!!removing" title="Remove profile?" @update:open="v => { if (!v && !busy) removing = null; }">
       <template #body><p>Remove {{ removing?.name }} and all its tasks, history, and settings? Running tasks will stop. Project files stay on disk. This cannot be undone.</p></template>
       <template #footer>

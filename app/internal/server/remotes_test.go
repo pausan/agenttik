@@ -64,7 +64,8 @@ func TestRemoteProfilesForwardAPIAndPersist(t *testing.T) {
 		t.Fatal("remote project listed locally")
 	}
 	// The catalog and the window stay on this machine.
-	if got := projects("/api/profiles?remote=" + id + "&profile=default"); !strings.Contains(got, `"private":false`) {
+	localName, _ := localStore.ServerName()
+	if got := projects("/api/profiles?remote=" + id + "&profile=default"); !strings.Contains(got, `"name":"`+localName+`"`) {
 		t.Fatalf("profiles left this machine: %s", got)
 	}
 	resp = do(t, local, "GET", "/api/projects?remote=unknown", nil)

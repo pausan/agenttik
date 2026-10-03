@@ -27,8 +27,8 @@ import InspectorPanel from "./components/InspectorPanel.vue";
 import Splitter from "./components/Splitter.vue";
 import { MOBILE_QUERY } from "./ui";
 import { MACOS } from "./platform";
-import { switchAdjacentProfile } from "./profiles";
-import { storage } from "./api";
+import { checkRemote, profiles, switchAdjacentProfile } from "./profiles";
+import { onRemoteSignIn, remoteID, storage } from "./api";
 import { readTour, saveTour } from "./quick-start-state";
 
 /* Everything below is reached by a click or a chord, never by the first
@@ -65,6 +65,8 @@ const settingsSection = ref("general");
 const commandPalette = ref(false);
 const remoteConnect = ref(false);
 const RemoteConnectModal = defineAsyncComponent(() => import("./components/RemoteConnectModal.vue"));
+const RemoteProfileDialog = defineAsyncComponent(() => import("./components/RemoteProfileDialog.vue"));
+onRemoteSignIn(() => checkRemote(remoteID, true));
 const goToFile = ref(false);
 const sideBar = ref(null);
 const mainPanel = ref(null);
@@ -232,12 +234,15 @@ function run(e, action) {
 }
 
 onMounted(() => {
-  const showSpinner = setTimeout(() => (bootSpinner.value = true), 1000);
-  init().finally(() => {
-    clearTimeout(showSpinner);
-    bootSpinner.value = false;
-    tour.value = readTour(storage);
-  });
+  // The remote this window shows did not answer; its dialog reloads once it does.
+  if (!profiles.connecting?.current) {
+    const showSpinner = setTimeout(() => (bootSpinner.value = true), 1000);
+    init().finally(() => {
+      clearTimeout(showSpinner);
+      bootSpinner.value = false;
+      tour.value = readTour(storage);
+    });
+  }
   window.addEventListener("keydown", onKey);
   media.addEventListener("change", changeLayout);
   window.visualViewport?.addEventListener("resize", resizeViewport);
@@ -342,6 +347,7 @@ onUnmounted(() => {
     <QuickStartTour v-if="tour.open" v-model:step="tour.step" :setup-open="settings || addProject" :mobile="mobile" @close="tour.open = false" />
     <GoToFileModal v-if="goToFile" v-model:open="goToFile" />
     <RemoteConnectModal v-if="remoteConnect" v-model:open="remoteConnect" />
+    <RemoteProfileDialog v-if="profiles.connecting?.state && profiles.connecting.state.status !== 'ok'" />
     <AnalyticsPage v-if="analytics" v-model:open="analytics" />
     <CommandPaletteModal
       v-if="commandPalette"

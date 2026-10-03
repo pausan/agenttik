@@ -1,7 +1,8 @@
 # Remote connections
 
 `agenttik --remote host:port` opens a desktop client for another agenttik
-server. HTTP(S) origins are also accepted, including bracketed IPv6 hosts.
+server. To keep the local instance open and add another machine's profiles to
+its picker instead, see [085](085-remote-profiles.md). HTTP(S) origins are also accepted, including bracketed IPv6 hosts.
 A bare address uses HTTP. Paths, query strings, fragments and embedded
 credentials are rejected. Use HTTPS when a TLS proxy fronts the server.
 
@@ -67,8 +68,11 @@ remain supported; the connection preview uses their address.
 `GET /api/version` returns JSON:
 
 ```json
-{"application":"agenttik","version":"1.2.3","name":"agenttik-a1b2c3d4"}
+{"application":"agenttik","version":"1.2.3","name":"agenttik-a1b2c3d4","id":"5f0c…"}
 ```
+
+`id` is the machine ID: 32 random hexadecimal digits made once per data
+directory and never changed. Servers older than it omit the field.
 
 The version is the same build value as `--version` (`dev` in unversioned
 builds). This endpoint is public even when the exposed listener requires

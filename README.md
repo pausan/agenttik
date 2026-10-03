@@ -66,6 +66,11 @@ URL), or choose **Connect to remote server** in the command palette. The
 client checks `/api/version` first, then shows the server’s login if needed.
 See [remote connections](specs/064-remote-connections.md).
 
+To keep your local profiles and also open another machine's, add the machine
+in **Settings → Profiles → Remote machines**. Its profiles then appear in the
+profile picker under the machine's name. See
+[remote profiles](specs/085-remote-profiles.md).
+
 Start a temporary, separate instance with `agenttik --private`. Its app data is
 removed on exit; project files stay on disk. Manage local profiles in
 **Settings → Profiles**. With multiple profiles, the picker before Shortcuts

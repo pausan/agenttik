@@ -4,8 +4,7 @@
    the Tasks pane is time-windowed and also includes archived sessions. */
 import { computed, ref, watch } from "vue";
 
-import { profileID } from "../api";
-import { profiles, loadProfiles, switchProfile } from "../profiles";
+import { allProfiles, isCurrentProfile, loadProfiles, switchProfile } from "../profiles";
 import { fuzzy, fuzzyAny, segments } from "../fuzzy";
 
 import {
@@ -82,12 +81,12 @@ const activeTasks = computed(() =>
   ),
 );
 
-const profileItems = computed(() => profiles.items
-  .filter((profile) => profile.id !== profileID)
+const profileItems = computed(() => allProfiles()
+  .filter((profile) => !isCurrentProfile(profile.id, profile.remote))
   .map((profile) => ({
-    label: `Switch to profile: ${profile.name}`,
-    icon: "i-lucide-user-round",
-    onSelect: () => choose(() => switchProfile(profile.id)),
+    label: `Switch to profile: ${profile.remote ? `${profile.machine} › ` : ""}${profile.name}`,
+    icon: profile.remote ? "i-lucide-wifi" : "i-lucide-user-round",
+    onSelect: () => choose(() => switchProfile(profile.id, profile.remote)),
   })),
 );
 

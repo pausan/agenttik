@@ -11,11 +11,12 @@ import {
   startTask,
   updateProjectPath,
 } from "../store";
-import { profileID } from "../api";
+import { profileID, remoteID } from "../api";
 import { loadProfiles, profiles } from "../profiles";
 import FolderPicker from "./FolderPicker.vue";
 
-const destinations = computed(() => profiles.items
+// Projects move between this computer's profiles only.
+const destinations = computed(() => remoteID ? [] : profiles.items
   .filter((p) => p.id !== profileID)
   .map((p) => ({ label: p.name, value: p.id })));
 const destination = ref("");

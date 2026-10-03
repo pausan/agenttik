@@ -150,6 +150,11 @@ type streamParser struct {
 	contextTokens   int64
 	contextWindow   int64
 	done            bool
+	// calls are tool calls that start or stop background work, by call id,
+	// until they return. tasks are the background work they started, by the
+	// shell or agent id Copilot gave it.
+	calls map[string]*agent.BackgroundTask
+	tasks map[string]*agent.BackgroundTask
 }
 
 func parse(r io.Reader, parser *streamParser, out chan<- agent.Event) {
@@ -281,6 +286,7 @@ func (p *streamParser) handleLine(line []byte, out chan<- agent.Event) {
 		out <- agent.Event{Type: agent.EventToolUse, Tool: &agent.ToolEvent{
 			ID: data.ToolCallID, Name: name, Input: rawText(data.Arguments),
 		}}
+		p.startCall(data)
 	case "tool.execution_complete":
 		var data toolExecutionComplete
 		if !unmarshalData(env.Data, &data) {
@@ -297,6 +303,12 @@ func (p *streamParser) handleLine(line []byte, out chan<- agent.Event) {
 		out <- agent.Event{Type: agent.EventToolResult, Tool: &agent.ToolEvent{
 			ID: data.ToolCallID, Output: output, IsError: isError,
 		}}
+		p.finishCall(data.ToolCallID, !isError, output, out)
+	case "system.notification":
+		var data systemNotification
+		if unmarshalData(env.Data, &data) {
+			p.notified(data, out)
+		}
 	case "session.idle":
 		p.done = true
 		out <- agent.Event{Type: agent.EventDone, Usage: p.doneUsage()}

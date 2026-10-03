@@ -114,7 +114,35 @@ const (
 	// EventApprovalResolved says an approval no longer waits: it was answered,
 	// or the provider withdrew it. Approval carries only the ID.
 	EventApprovalResolved EventType = "approval_resolved"
+	// EventBackground reports a background task the agent started or that
+	// changed: a shell or a subagent the agent moved on from while it runs.
+	// Background carries the task's whole state, so the latest event wins.
+	EventBackground EventType = "background"
 )
+
+// BackgroundTask is one shell or subagent running behind the agent's back.
+// Times are Unix milliseconds. See specs/083-background-tasks.md.
+type BackgroundTask struct {
+	ID          string `json:"id"`
+	Kind        string `json:"kind"` // "shell" or "agent"
+	Description string `json:"description,omitempty"`
+	// Status is "running" until the task ends, then "completed", "failed"
+	// or "stopped".
+	Status    string `json:"status"`
+	StartedAt int64  `json:"started_at"`
+	EndedAt   int64  `json:"ended_at,omitempty"`
+	// Summary is the provider's one-line account of how it ended.
+	Summary string `json:"summary,omitempty"`
+	// OutputFile is where the task's output is written, when the provider
+	// says so.
+	OutputFile string `json:"output_file,omitempty"`
+}
+
+// BackgroundEvent reports t as it stands. t is copied, so the provider can go
+// on changing its own.
+func BackgroundEvent(t BackgroundTask) Event {
+	return Event{Type: EventBackground, Background: &t}
+}
 
 // RateLimitWindow is one rolling subscription allowance window, exactly as the
 // provider reports it. agenttik never estimates an allowance from token totals.
@@ -191,6 +219,8 @@ type Event struct {
 	ProviderSessionID string `json:"provider_session_id,omitempty"`
 	// Approval is set on approval and approval_resolved events.
 	Approval *Approval `json:"approval,omitempty"`
+	// Background is set on background events.
+	Background *BackgroundTask `json:"background,omitempty"`
 }
 
 // Approval is one request a running turn waits on the user for: a tool call to

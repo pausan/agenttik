@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -81,6 +82,10 @@ type Runner struct {
 	sched          map[int64]*sync.Mutex       // project id -> serializes queue dispatch
 	forced         map[string]int64            // session id -> queued message to run next
 	approvals      map[string]*PendingApproval // approval id -> tool call waiting on the user
+	// backgroundTasks are what each running turn has left working behind it,
+	// by session id, then task id. They die with the turn's process, so they
+	// live here and not in the store. See 083-background-tasks.md.
+	backgroundTasks map[string]map[string]agent.BackgroundTask
 
 	// forcedScheduleRuns marks a session started by RunScheduleNow: its run
 	// spends no counter when it finishes, since asking for an extra run by
@@ -99,7 +104,8 @@ func New(s *store.Store, reg *agent.Registry, hub *Hub) *Runner {
 	return &Runner{store: s, registry: reg, hub: hub, lifetime: ctx, cancelLifetime: cancel,
 		active: make(map[string]activeTurn), sched: make(map[int64]*sync.Mutex),
 		forced: make(map[string]int64), forcedScheduleRuns: make(map[string]bool),
-		approvals: make(map[string]*PendingApproval)}
+		approvals:       make(map[string]*PendingApproval),
+		backgroundTasks: make(map[string]map[string]agent.BackgroundTask)}
 }
 
 func (r *Runner) Hub() *Hub { return r.hub }
@@ -218,6 +224,19 @@ func (r *Runner) Running(sessionID string) bool {
 	defer r.mu.Unlock()
 	_, ok := r.active[sessionID]
 	return ok
+}
+
+// BackgroundTasks lists what the session's running turn has left working,
+// oldest first, finished ones included until the turn ends.
+func (r *Runner) BackgroundTasks(sessionID string) []agent.BackgroundTask {
+	r.mu.Lock()
+	out := make([]agent.BackgroundTask, 0, len(r.backgroundTasks[sessionID]))
+	for _, t := range r.backgroundTasks[sessionID] {
+		out = append(out, t)
+	}
+	r.mu.Unlock()
+	slices.SortFunc(out, func(a, b agent.BackgroundTask) int { return int(a.StartedAt - b.StartedAt) })
+	return out
 }
 
 // Send starts a turn. It returns as soon as the provider process is up; the
@@ -769,6 +788,16 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 			if ev.Approval == nil || !r.withdrawApproval(ev.Approval.ID) {
 				continue
 			}
+		case agent.EventBackground:
+			if ev.Background == nil {
+				continue
+			}
+			r.mu.Lock()
+			if r.backgroundTasks[sess.ID] == nil {
+				r.backgroundTasks[sess.ID] = make(map[string]agent.BackgroundTask)
+			}
+			r.backgroundTasks[sess.ID][ev.Background.ID] = *ev.Background
+			r.mu.Unlock()
 		}
 		out := Event{SessionID: sess.ID, ProjectID: sess.ProjectID, TurnID: turn.ID, Event: ev}
 		r.hub.Publish(sess.ID, out)
@@ -779,6 +808,9 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 	}
 	flushText()
 	r.dropApprovals(sess.ID)
+	r.mu.Lock()
+	delete(r.backgroundTasks, sess.ID)
+	r.mu.Unlock()
 
 	turn.Status = "ok"
 	sessionStatus := store.StatusIdle

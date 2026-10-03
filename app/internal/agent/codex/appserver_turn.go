@@ -117,7 +117,23 @@ type appServerRun struct {
 	streamed    map[string]bool
 	activeTurns map[string]string
 	lastErr     string
+	// commands are the root thread's shell commands still running, by item
+	// id. One becomes a background task when the agent moves on without it.
+	commands map[string]*runningCommand
 }
+
+type runningCommand struct {
+	task       agent.BackgroundTask
+	background bool
+}
+
+// backgroundAfter is how long a command must have run before the agent moving
+// on makes it a background task. Calls made in parallel start within
+// milliseconds of each other and stay foreground.
+const backgroundAfter = time.Second
+
+// now is the clock background tasks are timed by; tests replace it.
+var now = time.Now
 
 func serveAppServer(
 	ctx context.Context,
@@ -423,6 +439,11 @@ func (r *appServerRun) handleNotification(
 		r.handleItem(params.ThreadID, params.Item, false)
 	case "item/completed":
 		r.handleItem(params.ThreadID, params.Item, true)
+	case "item/commandExecution/terminalInteraction":
+		// The agent is polling a command it left running.
+		if c := r.commands[params.ItemID]; c != nil && params.ThreadID == r.rootID {
+			r.toBackground(c)
+		}
 	case "error":
 		if params.ThreadID == r.rootID && !params.WillRetry {
 			r.lastErr = params.Error.Message
@@ -468,8 +489,21 @@ func (r *appServerRun) handleItem(threadID string, item appServerItem, completed
 	}
 
 	if !completed {
+		// Anything the agent starts while a command runs means it stopped
+		// waiting for that command.
+		at := now()
+		for _, c := range r.commands {
+			if !c.background && at.Sub(time.UnixMilli(c.task.StartedAt)) >= backgroundAfter {
+				r.toBackground(c)
+			}
+		}
 		switch item.Type {
 		case "commandExecution":
+			if r.commands == nil {
+				r.commands = make(map[string]*runningCommand)
+			}
+			r.commands[item.ID] = &runningCommand{task: agent.BackgroundTask{ID: item.ID,
+				Kind: "shell", Description: item.Command, Status: "running", StartedAt: at.UnixMilli()}}
 			r.out <- agent.Event{Type: agent.EventToolUse, Tool: &agent.ToolEvent{
 				ID: item.ID, Name: "shell", Input: item.Command,
 			}}
@@ -504,6 +538,19 @@ func (r *appServerRun) handleItem(threadID string, item appServerItem, completed
 		r.out <- agent.Event{Type: agent.EventToolResult, Tool: &agent.ToolEvent{
 			ID: item.ID, Output: item.AggregatedOutput, IsError: appItemFailed(item),
 		}}
+		if c := r.commands[item.ID]; c != nil {
+			delete(r.commands, item.ID)
+			if c.background {
+				c.task.Status, c.task.EndedAt = "completed", now().UnixMilli()
+				if appItemFailed(item) {
+					c.task.Status = "failed"
+				}
+				if item.ExitCode != nil {
+					c.task.Summary = fmt.Sprintf("exit code %d", *item.ExitCode)
+				}
+				r.out <- agent.BackgroundEvent(c.task)
+			}
+		}
 	case "mcpToolCall", "dynamicToolCall", "webSearch":
 		r.out <- agent.Event{Type: agent.EventToolResult, Tool: &agent.ToolEvent{
 			ID: item.ID, Output: appToolOutput(item), IsError: appItemFailed(item),
@@ -512,6 +559,13 @@ func (r *appServerRun) handleItem(threadID string, item appServerItem, completed
 		r.out <- agent.Event{Type: agent.EventToolResult, Tool: &agent.ToolEvent{
 			ID: item.ID, Output: item.Status, IsError: appItemFailed(item),
 		}}
+	}
+}
+
+func (r *appServerRun) toBackground(c *runningCommand) {
+	if !c.background {
+		c.background = true
+		r.out <- agent.BackgroundEvent(c.task)
 	}
 }
 

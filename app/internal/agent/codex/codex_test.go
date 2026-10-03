@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pausan/agenttik/app/internal/agent"
 )
@@ -191,5 +192,57 @@ func TestAppServerNotificationsKeepChildOutOfRootContext(t *testing.T) {
 		usage.SubagentInputTokens != 40 || usage.InputTokens != 70 ||
 		usage.SubagentCount != 1 {
 		t.Errorf("done usage = %+v", usage)
+	}
+}
+
+// A command still running when the agent moves on, as unified exec does once
+// a command outlives its yield time, is a background task until it exits.
+// Calls started together stay foreground.
+func TestAppServerCommandLeftRunningIsBackground(t *testing.T) {
+	clock := time.UnixMilli(1_000_000)
+	now = func() time.Time { return clock }
+	defer func() { now = time.Now }()
+	out := make(chan agent.Event, 32)
+	run := appServerRun{out: out, rootID: "t"}
+	notify := func(method, params string) {
+		t.Helper()
+		if _, err := run.handleNotification(method, json.RawMessage(params)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	background := func() []agent.BackgroundTask {
+		var got []agent.BackgroundTask
+		for {
+			select {
+			case ev := <-out:
+				if ev.Type == agent.EventBackground {
+					got = append(got, *ev.Background)
+				}
+			default:
+				return got
+			}
+		}
+	}
+
+	notify("item/started", `{"threadId":"t","item":{"type":"commandExecution","id":"c1","command":"make test","status":"inProgress"}}`)
+	notify("item/started", `{"threadId":"t","item":{"type":"commandExecution","id":"c2","command":"ls","status":"inProgress"}}`)
+	notify("item/completed", `{"threadId":"t","item":{"type":"commandExecution","id":"c2","command":"ls","status":"completed","exitCode":0}}`)
+	if got := background(); len(got) != 0 {
+		t.Fatalf("parallel calls became background: %+v", got)
+	}
+
+	clock = clock.Add(2 * time.Second)
+	notify("item/started", `{"threadId":"t","item":{"type":"agentMessage","id":"m1"}}`)
+	got := background()
+	if len(got) != 1 || got[0].ID != "c1" || got[0].Kind != "shell" || got[0].Status != "running" ||
+		got[0].Description != "make test" || got[0].StartedAt != 1_000_000 {
+		t.Fatalf("left running = %+v", got)
+	}
+
+	clock = clock.Add(3 * time.Second)
+	notify("item/completed", `{"threadId":"t","item":{"type":"commandExecution","id":"c1","command":"make test","status":"completed","exitCode":2}}`)
+	got = background()
+	if len(got) != 1 || got[0].Status != "failed" || got[0].EndedAt != 1_005_000 || got[0].Summary != "exit code 2" {
+		t.Fatalf("finished = %+v", got)
 	}
 }

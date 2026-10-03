@@ -438,3 +438,44 @@ func TestDeclinedQuestionDenies(t *testing.T) {
 		t.Errorf("declined question = %v", result)
 	}
 }
+
+// Background tasks are reported as the CLI announces them: once listed, again
+// when they end, and with the summary and output file the notification
+// brings. A subagent the agent waits on is not one.
+func TestParseReportsBackgroundTasks(t *testing.T) {
+	p := streamParser{subagents: map[string]struct{}{}}
+	out := make(chan agent.Event, 16)
+	for _, l := range []string{
+		`{"type":"system","subtype":"task_started","task_id":"a1","task_type":"local_agent","description":"explore","is_backgrounded":false}`,
+		`{"type":"system","subtype":"background_tasks_changed","tasks":[{"task_id":"b1","task_type":"local_bash","description":"sleep 4; echo done"}]}`,
+		`{"type":"system","subtype":"task_started","task_id":"b1","tool_use_id":"toolu_1","description":"sleep 4; echo done","is_backgrounded":true,"task_type":"local_bash"}`,
+		`{"type":"system","subtype":"background_tasks_changed","tasks":[]}`,
+		`{"type":"system","subtype":"task_updated","task_id":"b1","patch":{"status":"completed","end_time":1791011226631}}`,
+		`{"type":"system","subtype":"task_notification","task_id":"b1","tool_use_id":"toolu_1","status":"completed","output_file":"/tmp/b1.output","summary":"Background command \"sleep 4; echo done\" completed (exit code 0)"}`,
+	} {
+		p.handleLine([]byte(l), out)
+	}
+	close(out)
+	var got []agent.BackgroundTask
+	for ev := range out {
+		if ev.Type == agent.EventBackground {
+			got = append(got, *ev.Background)
+		}
+	}
+	if len(got) != 4 {
+		t.Fatalf("got %d background events, want 4: %+v", len(got), got)
+	}
+	first := got[0]
+	if first.ID != "b1" || first.Kind != "shell" || first.Status != "running" ||
+		first.Description != "sleep 4; echo done" || first.StartedAt == 0 || first.EndedAt != 0 {
+		t.Errorf("started = %+v", first)
+	}
+	if got[1].Status != "completed" || got[1].EndedAt == 0 {
+		t.Errorf("left the list = %+v", got[1])
+	}
+	last := got[3]
+	if last.Status != "completed" || last.EndedAt != 1791011226631 || last.StartedAt != first.StartedAt ||
+		last.OutputFile != "/tmp/b1.output" || !strings.Contains(last.Summary, "exit code 0") {
+		t.Errorf("finished = %+v", last)
+	}
+}

@@ -13,6 +13,7 @@ import {
 import { turnSummary } from "../api";
 import { tabScroll, vTabScroll } from "../tab-scroll";
 import ApprovalCard from "./ApprovalCard.vue";
+import BackgroundTasks from "./BackgroundTasks.vue";
 import Message from "./Message.vue";
 import ModelSelection from "./ModelSelection.vue";
 import ToolGroup from "./ToolGroup.vue";
@@ -380,6 +381,7 @@ watch(
         <span aria-hidden="true">{{ clockFace }}</span>
         <span>{{ !approvals.length ? "Working" : approvals.some((a) => a.questions?.length) ? "Waiting for your answer" : "Waiting for approval" }} ({{ elapsedLabel }})</span>
       </div>
+      <BackgroundTasks v-if="S.detail.running && S.detail.background?.length" :tasks="S.detail.background" :now="now" />
 
       <!-- A prompt that is only waiting is still shown where it will run, so
            clicking into a session tells you what is coming. The dashed bubble

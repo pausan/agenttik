@@ -664,3 +664,29 @@ func TestProjectMoveExcludesTurnStarts(t *testing.T) {
 		t.Fatal("turn start stayed blocked")
 	}
 }
+
+// A turn's background tasks are listed while it runs, latest state winning,
+// and gone once it ends.
+func TestBackgroundTasksLastAsLongAsTheTurn(t *testing.T) {
+	fp := &fakeProvider{gate: make(chan struct{}), script: []agent.Event{
+		agent.BackgroundEvent(agent.BackgroundTask{ID: "b2", Kind: "agent", Status: "running", StartedAt: 20}),
+		agent.BackgroundEvent(agent.BackgroundTask{ID: "b1", Kind: "shell", Status: "running", StartedAt: 10}),
+		agent.BackgroundEvent(agent.BackgroundTask{ID: "b1", Kind: "shell", Status: "completed", StartedAt: 10, EndedAt: 30}),
+	}}
+	r, _, sess := setup(t, fp)
+	if _, err := r.Send(sess.ID, "hi"); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	waitFor(t, func() bool {
+		got := r.BackgroundTasks(sess.ID)
+		return len(got) == 2 && got[0].Status == "completed"
+	}, "background tasks")
+	if got := r.BackgroundTasks(sess.ID); got[0].ID != "b1" || got[1].ID != "b2" {
+		t.Errorf("order = %+v", got)
+	}
+	close(fp.gate)
+	waitFor(t, func() bool { return !r.Running(sess.ID) }, "turn to finish")
+	if got := r.BackgroundTasks(sess.ID); len(got) != 0 {
+		t.Errorf("after the turn = %+v", got)
+	}
+}

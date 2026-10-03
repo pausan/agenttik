@@ -255,7 +255,10 @@ type streamParser struct {
 	// background is how many background tasks are still running. While any
 	// are, a result does not end the turn: the CLI wakes the agent when one
 	// finishes and it replies again, as long as stdin is open.
-	background    int
+	background int
+	// tasks are the background tasks this turn started, by task id, as last
+	// reported to the runner.
+	tasks         map[string]*agent.BackgroundTask
 	total         usage
 	main          usage
 	subagentsUsed usage
@@ -295,6 +298,32 @@ func (p *streamParser) handleLine(line []byte, out chan<- agent.Event) {
 			}
 		case "background_tasks_changed":
 			p.background = len(env.Tasks)
+			p.backgroundChanged(env.Tasks, out)
+		case "task_started":
+			if env.IsBackgrounded {
+				p.startTask(backgroundTask{env.TaskID, env.TaskType, env.Description}, out)
+			}
+		case "task_updated":
+			if t := p.tasks[env.TaskID]; t != nil && env.Patch != nil {
+				if env.Patch.Status != "" {
+					t.Status = taskStatus(env.Patch.Status)
+				}
+				if env.Patch.EndTime > 0 {
+					t.EndedAt = env.Patch.EndTime
+				}
+				out <- agent.BackgroundEvent(*t)
+			}
+		case "task_notification":
+			if t := p.tasks[env.TaskID]; t != nil {
+				if env.Status != "" {
+					t.Status = taskStatus(env.Status)
+				}
+				if t.EndedAt == 0 && t.Status != "running" {
+					t.EndedAt = time.Now().UnixMilli()
+				}
+				t.Summary, t.OutputFile = env.Summary, env.OutputFile
+				out <- agent.BackgroundEvent(*t)
+			}
 		}
 	case "stream_event":
 		handleStreamEvent(env.Event, out)
@@ -375,6 +404,53 @@ func (p *streamParser) handleLine(line []byte, out chan<- agent.Event) {
 			p.host.close()
 		}
 	}
+}
+
+// backgroundChanged reconciles the CLI's list of running background tasks
+// with ours: a new one has started, and one that left the list has ended. How
+// it ended follows in task_notification.
+func (p *streamParser) backgroundChanged(running []backgroundTask, out chan<- agent.Event) {
+	listed := make(map[string]bool, len(running))
+	for _, bt := range running {
+		listed[bt.TaskID] = true
+		p.startTask(bt, out)
+	}
+	for id, t := range p.tasks {
+		if !listed[id] && t.Status == "running" {
+			t.Status, t.EndedAt = "completed", time.Now().UnixMilli()
+			out <- agent.BackgroundEvent(*t)
+		}
+	}
+}
+
+// startTask reports a background task the first time it is seen.
+func (p *streamParser) startTask(bt backgroundTask, out chan<- agent.Event) {
+	if bt.TaskID == "" || p.tasks[bt.TaskID] != nil {
+		return
+	}
+	if p.tasks == nil {
+		p.tasks = make(map[string]*agent.BackgroundTask)
+	}
+	kind := "agent"
+	if bt.TaskType == "local_bash" {
+		kind = "shell"
+	}
+	t := &agent.BackgroundTask{ID: bt.TaskID, Kind: kind, Description: bt.Description,
+		Status: "running", StartedAt: time.Now().UnixMilli()}
+	p.tasks[bt.TaskID] = t
+	out <- agent.BackgroundEvent(*t)
+}
+
+// taskStatus maps the CLI's task states onto agenttik's. Unknown ones pass
+// through.
+func taskStatus(s string) string {
+	switch s {
+	case "pending":
+		return "running"
+	case "killed":
+		return "stopped"
+	}
+	return s
 }
 
 func (p *streamParser) addUsage(parentToolUseID string, u usage) {

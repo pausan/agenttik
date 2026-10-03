@@ -143,7 +143,7 @@ func nextSessionID() string {
 
 // runScript drives one real turn. The prompt is read line by line: a line
 // whose first non-blank character is "@" is a directive, and everything else
-// is the reply. Six directives exist:
+// is the reply. Seven directives exist:
 //
 //	@wait <ms>      pause, cut short the moment Stop cancels the turn
 //	@tool <name> <input...>   a tool call and its canned result
@@ -160,6 +160,9 @@ func nextSessionID() string {
 //	@ask <question> | <a>, <b>  ask a question with those options (typing is
 //	                          allowed too) and wait; the reply gains
 //	                          "answer=<what was picked>" or "declined"
+//	@background start <id> <description...>  a shell left running behind the
+//	                          turn, until
+//	@background end <id> <status> <summary...>  it ends with that status
 //
 // Any line whose leading word is not one of these is treated as reply text,
 // not a directive — so a prompt can still contain a literal "@" without being
@@ -173,6 +176,7 @@ func runScript(ctx context.Context, req agent.TurnRequest, events chan<- agent.E
 
 	var reply []string
 	var toolSeq int
+	background := map[string]agent.BackgroundTask{}
 	for _, line := range strings.Split(req.Prompt, "\n") {
 		name, rest, ok := cutDirective(line)
 		if !ok {
@@ -194,6 +198,21 @@ func runScript(ctx context.Context, req agent.TurnRequest, events chan<- agent.E
 				return
 			}
 			events <- agent.Event{Type: agent.EventToolResult, Tool: &agent.ToolEvent{ID: id, Output: toolName + " ok"}}
+		case "background":
+			fields := strings.Fields(rest)
+			if len(fields) < 2 {
+				continue
+			}
+			now, id := time.Now().UnixMilli(), fields[1]
+			t := background[id]
+			if fields[0] == "start" {
+				t = agent.BackgroundTask{ID: id, Kind: "shell", Status: "running", StartedAt: now,
+					Description: strings.Join(fields[2:], " ")}
+			} else if len(fields) > 2 {
+				t.Status, t.EndedAt, t.Summary = fields[2], now, strings.Join(fields[3:], " ")
+			}
+			background[id] = t
+			events <- agent.BackgroundEvent(t)
 		case "error":
 			events <- agent.Event{Type: agent.EventError, Text: strings.TrimSpace(rest)}
 			return
@@ -281,7 +300,7 @@ func cutDirective(line string) (name, rest string, ok bool) {
 	}
 	name, rest, _ = strings.Cut(trimmed[1:], " ")
 	switch name {
-	case "wait", "tool", "error", "account", "approve", "ask":
+	case "wait", "tool", "error", "account", "approve", "ask", "background":
 		return name, rest, true
 	default:
 		return "", "", false

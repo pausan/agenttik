@@ -125,6 +125,9 @@ type sessionDetail struct {
 	// Queued are the prompts waiting their turn, oldest first. The transcript
 	// draws them under the messages so a queued prompt is visible.
 	Queued []store.QueuedMessage `json:"queued"`
+
+	// Background is what the running turn has left working behind it.
+	Background []agent.BackgroundTask `json:"background"`
 }
 
 func (s *Server) getSession(c *fiber.Ctx) error {
@@ -150,7 +153,8 @@ func (s *Server) getSession(c *fiber.Ctx) error {
 		return err
 	}
 	return c.JSON(sessionDetail{Session: sess, Messages: messages,
-		Turns: turns, Stats: stats, Running: s.runner.Running(id), Queued: queued})
+		Turns: turns, Stats: stats, Running: s.runner.Running(id), Queued: queued,
+		Background: s.runner.BackgroundTasks(id)})
 }
 
 // updateSession changes the model, effort or title mid-session.

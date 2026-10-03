@@ -29,8 +29,19 @@ type envelope struct {
 	RateLimitInfo *rateLimitInfo `json:"rate_limit_info"`
 
 	// type=system, subtype=background_tasks_changed: every background task
-	// still running. Only the count is read.
-	Tasks []json.RawMessage `json:"tasks"`
+	// still running.
+	Tasks []backgroundTask `json:"tasks"`
+
+	// type=system, subtype=task_started | task_updated | task_notification:
+	// one background task starting, changing and ending.
+	TaskID         string     `json:"task_id"`
+	TaskType       string     `json:"task_type"`
+	Description    string     `json:"description"`
+	IsBackgrounded bool       `json:"is_backgrounded"`
+	Patch          *taskPatch `json:"patch"`
+	Status         string     `json:"status"`
+	Summary        string     `json:"summary"`
+	OutputFile     string     `json:"output_file"`
 
 	// type=control_request | control_cancel_request
 	RequestID string          `json:"request_id"`
@@ -42,6 +53,17 @@ type envelope struct {
 	TotalCostUSD float64               `json:"total_cost_usd"`
 	Usage        usage                 `json:"usage"`
 	ModelUsage   map[string]modelUsage `json:"modelUsage"`
+}
+
+type backgroundTask struct {
+	TaskID      string `json:"task_id"`
+	TaskType    string `json:"task_type"`
+	Description string `json:"description"`
+}
+
+type taskPatch struct {
+	Status  string `json:"status"`
+	EndTime int64  `json:"end_time"`
 }
 
 // controlRequest is the CLI asking its host something mid-turn. The only one

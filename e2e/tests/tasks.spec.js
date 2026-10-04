@@ -463,8 +463,9 @@ test("task context menus rename and persist unread without opening the task", as
   await expect(page.getByRole("menuitem", { name: "Delete task", exact: true })).toBeVisible();
   await page.getByRole("menuitem", { name: "Archive task", exact: true }).click();
   await expect(row).toHaveCount(0);
-  await page.locator("main").getByRole("tab", { name: "Archived", exact: true }).click();
-  await projectRow.click({ button: "right" });
+  const archivedRow = page.getByRole("region", { name: "Archived tasks" })
+    .locator(".task-row").filter({ hasText: "Context renamed" });
+  await archivedRow.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Unarchive task", exact: true }).click();
   await expect(row).toBeVisible();
 });

@@ -1,5 +1,22 @@
 import { watch } from "vue";
 
+// Remember the latest completion separately from unread, so acknowledging it
+// does not make a later snapshot mark the same result unread again.
+export function reconcileTaskCompletions(unread, completed, tasks) {
+  let changed = false;
+  for (const task of tasks) {
+    const turn = task.last_completed_turn_id;
+    // Older remote servers do not report completion IDs.
+    if (!Number.isSafeInteger(turn) || turn < 0) continue;
+    const previous = completed[task.id];
+    if (previous !== undefined && turn <= previous) continue;
+    completed[task.id] = turn;
+    if (previous !== undefined && task.status !== "running") unread[task.id] = turn;
+    changed = true;
+  }
+  return changed;
+}
+
 // One timer for the visible transcript, independent of how many rows show it.
 export function trackTaskAttention(unread, currentTask, visible, save = () => {}) {
   // A manual mark on the current transcript lasts until the next visit.

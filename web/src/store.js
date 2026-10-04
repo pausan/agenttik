@@ -13,7 +13,7 @@
 
 import { nextTick, reactive, ref, watch } from "vue";
 import { createTaskSounds, TASK_SOUNDS_KEY } from "./task-sounds.js";
-import { trackTaskAttention } from "./task-attention.js";
+import { trackTaskAttention, reconcileTaskCompletions } from "./task-attention.js";
 import { upsertTask } from "./background-tasks.js";
 import { recordError } from "./diagnostics.js";
 import { api, apiURL, storage, clientStorage, diagnosticStorage } from "./api";
@@ -542,9 +542,34 @@ document.addEventListener("pointerdown", taskSounds.unlock);
 document.addEventListener("keydown", taskSounds.unlock);
 
 const attentionVisible = ref(!document.hidden);
+const completedTasks = {};
+let attentionLoaded = false;
 document.addEventListener("visibilitychange", () => { attentionVisible.value = !document.hidden; });
 function saveTaskAttention() {
-  try { storage.setItem("agenttik.unreadTasks", JSON.stringify(S.unreadTasks)); } catch { /* memory still works */ }
+  try {
+    storage.setItem("agenttik.unreadTasks", JSON.stringify(S.unreadTasks));
+    storage.setItem("agenttik.completedTasks", JSON.stringify(completedTasks));
+  } catch { /* memory still works */ }
+}
+function loadTaskAttention() {
+  if (attentionLoaded) return;
+  try {
+    const unread = JSON.parse(storage.getItem("agenttik.unreadTasks") || "{}");
+    for (const [id, turn] of Object.entries(unread || {})) {
+      if (Number.isSafeInteger(turn) && (turn > 0 || turn === -1)) S.unreadTasks[id] = turn;
+    }
+  } catch { /* Ignore invalid saved state. */ }
+  try {
+    const completed = JSON.parse(storage.getItem("agenttik.completedTasks") || "{}");
+    for (const [id, turn] of Object.entries(completed || {})) {
+      if (Number.isSafeInteger(turn) && turn >= 0) completedTasks[id] = turn;
+    }
+  } catch { /* Ignore invalid saved state. */ }
+  attentionLoaded = true;
+}
+function reconcileProjectAttention() {
+  if (reconcileTaskCompletions(S.unreadTasks, completedTasks,
+    S.projects.flatMap((project) => project.recent_sessions))) saveTaskAttention();
 }
 export function toggleTaskUnread(id) {
   if (S.unreadTasks[id]) delete S.unreadTasks[id];
@@ -1083,6 +1108,10 @@ export async function refreshProjects() {
     if (!visible.has(p.id)) detached = detachProject(p.id) || detached;
   }
   S.projects = projects;
+  // The API has identified the storage scope. Restore attention before
+  // subscribing, so an early event cannot overwrite the saved baseline.
+  loadTaskAttention();
+  reconcileProjectAttention();
   for (const project of S.projects) {
     const tab = S.tabs.find((t) => t.kind === "project" && t.projectID === project.id);
     if (tab) {
@@ -3081,9 +3110,11 @@ function onEvent(msg) {
   }
   if (msg.event?.type === "done" && msg.stats) {
     S.unreadTasks[msg.session_id] = msg.turn_id;
+    completedTasks[msg.session_id] = Math.max(completedTasks[msg.session_id] || 0, msg.turn_id);
     saveTaskAttention();
   } else if (msg.event?.type === "started") {
     delete S.unreadTasks[msg.session_id];
+    completedTasks[msg.session_id] ??= 0;
     saveTaskAttention();
   }
   const tab = S.tabs.find((t) => t.kind === "session" && t.sessionID === msg.session_id);
@@ -3833,12 +3864,6 @@ async function initialize() {
     // can cost a CLI probe of a second or more, and the model it names is
     // worth showing late rather than holding an otherwise ready window on.
     await Promise.all([refreshProjects(), refreshSessions()]);
-    try {
-      const unread = JSON.parse(storage.getItem("agenttik.unreadTasks") || "{}");
-      for (const [id, turn] of Object.entries(unread || {})) {
-        if (Number.isSafeInteger(turn) && (turn > 0 || turn === -1)) S.unreadTasks[id] = turn;
-      }
-    } catch { /* Ignore invalid saved state. */ }
     await restoreOpenTabs();
     // A first launch has no tabs to say which project is selected, and the
     // sidebar, the Tree and Ctrl+N all want one.

@@ -54,6 +54,38 @@ func TestProjectWithOpenSessions(t *testing.T) {
 	}
 }
 
+func TestProjectSessionsReportLatestCompletedTurn(t *testing.T) {
+	s := testStore(t)
+	p, err := s.CreateProject("project", "/tmp/project")
+	must(t, err)
+	must(t, s.CreateSession(&Session{ID: "task", ProjectID: p.ID, Provider: "fake", Model: "fake"}))
+	check := func(want int64) {
+		t.Helper()
+		projects, err := s.ListProjects()
+		must(t, err)
+		if got := projects[0].RecentSessions[0].LastCompletedTurnID; got != want {
+			t.Fatalf("latest completed turn = %d, want %d", got, want)
+		}
+	}
+	check(0)
+	first, err := s.StartTurn("task", "fake", "")
+	must(t, err)
+	check(0)
+	first.Status = "done"
+	must(t, s.FinishTurn(first))
+	check(first.ID)
+	second, err := s.StartTurn("task", "fake", "")
+	must(t, err)
+	check(first.ID)
+	second.Status = "error"
+	must(t, s.FinishTurn(second))
+	check(second.ID)
+	third, err := s.StartTurn("task", "fake", "")
+	must(t, err)
+	must(t, s.DiscardTurn(third.ID))
+	check(second.ID)
+}
+
 func TestReorderProjectsDrivesSidebarOrder(t *testing.T) {
 	s := testStore(t)
 	a, _ := s.CreateProject("alpha", "/tmp/alpha")

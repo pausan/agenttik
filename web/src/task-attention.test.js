@@ -1,7 +1,51 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { reactive, ref } from "vue";
-import { trackTaskAttention, taskDot, projectDot } from "./task-attention.js";
+import { trackTaskAttention, reconcileTaskCompletions, taskDot, projectDot } from "./task-attention.js";
+
+test("snapshots recover missed completions without marking existing history or read results unread", () => {
+  const unread = {};
+  const completed = {};
+  const tasks = [
+    { id: "a", status: "running", last_completed_turn_id: 0 },
+    { id: "b", status: "idle", last_completed_turn_id: 2 },
+  ];
+  assert.equal(reconcileTaskCompletions(unread, completed, tasks), true);
+  assert.deepEqual(unread, {});
+  assert.deepEqual(completed, { a: 0, b: 2 });
+
+  // The client left this profile while a was running. Its next snapshot is
+  // the first time it learns that the turn finished.
+  tasks[0].status = "idle";
+  tasks[0].last_completed_turn_id = 3;
+  assert.equal(reconcileTaskCompletions(unread, completed, tasks), true);
+  assert.deepEqual(unread, { a: 3 });
+  delete unread.a;
+  assert.equal(reconcileTaskCompletions(unread, completed, tasks), false);
+  assert.deepEqual(unread, {});
+
+  // A stale response after a live done event cannot roll back the baseline.
+  completed.a = 5;
+  assert.equal(reconcileTaskCompletions(unread, completed, tasks), false);
+  assert.equal(completed.a, 5);
+});
+
+test("snapshots replace manual unread for new results and skip results superseded by running work", () => {
+  const unread = { a: -1 };
+  const completed = { a: 1, b: 2 };
+  const tasks = [
+    { id: "a", status: "error", last_completed_turn_id: 3 },
+    { id: "b", status: "running", last_completed_turn_id: 4 },
+    { id: "old-remote", status: "idle" },
+  ];
+  assert.equal(reconcileTaskCompletions(unread, completed, tasks), true);
+  assert.deepEqual(unread, { a: 3 });
+  assert.deepEqual(completed, { a: 3, b: 4 });
+  tasks[1].status = "idle";
+  tasks[1].last_completed_turn_id = 5;
+  reconcileTaskCompletions(unread, completed, tasks);
+  assert.deepEqual(unread, { a: 3, b: 5 });
+});
 
 test("reading requires three uninterrupted visible seconds and restarts for a new completion", (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });

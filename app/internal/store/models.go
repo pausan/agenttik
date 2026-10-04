@@ -55,6 +55,9 @@ type SessionRef struct {
 	Status     string `json:"status"`
 	QueueCount int64  `json:"queue_count"`
 
+	// LastCompletedTurnID lets clients recover completions missed while away.
+	LastCompletedTurnID int64 `json:"last_completed_turn_id"`
+
 	// ScheduleID is the job that spawned this task, or 0. The sidebar draws
 	// it as the job's number, so a run can be traced back to the schedule it
 	// came from without opening it. See 028-scheduled-jobs.md.

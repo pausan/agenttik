@@ -32,8 +32,18 @@ not clear it. A new turn or completion replaces that manual state. Manual
 unread uses `-1` alongside positive unread turn IDs.
 
 Unread markers are saved through instance/profile-scoped UI storage and
-restored on reload. Private mode uses memory storage. Read state is local to
-this client; completions missed while disconnected are not backfilled.
+restored on reload. The client also saves each known task's latest completed
+turn ID. Project task rows report `last_completed_turn_id`, read using the
+existing session/turn index. Refreshing the project list compares those IDs
+and marks newer results unread, including turns that finished while another
+profile was open or the stream was disconnected. Initial history establishes
+a baseline without marking old results unread. Acknowledgement keeps that
+baseline, so reloads do not mark an already-read completion unread again.
+Results superseded by a running turn are skipped. Older remote servers without
+completion IDs keep live-event behaviour. Private mode uses memory storage.
+Read state is local to this client.
 
 `task-attention.test.js` checks interrupted visits, hidden windows, new results,
-completion during viewing, and persistent error coloring.
+completion during viewing, missed completions, and persistent error coloring.
+Browser tests switch profiles during selected and unselected tasks, check
+unread persistence on return and reload, then read and reload the result.

@@ -52,6 +52,44 @@ async function paletteSwitch(page, name) {
   await expect(page.getByRole("button", { name: `Profile: ${name}`, exact: true })).toBeVisible();
 }
 
+for (const selected of [true, false]) {
+  test(`completion while away from a profile stays unread (${selected ? "selected" : "unselected"} task)`, async ({ page, agenttik }) => {
+    await page.request.post(`${agenttik.url}/api/profiles`, { data: { name: "Work" } });
+    const project = await (await page.request.post(`${agenttik.url}/api/projects`, {
+      data: { path: REPO, name: "Personal project" },
+    })).json();
+    const task = await (await page.request.post(`${agenttik.url}/api/sessions`, {
+      data: { project_id: project.id, provider: "fake", model: "fake-quick", title: "Finishes while away" },
+    })).json();
+    await page.reload();
+    const row = sidebar(page).locator(".task-row").filter({ hasText: task.title });
+    await row.click();
+    await expect(page.getByPlaceholder("Ask the agent…")).toBeVisible();
+    await page.request.post(`${agenttik.url}/api/sessions/${task.id}/messages`, {
+      data: { prompt: "@wait 5000\nFinished while away" },
+    });
+    await expect(page.getByText("running", { exact: true })).toBeVisible();
+    if (!selected) await sidebar(page).getByText("Personal project", { exact: true }).click();
+    await paletteSwitch(page, "Work");
+    await expect.poll(async () => {
+      const detail = await (await page.request.get(`${agenttik.url}/api/sessions/${task.id}`)).json();
+      return detail.running;
+    }).toBe(false);
+    await paletteSwitch(page, "Default");
+    await expect(row.locator(".task-title")).toHaveClass(/font-bold/);
+    // Leave the restored transcript before its three-second acknowledgement.
+    await sidebar(page).getByText("Personal project", { exact: true }).click();
+    await page.waitForTimeout(3200);
+    await expect(row.locator(".task-title")).toHaveClass(/font-bold/);
+    await page.reload();
+    await expect(row.locator(".task-title")).toHaveClass(/font-bold/);
+    await row.click();
+    await expect(row.locator(".task-title")).not.toHaveClass(/font-bold/);
+    await page.reload();
+    await expect(row.locator(".task-title")).not.toHaveClass(/font-bold/);
+  });
+}
+
 test("command palette refreshes profiles and appearance stays with each profile", async ({ page, agenttik }) => {
   await page.emulateMedia({ colorScheme: "light" });
   await openSettings(page, "Appearance");

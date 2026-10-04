@@ -28,6 +28,11 @@ type Profile struct {
 	Name string `json:"name"`
 }
 
+type profileStatus struct {
+	Profile
+	Busy bool `json:"busy"`
+}
+
 type profileRuntime struct {
 	server   *Server
 	cancel   context.CancelFunc
@@ -251,10 +256,6 @@ func (s *Server) routeProfile(c *fiber.Ctx) error {
 }
 
 func (s *Server) listProfiles(c *fiber.Ctx) error {
-	type profileStatus struct {
-		Profile
-		Busy bool `json:"busy"`
-	}
 	// The picker heads this machine's profiles with its name once remote
 	// machines are listed beside them.
 	name, err := s.store.ServerName()

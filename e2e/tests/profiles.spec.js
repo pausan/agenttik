@@ -182,7 +182,7 @@ test("working profiles pulse in the footer and menu, then clear when stopped", a
     data: { project_id: project.id, provider: "fake", model: "fake-quick", title: "Working elsewhere" },
   })).json();
   const picker = page.getByRole("button", { name: "Profile: Default", exact: true });
-  const cue = picker.getByLabel("Other profiles are working");
+  const cue = picker.getByLabel("Profiles are working");
   await expect(picker).toBeVisible();
   await expect(cue).toHaveCount(0);
   await page.request.post(`${agenttik.url}/api/sessions/${task.id}/messages?profile=${work.id}`, { data: { prompt: "@wait 60000" } });

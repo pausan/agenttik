@@ -1,7 +1,48 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, openSettings, sidebar, startServer, test } from "../fixtures.js";
+import { expect, openSettings, REPO, sidebar, startServer, test } from "../fixtures.js";
+
+test("remote work pulses in the profile area from local and remote profiles", async ({ page, agenttik }) => {
+  const other = await startServer();
+  try {
+    await page.request.put(`${other.url}/api/server/name`, { data: { name: "Office" } });
+    const work = await (await page.request.post(`${other.url}/api/profiles`, { data: { name: "Work" } })).json();
+    const project = await (await page.request.post(`${other.url}/api/projects?profile=${work.id}`, { data: { path: REPO } })).json();
+    const task = await (await page.request.post(`${other.url}/api/sessions?profile=${work.id}`, {
+      data: { project_id: project.id, provider: "fake", model: "fake-quick", title: "Remote work" },
+    })).json();
+    await page.request.post(`${agenttik.url}/api/remotes`, { data: { address: other.url } });
+    await page.reload();
+    let picker = page.getByRole("button", { name: "Profile: Default", exact: true });
+    const cue = () => picker.getByLabel("Profiles are working");
+    await expect(cue()).toHaveCount(0);
+    await page.request.post(`${other.url}/api/sessions/${task.id}/messages?profile=${work.id}`, { data: { prompt: "@wait 60000" } });
+    await expect(cue()).toBeVisible();
+    await expect(cue()).toHaveClass(/status-pulse/);
+    await picker.click();
+    const item = page.getByRole("menuitem", { name: /^Work\b/ });
+    await expect(item.getByLabel("Working", { exact: true })).toBeVisible();
+    await item.click();
+    picker = page.getByRole("button", { name: "Profile: Office › Work", exact: true });
+    // The selected remote profile's work still appears in the footer.
+    await expect(cue()).toBeVisible();
+    await page.request.post(`${other.url}/api/sessions/${task.id}/stop?profile=${work.id}`);
+    await expect(cue()).toHaveCount(0);
+
+    // Work in a different remote profile is visible while staying on Office.
+    const defaultProject = await (await page.request.post(`${other.url}/api/projects`, { data: { path: REPO } })).json();
+    const defaultTask = await (await page.request.post(`${other.url}/api/sessions`, {
+      data: { project_id: defaultProject.id, provider: "fake", model: "fake-quick" },
+    })).json();
+    await page.request.post(`${other.url}/api/sessions/${defaultTask.id}/messages`, { data: { prompt: "@wait 60000" } });
+    await expect(cue()).toBeVisible();
+    await page.request.post(`${other.url}/api/sessions/${defaultTask.id}/stop`);
+    await expect(cue()).toHaveCount(0);
+  } finally {
+    await other.stop();
+  }
+});
 
 test("a remote machine's profiles open through this instance and wait for it when it is gone", async ({ page, agenttik }) => {
   const other = await startServer();

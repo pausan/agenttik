@@ -29,7 +29,9 @@ func newTestServer(t *testing.T) (*Server, *store.Store) {
 	}
 	t.Cleanup(func() { st.Close() })
 	reg := agent.NewRegistry()
-	return New(st, reg, runner.New(st, reg, runner.NewHub())), st
+	s := New(st, reg, runner.New(st, reg, runner.NewHub()))
+	t.Cleanup(s.remotes.stop)
+	return s, st
 }
 
 func do(t *testing.T, s *Server, method, path string, body any) *http.Response {

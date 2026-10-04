@@ -82,3 +82,18 @@ test("profile shortcuts continue into remote machines and back", async () => {
   delete globalThis.location;
   delete globalThis.window;
 });
+
+test("profile activity includes remote work and keeps the current local task in its workspace", async () => {
+  const { profiles, hasProfileWork } = await import("./profiles.js");
+  profiles.items = [{ id: "default", busy: true }, { id: "work", busy: false }];
+  profiles.remotes = [];
+  strictEqual(hasProfileWork(), false);
+  profiles.remotes = [{ id: "office", profiles: [{ id: "default", busy: true }] }];
+  strictEqual(hasProfileWork(), true);
+  profiles.remotes[0].profiles[0].busy = false;
+  strictEqual(hasProfileWork(), false);
+  profiles.items[1].busy = true;
+  strictEqual(hasProfileWork(), true);
+  profiles.items = [];
+  profiles.remotes = [];
+});

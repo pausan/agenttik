@@ -28,6 +28,13 @@ export function isCurrentProfile(id, remote = "") {
   return id === profileID && remote === remoteID;
 }
 
+// The current local task already shows its status in the workspace. Remote
+// work remains visible here, including work in the remote profile on screen.
+export function hasProfileWork() {
+  return profiles.items.some(p => !isCurrentProfile(p.id) && p.busy)
+    || profiles.remotes.some(r => r.profiles.some(p => p.busy));
+}
+
 export function profileURL(id, remote = "") {
   const url = new URL(window.location.href);
   if (remote) url.searchParams.set("remote", remote);

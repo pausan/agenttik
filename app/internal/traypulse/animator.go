@@ -11,29 +11,30 @@ import (
 // cache on Windows, and a breath does not need more.
 const Step = 250 * time.Millisecond
 
-// Animator shows the resting icon while nothing is running and plays the
-// pulse while something is. It owns every call to setIcon, so the tray is
-// only ever touched from the one goroutine running Run.
+// Animator plays the local pulse, shows a static remote badge for remote-only
+// work, and rests when idle. It owns every call to setIcon on Run's goroutine.
 type Animator struct {
 	setIcon func([]byte)
 	resting []byte
+	remote  []byte
 	frames  [][]byte
 
-	step time.Duration
-	busy atomic.Bool
+	step       time.Duration
+	busy       atomic.Bool
+	remoteBusy atomic.Bool
 	// wake carries "busy changed"; it holds one token, because what the loop
 	// needs to know is that the flag moved, not how many times.
 	wake chan struct{}
 }
 
 // New returns an animator for frames from Frames, played forwards then
-// backwards. resting is the icon shown whenever nothing is running.
-func New(setIcon func([]byte), resting []byte, frames [][]byte) *Animator {
-	return &Animator{setIcon: setIcon, resting: resting, frames: frames,
+// backwards. remote is the icon for remote-only work; nil disables the badge.
+func New(setIcon func([]byte), resting []byte, frames [][]byte, remote []byte) *Animator {
+	return &Animator{setIcon: setIcon, resting: resting, frames: frames, remote: remote,
 		step: Step, wake: make(chan struct{}, 1)}
 }
 
-// SetBusy says whether any turn is in flight. It never blocks and may be
+// SetBusy says whether any local turn is in flight. It never blocks and may be
 // called from any goroutine, including one holding a lock: the work it causes
 // happens on Run's goroutine.
 func (a *Animator) SetBusy(busy bool) {
@@ -41,6 +42,19 @@ func (a *Animator) SetBusy(busy bool) {
 		return
 	}
 	a.busy.Store(busy)
+	a.wakeUp()
+}
+
+// SetRemoteBusy shows the Wi-Fi icon only while local work is idle.
+func (a *Animator) SetRemoteBusy(busy bool) {
+	if a == nil {
+		return
+	}
+	a.remoteBusy.Store(busy)
+	a.wakeUp()
+}
+
+func (a *Animator) wakeUp() {
 	select {
 	case a.wake <- struct{}{}:
 	default:
@@ -48,13 +62,12 @@ func (a *Animator) SetBusy(busy bool) {
 }
 
 // Run drives the icon until done is closed, leaving the resting icon behind.
-// With fewer than two frames it only ever shows the resting icon, so a failed
-// render degrades to the tray as it was.
+// With fewer than two frames local work leaves the resting icon showing.
 func (a *Animator) Run(done <-chan struct{}) {
 	// The step of the cycle on the tray now: resting, or an index into the
 	// ping-pong cycle. It starts at neither, so Run puts the resting icon up
 	// itself and owns every icon the tray is given from then on.
-	const resting, unset = -1, -2
+	const resting, unset, remote = -1, -2, -3
 	shown := unset
 	show := func(i int) {
 		if i == shown {
@@ -63,6 +76,10 @@ func (a *Animator) Run(done <-chan struct{}) {
 		shown = i
 		if i == resting {
 			a.setIcon(a.resting)
+			return
+		}
+		if i == remote {
+			a.setIcon(a.remote)
 			return
 		}
 		a.setIcon(a.frames[a.frameAt(i)])
@@ -83,12 +100,16 @@ func (a *Animator) Run(done <-chan struct{}) {
 				show(0)
 				ticker.Reset(a.step)
 			}
-		case running:
-			running = false
-			ticker.Stop()
-			show(resting)
 		default:
-			show(resting)
+			if running {
+				running = false
+				ticker.Stop()
+			}
+			if !a.busy.Load() && a.remoteBusy.Load() && len(a.remote) > 0 {
+				show(remote)
+			} else {
+				show(resting)
+			}
 		}
 
 		select {

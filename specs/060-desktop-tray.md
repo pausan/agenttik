@@ -51,12 +51,16 @@ is unavailable, such as another application already holding the chord.
 
 ## The working pulse
 
-While any turn is in flight the tray icon breathes: the sparkle cycles from
-near-black through blue to white and back, with a blue halo, over three
+While any local turn is in flight the tray icon breathes: the sparkle cycles
+from near-black through blue to white and back, with a blue halo, over three
 seconds. It returns to the green resting icon when all turns are waiting,
 paused, or finished, so a window left in the tray still says whether the app is
-working. Nothing else about the tray changes with it — no badge, no second
-icon, no menu entry.
+working. When only connected remote machines are working, the green resting
+icon carries a white Wi-Fi mark at its bottom-right corner. Any local work
+takes priority: the normal local pulse replaces the Wi-Fi mark, which returns
+if remote work remains when local work stops. With all machines idle the
+tray shows the plain resting icon. Remote activity updates every three
+seconds even while the window is hidden ([085](085-remote-profiles.md)).
 
 `app/internal/traypulse` renders the frames from `tray.png` when the tray
 starts rather than shipping them beside it, so the logo stays one asset: the
@@ -70,8 +74,8 @@ still the committed ICO with its fuller set of sizes.
 
 A step every 250ms is as fast as it goes. Every step is an icon the host has
 to be handed — a D-Bus property and a signal on Linux, a cached temp file on
-Windows — and a breath does not need more. Nothing is sent at all while the
-app is idle: the animator blocks until the server says work started.
+Windows — and a breath does not need more. The animator sends no frames while
+idle or showing the static remote badge; it blocks until activity changes.
 
 `Server.OnBusy` is that signal, and it covers every local profile: the tray
 pulses while any profile has a turn in flight, whichever one the window
@@ -84,6 +88,11 @@ passes on only the first busy and the last idle edge. Runners call it while
 holding their lock, so edges cannot arrive out of order, and the animator's
 `SetBusy` only stores a flag and pokes a channel, so nothing the tray does can
 block a turn.
+
+`Server.OnRemoteBusy` supplies the remote activity edges. The Wi-Fi icon is
+rendered from the same resting PNG at startup and wrapped as an ICO on
+Windows. The animator owns both signals and all icon updates, so switching
+between a local pulse, remote work and idle does not start another animator.
 
 A frame that fails to render is logged and leaves the tray static; the icon
 and the menu still work. The pulse only exists where the tray does, so
@@ -142,7 +151,9 @@ startup error reporting. `app/internal/traypulse` tests cover the frames
 cycling through near-black, blue and white, rising monotonically in brightness without the
 glow reaching the plate, the ICO entries decoding at every size asked for, and
 the animator's cycle, its return to the resting icon when work stops and on
-shutdown, and its silence while idle. Runner tests cover the two edges of
+shutdown, its silence while idle and local priority over the remote badge.
+The Wi-Fi renderer is checked for changes confined to the bottom-right corner
+and valid Windows icons at every size. Runner tests cover the two edges of
 `OnBusy` across overlapping turns and a provider that refuses to start. Browser tests cover saving and reopening settings
 and hiding the controls in web mode. The isolated Linux test exercises the
 default chord, auto-repeat, the reported foreground state, registration

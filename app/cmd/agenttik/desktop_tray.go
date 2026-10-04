@@ -84,6 +84,18 @@ func workingFrames() [][]byte {
 	return frames
 }
 
+func remoteWorkingIcon() []byte {
+	icon, err := traypulse.RemoteIcon(trayPNG)
+	if err == nil && runtime.GOOS == "windows" {
+		icon, err = traypulse.ICO(icon, icoSizes...)
+	}
+	if err != nil {
+		log.Printf("desktop tray: %v", err)
+		return nil
+	}
+	return icon
+}
+
 func (w *window) startTray(config store.DesktopConfig, srv *server.Server) func() {
 	if !config.CloseToTray {
 		return func() {}
@@ -101,8 +113,9 @@ func (w *window) startTray(config store.DesktopConfig, srv *server.Server) func(
 	toggleTitle := trayToggleTitle(config.ToggleShortcut, w.trayStatus() == "")
 	// The pulse is rendered before the tray exists, so a bad icon is found
 	// and reported at startup rather than the first time a turn runs.
-	pulse := traypulse.New(systray.SetIcon, restingIcon(), workingFrames())
+	pulse := traypulse.New(systray.SetIcon, restingIcon(), workingFrames(), remoteWorkingIcon())
 	srv.OnBusy(pulse.SetBusy)
+	srv.OnRemoteBusy(pulse.SetRemoteBusy)
 
 	done := make(chan struct{})
 	var ready sync.WaitGroup

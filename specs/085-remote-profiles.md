@@ -53,7 +53,10 @@ the window is on a remote profile, and its title reads
 `Switch to profile: <machine> › <profile>`. `Ctrl+Alt+P` and its reverse move
 through local profiles, then each machine's, wrapping.
 
-Busy dots cover local profiles only. A remote is not polled.
+Busy dots pulse beside working local and connected remote profiles in the
+menu. The footer dot shows work in other local profiles and any connected
+remote profile, including the selected remote profile. The current local
+profile's task status stays in the workspace.
 
 Keyboard shortcuts use the client's shared bindings, including the
 Enter-send/enqueue choice. Ctrl/Cmd defaults follow the client's OS rather
@@ -67,6 +70,16 @@ window already on it. Before the window navigates,
 `POST /api/remotes/:id/connect` checks that the saved address answers with
 the same machine ID, and fetches its profile list. A profile that no longer
 exists falls back to the remote's first one.
+
+After a successful connection, one server worker per machine refreshes its
+profiles and busy state every three seconds, with a three-second deadline.
+It verifies the machine ID before fetching profiles with the saved sign-in.
+This continues while the window is hidden or showing a local profile. Failed
+requests, expired sign-ins and a different machine at the address clear the
+working dots; the worker retries on its next tick. Removing the machine or
+shutting down cancels its worker. Busy state stays in memory and is never
+restored from disk. The desktop tray shows remote-only work with a Wi-Fi
+badge; local work always takes priority ([060](060-desktop-tray.md)).
 
 The window's URL is `/?remote=<machine-id>&profile=<remote-profile-id>`. The
 UI comes from this instance; every `/api/` request carries `remote=` and is
@@ -112,7 +125,7 @@ temporary root.
 
 | Method | Path | Does |
 |--------|------|------|
-| GET | `/api/remotes` | Saved machines, without cookies |
+| GET | `/api/remotes` | Saved machines, without cookies; profiles include live `busy` state for connected machines |
 | POST | `/api/remotes` | `{address}`: check and save; answers like connect |
 | POST/GET/DELETE | `/api/remotes/discovery` | Start or continue (`{port?, restart?}`), read `{running, complete, port, probed, total, machines, error}`, pause |
 | DELETE | `/api/remotes/:id` | Forget the machine |
@@ -134,3 +147,7 @@ it after it stopped. Discovery tests cover pause, resume without skipped or
 repeated addresses, restart, deduplication, filtering, connection-triggered
 pause and shutdown. A browser test exercises the controls and connects to
 two real machines with deterministic discovery results.
+Activity tests cover initial and refreshed busy state, overlapping remote
+work, expired sign-ins, reconnects, removal and shutdown. A browser test checks
+the footer and menu dots through two real instances, from both a local and a
+remote profile.

@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted } from "vue";
-import { profileID, remoteID } from "../api";
-import { allProfiles, isCurrentProfile, profiles, loadProfiles, switchProfile } from "../profiles";
+import { remoteID } from "../api";
+import { allProfiles, hasProfileWork, isCurrentProfile, profiles, loadProfiles, switchProfile } from "../profiles";
 
 import ProfileIcon from "./ProfileIcon.vue";
 import StatusDot from "./StatusDot.vue";
@@ -21,7 +21,7 @@ const items = computed(() => {
 const current = computed(() => allProfiles().find(p => isCurrentProfile(p.id, p.remote)));
 const name = computed(() => current.value?.name || "Profile");
 const title = computed(() => `Profile: ${current.value?.machine ? `${current.value.machine} › ` : ""}${name.value}`);
-const otherBusy = computed(() => profiles.items.some(p => (remoteID || p.id !== profileID) && p.busy));
+const profileBusy = computed(hasProfileWork);
 let timer;
 let disposed = false;
 async function refresh() {
@@ -45,7 +45,7 @@ onUnmounted(() => { disposed = true; clearTimeout(timer); });
         <ProfileIcon :remote="!!remoteID" />
       </template>
       <template #trailing>
-        <StatusDot v-if="otherBusy" status="running" title="Other profiles are working" aria-label="Other profiles are working" />
+        <StatusDot v-if="profileBusy" status="running" title="Profiles are working" aria-label="Profiles are working" />
       </template>
     </UButton>
     <template #profile-leading="{ item }">

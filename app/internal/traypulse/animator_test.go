@@ -46,7 +46,7 @@ func testAnimator(t *testing.T, frames int) (*Animator, *recorder, func()) {
 	for i := range pulse {
 		pulse[i] = []byte{byte(i + 1)}
 	}
-	a := New(rec.set, []byte{0}, pulse)
+	a := New(rec.set, []byte{0}, pulse, []byte{9})
 	a.step = time.Millisecond
 
 	done := make(chan struct{})
@@ -126,5 +126,48 @@ func TestAnimatorWithoutFramesStaysResting(t *testing.T) {
 		if icon != 0 {
 			t.Fatalf("step %d showed frame %d, want the resting icon throughout", i, icon)
 		}
+	}
+}
+
+func TestAnimatorLocalWorkPrevailsOverRemote(t *testing.T) {
+	a, rec, stop := testAnimator(t, 4)
+	defer stop()
+	lastIs := func(icon byte) func([]byte) bool {
+		return func(seen []byte) bool { return len(seen) > 0 && seen[len(seen)-1] == icon }
+	}
+	rec.waitFor(t, lastIs(0), "idle")
+	a.SetRemoteBusy(true)
+	seen := rec.waitFor(t, lastIs(9), "remote Wi-Fi icon")
+	time.Sleep(20 * a.step)
+	if len(rec.snapshot()) != len(seen) {
+		t.Fatal("remote-only work keeps updating a static icon")
+	}
+	a.SetBusy(true)
+	rec.waitFor(t, func(seen []byte) bool { return len(seen) > 0 && seen[len(seen)-1] >= 1 && seen[len(seen)-1] <= 4 }, "local pulse")
+	a.SetBusy(false)
+	rec.waitFor(t, lastIs(9), "remote work after local work ends")
+	a.SetRemoteBusy(false)
+	rec.waitFor(t, lastIs(0), "idle after all work ends")
+	checkpoint := len(rec.snapshot())
+	a.SetBusy(true)
+	rec.waitFor(t, func(seen []byte) bool { return seen[len(seen)-1] != 0 }, "local work alone")
+	a.SetRemoteBusy(true)
+	a.SetRemoteBusy(false)
+	time.Sleep(10 * a.step)
+	for _, icon := range rec.snapshot()[checkpoint:] {
+		if icon == 9 {
+			t.Fatal("remote icon replaced local pulse")
+		}
+	}
+}
+
+func TestAnimatorShutdownClearsRemoteIcon(t *testing.T) {
+	a, rec, stop := testAnimator(t, 0)
+	a.SetRemoteBusy(true)
+	rec.waitFor(t, func(seen []byte) bool { return len(seen) > 0 && seen[len(seen)-1] == 9 }, "remote Wi-Fi icon")
+	stop()
+	seen := rec.snapshot()
+	if seen[len(seen)-1] != 0 {
+		t.Fatal("shutdown left remote icon showing")
 	}
 }

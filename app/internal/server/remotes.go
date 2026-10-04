@@ -38,12 +38,12 @@ type savedRemote struct {
 
 // remoteView is what the UI sees of a saved remote.
 type remoteView struct {
-	ID       string    `json:"id"`
-	Name     string    `json:"name"`
-	Address  string    `json:"address"`
-	Version  string    `json:"version,omitempty"`
-	Profiles []Profile `json:"profiles"`
-	SignedIn bool      `json:"signed_in"`
+	ID       string          `json:"id"`
+	Name     string          `json:"name"`
+	Address  string          `json:"address"`
+	Version  string          `json:"version,omitempty"`
+	Profiles []profileStatus `json:"profiles"`
+	SignedIn bool            `json:"signed_in"`
 }
 
 type remoteScan struct {
@@ -63,12 +63,17 @@ type remoteManager struct {
 	networks func() ([]netip.Prefix, error)
 	client   *http.Client
 
-	mu          sync.Mutex
-	loaded      bool
-	remotes     []savedRemote
-	scan        *remoteScan
-	discoveryMu sync.Mutex
-	discovery   *machineDiscovery
+	mu           sync.Mutex
+	loaded       bool
+	remotes      []savedRemote
+	activity     map[string]*remoteActivity
+	activityBusy bool
+	onBusy       func(bool)
+	stopped      bool
+	workers      sync.WaitGroup
+	scan         *remoteScan
+	discoveryMu  sync.Mutex
+	discovery    *machineDiscovery
 }
 
 func newRemoteManager(dir string, self func() (string, error)) *remoteManager {
@@ -157,9 +162,9 @@ func (m *remoteManager) get(id string) (savedRemote, error) {
 }
 
 func (r savedRemote) view() remoteView {
-	profiles := r.Profiles
-	if profiles == nil {
-		profiles = []Profile{}
+	profiles := make([]profileStatus, 0, len(r.Profiles))
+	for _, p := range r.Profiles {
+		profiles = append(profiles, profileStatus{Profile: p})
 	}
 	return remoteView{ID: r.ID, Name: r.Name, Address: r.Address, Version: r.Version, Profiles: profiles, SignedIn: len(r.Cookies) > 0}
 }
@@ -213,7 +218,11 @@ func (s *Server) listRemotes(c *fiber.Ctx) error {
 	}
 	views := make([]remoteView, 0, len(m.remotes))
 	for _, r := range m.remotes {
-		views = append(views, r.view())
+		view := r.view()
+		if a := m.activity[r.ID]; a != nil && a.profiles != nil {
+			view.Profiles = a.profiles
+		}
+		views = append(views, view)
 	}
 	return c.JSON(fiber.Map{"remotes": views})
 }
@@ -333,10 +342,7 @@ func (m *remoteManager) connect(parent context.Context, id string) remoteState {
 		return remoteState{Status: "signin", Remote: &view, CodeRequired: m.codeRequired(ctx, r)}
 	}
 	var list struct {
-		Profiles []struct {
-			Profile
-			Busy bool `json:"busy"`
-		} `json:"profiles"`
+		Profiles []profileStatus `json:"profiles"`
 	}
 	if res.StatusCode != 200 || json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&list) != nil {
 		view := r.view()
@@ -357,6 +363,8 @@ func (m *remoteManager) connect(parent context.Context, id string) remoteState {
 		return remoteState{Status: "unreachable", Error: err.Error()}
 	}
 	view := r.view()
+	view.Profiles = list.Profiles
+	m.watchActivity(r, list.Profiles)
 	return remoteState{Status: "ok", Remote: &view, Busy: busy}
 }
 
@@ -436,6 +444,11 @@ func (s *Server) deleteRemote(c *fiber.Ctx) error {
 	}
 	if err := m.save(next); err != nil {
 		return err
+	}
+	if a := m.activity[id]; a != nil {
+		a.cancel()
+		delete(m.activity, id)
+		m.activityChangedLocked()
 	}
 	return c.SendStatus(204)
 }
@@ -539,6 +552,7 @@ func (s *Server) stopFindRemote(c *fiber.Ctx) error {
 }
 
 func (m *remoteManager) stop() {
+	m.stopActivity()
 	m.discoveryMu.Lock()
 	defer m.discoveryMu.Unlock()
 	m.pauseDiscoveryLocked()

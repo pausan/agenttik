@@ -175,6 +175,7 @@ const folding = computed({
     <p class="mb-2 text-xs text-dimmed">
       What the prompt box does when you press Enter. The other of the two takes
       <Chord :chord="PROMPT_CHORDS.modified" />, and Shortcuts can move either one elsewhere.
+      Shared across all profiles and remote connections in this client.
     </p>
 
     <URadioGroup v-model="chosen" :items="promptRows" size="sm" :ui="{ item: 'py-1' }">
@@ -293,7 +294,7 @@ const folding = computed({
   </section>
   <UModal v-model:open="confirmingReset" title="Reset defaults?" :dismissible="!resetting">
     <template #body>
-      <p>Reset appearance, shortcuts, remembered choices, model favourites and visibility, item placement, and tray settings? This cannot be undone.</p>
+      <p>Reset appearance, shortcuts, remembered choices, model favourites and visibility, item placement, and tray settings? Shortcuts reset across all profiles and remote connections in this client. This cannot be undone.</p>
       <p class="mt-2">Appearance and browser choices reset in this browser. Shared preferences reset for all windows. Accounts stay signed in. Server authentication, projects, tasks, open files, and drafts are preserved.</p>
     </template>
     <template #footer>

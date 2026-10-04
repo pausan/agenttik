@@ -97,7 +97,7 @@ screen, **session** for the row, the route or the CLI flag.
 | Doc | What it covers |
 |-----|----------------|
 | [072](072-about.md) | About and Troubleshooting: identity, license and local error reports |
-| [015](015-settings-shortcuts.md) | Settings, editable chords, Command Palette and file search |
+| [015](015-settings-shortcuts.md) | Settings, shared client shortcuts, Command Palette and file search |
 | [017](017-general-settings.md) | General: prompt keys, project folding, insertion order, and database info |
 | [018](018-readme-icon.md) | README, private demo screenshots, and the shared app icon |
 | [029](029-desktop-proxy-logging.md) | Why the window logged broken pipes, and the abort it recovers instead |

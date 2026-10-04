@@ -16,7 +16,7 @@ import { createTaskSounds, TASK_SOUNDS_KEY } from "./task-sounds.js";
 import { trackTaskAttention } from "./task-attention.js";
 import { upsertTask } from "./background-tasks.js";
 import { recordError } from "./diagnostics.js";
-import { api, apiURL, storage, diagnosticStorage } from "./api";
+import { api, apiURL, storage, clientStorage, diagnosticStorage } from "./api";
 import { debounce } from "./debounce";
 import { ACCENTS, DEFAULT_COLORS, NEUTRALS, applyColors } from "./theme";
 import { ACTIONS, matches } from "./shortcuts";
@@ -33,7 +33,7 @@ const FILE_MODE_KEY = "agenttik.fileMode";
 const DIFF_CONTEXT_KEY = "agenttik.diffContext";
 const DIFF_VIEW_KEY = "agenttik.diffView";
 const COLORS_KEY = "agenttik.colors";
-const KEYS_KEY = "agenttik.keys";
+const KEYS_KEY = "agenttik.client.keys";
 const WINDOW_KEY = "agenttik.window";
 const TASK_PAGE_KEY = "agenttik.taskPageSize";
 const SCHEDULE_KEY = "agenttik.schedule";
@@ -3675,9 +3675,17 @@ function defaultKeys() {
 }
 
 export function loadKeys() {
+  S.keys = defaultKeys();
   let saved = null;
   try {
-    saved = JSON.parse(storage.getItem(KEYS_KEY));
+    let raw = clientStorage.getItem(KEYS_KEY);
+    if (raw === null) {
+      // The local Default profile used the unscoped key. Seed once from it,
+      // retaining every old profile/remote set without letting one replace it.
+      raw = clientStorage.getItem("agenttik.keys") || "{}";
+      saved = JSON.parse(raw);
+      clientStorage.setItem(KEYS_KEY, raw);
+    } else saved = JSON.parse(raw);
   } catch {
     /* keep the defaults */
   }
@@ -3695,7 +3703,7 @@ function saveKeys() {
     if (!sameChords(S.keys[a.id], a.keys)) overrides[a.id] = S.keys[a.id];
   }
   try {
-    storage.setItem(KEYS_KEY, JSON.stringify(overrides));
+    clientStorage.setItem(KEYS_KEY, JSON.stringify(overrides));
   } catch {
     /* private mode, a full quota — the chords just do not persist */
   }
@@ -3803,6 +3811,9 @@ async function initialize() {
   loadLastUsed();
   loadLayout();
   loadKeys();
+  window.addEventListener("storage", (e) => {
+    if (e.storageArea === localStorage && (e.key === KEYS_KEY || e.key === null)) loadKeys();
+  });
   loadFileMode();
   loadWindow();
   loadTaskPageSize();
@@ -3869,7 +3880,7 @@ export async function resetPreferences() {
   taskSounds.setEnabled(false);
   for (const [key, value] of Object.entries(DEFAULT_COLORS)) setColor(key, value);
   for (const key of [LAYOUT_KEY, LAST_USED_KEY, FILE_MODE_KEY, DIFF_VIEW_KEY, DIFF_CONTEXT_KEY,
-    COLORS_KEY, KEYS_KEY, WINDOW_KEY, TASK_PAGE_KEY, SCHEDULE_KEY, FOLD_KEY,
+    COLORS_KEY, WINDOW_KEY, TASK_PAGE_KEY, SCHEDULE_KEY, FOLD_KEY,
     "agenttik.smartSearch", TASK_SOUNDS_KEY]) storage.removeItem(key);
   await Promise.all([loadProviders(), loadActionModels()]);
 }

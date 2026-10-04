@@ -94,6 +94,54 @@ test("diagnostics never write browser storage before privacy is known or in priv
   } finally { globalThis.localStorage = original; }
 });
 
+test("client preferences share storage across profiles and remote instances", async () => {
+  const originalLocation = globalThis.location;
+  const originalStorage = globalThis.localStorage;
+  const originalFetch = globalThis.fetch;
+  const values = new Map();
+  globalThis.localStorage = {
+    getItem(key) { return values.get(key) ?? null; },
+    setItem(key, value) { values.set(key, String(value)); },
+  };
+  try {
+    globalThis.location = { search: "" };
+    const local = await import("./api.js?client-local");
+    globalThis.location = { search: "?profile=work&remote=office" };
+    const remote = await import("./api.js?client-remote");
+    globalThis.fetch = async () => new Response("{}", { headers: {
+      "Content-Type": "application/json", "X-Agenttik-Instance": "local-id", "X-Agenttik-Remote": "office-url",
+    } });
+    await remote.api("GET", "/api/projects");
+    local.clientStorage.setItem("keys", "shared bindings");
+    strictEqual(remote.clientStorage.getItem("keys"), "shared bindings");
+    remote.clientStorage.setItem("keys", "new bindings");
+    strictEqual(local.clientStorage.getItem("keys"), "new bindings");
+    // Tabs and drafts still belong to their profile and server.
+    remote.storage.setItem("tabs", "remote tabs");
+    strictEqual(local.storage.getItem("tabs"), null);
+    strictEqual(remote.storage.getItem("tabs"), "remote tabs");
+  } finally {
+    globalThis.location = originalLocation;
+    globalThis.localStorage = originalStorage;
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("private client preferences never read or change normal bindings", async () => {
+  const originalStorage = globalThis.localStorage;
+  globalThis.localStorage = {
+    getItem() { throw new Error("read normal storage"); },
+    setItem() { throw new Error("wrote normal storage"); },
+  };
+  try {
+    const { clientStorage, setPrivateMode } = await import("./api.js?private-client");
+    setPrivateMode(true);
+    strictEqual(clientStorage.getItem("keys"), null);
+    clientStorage.setItem("keys", "private bindings");
+    strictEqual(clientStorage.getItem("keys"), "private bindings");
+  } finally { globalThis.localStorage = originalStorage; }
+});
+
 test("turn footers are exact under two minutes and rough after", () => {
   const turn = (secs, input, output, cost = 0, estimate = 0) =>
     turnSummary([{ started_at: 0, ended_at: secs * 1000, input_tokens: input, output_tokens: output, cost_usd: cost, estimated_cost_usd: estimate }]);

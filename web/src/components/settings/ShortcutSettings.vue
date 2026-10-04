@@ -89,6 +89,9 @@ onUnmounted(stop);
   <section v-if="groups.length">
     <div class="mb-0.5 font-semibold text-highlighted">Shortcuts</div>
     <p class="mb-2 text-xs text-dimmed">
+      Shared across all profiles and remote connections in this client. Restoring defaults applies to all of them.
+    </p>
+    <p class="mb-2 text-xs text-dimmed">
       Click a chord and press the keys you want. Escape cancels. Greyed chords belong to the text
       boxes themselves and stay as they are.
     </p>

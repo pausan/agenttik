@@ -1,7 +1,10 @@
 # Settings sections and editable shortcuts
 
 Enqueue is `Enter`; `Ctrl+Enter` sends. On macOS the primary modifier is `Cmd`,
-so the same binding is `Cmd+Enter`. `Alt+Enter` no longer queues anything: it
+so the same binding is `Cmd+Enter`. The platform is detected on the client,
+never on the server: a Linux client connected to a macOS host keeps Ctrl,
+and a macOS client connected to Linux keeps Cmd. Explicitly recorded bindings
+keep their chosen modifiers. `Alt+Enter` no longer queues anything: it
 was chosen because the modified Enter chord looked taken, and it is not.
 
 Browser shortcuts come from one registry, `shortcuts.js`, and
@@ -25,7 +28,23 @@ unsaved-file warning.
 
 Most browser shortcuts are editable. Click a chord in Settings and the next keystroke
 becomes the binding; Escape cancels, and a per-row arrow restores that row's
-default. Recording listens in the capture phase with propagation stopped, so
+default. Bindings are shared across all local profiles and remote connections
+in the same client. The Enter-send/enqueue choice uses these bindings too.
+Edits and resets reach other open windows through browser storage events.
+Restoring one row, all shortcuts, or General defaults changes the shared set;
+the settings panes explain this scope.
+
+The shared set lives at the unscoped `agenttik.client.keys` browser key.
+On first load it is seeded from the local Default profile's unscoped
+`agenttik.keys`, or an empty override map if absent. Old profile and remote
+sets remain saved but are not used. An empty shared map is kept after reset,
+so old bindings cannot return on reload. Private mode uses memory only and
+does not import normal bindings. Separate browser origins and browser profiles
+have separate sets; remote profiles reached through the local instance share
+its origin. Native global tray shortcuts keep their desktop setting, and
+terminal input keeps its terminal semantics.
+
+Recording listens in the capture phase with propagation stopped, so
 binding `Ctrl+P` (or `Cmd+P` on macOS) records that chord instead of opening
 the launcher, and Escape
 reaches the recorder rather than closing the dialog. Only what differs from a

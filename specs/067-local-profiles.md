@@ -32,7 +32,9 @@ catalogs are shared too; API conversation files remain profile-local
 profile-local. The same folder
 can be registered independently in multiple profiles. Working files are shared:
 profiles do not create copies of the project directory. Browser preferences are
-scoped too, including Light/Dark/System mode and file-tree expansion. Default
+scoped too, including Light/Dark/System mode and file-tree expansion. Keyboard
+shortcuts and the Enter-send/enqueue choice are shared across all local and
+remote profiles in the client; see [015](015-settings-shortcuts.md). Default
 retains its existing browser keys; added profiles use separate keys.
 
 Existing profile subscriptions are imported into the instance database at startup.

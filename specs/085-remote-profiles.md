@@ -55,6 +55,10 @@ through local profiles, then each machine's, wrapping.
 
 Busy dots cover local profiles only. A remote is not polled.
 
+Keyboard shortcuts use the client's shared bindings, including the
+Enter-send/enqueue choice. Ctrl/Cmd defaults follow the client's OS rather
+than the remote host; see [015](015-settings-shortcuts.md).
+
 ## Connecting
 
 Startup reads the saved list and contacts no remote. A machine is contacted

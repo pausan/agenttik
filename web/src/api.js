@@ -37,6 +37,12 @@ export const storage = {
   setItem(key, value) { if (privateMode) privateState.set(key, String(value)); else localStorage.setItem(instanceKey(key), value); },
   removeItem(key) { if (privateMode) privateState.delete(key); else localStorage.removeItem(instanceKey(key)); },
 };
+// Keyboard preferences belong to the client, across profiles and servers.
+// Private windows still keep them in memory and never read normal preferences.
+export const clientStorage = {
+  getItem(key) { return privateMode ? privateState.get(key) ?? null : localStorage.getItem(key); },
+  setItem(key, value) { if (privateMode) privateState.set(key, String(value)); else localStorage.setItem(key, value); },
+};
 // Startup failures stay in memory until the server identifies private mode.
 const startupDiagnostics = new Map();
 export const diagnosticStorage = {

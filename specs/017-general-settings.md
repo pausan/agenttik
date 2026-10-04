@@ -26,6 +26,8 @@ so the General pane and the Shortcuts list are one fact shown twice and cannot
 disagree — the prompt bar's hint line follows without knowing the setting
 exists, because it already read the bindings. That is the same reason the
 shortcut list is generated from the registry rather than written out (see 015).
+The pair is shared across every local and remote profile in the client,
+and its modifier follows the client OS.
 
 The cost of storing it there is that Shortcuts can still put either chord
 anywhere, which is no longer one of the two arrangements. Rather than
@@ -157,4 +159,6 @@ all windows. Tray changes need a restart.
 `POST /api/general/reset` updates these database preferences in one transaction.
 Only named browser preference keys are removed; authentication, accounts, server
 configuration, project/task data, open tabs, files and drafts are preserved.
-The reset applies in place without reloading the page.
+The reset applies in place without reloading the page. Keyboard shortcuts and
+prompt submission reset across all profiles and remote connections in this
+client, including other open windows. The warning states that scope.

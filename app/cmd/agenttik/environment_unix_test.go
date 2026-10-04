@@ -116,3 +116,47 @@ func writeExecutable(t *testing.T, path, body string) {
 		t.Fatal(err)
 	}
 }
+
+func isolateBundledCodexDirs(t *testing.T) {
+	t.Helper()
+	original := bundledCodexDirs
+	bundledCodexDirs = nil
+	t.Cleanup(func() { bundledCodexDirs = original })
+}
+
+func TestRestoreBundledCodexPath(t *testing.T) {
+	isolateBundledCodexDirs(t)
+	home := t.TempDir()
+	bin := filepath.Join(home, "Applications", "ChatGPT.app", "Contents", "Resources", "codex-cli", "CodexCLI.app", "Contents", "MacOS")
+	if err := os.MkdirAll(bin, 0700); err != nil {
+		t.Fatal(err)
+	}
+	writeExecutable(t, filepath.Join(bin, "codex"), "#!/bin/sh\nprintf 'bundled codex'\n")
+	bundledCodexDirs = []string{filepath.Join(home, "missing"), bin}
+	t.Setenv("HOME", home)
+	t.Setenv("TERM", "xterm-256color")
+	t.Setenv("SHELL", filepath.Join(home, "missing-shell"))
+	t.Setenv("PATH", "/usr/bin:/bin")
+	if codex.New().Available() == nil {
+		t.Fatal("bundled Codex must be unavailable before restoring PATH")
+	}
+	restoreBundledCodexPath()
+	if err := codex.New().Available(); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command("codex").Output()
+	if err != nil || string(out) != "bundled codex" {
+		t.Fatalf("Codex output %q, error %v", out, err)
+	}
+	// An installed CLI wins over the app bundle, including after another probe.
+	installed := filepath.Join(home, ".local", "bin")
+	if err := os.MkdirAll(installed, 0700); err != nil {
+		t.Fatal(err)
+	}
+	writeExecutable(t, filepath.Join(installed, "codex"), "#!/bin/sh\n")
+	t.Setenv("PATH", installed+":/usr/bin:/bin")
+	restoreBundledCodexPath()
+	if got, err := exec.LookPath("codex"); err != nil || got != filepath.Join(installed, "codex") {
+		t.Fatalf("selected Codex %q, error %v", got, err)
+	}
+}

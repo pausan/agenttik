@@ -16,14 +16,25 @@ leaves the inherited path intact. Whether or not the shell answered, the usual
 install directories that exist are appended last: `~/.local/bin` (Claude Code's
 native installer), `~/.claude/local`, `/opt/homebrew/bin` and `/usr/local/bin`.
 A slow or broken shell startup therefore cannot hide a natively installed
-`claude`. CLI children inherit the recovered path too, so scripts can find
+`claude`.
+
+Every macOS server launch, including terminal launches, `--web` and web-only
+builds, also finds the Codex executable bundled with ChatGPT
+under `/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS`
+and the same bundle under `~/Applications`. These directories come after the
+usual install directories, so a separately installed CLI takes priority.
+Saved Codex login detection is independent of CLI discovery: a detected
+ChatGPT subscription still needs a discoverable executable to run.
+CLI children inherit the recovered path too, so scripts can find
 runtimes such as `node`.
 
-Terminal environments, explicit `--web` launches, web-only builds and Windows
-keep their inherited path. Remote clients and command-only invocations do not
-start the shell. Tests simulate a desktop path, verify both discovery and CLI
+Terminal environments, explicit `--web` launches and web-only builds skip the
+shell probe; on macOS they still append the bundle directories. Windows keeps
+its inherited path. Remote clients and command-only invocations do not change
+the path or start the shell. Tests simulate a desktop path, verify both discovery and CLI
 execution, and cover failed, incomplete and timed-out shell probes, and the install
-directories found without a shell.
+directories found without a shell, bundled Codex execution with `TERM` set
+and without desktop build tags, and installed CLI priority over app bundles.
 
 ## Interface
 

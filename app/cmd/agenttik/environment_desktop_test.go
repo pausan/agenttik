@@ -11,6 +11,7 @@ import (
 )
 
 func TestRestoreDesktopPath(t *testing.T) {
+	isolateBundledCodexDirs(t)
 	shell := filepath.Join(t.TempDir(), "shell")
 	writeExecutable(t, shell, "#!/bin/sh\nexport PATH=/shell/bin\n/bin/sh -c \"$2\"\n")
 	systemBinDirs = nil
@@ -38,6 +39,7 @@ func TestRestoreDesktopPath(t *testing.T) {
 // A shell that fails, or takes too long, still leaves Claude Code's native
 // install findable.
 func TestRestoreDesktopPathFindsInstallDirsWithoutShell(t *testing.T) {
+	isolateBundledCodexDirs(t)
 	home := t.TempDir()
 	bin := filepath.Join(home, ".local", "bin")
 	if err := os.MkdirAll(bin, 0700); err != nil {

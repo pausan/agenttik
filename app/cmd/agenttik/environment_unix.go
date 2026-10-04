@@ -9,11 +9,38 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
 	"github.com/pausan/agenttik/app/internal/process"
 )
+
+// ChatGPT ships a standalone Codex executable outside the usual CLI paths.
+// Keep bundle directories last so an explicitly installed CLI takes priority.
+var bundledCodexDirs = func() []string {
+	if runtime.GOOS != "darwin" {
+		return nil
+	}
+	const bin = "ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS"
+	dirs := []string{filepath.Join("/Applications", bin)}
+	if home, err := os.UserHomeDir(); err == nil {
+		dirs = append(dirs, filepath.Join(home, "Applications", bin))
+	}
+	return dirs
+}()
+
+// Bundle discovery is cheap and applies to every local server, including web
+// mode and terminal launches. It does not run a shell or change CLI priority.
+func restoreBundledCodexPath() {
+	var dirs []string
+	for _, dir := range bundledCodexDirs {
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			dirs = append(dirs, dir)
+		}
+	}
+	os.Setenv("PATH", appendShellPath(os.Getenv("PATH"), strings.Join(dirs, string(os.PathListSeparator))))
+}
 
 // restoreShellPath runs before providers or background jobs start, so discovery
 // and every CLI child inherit the same PATH (including interpreters like node).

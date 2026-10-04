@@ -16,20 +16,6 @@ import (
 // home directory. A variable so tests can leave the machine's own out.
 var systemBinDirs = []string{"/opt/homebrew/bin", "/usr/local/bin"}
 
-// ChatGPT ships a standalone Codex executable outside the usual CLI paths.
-// Keep bundle directories last so an explicitly installed CLI takes priority.
-var bundledCodexDirs = func() []string {
-	if runtime.GOOS != "darwin" {
-		return nil
-	}
-	const bin = "ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS"
-	dirs := []string{filepath.Join("/Applications", bin)}
-	if home, err := os.UserHomeDir(); err == nil {
-		dirs = append(dirs, filepath.Join(home, "Applications", bin))
-	}
-	return dirs
-}()
-
 func restoreDesktopPath() {
 	// Terminal launches already carry the user's chosen environment, including
 	// deliberately restricted paths. Desktop launchers usually have no TERM.
@@ -63,7 +49,6 @@ func installDirs() []string {
 		dirs = append(dirs, filepath.Join(home, ".local", "bin"), filepath.Join(home, ".claude", "local"))
 	}
 	dirs = append(dirs, systemBinDirs...)
-	dirs = append(dirs, bundledCodexDirs...)
 	found := dirs[:0]
 	for _, dir := range dirs {
 		if info, err := os.Stat(dir); err == nil && info.IsDir() {

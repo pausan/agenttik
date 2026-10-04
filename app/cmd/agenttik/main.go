@@ -165,6 +165,7 @@ func run() error {
 	if !*webOnly {
 		restoreDesktopPath()
 	}
+	restoreBundledCodexPath()
 
 	claude, openai, github := claudecode.New(), codex.New(), copilot.New()
 	providers := []agent.Provider{claude, openai, github, opencode.New()}

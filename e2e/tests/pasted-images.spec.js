@@ -1,14 +1,19 @@
-import { addProject, expect, newTask, openProject, test } from "../fixtures.js";
+import { addProject, expect, newTask, openProject, pickModel, test } from "../fixtures.js";
 
-async function pasteImages(page, count) {
-  await page.getByPlaceholder("Ask the agent…").evaluate((box, count) => {
+async function pasteImages(page, count, size = 2) {
+  await page.getByPlaceholder("Ask the agent…").evaluate((box, { count, size }) => {
     const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = 2;
-    const bytes = Uint8Array.from(atob(canvas.toDataURL("image/png").split(",")[1]), (c) => c.charCodeAt(0));
+    canvas.width = canvas.height = size;
     const clipboardData = new DataTransfer();
-    for (let i = 0; i < count; i++) clipboardData.items.add(new File([bytes], `image-${i}.png`, { type: "image/png" }));
+    const ctx = canvas.getContext("2d");
+    for (let i = 0; i < count; i++) {
+      ctx.fillStyle = i % 2 ? "blue" : "red";
+      ctx.fillRect(0, 0, size, size);
+      const bytes = Uint8Array.from(atob(canvas.toDataURL("image/png").split(",")[1]), (c) => c.charCodeAt(0));
+      clipboardData.items.add(new File([bytes], `image-${i}.png`, { type: "image/png" }));
+    }
     box.dispatchEvent(new ClipboardEvent("paste", { clipboardData, bubbles: true, cancelable: true }));
-  }, count);
+  }, { count, size });
 }
 
 test("paste multiple images, remove one, restore draft and require text before sending", async ({ page }) => {
@@ -16,7 +21,7 @@ test("paste multiple images, remove one, restore draft and require text before s
   await openProject(page);
   await newTask(page);
   await pasteImages(page, 2);
-  const previews = page.getByRole("img", { name: /Attached image/ });
+  const previews = page.locator(".prompt-bar").getByRole("img", { name: /Attached image/ });
   await expect(previews).toHaveCount(2);
   await page.getByRole("button", { name: "Remove image 1", exact: true }).click();
   await expect(previews).toHaveCount(1);
@@ -33,6 +38,43 @@ test("paste multiple images, remove one, restore draft and require text before s
   const sent = (await request).postDataJSON().prompt;
   expect(sent.match(/!\[Attached image\]/g)).toHaveLength(2);
   await expect(previews).toHaveCount(0);
+});
+
+test("submitted images stay visible and open a zoomable viewer after reload", async ({ page }) => {
+  await addProject(page);
+  await openProject(page);
+  await newTask(page);
+  await pickModel(page);
+  const text = "Describe **these** images\nwith this spacing.";
+  await page.getByPlaceholder("Ask the agent…").fill(text);
+  await pasteImages(page, 2, 1024);
+  await expect(page.locator(".prompt-bar").getByRole("img")).toHaveCount(2);
+  await expect(page.getByRole("status").filter({ hasText: "Saving images" })).toHaveCount(0);
+  await page.getByPlaceholder("Ask the agent…").press("Control+Enter");
+  const message = page.locator("[data-human-message]").last();
+  const images = message.getByRole("img", { name: /Attached image/ });
+  await expect(images).toHaveCount(2);
+  await expect(message.getByText(text, { exact: true })).toBeVisible();
+  await expect(message).not.toContainText("/api/attachments/");
+  await expect(page.getByText("idle", { exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  await expect(images).toHaveCount(2);
+  await expect.poll(() => images.first().evaluate((img) => img.naturalWidth)).toBe(1024);
+  expect((await images.first().boundingBox()).width).toBeLessThan(390);
+  const source = await images.nth(1).getAttribute("src");
+  const thumbnail = await images.nth(1).boundingBox();
+  await message.getByRole("button", { name: "View attached image 2", exact: true }).click();
+  const viewer = page.getByRole("dialog", { name: "Attached image", exact: true });
+  await expect(viewer).toBeVisible();
+  await expect(viewer.getByRole("img")).toHaveAttribute("src", source);
+  await expect.poll(() => viewer.getByRole("img").evaluate((img) => img.naturalWidth)).toBe(1024);
+  await expect.poll(async () => (await viewer.getByRole("img").boundingBox()).width).toBeGreaterThan(thumbnail.width);
+  await viewer.getByRole("button", { name: "Zoom in", exact: true }).click();
+  await expect(viewer.getByTitle("Fit to the pane", { exact: true })).not.toHaveText("Fit");
+  await page.keyboard.press("Escape");
+  await expect(viewer).toBeHidden();
+  await expect(images).toHaveCount(2);
 });
 
 test("ordinary paste retains the browser default", async ({ page }) => {

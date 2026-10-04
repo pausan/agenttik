@@ -26,7 +26,13 @@ Drafts contain `![Attached image](/api/attachments/<name>)` references, hidden
 from the prompt text box and shown as previews. This uses the existing draft,
 queue, schedule, transcript and retry storage; the stored format supports images alone, but the prompt bar requires typed
 text before enabling its actions ([062](062-pinned-prompts.md)).
-The transcript renders references as links. Before starting a turn, the runner
+Human transcript messages show attachment previews below the literal prompt
+text. Clicking a preview opens a large image dialog with the existing image
+viewer, including zoom controls, wheel and pinch zoom, and panning. Escape or
+the close button returns to the transcript. Previews load lazily and use the
+current profile and remote API scope. Copying and editing preserve the stored
+references. Assistant Markdown still renders image references as links.
+Before starting a turn, the runner
 resolves references to absolute local paths and asks the agent to use its
 image-reading tool. Image understanding requires a provider with that tool
 and image support; images are not sent as native multimodal API content.

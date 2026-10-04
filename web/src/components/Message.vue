@@ -13,6 +13,8 @@
 import { computed, nextTick, ref } from "vue";
 
 import { S, copyText, editMessage, setModel } from "../store";
+import { promptImages, promptText } from "../prompt-images";
+import ImageFrame from "./ImageFrame.vue";
 import MarkdownContent from "./MarkdownContent.vue";
 import ModelSelection from "./ModelSelection.vue";
 
@@ -37,6 +39,9 @@ const BUBBLE = {
 };
 
 const rendered = computed(() => !!RENDERED[props.message.role]);
+const images = computed(() => props.message.role === "user" ? promptImages(props.message.content) : []);
+const text = computed(() => images.value.length ? promptText(props.message.content) : props.message.content);
+const preview = ref(null);
 const classes = computed(() => [
   "wrap-anywhere",
   BUBBLE[props.message.role],
@@ -170,7 +175,19 @@ function onKey(e) {
 
     <template v-else>
       <MarkdownContent v-if="rendered" :class="classes" :text="message.content" />
-      <div v-else :class="classes">{{ message.content }}</div>
+      <div v-else :class="classes">
+        <span v-if="text">{{ text }}</span>
+        <div v-if="images.length" class="mt-2 flex flex-wrap gap-2" aria-label="Message images">
+          <button v-for="(image, i) in images" :key="i" type="button" :aria-label="`View attached image ${i + 1}`" class="max-w-full cursor-zoom-in rounded focus-visible:outline-2 focus-visible:outline-primary" @click="preview = image">
+            <img :src="image.url" :alt="`Attached image ${i + 1}`" loading="lazy" class="max-h-48 max-w-full rounded object-contain" />
+          </button>
+        </div>
+      </div>
     </template>
+    <UModal v-if="preview" :open="true" title="Attached image" :ui="{ content: 'max-w-5xl', body: 'flex h-[75vh] min-h-0' }" @update:open="preview = null">
+      <template #body>
+        <ImageFrame :src="preview.url" zoomable />
+      </template>
+    </UModal>
   </div>
 </template>

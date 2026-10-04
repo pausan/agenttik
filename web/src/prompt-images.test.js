@@ -13,6 +13,17 @@ test("image drafts round trip without changing typed whitespace", () => {
   }
 });
 
+test("message previews recognize stored image formats and preserve other literal text", () => {
+  const text = '**Literal prompt**\n![External](https://example.com/image.png)\n![Attached image](javascript:alert)';
+  const images = ["png", "jpg", "gif", "webp"].map((ext) => {
+    const url = `/api/attachments/${"b".repeat(64)}.${ext}`;
+    return { reference: `![Attached image](${url})`, url };
+  });
+  const content = withImages(text, images);
+  assert.deepEqual(promptImages(content), images);
+  assert.equal(promptText(content), text);
+});
+
 test("clipboard collects every image and leaves text paste alone", () => {
   const file = { name: "shot.png" };
   const item = { kind: "file", type: "image/png", getAsFile: () => file };

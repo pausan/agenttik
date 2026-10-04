@@ -24,7 +24,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [003](003-providers.md) | Provider interface, desktop CLI discovery, invocation, event mapping |
 | [004](004-ui.md) | Layout, panels, appearance modes, persistent Tree navigation, shortcuts, HTTP API |
 | [073](073-terminals.md) | Project terminal tabs, streaming, and silent history replay |
-| [056](056-pasted-images.md) | Clipboard images, previews, storage and agent file references |
+| [056](056-pasted-images.md) | Clipboard images, transcript previews, zoomable viewer and storage |
 | [055](055-mobile-layout.md) | Phone navigation, drawers, touch controls and viewport sizing |
 | [005](005-testing.md) | The three test layers and how they are isolated |
 | [080](080-analytics.md) | Usage cost estimates, provider/model/effort breakdowns, date windows |

@@ -50,7 +50,10 @@ operation available for recovery instead of reporting success.
 An in-progress merge/rebase replaces the operation controls with **Retry solving
 conflicts** and **Abort**. These also appear after reopening the pane. Retry can
 continue a manually staged resolution; Abort uses Git's normal abort behavior.
-Controls are disabled while a request runs. Branch, staging and commit requests
+Controls are disabled while a request runs. The spinner stops when the operation
+request answers, including on failure, before the log, changes and tree refreshes
+finish. Slow or failed refreshes over a remote connection do not keep a completed
+operation busy. Branch, staging and commit requests
 share a checkout lock across windows; this does not lock out external Git tools.
 
 Cleanup immediately deletes local branches whose tips are ancestors of either

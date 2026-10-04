@@ -77,9 +77,10 @@ async function act(action, branch = S.log.branch, remotes = []) {
       error.value = e.message;
     }
   } finally {
+    // The action has answered. Slow remote refreshes must not keep it spinning.
+    busy.value = "";
     // Refresh failures too: Git may have completed part of an operation.
     if (stillHere()) await Promise.all([refreshLog(), refreshChanged(), refreshTree()]);
-    busy.value = "";
   }
 }
 

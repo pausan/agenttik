@@ -108,6 +108,19 @@ been trimmed away, is handed the scrollback as a whole screen instead, flagged
 `reset` so the view clears before writing it. A watcher that falls too far
 behind has its stream closed, which is not a loss: reconnecting resumes it.
 
+A redrawn history is also flagged `replay`, even when it is untrimmed and needs
+no reset. The emulator draws it with terminal-query replies suppressed: old
+cursor, capability, color and mode queries must not inject answers into the
+shell prompt when a tab is selected again or the window reloads. The first
+watcher answers pending shell startup queries. Live output and incremental
+reconnects keep their replies enabled for running programs.
+
+The view finishes parsing each frame before changing its replay state or
+resetting for the next frame. Query handlers fall through to xterm.js so screen
+and color changes still apply, including commands that mix color setters and
+queries. Only synchronous query replies are muted; keyboard, paste and mouse
+input keep working between parser slices.
+
 The replay is a byte slice cut at an arbitrary point, so a very old escape
 sequence can be halved by the cut. An emulator discards a partial sequence,
 which is why the cut is allowed to be that careless.
@@ -189,6 +202,10 @@ exact-modifier matching separates.
 keystrokes keep their order across an in-flight request, report-mode bytes are
 not widened into text, keystrokes travel as bytes rather than as a `Blob`, and
 a reopened stream resumes each terminal where its view got to.
+`web/src/terminal-output.test.js` checks silent replay, input during replay,
+live replies after queued historical output, and disposal during a pending
+write. The Go tests distinguish first-watch startup output, redrawn history,
+incremental reconnects and live frames.
 
 `make test-desktop-terminal` types through the real module inside Wails/WebKit,
 where a `Blob` body is a native crash rather than a failed assertion
@@ -201,5 +218,9 @@ task leaving them alone, `exit` taking a tab with it, and the chord opening one
 from the prompt box and then a second from inside the terminal it just opened.
 It also checks clipboard menu actions, disabled Copy without a selection,
 focus after menu dismissal, and the copy/paste keyboard shortcuts.
+Local and remote-client regressions replay cursor, capability, color and mode
+queries across tab switches and reloads, then click and focus the terminal and
+verify that only the typed command reaches the shell. Live queries still get
+their replies.
 The fixture pins `SHELL` to `/bin/sh` so the tab names and the screen read the
 same on every machine.

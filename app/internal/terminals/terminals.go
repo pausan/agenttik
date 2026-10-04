@@ -63,17 +63,21 @@ var ErrNotFound = errors.New("terminal not found")
 //
 // Reset says the frame is a whole screen rather than the next piece of one,
 // so the watcher clears what it has before writing it. See SubscribeMany.
+// Replay marks a redrawn history that must not answer terminal queries again.
+// The first watcher still answers pending startup queries, and an incremental
+// reconnect answers queries in the output it has not processed yet.
 //
 // At is the shell's byte count once this frame has been applied, and is what
 // the watcher sends back as Watch.From. It is carried rather than counted by
 // the watcher because a reset frame is the tail of a longer history: the bytes
 // in it say how much was sent, not how much has happened.
 type Frame struct {
-	ID    string `json:"id"`
-	Data  string `json:"data,omitempty"`
-	At    int64  `json:"at"`
-	Exit  bool   `json:"exit,omitempty"`
-	Reset bool   `json:"reset,omitempty"`
+	ID     string `json:"id"`
+	Data   string `json:"data,omitempty"`
+	At     int64  `json:"at"`
+	Exit   bool   `json:"exit,omitempty"`
+	Reset  bool   `json:"reset,omitempty"`
+	Replay bool   `json:"replay,omitempty"`
 }
 
 // Watch is one terminal a stream wants, and how much of its output the watcher
@@ -127,6 +131,7 @@ type Terminal struct {
 	// given only what it missed.
 	written int64
 	streams map[*stream]struct{}
+	watched bool
 	exited  bool
 	closed  bool
 }
@@ -464,8 +469,9 @@ func (t *Terminal) attach(s *stream, from int64) {
 	defer t.mu.Unlock()
 	missed, reset := t.since(from)
 	if len(missed) > 0 {
-		s.send(Frame{ID: t.id, Data: base64.StdEncoding.EncodeToString(missed), At: t.written, Reset: reset})
+		s.send(Frame{ID: t.id, Data: base64.StdEncoding.EncodeToString(missed), At: t.written, Reset: reset, Replay: t.watched && (from == 0 || reset)})
 	}
+	t.watched = true
 	if t.exited {
 		s.send(Frame{ID: t.id, At: t.written, Exit: true})
 		return

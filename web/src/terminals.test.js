@@ -107,14 +107,14 @@ test("a reopened stream resumes each terminal where its view got to", async () =
 
   const drawn = [];
   const stopFirst = watchTerminal("first", {
-    onData: (bytes, reset) => drawn.push({ text: Buffer.from(bytes).toString(), reset }),
+    onData: (bytes, reset, replay) => drawn.push({ text: Buffer.from(bytes).toString(), reset, replay }),
   });
   const stream = FakeEventSource.opened.at(-1);
   ok(stream.url.includes("first%3A0"), "a view with nothing asks from zero");
 
   // 512 bytes have reached this view, of which the frame carries the last 5.
   stream.push({ id: "first", data: Buffer.from("hello").toString("base64"), at: 512 });
-  deepStrictEqual(drawn, [{ text: "hello", reset: false }]);
+  deepStrictEqual(drawn, [{ text: "hello", reset: false, replay: false }]);
 
   // Opening a second terminal reopens the shared stream. The first must be
   // resumed from where it got to, or its screen would be drawn again on top
@@ -126,8 +126,13 @@ test("a reopened stream resumes each terminal where its view got to", async () =
   ok(reopened.url.includes("second%3A0"), `the new terminal was not asked for: ${reopened.url}`);
 
   // A server that could not resume sends the screen whole, and says so.
-  reopened.push({ id: "first", data: Buffer.from("redrawn").toString("base64"), at: 900, reset: true });
-  deepStrictEqual(drawn.at(-1), { text: "redrawn", reset: true });
+  reopened.push({ id: "first", data: Buffer.from("redrawn").toString("base64"), at: 900, reset: true, replay: true });
+  deepStrictEqual(drawn.at(-1), { text: "redrawn", reset: true, replay: true });
+
+  // An untrimmed history replay does not reset the emulator, but its old
+  // terminal queries must still be silent.
+  reopened.push({ id: "first", data: Buffer.from("tail").toString("base64"), at: 904, replay: true });
+  deepStrictEqual(drawn.at(-1), { text: "tail", reset: false, replay: true });
 
   stopSecond();
   stopFirst();

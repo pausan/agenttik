@@ -23,7 +23,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [077](077-direct-api-runtime.md) | Shared API coding loop, project instructions, detected tools and permissions |
 | [003](003-providers.md) | Provider interface, desktop CLI discovery, invocation, event mapping |
 | [004](004-ui.md) | Layout, panels, appearance modes, persistent Tree navigation, shortcuts, HTTP API |
-| [073](073-terminals.md) | Shells in the project folder, per-project terminal tabs, and how they stream |
+| [073](073-terminals.md) | Project terminal tabs, streaming, and silent history replay |
 | [056](056-pasted-images.md) | Clipboard images, previews, storage and agent file references |
 | [055](055-mobile-layout.md) | Phone navigation, drawers, touch controls and viewport sizing |
 | [005](005-testing.md) | The three test layers and how they are isolated |

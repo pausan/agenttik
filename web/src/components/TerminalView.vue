@@ -12,6 +12,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 
 import { resizeTerminal, sendTerminalBinary, sendTerminalInput, watchTerminal } from "../terminals";
+import { terminalOutput } from "../terminal-output";
 import { S, closeTab, copyText, fail, hit } from "../store";
 import { rememberTabScroll, tabScroll } from "../tab-scroll";
 import { colorPreference } from "../color-mode";
@@ -22,6 +23,7 @@ const host = ref(null);
 let term = null;
 let fit = null;
 let unwatch = null;
+let output = null;
 let observer = null;
 let restoreLine = tabScroll(props.tab, "terminal")?.top;
 const selection = ref("");
@@ -113,21 +115,17 @@ onMounted(() => {
   });
   term.onSelectionChange(() => { selection.value = term.getSelection(); });
 
-  term.onData((data) => sendTerminalInput(props.tab.terminalID, data));
+  output = terminalOutput(term, data => sendTerminalInput(props.tab.terminalID, data), () => {
+    if (restoreLine === undefined) return;
+    term.scrollToLine(restoreLine);
+    restoreLine = undefined;
+  });
   term.onBinary((data) => sendTerminalBinary(props.tab.terminalID, data));
 
   unwatch = watchTerminal(props.tab.terminalID, {
     /* A reset frame is the whole screen rather than the next piece of one:
        the stream was reopened, or this view fell behind and was caught up. */
-    onData: (bytes, reset) => {
-      if (reset) term.reset();
-      const target = term;
-      term.write(bytes, () => {
-        if (target !== term || restoreLine === undefined) return;
-        term.scrollToLine(restoreLine);
-        restoreLine = undefined;
-      });
-    },
+    onData: (bytes, reset, replay) => output.write(bytes, reset, replay),
     /* The shell ended — `exit`, or Ctrl+D. The tab stood for that shell, so
        it goes with it rather than sitting there as a dead screen. */
     onExit: () => closeTab(props.tab.id, false),
@@ -150,6 +148,7 @@ onBeforeUnmount(() => {
   }
   observer?.disconnect();
   unwatch?.();
+  output?.dispose();
   term?.dispose();
   term = null;
   fit = null;

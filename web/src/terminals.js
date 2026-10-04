@@ -75,7 +75,7 @@ function open() {
       // redrawn screen is the tail of a longer history, so its length is not
       // how far the shell has got.
       view.at = frame.at;
-      view.onData(bytes(frame.data), !!frame.reset);
+      view.onData(bytes(frame.data), !!frame.reset, !!frame.replay);
     }
     if (frame.exit) {
       view.at = frame.at;

@@ -95,6 +95,39 @@ func TestLateWatcherIsHandedTheScrollback(t *testing.T) {
 	await(t, later, "written-before-watching")
 }
 
+func TestHistoryReplaysDoNotAnswerQueriesAgain(t *testing.T) {
+	term := &Terminal{streams: make(map[*stream]struct{})}
+	term.publish([]byte("\x1b[6n"))
+	first := &stream{ch: make(chan Frame, streamBuffer)}
+	term.attach(first, 0)
+	if frame := <-first.ch; frame.Replay {
+		t.Fatal("the first watcher must answer pending shell startup queries")
+	}
+	term.detach(first)
+
+	later := &stream{ch: make(chan Frame, streamBuffer)}
+	term.attach(later, 0)
+	if frame := <-later.ch; !frame.Replay || frame.Reset {
+		t.Fatalf("untrimmed history must be silent without a reset: %+v", frame)
+	}
+	term.publish([]byte("\x1b]11;?\x07"))
+	if frame := <-later.ch; frame.Replay {
+		t.Fatal("a live program must still receive terminal replies")
+	}
+	term.detach(later)
+
+	// A whole-screen reset repeats old queries; an incremental reconnect only
+	// carries output the watcher has not parsed, so those queries need replies.
+	for _, from := range []int64{4, 1000} {
+		reopened := &stream{ch: make(chan Frame, streamBuffer)}
+		term.attach(reopened, from)
+		if frame := <-reopened.ch; frame.Replay != frame.Reset {
+			t.Fatalf("only redrawn history from %d must be silent: %+v", from, frame)
+		}
+		term.detach(reopened)
+	}
+}
+
 // One connection carries every terminal, each frame naming its own.
 func TestOneStreamCarriesSeveralTerminals(t *testing.T) {
 	useSh(t)

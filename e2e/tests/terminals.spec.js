@@ -1,6 +1,8 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { addProject, expect, newTask, openProject, sidebar, test } from "../fixtures.js";
 
 /* Terminal tabs — see specs/073-terminals.md. The fixture pins SHELL to
@@ -26,6 +28,77 @@ async function expectScreen(page, text) {
   await expect(async () => {
     expect(await pane(page).innerText()).toContain(text);
   }).toPass({ timeout: 15_000 });
+}
+
+for (const remote of [false, true]) {
+  test(`${remote ? "remote" : "local"} terminal replays and clicks leave the shell input clean`, async ({ page, agenttik }) => {
+    const root = await mkdtemp(join(tmpdir(), "agenttik-terminal-replay-"));
+    let client;
+    let exited;
+    try {
+      if (remote) {
+        const binary = process.env.AGENTTIK_E2E_BIN || fileURLToPath(new URL("../../bin/agenttik-web", import.meta.url));
+        client = spawn(binary, ["--web", "--remote", agenttik.url]);
+        exited = new Promise(resolve => client.once("exit", resolve));
+        const url = await new Promise((resolve, reject) => {
+          let output = "";
+          const timer = setTimeout(() => reject(new Error("remote client did not start: " + output)), 10_000);
+          client.once("error", error => { clearTimeout(timer); reject(error); });
+          client.stdout.on("data", chunk => {
+            output += chunk;
+            const match = /remote client: (http:\/\/127\.0\.0\.1:\d+)/.exec(output);
+            if (match) { clearTimeout(timer); resolve(match[1]); }
+          });
+        });
+        await page.goto(url);
+      }
+      await addProject(page, root);
+      await openProject(page, root);
+      await newTask(page);
+      await newTerminal(page).click();
+      const inputs = [];
+      page.on("request", request => {
+        if (/\/api\/terminals\/[^/]+\/input$/.test(request.url())) {
+          inputs.push(request.postDataBuffer().toString());
+        }
+      });
+
+      // These are the queries behind the reported cursor, capability, color
+      // and mode gibberish. Live output must still answer them for programs.
+      await run(page, "printf '\\033[6n\\033[>c\\033]10;?\\007\\033]11;?\\007\\033[12$p\\nquery-ready\\n'");
+      await expect.poll(() => inputs.join("")).toMatch(/\x1b\[12;[0-4]\$y/);
+      expect(inputs.join("")).toContain("\x1b[>0;276;0c");
+      expect(inputs.join("")).toContain("\x1b]10;rgb:");
+      expect(inputs.join("")).toContain("\x1b]11;rgb:");
+      // The probe runs at the prompt, so clear its live replies before testing
+      // historical ones. A real foreground program would consume the replies.
+      await page.keyboard.press("Control+u");
+      await run(page, "printf 'shell-%s\\n' ready");
+      await expectScreen(page, "shell-ready");
+
+      for (const reload of [false, true]) {
+        inputs.length = 0;
+        if (reload) {
+          await page.reload();
+          await terminalTabs(page).first().click();
+        } else {
+          await page.getByRole("tab", { name: "New task", exact: true }).click();
+          await terminalTabs(page).first().click();
+        }
+        await expectScreen(page, "shell-ready");
+        await pane(page).locator(".xterm-screen").click();
+        await page.getByRole("button", { name: "New task" }).first().focus();
+        await pane(page).locator(".xterm-screen").click();
+        expect(inputs).toEqual([]);
+        await run(page, "printf 'clean-%s\\n' input");
+        await expectScreen(page, "clean-input");
+        expect(inputs.join("")).toBe("printf 'clean-%s\\n' input\r");
+      }
+    } finally {
+      if (client) { client.kill(); await exited; }
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 }
 
 test("a terminal runs in the project folder, and closing it ends the shell", async ({ page }) => {

@@ -5,9 +5,8 @@
    Markdown goes through the transcript's own renderer, which emits a fixed
    list of tags and escapes everything else. HTML cannot be rendered that way
    — it *is* markup — so it goes in a fully sandboxed iframe: no scripts, no
-   same-origin, no navigation, nothing that can reach back into the app. The
-   cost is that relative images and stylesheets do not resolve, which is the
-   right trade for a preview of a file the agent just wrote.
+   same-origin, no top-level navigation. A base URL serves local images and
+   stylesheets through the passive preview endpoint, including CSS imports.
 
    An SVG is markup too, and an <img> draws the same boundary for less work:
    a document there cannot run a script or fetch anything. Its source is the
@@ -19,6 +18,8 @@
    raw endpoint. FontPreview registers a face only while it is displayed.
    Videos stream from their own endpoint, in ranges, through VideoPreview. */
 import { computed } from "vue";
+import { profileID, remoteID } from "../api";
+import { htmlPreviewDocument, htmlPreviewURL } from "../html-preview";
 
 import MarkdownContent from "./MarkdownContent.vue";
 import { isFont, isImage, isVideo, rawURL } from "../store";
@@ -33,6 +34,8 @@ const text = computed(() => props.tab.edited ?? props.tab.content ?? "");
 const isHTML = computed(() => /\.html?$/i.test(props.tab.path));
 const isSVG = computed(() => /\.svg$/i.test(props.tab.path));
 const image = computed(() => isImage(props.tab.path));
+const html = computed(() => isHTML.value ? htmlPreviewDocument(text.value,
+  new URL(htmlPreviewURL(props.tab, { remote: remoteID, profile: profileID }), window.location.href).href) : "");
 
 /* A data URL keeps the markup exact without a base64 round trip, and costs
    one encode per keystroke on a file small enough to be drawn as a picture. */
@@ -46,7 +49,7 @@ const svg = computed(() => "data:image/svg+xml;charset=utf-8," + encodeURICompon
     sandbox
     referrerpolicy="no-referrer"
     :title="tab.path"
-    :srcdoc="text"
+    :srcdoc="html"
   ></iframe>
 
   <div v-else-if="isSVG || image" class="flex h-full min-h-0 px-5 py-4">

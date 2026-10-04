@@ -80,6 +80,11 @@ test-desktop-remote:
 test-desktop-images:
 	xvfb-run -a go test -tags "$(DESKTOP_TAGS)" $(PKG) -run '^TestDesktopImageUpload$$' -count=1
 
+## test-desktop-html: native Wails/WebKit sandboxed HTML asset regression (needs Xvfb)
+.PHONY: test-desktop-html
+test-desktop-html:
+	xvfb-run -a go test -tags "$(DESKTOP_TAGS)" $(PKG) -run '^TestDesktopHTMLPreview$$' -count=1
+
 ## test-desktop-video: native Wails/WebKit video playback through the media bridge (needs Xvfb, GStreamer, ffmpeg)
 .PHONY: test-desktop-video
 test-desktop-video:

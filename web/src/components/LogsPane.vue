@@ -67,7 +67,6 @@ async function act(action, branch = S.log.branch, remotes = []) {
         ? `Removed: ${result.deleted.join(", ")}` : "No merged local branches to remove.";
     }
     if (action === "clean" && stillHere()) {
-      await Promise.all([refreshLog(), refreshChanged(), refreshTree()]);
       const checked = await api("POST", `/api/projects/${id}/branches/check-remote?repo=${encodeURIComponent(repo)}`, { branch });
       if (stillHere() && checked.remotes.length) remoteCleanup.value = { branch, remotes: checked.remotes };
     }

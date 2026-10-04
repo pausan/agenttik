@@ -44,12 +44,16 @@ async function act(action, path) {
       action === "commit" ? { message: message.value } : { path });
     if (id === currentProjectID() && repo === S.repository) {
       if (action === "commit") message.value = "";
-      await Promise.all([refreshChanged(), refreshLog()]);
     }
   } catch (e) {
     if (id === currentProjectID() && repo === S.repository) error.value = e.message;
   } finally {
+    // Only the Git request keeps the controls busy, not the remote reads.
     busy.value = false;
+    // Failed hooks or Git commands may still have changed the checkout.
+    if (id === currentProjectID() && repo === S.repository) {
+      await Promise.all([refreshChanged(), refreshLog()]);
+    }
   }
 }
 </script>

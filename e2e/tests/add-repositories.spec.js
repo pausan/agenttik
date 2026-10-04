@@ -58,3 +58,46 @@ test("pasted URLs create separate rows and delete buttons fit at narrow widths",
   await expect(inputs).toHaveCount(2);
   await expect(inputs.first()).toHaveValue("git@gitlab.com:group/repo.git");
 });
+
+for (const failed of [false, true]) {
+  test(`repository check and clone stop spinning after ${failed ? "failure" : "success"}`, async ({ page }) => {
+    let releaseCheck, releaseClone, releaseProject;
+    const checkGate = new Promise((resolve) => { releaseCheck = resolve; });
+    const cloneGate = new Promise((resolve) => { releaseClone = resolve; });
+    const projectGate = new Promise((resolve) => { releaseProject = resolve; });
+    await page.route("**/api/fs/remote", async (route) => {
+      await checkGate;
+      await route.fulfill({ json: { url: "https://example.com/repo.git" } });
+    });
+    await page.route("**/api/fs/clone", async (route) => {
+      await cloneGate;
+      await route.fulfill(failed ? { status: 400, json: { error: "Clone failed" } } : { json: { name: "repo" } });
+    });
+    await page.route("**/api/projects", async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      await projectGate;
+      await route.fulfill({ status: 400, json: { error: "Project unavailable" } });
+    });
+    try {
+      const dialog = await openRepos(page);
+      await dialog.getByRole("textbox", { name: "Repository 1", exact: true }).fill("https://example.com/repo.git");
+      await expect(dialog.locator(".animate-spin")).toBeVisible();
+      releaseCheck();
+      await expect(dialog.locator(".animate-spin")).toHaveCount(0);
+      const add = dialog.getByRole("button", { name: "Add project", exact: true });
+      await expect(add).toBeEnabled();
+      await add.click();
+      await expect(dialog.locator(".animate-spin")).toBeVisible();
+      releaseClone();
+      // A successful clone has finished even while adding the project waits.
+      await expect(dialog.locator(".animate-spin")).toHaveCount(0);
+      await expect(dialog.getByText("Cloning 1 of 1 repositories", { exact: true })).toBeHidden();
+      if (failed) await expect(dialog.getByText("Clone failed", { exact: true })).toBeVisible();
+    } finally {
+      releaseCheck();
+      releaseClone();
+      releaseProject();
+      await page.unrouteAll({ behavior: "wait" });
+    }
+  });
+}

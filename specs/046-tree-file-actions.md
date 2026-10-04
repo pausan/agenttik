@@ -28,6 +28,10 @@ the repository, and directories (including submodules) are rejected.
 
 The response lists affected paths. Their working-file tabs close, while history
 tabs stay open, and the Tree and Changes lists refresh. Other files are untouched.
+The confirmation closes after Git answers and the affected tabs close, without
+waiting for those refreshes. A failure keeps the dialog available for retry.
+Both outcomes refresh the lists in the background; slow or failed remote reads
+do not keep the Revert button spinning.
 
 ## Paths
 

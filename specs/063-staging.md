@@ -31,6 +31,10 @@ text conversion disabled, rejects empty diffs and diffs over 128 KiB, and allows
 one minute for generation. No task or conversation is created.
 
 Successful commits clear the message and refresh changes and history.
+Staging, unstaging and committing stop their busy indicators as soon as the Git
+request answers. Changes and history refresh afterward, including on failure;
+slow or failed remote reads do not keep the controls busy. Failed commits keep
+the message for retry.
 
 `GET /api/projects/:id/changes?repo=…` returns project-relative paths, status,
 `staged`, and `unstaged`. NUL-delimited porcelain preserves unusual filenames.

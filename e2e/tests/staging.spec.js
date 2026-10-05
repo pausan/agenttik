@@ -107,6 +107,8 @@ test("stage, unstage and commit through the inline resizable composer", async ({
     }), { times: 1 });
     await generate.click();
     await expect(field).toHaveValue("Add new file");
+    await page.reload();
+    await expect(field).toHaveValue("Add new file");
     expect(git("diff", "--cached", "--name-only").trim()).toBe("new.txt");
     expect(() => git("rev-parse", "--verify", "HEAD")).toThrow();
     await page.route("**/api/projects/*/commit-message?*", (route) => route.fulfill({
@@ -124,6 +126,8 @@ test("stage, unstage and commit through the inline resizable composer", async ({
     await commit.click();
     await expect(field).toHaveValue("");
     await expect(pane.getByText("No staged files.")).toBeVisible();
+    await page.reload();
+    await expect(field).toHaveValue("");
     expect(git("log", "-1", "--format=%s").trim()).toBe("Add new file");
     expect(git("status", "--porcelain")).toBe("");
   } finally {

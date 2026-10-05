@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { api } from "../api";
 import { S, currentProjectID, refreshChanged, refreshLog } from "../store";
 import FileList from "./FileList.vue";
@@ -8,16 +8,24 @@ const emit = defineEmits(["show-in-tree"]);
 const staged = computed(() => S.changed.filter((f) => f.staged));
 const unstaged = computed(() => S.changed.filter((f) => f.unstaged));
 const expanded = ref(true);
-const message = ref("");
+const messageKey = computed(() => JSON.stringify([currentProjectID(), S.repository]));
+function setMessage(key, text) {
+  if (text) S.commitDrafts[key] = text;
+  else delete S.commitDrafts[key];
+}
+const message = computed({
+  get: () => S.commitDrafts[messageKey.value] || "",
+  set: (text) => setMessage(messageKey.value, text),
+});
 const busy = ref(false);
 const error = ref("");
 const generating = ref(false);
 let contextVersion = 0;
 watch(() => [currentProjectID(), S.repository], () => {
   contextVersion++;
-  message.value = "";
   error.value = "";
-});
+}, { flush: "sync" });
+onBeforeUnmount(() => { contextVersion++; });
 async function generateMessage() {
   if (busy.value || !staged.value.length) return;
   const version = contextVersion;
@@ -37,13 +45,16 @@ async function act(action, path) {
   if (busy.value) return;
   const id = currentProjectID();
   const repo = S.repository;
+  const key = messageKey.value;
+  const submitted = message.value;
   busy.value = true;
   error.value = "";
   try {
     await api("POST", `/api/projects/${id}/${action}?repo=${encodeURIComponent(repo)}`,
-      action === "commit" ? { message: message.value } : { path });
-    if (id === currentProjectID() && repo === S.repository) {
-      if (action === "commit") message.value = "";
+      action === "commit" ? { message: submitted } : { path });
+    // Clear the committed draft even after navigation, keeping any new edits.
+    if (action === "commit" && S.commitDrafts[key] === submitted) {
+      setMessage(key, "");
     }
   } catch (e) {
     if (id === currentProjectID() && repo === S.repository) error.value = e.message;
@@ -62,7 +73,7 @@ async function act(action, path) {
   <div class="space-y-3">
     <div class="space-y-2">
       <div class="flex flex-col items-end gap-2">
-        <textarea v-model="message" :disabled="generating" aria-label="Commit message" placeholder="Commit message" rows="2" class="w-full min-h-14 resize-y rounded-md border border-default bg-default p-2 font-mono text-xs" />
+        <textarea v-model="message" :disabled="generating || !S.repository" aria-label="Commit message" placeholder="Commit message" rows="2" class="w-full min-h-14 resize-y rounded-md border border-default bg-default p-2 font-mono text-xs" />
         <div class="flex w-full items-center gap-1">
           <span class="mr-auto min-w-0 truncate text-xs text-muted" aria-label="Current branch" :title="S.log.branch">{{ S.log.branch }}</span>
           <UButton class="shrink-0" icon="i-lucide-sparkle" aria-label="Generate commit message" title="Generate or rewrite the message from staged changes using the model in Settings → Models → Automatic actions. Does not commit." size="sm" variant="ghost" color="neutral" :loading="generating" :disabled="busy || !staged.length" @click="generateMessage" />

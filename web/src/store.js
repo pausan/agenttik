@@ -94,6 +94,8 @@ export const S = reactive({
      session tab the text was typed into; the text is the user's and outlives
      that tab. */
   drafts: {},
+  // [projectID, repository] -> commit text, independent of the open pane/tab.
+  commitDrafts: {},
   unreadTasks: {},
   /* sessionID -> tool calls its running turn waits on the user to allow.
      Server state: read whole when the stream opens, then kept by events, so
@@ -2559,6 +2561,7 @@ function writeOpenTabs() {
         // The drafts of conversations with no tab of their own; an open tab
         // carries its own.
         drafts: S.drafts,
+        commitDrafts: S.commitDrafts,
         activeTab: S.activeTab,
         activeProjectID: S.activeProjectID,
       }),
@@ -2589,6 +2592,11 @@ async function restoreOpenTabs() {
   }
   if (!Array.isArray(saved?.tabs)) return;
   if (saved.drafts && typeof saved.drafts === "object") Object.assign(S.drafts, saved.drafts);
+  if (saved.commitDrafts && typeof saved.commitDrafts === "object") {
+    for (const [key, message] of Object.entries(saved.commitDrafts)) {
+      if (typeof message === "string" && message) S.commitDrafts[key] = message;
+    }
+  }
 
   restoringTabs = true;
   try {
@@ -2633,6 +2641,7 @@ watch(
     activeTab: S.activeTab,
     activeProjectID: S.activeProjectID,
     tabs: S.tabs.map(savedTab),
+    commitDrafts: { ...S.commitDrafts },
   }),
   saveOpenTabs,
 );

@@ -103,6 +103,8 @@ func New(s *store.Store, reg *agent.Registry, r *runner.Runner) *Server {
 		AppName:               "agenttik",
 		DisableStartupMessage: true,
 		ErrorHandler:          errorHandler,
+		// A 2 MiB hex edit needs two characters per byte plus JSON fields.
+		BodyLimit: 2*maxFileBytes + (64 << 10),
 		// Without this, Query and Params hand back strings that point into
 		// fasthttp's request buffer, which is recycled for the next request.
 		// Session ids and stream topics outlive their handler — they end up

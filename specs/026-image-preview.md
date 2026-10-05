@@ -9,15 +9,13 @@ and the picture is a second view of it. `FilePreview` draws it through an
 text, so the drawing follows the editor keystroke by keystroke and an SVG's
 Diff is still the text diff, unified or split.
 
-**A raster image previews and has no editor.** `isImage()` covers `png`, `jpg`,
-`jpeg`, `gif`, `webp`, `avif`, `bmp`, `ico` and `apng`. Such a tab offers
-`Diff | Preview` and nothing else — `setFileMode` refuses `edit`, `openingMode`
-opens on the picture when the remembered view is one an image cannot show, the
-tab is `readOnly` from the moment it is built so no Save button appears, and
-`gotoLine` leaves it alone since a line means nothing in a picture. Its text is
-never fetched: `loadFileTab` short-circuits, and the bytes go straight from the
-raw endpoint into the element that draws them. A separate small metadata
-response supplies the header's [file size and color depth](059-file-information.md).
+**A raster image opens in Preview and offers Hex.** `isImage()` covers `png`,
+`jpg`, `jpeg`, `gif`, `webp`, `avif`, `bmp`, `ico` and `apng`. Its modes are
+`Diff | Preview | Hex`; it has no text editor or line navigation. Preview
+streams bytes from the raw endpoint without fetching file content. Hex loads
+a bounded byte view and allows small replacements within the existing 2 MiB
+edit limit. See [088](088-binary-files.md). A separate metadata response supplies
+the header's [file size and color depth](059-file-information.md).
 
 **An image's Diff is the two pictures, side by side, and only that.** `ImageDiff`
 replaces `FileDiff` for an image and carries no unified/split toggle: there is

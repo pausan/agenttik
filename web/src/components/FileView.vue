@@ -23,6 +23,7 @@ import FileDiff from "./FileDiff.vue";
 import FileEditor from "./FileEditor.vue";
 import FilePreview from "./FilePreview.vue";
 import ImageDiff from "./ImageDiff.vue";
+import HexEditor from "./HexEditor.vue";
 
 const props = defineProps({ tab: { type: Object, required: true } });
 
@@ -77,11 +78,17 @@ watch(
    so offering Edit or Preview would only show the wrong thing. */
 const modes = computed(() => {
   if (props.tab.commit) return [{ label: "Diff", value: "diff" }];
+  if (props.tab.binary && !media.value) {
+    const items = [{ label: "Hex", value: "hex" }];
+    if (!outside.value) items.push({ label: "Diff", value: "diff" });
+    return items;
+  }
   // Media has no editable text.
   const items = media.value ? [] : [{ label: "Edit", value: "edit" }];
   // A file outside the project is in no repository of it: there is no diff.
   if (!outside.value) items.push({ label: "Diff", value: "diff" });
   if (canPreview(props.tab.path)) items.push({ label: "Preview", value: "preview" });
+  if (media.value) items.push({ label: "Hex", value: "hex" });
   return items;
 });
 
@@ -93,13 +100,14 @@ const text = computed(() => props.tab.edited ?? props.tab.content ?? "");
 /* Restored files show their tab immediately and fill in their contents later. */
 const body = computed(() => {
   if (props.tab.loadError) return "error";
+  if (props.tab.mode === "hex" && !props.tab.binary) return "loading";
   const value = props.tab.mode === "diff" ? props.tab.diff : props.tab.content;
   if (value === null) return "loading";
   // The diff of an image is still fetched, for its one useful word: git says
   // nothing at all when a file has not changed, and the pictures are what is
   // drawn from there on.
   if (props.tab.mode === "diff") return value ? (image.value ? "images" : "diff") : "empty";
-  return props.tab.mode === "preview" ? "preview" : "edit";
+  return props.tab.mode === "hex" ? "hex" : props.tab.mode === "preview" ? "preview" : "edit";
 });
 
 /* An iframe scrolls itself and a picture or video is fitted to its pane;
@@ -111,13 +119,13 @@ const fills = computed(
     (body.value === "preview" && (image.value || video.value || /\.html?$/i.test(props.tab.path))),
 );
 
-const lines = computed(() => lineCount(text.value));
-const large = computed(() => largeFile(text.value, lines.value));
+const lines = computed(() => props.tab.binary ? 0 : lineCount(text.value));
+const large = computed(() => !props.tab.binary && largeFile(text.value, lines.value));
 
 /* One extra pass over a diff that has already been fetched, and only when it
    changes — cheaper than threading the count back out of the parse. */
 const stat = computed(() => {
-  if (props.tab.mode !== "diff" || !props.tab.diff || media.value) return null;
+  if (props.tab.mode !== "diff" || !props.tab.diff || media.value || props.tab.binary) return null;
   let add = 0;
   let del = 0;
   for (const line of props.tab.diff.split("\n")) {
@@ -146,12 +154,9 @@ const stat = computed(() => {
         aria-label="Unsaved changes"
         >*</span
       >
-      <!-- Save belongs to the editor. A diff and a preview are not where text
-           is typed, and a file with no text to type — an image, a binary, a
-           commit's revision — never shows the editor at all. Ctrl+S still
-           reaches the file from any view: the edits are there either way. -->
+      <!-- Text and hex edits share Save and the unsaved-tab guard. -->
       <UButton
-        v-if="tab.mode === 'edit' && !tab.readOnly"
+        v-if="(tab.mode === 'edit' || tab.mode === 'hex') && !tab.readOnly"
         icon="i-lucide-save"
         size="xs"
         color="neutral"
@@ -192,15 +197,16 @@ const stat = computed(() => {
       <FileDiff v-else-if="body === 'diff'" :diff="tab.diff" :tab="tab" />
       <ImageDiff v-else-if="body === 'images'" :tab="tab" @dimensions="dimensions = $event" />
       <FilePreview v-else-if="body === 'preview'" :tab="tab" @dimensions="dimensions = $event" />
+      <HexEditor v-else-if="body === 'hex'" :tab="tab" />
       <FileEditor v-else :tab="tab" :large="large" />
     </div>
 
     <div
       class="flex shrink-0 items-center gap-3 border-t border-default px-5 py-1 text-xs text-dimmed"
     >
-      <span>{{ image ? "image" : font ? "font" : video ? "video" : langOf(tab.path) || "text" }}</span>
+      <span>{{ body === "hex" ? "binary" : image ? "image" : font ? "font" : video ? "video" : langOf(tab.path) || "text" }}</span>
       <span v-if="tab.commit" class="text-dimmed">committed</span>
-      <span v-else-if="media" class="text-dimmed">not editable</span>
+      <span v-else-if="media && body !== 'hex'" class="text-dimmed">not editable</span>
       <span v-else-if="tab.readOnly" class="text-warning">read only</span>
       <span v-else-if="dirty" class="text-primary">unsaved</span>
       <span v-if="body === 'edit' && large">plain text · no wrap</span>
@@ -209,6 +215,7 @@ const stat = computed(() => {
         <span class="text-success">+{{ nf.format(stat.add) }}</span>
         <span class="text-error">−{{ nf.format(stat.del) }}</span>
       </template>
+      <span v-else-if="body === 'hex'">{{ nf.format(tab.size) }} bytes</span>
       <span v-else-if="!media">{{ nf.format(lines) }} {{ lines === 1 ? "line" : "lines" }}</span>
     </div>
   </div>

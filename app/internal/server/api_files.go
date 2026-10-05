@@ -4,7 +4,10 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -458,6 +461,8 @@ type fileContent struct {
 	Content string `json:"content"`
 	Binary  bool   `json:"binary"`
 	Partial bool   `json:"partial"`
+	Hex     string `json:"hex,omitempty"`
+	Version string `json:"version,omitempty"`
 }
 
 func (s *Server) projectFile(c *fiber.Ctx) error {
@@ -485,12 +490,27 @@ func (s *Server) projectFile(c *fiber.Ctx) error {
 	defer f.Close()
 
 	buf := make([]byte, maxFileBytes)
-	n, _ := f.Read(buf)
+	n, err := io.ReadFull(f, buf)
+	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+		return badRequest("cannot read %s: %v", rel, err)
+	}
 	buf = buf[:n]
+	// A preview cap can split a valid UTF-8 rune. Only trim an incomplete
+	// final rune; invalid bytes elsewhere must still open in Hex.
+	if c.Query("format") != "hex" && info.Size() > int64(n) && bytes.IndexByte(buf, 0) < 0 && !utf8.Valid(buf) {
+		for trim := 1; trim < utf8.UTFMax && trim <= len(buf); trim++ {
+			if !utf8.FullRune(buf[len(buf)-trim:]) && utf8.Valid(buf[:len(buf)-trim]) {
+				buf = buf[:len(buf)-trim]
+				break
+			}
+		}
+	}
 
 	body := fileContent{Path: rel, Size: info.Size(), Partial: info.Size() > int64(n)}
-	if bytes.IndexByte(buf, 0) >= 0 || !utf8.Valid(buf) {
+	if c.Query("format") == "hex" || bytes.IndexByte(buf, 0) >= 0 || !utf8.Valid(buf) {
 		body.Binary = true
+		body.Hex = hex.EncodeToString(buf)
+		body.Version = fmt.Sprintf("%x", sha256.Sum256(buf))
 	} else {
 		body.Content = string(buf)
 	}
@@ -503,8 +523,8 @@ type savedFile struct {
 }
 
 // saveProjectFile writes an edited file back. What was never read whole is
-// never written back: a truncated or binary read saved over its source would
-// destroy the file, so both are refused here as well as disabled in the UI.
+// never written back. Hex saves replace bytes without changing the size and
+// compare the loaded version before replacing the file atomically.
 func (s *Server) saveProjectFile(c *fiber.Ctx) error {
 	root, err := s.projectRoot(c)
 	if err != nil {
@@ -517,14 +537,28 @@ func (s *Server) saveProjectFile(c *fiber.Ctx) error {
 	}
 	var body struct {
 		Content *string `json:"content"`
+		Hex     *string `json:"hex"`
+		Version string  `json:"version"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return badRequest("invalid body: %v", err)
 	}
-	if body.Content == nil {
-		return badRequest("content is required")
+	if (body.Content == nil) == (body.Hex == nil) {
+		return badRequest("exactly one of content or hex is required")
 	}
-	if len(*body.Content) > maxFileBytes {
+	var data []byte
+	if body.Hex != nil {
+		if len(*body.Hex) > maxFileBytes*2 {
+			return badRequest("%s is too large to edit", rel)
+		}
+		data, err = hex.DecodeString(*body.Hex)
+		if err != nil {
+			return badRequest("invalid hex bytes")
+		}
+	} else {
+		data = []byte(*body.Content)
+	}
+	if len(data) > maxFileBytes {
 		return badRequest("%s is larger than the %d MiB edit limit", rel, maxFileBytes>>20)
 	}
 
@@ -537,18 +571,41 @@ func (s *Server) saveProjectFile(c *fiber.Ctx) error {
 		if info.Size() > int64(maxFileBytes) {
 			return badRequest("%s is too large to edit", rel)
 		}
-		if binary, err := looksBinary(abs); err != nil || binary {
+		if body.Hex != nil {
+			file, err := os.Open(abs)
+			if err != nil {
+				return badRequest("cannot read %s: %v", rel, err)
+			}
+			original, err := io.ReadAll(io.LimitReader(file, maxFileBytes+1))
+			file.Close()
+			if err != nil {
+				return badRequest("cannot read %s: %v", rel, err)
+			}
+			if len(data) != len(original) {
+				return badRequest("hex edits must keep the file size")
+			}
+			if body.Version != fmt.Sprintf("%x", sha256.Sum256(original)) {
+				return fiber.NewError(fiber.StatusConflict, "file changed on disk; reopen it before saving")
+			}
+		} else if binary, err := looksBinary(abs); err != nil || binary {
 			return badRequest("%s is not a text file", rel)
 		}
 		mode = info.Mode().Perm()
-	} else if !os.IsNotExist(err) {
+	} else if body.Hex != nil || !os.IsNotExist(err) {
 		return badRequest("cannot write %s: %v", rel, err)
 	}
 
-	if err := writeAtomic(abs, []byte(*body.Content), mode); err != nil {
+	if err := writeAtomic(abs, data, mode); err != nil {
 		return badRequest("cannot write %s: %v", rel, err)
 	}
-	return c.JSON(savedFile{Path: rel, Size: int64(len(*body.Content))})
+	version := ""
+	if body.Hex != nil {
+		version = fmt.Sprintf("%x", sha256.Sum256(data))
+	}
+	return c.JSON(struct {
+		savedFile
+		Version string `json:"version,omitempty"`
+	}{savedFile{Path: rel, Size: int64(len(data))}, version})
 }
 
 // writeAtomic replaces a file in one step, so a failed write leaves the
@@ -573,16 +630,15 @@ func writeAtomic(abs string, data []byte, mode fs.FileMode) error {
 	return os.Rename(name, abs)
 }
 
-// looksBinary reads the same prefix the browser's null check would see.
+// Text saves use the same NUL and UTF-8 checks as the file preview.
 func looksBinary(abs string) (bool, error) {
 	f, err := os.Open(abs)
 	if err != nil {
 		return false, err
 	}
 	defer f.Close()
-	buf := make([]byte, 8<<10)
-	n, _ := f.Read(buf)
-	return bytes.IndexByte(buf[:n], 0) >= 0, nil
+	buf, err := io.ReadAll(io.LimitReader(f, maxFileBytes+1))
+	return len(buf) > maxFileBytes || bytes.IndexByte(buf, 0) >= 0 || !utf8.Valid(buf), err
 }
 
 func isGitRepo(root string) bool {

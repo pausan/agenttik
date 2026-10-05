@@ -1,10 +1,11 @@
 # Font previews
 
 `.ttf`, `.otf`, `.woff` and `.woff2` files, matched without case sensitivity,
-offer Diff and Preview. They open in Preview unless the remembered file view
-is Diff. They are read-only, with no Edit, Save or line count, and line links
-cannot switch them into the editor. Committed files retain their Diff-only
-view; font diffs show git's binary change description.
+offer Diff, Preview and [Hex](088-binary-files.md). They open in Preview unless
+the remembered file view is Diff. Preview and Diff have no Edit, Save or line
+count; Hex can replace bytes in files up to 2 MiB. Line links cannot switch
+them into a text editor. Committed files retain their Diff-only view; font
+diffs show git's binary change description.
 
 Preview loads the file through the raw endpoint into a browser `FontFace`.
 The server serves `font/ttf`, `font/otf`, `font/woff` and `font/woff2`, with the

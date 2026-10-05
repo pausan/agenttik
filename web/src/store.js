@@ -2119,7 +2119,7 @@ export async function reorderSidebarTasks(project, ids) {
    Editing lives on the tab, in `edited`: null until a key is pressed, so a
    file that has only been read carries nothing extra and switching tabs and
    coming back finds the edits where they were left. */
-const FILE_MODES = ["edit", "diff", "preview"];
+const FILE_MODES = ["edit", "diff", "preview", "hex"];
 const PREVIEWABLE = /\.(md|markdown|html?|svg)$/i;
 
 /* The images the server will hand over as bytes — the same list, because a
@@ -2150,8 +2150,8 @@ export function isVideo(path) {
   return VIDEO.test(String(path || ""));
 }
 
-/* Media is never read as text: no editor, no line to go to, and the bytes go
-   from the server straight into the element that renders them. */
+/* Media previews stream directly to the renderer. Hex is loaded separately;
+   a line request still has no meaning in either view. */
 export function isMedia(path) {
   return isImage(path) || isFont(path) || isVideo(path);
 }
@@ -2263,7 +2263,7 @@ function selectOpenFile(tabID, pin, line = 0) {
    — without moving S.fileMode, which is the choice the user made and not one
    a link should make for them. A commit's file has only its diff. */
 async function gotoLine(tab, line) {
-  if (tab.commit || isMedia(tab.path)) return;
+  if (tab.commit || tab.binary || isMedia(tab.path)) return;
   if (tab.mode !== "edit") {
     tab.mode = "edit";
     try {
@@ -2327,9 +2327,12 @@ async function loadFileTabIn(projectID, ownerID, path, opts = {}) {
     content: null,
     diff: null,
     edited: null,
-    // What was not read whole must never be written back over its source,
-    // media is never read as text at all, and a file outside the
-    // project is one the server reads but does not write.
+    binary: false,
+    partial: false,
+    size: 0,
+    version: "",
+    // Truncated files and paths outside the project cannot be saved. Media
+    // previews are read-only until their bytes are loaded in Hex.
     readOnly: !!commit || isMedia(path) || isOutsideProject(path),
     saving: false,
     loadError: "",
@@ -2377,22 +2380,28 @@ async function loadFileTab(tab) {
     tab.diff = (await api("GET", `/api/projects/${id}/diff?${query}`)).diff || "";
     return;
   }
-  if (tab.content !== null) return;
-  if (isMedia(tab.path)) {
+  if (tab.content !== null && !(tab.mode === "hex" && !tab.binary)) return;
+  if (isMedia(tab.path) && tab.mode !== "hex") {
     // The bytes go straight to the browser renderer. Reading a megabyte
     // of them into a string first would move it twice and display it never.
     tab.content = "";
     return;
   }
-  const f = await api("GET", `/api/projects/${id}/file?${query}`);
-  tab.readOnly = !!(f.binary || f.partial) || isOutsideProject(tab.path);
-  tab.content = f.binary ? "(binary file)" : f.content + (f.partial ? "\n\n… truncated" : "");
+  const f = await api("GET", `/api/projects/${id}/file?${query}${tab.mode === "hex" ? "&format=hex" : ""}`);
+  tab.binary = !!f.binary;
+  tab.partial = !!f.partial;
+  tab.size = f.size;
+  tab.version = f.version || "";
+  tab.readOnly = !!f.partial || isOutsideProject(tab.path);
+  tab.content = f.binary ? f.hex || "" : f.content + (f.partial ? "\n\n… truncated" : "");
+  if (f.binary) tab.mode = "hex";
 }
 
 /* setFileMode switches one tab and remembers the choice for file links —
    but only once the switch has worked, so a view that cannot be fetched puts
    the tab back rather than leaving it on an empty pane. */
 export async function setFileMode(tab, mode, remember = true) {
+  if (mode === "edit" && tab?.binary) mode = "hex";
   if (tab?.kind !== "file" || tab.commit || tab.mode === mode || !FILE_MODES.includes(mode)) return;
   if (mode === "edit" && isMedia(tab.path)) return;
   const previous = tab.mode;
@@ -2403,7 +2412,7 @@ export async function setFileMode(tab, mode, remember = true) {
     tab.mode = previous;
     return fail(e);
   }
-  if (remember) {
+  if (remember && mode !== "hex") {
     S.fileMode = mode;
     persist(FILE_MODE_KEY, mode);
   }
@@ -2444,7 +2453,9 @@ export async function saveFile(tab) {
   const content = tab.edited;
   tab.saving = true;
   try {
-    await api("PUT", `/api/projects/${id}/file?path=${encodeURIComponent(tab.path)}`, { content });
+    const body = tab.binary ? { hex: content, version: tab.version } : { content };
+    const result = await api("PUT", `/api/projects/${id}/file?path=${encodeURIComponent(tab.path)}`, body);
+    tab.version = result.version || "";
   } catch (e) {
     fail(e);
     return false;

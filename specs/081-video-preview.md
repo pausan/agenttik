@@ -2,10 +2,11 @@
 
 `.mp4`, `.m4v`, `.mov`, `.webm`, `.ogv`, `.mkv`, `.avi`, `.mpg`, `.mpeg`,
 `.wmv`, `.flv`, `.3gp` and `.m2ts`, matched without case sensitivity, offer
-Diff and Preview like [fonts](058-font-preview.md): read-only, no Edit, Save or
-line count, opened in Preview unless the remembered view is Diff, which is
-git's binary line. `.ts` and `.mts` are left out: they are TypeScript far more
-often than MPEG streams. The header shows the size and the picture's
+Diff, Preview and [Hex](088-binary-files.md) like [fonts](058-font-preview.md).
+Preview and Diff have no text editor or line count. Hex previews the first
+2 MiB and can replace bytes in files up to that limit. Videos open in Preview
+unless the remembered view is Diff, which is git's binary line. `.ts` and
+`.mts` are left out: they are TypeScript far more often than MPEG streams. The header shows the size and the picture's
 dimensions, read off the element.
 
 ## The player

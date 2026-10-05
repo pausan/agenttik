@@ -5,8 +5,9 @@ Only one page plus a lookahead row is retained, and leaving the pane releases
 it. Stats and Jobs also load on demand. New-task model defaults fetch one
 newest task. See [030](030-project-tasks.md).
 
-The file editor updates highlighted lines individually, preserving unchanged
-DOM. The highlighted copy determines height and the transparent textarea
+Small files update highlighted lines individually, preserving unchanged
+DOM. [Large files](087-large-files.md) use a native scrolling textarea without
+highlighting or wrapping once they reach 10,000 lines or 400,000 characters. The highlighted copy determines height and the transparent textarea
 fills it. There are no synchronous textarea height measurements on input;
 wrapping, empty trailing lines and viewport changes use normal CSS layout.
 Highlighting still carries multiline lexer state between lines and escapes

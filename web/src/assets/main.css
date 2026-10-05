@@ -303,6 +303,16 @@ button[draggable="true"]:active { cursor: grabbing; }
   background: color-mix(in oklab, var(--ui-primary) 28%, transparent);
 }
 
+.editor.large-editor { height: 100%; }
+.editor.large-editor > textarea {
+  position: static;
+  overflow: auto;
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
+  color: var(--ui-text-highlighted);
+}
+
 /* Token colours, from src/highlight.js. Deliberately few — comment, string,
    number, keyword, call, tag, attribute — which is enough to read structure
    at a glance without turning a file into a colour chart.

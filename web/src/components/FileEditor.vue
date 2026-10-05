@@ -13,19 +13,16 @@ import { computed, nextTick, ref, watch } from "vue";
 import { editFile } from "../store";
 import { highlightLines, langOf } from "../highlight";
 import { useTextHistory } from "../text-history";
+import { revealText } from "../file-editor";
+import { vTabScroll } from "../tab-scroll";
 
-const props = defineProps({ tab: { type: Object, required: true } });
-
-/* Colouring is one pass per changed line, but the pass over a very long file
-   still runs on the first keystroke. Past this it is plain text: a file this
-   size is being looked at, not read. */
-const MAX_HIGHLIGHT = 400_000;
+const props = defineProps({ tab: { type: Object, required: true }, large: Boolean });
 
 const area = ref(null);
 const layer = ref(null);
 const text = computed(() => props.tab.edited ?? props.tab.content ?? "");
 const lang = computed(() =>
-  text.value.length > MAX_HIGHLIGHT ? "" : langOf(props.tab.path),
+  props.large ? "" : langOf(props.tab.path),
 );
 const history = useTextHistory(text, (value) => editFile(props.tab, value));
 
@@ -71,12 +68,16 @@ watch(
     // An explicit line request takes precedence over the tab's saved offset.
     await nextTick();
     const el = area.value;
-    if (!el || !layer.value) return;
+    if (!el) return;
     const lines = text.value.split("\n");
     const n = Math.min(line, lines.length);
     let at = 0;
     for (let i = 0; i < n - 1; i++) at += lines[i].length + 1;
     el.focus({ preventScroll: true });
+    if (props.large) {
+      revealText(el, at, at + lines[n - 1].length);
+      return;
+    }
     el.setSelectionRange(at, at + lines[n - 1].length);
     scrollTo(at);
   },
@@ -128,10 +129,11 @@ function scroller(el) {
   <!-- The padding is on both layers, not here: `inset: 0` aligns the coloured
        copy with the wrapper's padding box, so any padding here would offset
        one layer from the other. -->
-  <div class="editor font-mono text-xs">
-    <pre ref="layer" aria-hidden="true"><code v-if="lang"><span v-for="(line, i) in coloured" :key="i" v-html="line + '\n'"></span></code><code v-else v-text="text + '\n'"></code></pre>
+  <div class="editor font-mono text-xs" :class="{ 'large-editor': large }">
+    <pre v-if="!large" ref="layer" aria-hidden="true"><code v-if="lang"><span v-for="(line, i) in coloured" :key="i" v-html="line + '\n'"></span></code><code v-else v-text="text + '\n'"></code></pre>
     <textarea
       ref="area"
+      v-tab-scroll="[tab, large ? 'large-edit' : 'overlay-edit']"
       :value="text"
       :readonly="tab.readOnly"
       :aria-label="tab.path"
@@ -139,7 +141,7 @@ function scroller(el) {
       autocomplete="off"
       autocapitalize="off"
       autocorrect="off"
-      wrap="soft"
+      :wrap="large ? 'off' : 'soft'"
       @input="onInput"
       @keydown="onKey"
     ></textarea>

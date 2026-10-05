@@ -16,6 +16,7 @@ import { canPreview, isDirty, isFont, isImage, isMedia, isOutsideProject, isVide
 import { langOf } from "../highlight";
 import { api, nf } from "../api";
 import { fileInfoLabel } from "../file-info";
+import { largeFile, lineCount } from "../file-editor";
 import { SEGMENTED } from "../ui";
 import { primaryChord } from "../platform";
 import FileDiff from "./FileDiff.vue";
@@ -106,10 +107,12 @@ const body = computed(() => {
 const fills = computed(
   () =>
     body.value === "images" ||
+    (body.value === "edit" && large.value) ||
     (body.value === "preview" && (image.value || video.value || /\.html?$/i.test(props.tab.path))),
 );
 
-const lines = computed(() => text.value.split("\n").length);
+const lines = computed(() => lineCount(text.value));
+const large = computed(() => largeFile(text.value, lines.value));
 
 /* One extra pass over a diff that has already been fetched, and only when it
    changes — cheaper than threading the count back out of the parse. */
@@ -189,7 +192,7 @@ const stat = computed(() => {
       <FileDiff v-else-if="body === 'diff'" :diff="tab.diff" :tab="tab" />
       <ImageDiff v-else-if="body === 'images'" :tab="tab" @dimensions="dimensions = $event" />
       <FilePreview v-else-if="body === 'preview'" :tab="tab" @dimensions="dimensions = $event" />
-      <FileEditor v-else :tab="tab" />
+      <FileEditor v-else :tab="tab" :large="large" />
     </div>
 
     <div
@@ -200,6 +203,7 @@ const stat = computed(() => {
       <span v-else-if="media" class="text-dimmed">not editable</span>
       <span v-else-if="tab.readOnly" class="text-warning">read only</span>
       <span v-else-if="dirty" class="text-primary">unsaved</span>
+      <span v-if="body === 'edit' && large">plain text · no wrap</span>
       <span class="flex-1"></span>
       <template v-if="stat">
         <span class="text-success">+{{ nf.format(stat.add) }}</span>

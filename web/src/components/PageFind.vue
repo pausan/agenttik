@@ -1,6 +1,7 @@
 <script setup>
 import { nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { pageRanges } from "../page-find";
+import { findMatches, pageRanges } from "../page-find";
+import { revealText } from "../file-editor";
 
 const props = defineProps({ root: Object, context: String });
 const open = ref(false);
@@ -13,6 +14,7 @@ let observer;
 let timer;
 let previousFocus;
 let selectedRange;
+let textArea;
 
 async function show() {
   previousFocus = open.value ? previousFocus : document.activeElement;
@@ -40,11 +42,12 @@ function close() {
 }
 function search() {
   if (!open.value) return;
-  ranges = pageRanges(props.root?.querySelector(".editor") || props.root, query.value);
+  textArea = props.root?.querySelector(".large-editor textarea");
+  ranges = textArea ? findMatches(textArea.value, query.value) : pageRanges(props.root?.querySelector(".editor") || props.root, query.value);
   count.value = ranges.length;
   current.value = ranges.length ? 0 : -1;
   clear();
-  if (globalThis.CSS?.highlights && globalThis.Highlight) {
+  if (!textArea && globalThis.CSS?.highlights && globalThis.Highlight) {
     CSS.highlights.set("page-find", new Highlight(...ranges));
   }
   reveal();
@@ -52,6 +55,10 @@ function search() {
 function reveal() {
   const range = ranges[current.value];
   if (!range) return;
+  if (textArea) {
+    revealText(textArea, range.start, range.end);
+    return;
+  }
   if (globalThis.CSS?.highlights && globalThis.Highlight) {
     CSS.highlights.set("page-find-current", new Highlight(range));
   } else {
@@ -86,6 +93,15 @@ watch([open, () => props.root], () => {
   });
   observer.observe(props.root, { childList: true, subtree: true, characterData: true });
 });
+function onInput() {
+  clearTimeout(timer);
+  timer = setTimeout(search, 120);
+}
+watch(() => props.root, (root, previous) => {
+  previous?.removeEventListener("input", onInput);
+  root?.addEventListener("input", onInput);
+}, { immediate: true });
+onBeforeUnmount(() => props.root?.removeEventListener("input", onInput));
 onBeforeUnmount(close);
 defineExpose({ show });
 </script>

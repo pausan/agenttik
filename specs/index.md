@@ -75,6 +75,7 @@ screen, **session** for the row, the route or the CLI flag.
 
 | Doc | What it covers |
 |-----|----------------|
+| [087](087-large-files.md) | Large text editing, plain rendering and latency checks |
 | [076](076-tab-scroll.md) | Scroll positions for every open tab, file modes, transcripts and terminals |
 | [075](075-page-find.md) | Find in the current page or text file, match navigation and shortcuts |
 | [013](013-project-logs.md) | Commits, graph, branch actions, files and diffs |

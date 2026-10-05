@@ -63,3 +63,54 @@ test("large files open and type within a bounded frame budget", async ({ page })
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("large editors retain scroll positions and reveal linked lines", async ({ page }) => {
+  test.skip(!!process.env.PERF_BASELINE, "Requires the native large editor.");
+  const dir = await mkdtemp(join(tmpdir(), "agenttik-large-navigation-"));
+  try {
+    await writeFile(join(dir, "large.js"), Array.from({ length: 12_000 }, (_, i) => `const value${i} = ${i};`).join("\n"));
+    await writeFile(join(dir, "links.md"), "[Deep line](large.js:11990)\n");
+    await addProject(page, dir);
+    await openProject(page, dir);
+    const tree = sidebar(page);
+    const tab = (name) => page.locator("main").getByRole("tab", { name, exact: true });
+    await tree.getByRole("tab", { name: "Tree" }).click();
+    await tree.getByRole("button", { name: "large.js", exact: true }).dblclick();
+    const editor = page.getByRole("textbox", { name: "large.js", exact: true });
+    await editor.evaluate(el => { el.scrollTop = 5000; });
+    await tree.getByRole("button", { name: "links.md", exact: true }).dblclick();
+    await tab("large.js").click();
+    await expect.poll(() => editor.evaluate(el => el.scrollTop)).toBe(5000);
+    await tab("Diff").click();
+    await tab("Edit").click();
+    await expect.poll(() => editor.evaluate(el => el.scrollTop)).toBe(5000);
+    await tab("links.md").click();
+    await tab("Preview").click();
+    await page.getByRole("button", { name: "Deep line", exact: true }).click();
+    await expect.poll(() => editor.evaluate(el => el.value.slice(el.selectionStart, el.selectionEnd))).toBe("const value11989 = 11989;");
+    expect(await editor.evaluate(el => el.scrollTop)).toBeGreaterThan(100_000);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("truncated text stays read-only when Tab is pressed", async ({ page }) => {
+  test.skip(!!process.env.PERF_BASELINE, "Requires the read-only keyboard guard.");
+  const dir = await mkdtemp(join(tmpdir(), "agenttik-large-readonly-"));
+  try {
+    await writeFile(join(dir, "readonly.txt"), "line content\n".repeat(170_000));
+    await addProject(page, dir);
+    await openProject(page, dir);
+    await sidebar(page).getByRole("tab", { name: "Tree" }).click();
+    await sidebar(page).getByRole("button", { name: "readonly.txt", exact: true }).click();
+    const editor = page.getByRole("textbox", { name: "readonly.txt", exact: true });
+    await expect(editor).toHaveAttribute("readonly", "");
+    const before = await editor.inputValue();
+    await editor.focus();
+    await editor.press("Tab");
+    expect(await editor.inputValue()).toBe(before);
+    await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

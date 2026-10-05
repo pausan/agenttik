@@ -21,7 +21,9 @@ loaded string.
 files and measures opening through the next frame and keydown-to-frame p95
 for 30 real keystrokes. Run serially; `PERF_BASELINE=1` omits new behavior
 assertions. Checks cover the absence of the overlay, typing below 50 ms p95,
-opening below one second, undo/redo, find and saving.
+opening below one second, undo/redo, find and saving. Navigation checks cover
+linked lines and independent native scroll positions; read-only checks keep
+Tab from changing truncated text.
 
 Three Chromium runs on the development Linux machine gave these medians:
 

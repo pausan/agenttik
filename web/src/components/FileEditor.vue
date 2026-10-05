@@ -39,6 +39,7 @@ function onInput(e) {
    Ctrl+S is not handled here — App.vue already answers it for whatever file
    is in front, and the caret being in the text changes nothing about it. */
 function onKey(e) {
+  if (props.tab.readOnly) return;
   if (history.keydown(e)) return;
   if (e.key !== "Tab" || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return;
   e.preventDefault();

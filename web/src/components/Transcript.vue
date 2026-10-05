@@ -13,7 +13,7 @@ import {
 import { turnSummary } from "../api";
 import { tabScroll, vTabScroll } from "../tab-scroll";
 import ApprovalCard from "./ApprovalCard.vue";
-import BackgroundTasks from "./BackgroundTasks.vue";
+import BackgroundTask from "./BackgroundTask.vue";
 import Message from "./Message.vue";
 import ModelSelection from "./ModelSelection.vue";
 import StickyPrompt from "./StickyPrompt.vue";
@@ -447,6 +447,7 @@ watch(
 
       <template v-for="row in rows" :key="row.at">
         <ToolGroup v-if="row.tools" :tools="row.tools" />
+        <BackgroundTask v-else-if="row.message.role === 'background'" :message="row.message" :now="now" />
         <Message v-else :message="row.message" :data-human-message="row.message.role === 'user' ? row.at : undefined" />
         <p v-if="row.summary" class="-mt-2 mb-4 text-[11px] text-dimmed tabular-nums" aria-label="Turn usage">
           {{ row.summary }}
@@ -457,7 +458,6 @@ watch(
         <span aria-hidden="true">{{ clockFace }}</span>
         <span>{{ !approvals.length ? "Working" : approvals.some((a) => a.questions?.length) ? "Waiting for your answer" : "Waiting for approval" }} ({{ elapsedLabel }})</span>
       </div>
-      <BackgroundTasks v-if="S.detail.running && S.detail.background?.length" :tasks="S.detail.background" :now="now" />
 
       <!-- A prompt that is only waiting is still shown where it will run, so
            clicking into a session tells you what is coming. The dashed bubble

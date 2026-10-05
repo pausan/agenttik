@@ -20,6 +20,15 @@ func (s *Store) AddMessage(sessionID string, turnID int64, role, content string)
 	return m, nil
 }
 
+// SetMessageContent updates a task's state without changing its transcript position.
+func (s *Store) SetMessageContent(id int64, content string) error {
+	_, err := s.db.Exec(`UPDATE messages SET content = ? WHERE id = ?`, content, id)
+	if err != nil {
+		return fmt.Errorf("set message content %d: %w", id, err)
+	}
+	return nil
+}
+
 // GetMessage reads one message. The caller checks it belongs to the session it
 // is acting on: an id alone says nothing about that.
 func (s *Store) GetMessage(id int64) (*Message, error) {

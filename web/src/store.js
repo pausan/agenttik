@@ -14,7 +14,7 @@
 import { nextTick, reactive, ref, watch } from "vue";
 import { createTaskSounds, TASK_SOUNDS_KEY } from "./task-sounds.js";
 import { trackTaskAttention, reconcileTaskCompletions } from "./task-attention.js";
-import { upsertTask } from "./background-tasks.js";
+import { upsertBackgroundMessage } from "./background-tasks.js";
 import { recordError } from "./diagnostics.js";
 import { api, apiURL, storage, clientStorage, diagnosticStorage } from "./api";
 import { debounce } from "./debounce";
@@ -3199,7 +3199,7 @@ function onSessionEvent(tab, msg) {
       push(tab, "error", ev.text);
       break;
     case "background":
-      if (ev.background) tab.detail.background = upsertTask(tab.detail.background, ev.background);
+      if (msg.message) upsertBackgroundMessage(tab.detail.messages, msg.message);
       break;
     case "done":
       endLive(tab);
@@ -3207,9 +3207,8 @@ function onSessionEvent(tab, msg) {
         tab.detail.stats = msg.stats;
         tab.detail.liveUsage = null;
         tab.detail.running = false;
-        tab.detail.background = [];
-        // The transcript grown from the stream has no message ids, and editing
-        // a prompt needs one. Re-reading it at the end of a turn is also what
+        // Prose and tools grown from the stream have no message ids, and
+        // editing a prompt needs one. Re-reading at the end of a turn is what
         // reconciles anything the stream and the store disagree about.
         syncMessages(tab);
         if (tab.id === S.owner?.id) {
@@ -3301,7 +3300,6 @@ async function syncMessages(tab, preserveLive = false) {
     // it. See specs/045-provider-outage-retry.md.
     tab.detail.session.status = detail.session.status;
     tab.detail.running = detail.running;
-    tab.detail.background = detail.background || [];
     if (keepLive) return;
     tab.detail.messages = detail.messages;
     tab.detail.turns = detail.turns;

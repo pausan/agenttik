@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"sync"
@@ -665,15 +666,21 @@ func TestProjectMoveExcludesTurnStarts(t *testing.T) {
 	}
 }
 
-// A turn's background tasks are listed while it runs, latest state winning,
-// and gone once it ends.
-func TestBackgroundTasksLastAsLongAsTheTurn(t *testing.T) {
+// Live task state goes with the turn, but its transcript rows keep the last
+// state in the position where each task was first reported.
+func TestBackgroundTasksStayInTranscriptOrder(t *testing.T) {
 	fp := &fakeProvider{gate: make(chan struct{}), script: []agent.Event{
+		{Type: agent.EventText, Text: "Starting tasks."},
 		agent.BackgroundEvent(agent.BackgroundTask{ID: "b2", Kind: "agent", Status: "running", StartedAt: 20}),
+		{Type: agent.EventToolUse, Tool: &agent.ToolEvent{Name: "Read", Input: "files"}},
 		agent.BackgroundEvent(agent.BackgroundTask{ID: "b1", Kind: "shell", Status: "running", StartedAt: 10}),
+		{Type: agent.EventText, Text: "While they run."},
 		agent.BackgroundEvent(agent.BackgroundTask{ID: "b1", Kind: "shell", Status: "completed", StartedAt: 10, EndedAt: 30}),
+		{Type: agent.EventText, Text: " Done."},
 	}}
-	r, _, sess := setup(t, fp)
+	r, st, sess := setup(t, fp)
+	events, unsubscribe := r.Hub().Subscribe(sess.ID)
+	defer unsubscribe()
 	if _, err := r.Send(sess.ID, "hi"); err != nil {
 		t.Fatalf("send: %v", err)
 	}
@@ -688,5 +695,50 @@ func TestBackgroundTasksLastAsLongAsTheTurn(t *testing.T) {
 	waitFor(t, func() bool { return !r.Running(sess.ID) }, "turn to finish")
 	if got := r.BackgroundTasks(sess.ID); len(got) != 0 {
 		t.Errorf("after the turn = %+v", got)
+	}
+	messages, err := st.ListMessages(sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantRoles := []string{store.RoleUser, store.RoleAssistant, store.RoleBackground, store.RoleTool,
+		store.RoleBackground, store.RoleAssistant}
+	if len(messages) != len(wantRoles) {
+		t.Fatalf("messages = %+v", messages)
+	}
+	for i, role := range wantRoles {
+		if messages[i].Role != role {
+			t.Errorf("message %d role = %s, want %s", i, messages[i].Role, role)
+		}
+	}
+	if messages[1].Content != "Starting tasks." || messages[5].Content != "While they run. Done." {
+		t.Errorf("prose ordering = %+v", messages)
+	}
+	for _, at := range []int{2, 4} {
+		var task agent.BackgroundTask
+		if err := json.Unmarshal([]byte(messages[at].Content), &task); err != nil {
+			t.Fatal(err)
+		}
+		if at == 2 && (task.ID != "b2" || task.Status != "stopped" || task.EndedAt == 0) {
+			t.Errorf("unfinished task = %+v", task)
+		}
+		if at == 4 && (task.ID != "b1" || task.Status != "completed" || task.EndedAt != 30) {
+			t.Errorf("finished task = %+v", task)
+		}
+	}
+	// Start and completion events name the same persisted row. Earlier event
+	// bodies remain unchanged even when the task's saved state is updated.
+	var updates []*store.Message
+	for len(events) > 0 {
+		ev := <-events
+		if ev.Event.Type == agent.EventBackground {
+			if ev.Message == nil {
+				t.Fatal("background event missing transcript message")
+			}
+			updates = append(updates, ev.Message)
+		}
+	}
+	if len(updates) != 4 || updates[1].ID != updates[2].ID || updates[0].ID != updates[3].ID ||
+		updates[1].CreatedAt != updates[2].CreatedAt || updates[1].Content == updates[2].Content {
+		t.Errorf("background updates = %+v", updates)
 	}
 }

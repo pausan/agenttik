@@ -37,6 +37,7 @@ The totals add every finished turn up to this one, including turns whose
 messages an edit removed, as Stats does. Time is the sum of turn durations,
 not wall-clock time since the first prompt.
 
-The line is placed from each message's `turn_id`. Messages streamed during a
-turn have none; the transcript is re-read when the turn ends, which supplies
-them. `turnSummary` in `web/src/api.js` formats it.
+The line is placed from each message's `turn_id`. Prose and tool messages
+streamed during a turn have none; the transcript is re-read when the turn
+ends, which supplies them. Background task events carry stored messages with
+turn ids. `turnSummary` in `web/src/api.js` formats the line.

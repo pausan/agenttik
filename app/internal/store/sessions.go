@@ -567,5 +567,15 @@ func (s *Store) ResetRunningSessions() error {
 	if err != nil {
 		return fmt.Errorf("reset running turns: %w", err)
 	}
+	_, err = s.db.Exec(
+		`UPDATE messages SET content = json_set(content, '$.status', 'stopped',
+		 '$.ended_at', ?, '$.summary', 'turn interrupted')
+		 WHERE session_id IN (SELECT session_id FROM turns WHERE status = 'interrupted')
+		 AND role = ? AND json_extract(content, '$.status') = 'running'
+		 AND turn_id IN (SELECT id FROM turns WHERE status = 'interrupted')`,
+		nowMillis(), RoleBackground)
+	if err != nil {
+		return fmt.Errorf("reset background tasks: %w", err)
+	}
 	return nil
 }

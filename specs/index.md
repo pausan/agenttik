@@ -63,7 +63,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [011](011-prompt-bar-usage.md) | Fuzzy models, context ring, every subscription window |
 | [012](012-task-queue.md) | Queued prompts and project scheduling |
 | [082](082-tool-approvals.md) | Tool approvals, async questions, and saved user or automatic answers |
-| [083](083-background-tasks.md) | Shells and subagents a running turn leaves working, listed under the progress line with start time and running time |
+| [083](083-background-tasks.md) | Background shells and subagents kept in conversation order with status and running time |
 | [020](020-task-titles.md) | Instant first-line title, refined by an isolated small model |
 | [024](024-instant-prompt-echo.md) | Drawing sent and queued prompts on the keypress |
 | [028](028-scheduled-jobs.md) | Repeating a prompt on a clock, the tasks it spawns, and the number they share |

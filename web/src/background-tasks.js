@@ -1,13 +1,17 @@
-/* Background tasks: shells and subagents a running turn has left working
-   behind it. The server sends each one's whole state whenever it changes, so
-   the latest copy replaces the one before. See specs/083-background-tasks.md. */
+/* Background tasks keep one transcript row each, updated in place with the
+   latest state from the server. See specs/083-background-tasks.md. */
 
-/* upsertTask hands back the list with task in it, replacing any copy with
-   the same id, oldest first. */
-export function upsertTask(list, task) {
-  const next = (list || []).filter((t) => t.id !== task.id);
-  next.push(task);
-  return next.sort((a, b) => a.started_at - b.started_at);
+export function upsertBackgroundMessage(messages, message) {
+  const at = messages.findIndex((m) => m.id === message.id);
+  if (at >= 0) {
+    messages[at] = message;
+    return;
+  }
+  // Only a new task interrupts prose. Updating an earlier task must leave
+  // the current assistant message streaming.
+  const last = messages.at(-1);
+  if (last?.streaming) last.streaming = false;
+  messages.push(message);
 }
 
 /* taskSeconds is how long a task has run: until it ended, or until now. */
@@ -22,13 +26,4 @@ export function durationLabel(secs) {
   const h = Math.floor(secs / 3600);
   const m = Math.floor((secs % 3600) / 60);
   return h ? `${h}:${pad(m)}:${pad(secs % 60)}` : `${m}:${pad(secs % 60)}`;
-}
-
-/* tasksLabel names the list: how many are still running, and how many there
-   are once none is. */
-export function tasksLabel(tasks) {
-  const running = tasks.filter((t) => t.status === "running").length;
-  const n = running || tasks.length;
-  const noun = n === 1 ? "background task" : "background tasks";
-  return running ? `${n} ${noun} running` : `${n} ${noun} finished`;
 }

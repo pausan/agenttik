@@ -84,8 +84,8 @@ type Runner struct {
 	forced         map[string]int64            // session id -> queued message to run next
 	approvals      map[string]*PendingApproval // approval id -> tool call waiting on the user
 	// backgroundTasks are what each running turn has left working behind it,
-	// by session id, then task id. They die with the turn's process, so they
-	// live here and not in the store. See 083-background-tasks.md.
+	// by session id, then task id. Their latest states also live in transcript
+	// messages, which survive the turn. See 083-background-tasks.md.
 	backgroundTasks map[string]map[string]agent.BackgroundTask
 
 	// forcedScheduleRuns marks a session started by RunScheduleNow: its run
@@ -694,15 +694,15 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 	var text strings.Builder
 	var failure string
 	// produced is whether the turn got anywhere before it ended: a word of
-	// prose, a tool call, or tokens the provider charged for. It is what
-	// separates a turn worth keeping from an attempt that never happened,
+	// prose, a tool call, a background task, or tokens the provider charged
+	// for. It separates a turn worth keeping from an attempt that never happened,
 	// which is the difference between requeueing a prompt behind its own
 	// record and requeueing it as if nothing had been tried. See
 	// 045-provider-outage-retry.md.
 	var produced bool
 
 	// flushText writes the assistant prose accumulated so far. Called before
-	// each tool call so the transcript keeps its original ordering.
+	// each tool call or new background task so the transcript keeps its order.
 	flushText := func() {
 		if text.Len() == 0 {
 			return
@@ -712,7 +712,35 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 		produced = true
 	}
 
+	// A task gets one row where it is first reported. Later states update that
+	// row, leaving prose and tools in their original order.
+	backgroundMessages := make(map[string]store.Message)
+	saveBackground := func(task agent.BackgroundTask) *store.Message {
+		body, err := json.Marshal(task)
+		if err != nil {
+			return nil
+		}
+		message, exists := backgroundMessages[task.ID]
+		if exists {
+			if err := r.store.SetMessageContent(message.ID, string(body)); err != nil {
+				return nil
+			}
+			message.Content = string(body)
+		} else {
+			flushText()
+			added, err := r.store.AddMessage(sess.ID, turn.ID, store.RoleBackground, string(body))
+			if err != nil {
+				return nil
+			}
+			message = *added
+			produced = true
+		}
+		backgroundMessages[task.ID] = message
+		return &message
+	}
+
 	for ev := range events {
+		var message *store.Message
 		switch ev.Type {
 		case agent.EventSessionStarted:
 			if ev.ProviderSessionID != "" && ev.ProviderSessionID != sess.ProviderSessionID {
@@ -798,6 +826,7 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 			if ev.Background == nil {
 				continue
 			}
+			message = saveBackground(*ev.Background)
 			r.mu.Lock()
 			if r.backgroundTasks[sess.ID] == nil {
 				r.backgroundTasks[sess.ID] = make(map[string]agent.BackgroundTask)
@@ -805,7 +834,7 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 			r.backgroundTasks[sess.ID][ev.Background.ID] = *ev.Background
 			r.mu.Unlock()
 		}
-		out := Event{SessionID: sess.ID, ProjectID: sess.ProjectID, TurnID: turn.ID, Event: ev}
+		out := Event{SessionID: sess.ID, ProjectID: sess.ProjectID, TurnID: turn.ID, Event: ev, Message: message}
 		r.hub.Publish(sess.ID, out)
 		// The sidebar marks a task waiting on the user, open tab or not.
 		if ev.Type == agent.EventApproval || ev.Type == agent.EventApprovalResolved {
@@ -813,6 +842,16 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 		}
 	}
 	flushText()
+	// The provider's process owns these tasks. Work still running when it
+	// exits is stopped, and its row stays available after the turn ends.
+	for _, task := range r.BackgroundTasks(sess.ID) {
+		if task.Status != "running" {
+			continue
+		}
+		task.Status, task.EndedAt, task.Summary = "stopped", time.Now().UnixMilli(), "turn ended"
+		r.hub.Publish(sess.ID, Event{SessionID: sess.ID, ProjectID: sess.ProjectID, TurnID: turn.ID,
+			Event: agent.BackgroundEvent(task), Message: saveBackground(task)})
+	}
 	r.dropApprovals(sess.ID)
 	r.mu.Lock()
 	delete(r.backgroundTasks, sess.ID)

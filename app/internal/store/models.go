@@ -415,6 +415,7 @@ const (
 	RoleAssistant       = "assistant"
 	RoleThinking        = "thinking"
 	RoleTool            = "tool"
+	RoleBackground      = "background"
 	RoleError           = "error"
 	RoleAnswer          = "answer"
 	RoleQuestion        = "question"

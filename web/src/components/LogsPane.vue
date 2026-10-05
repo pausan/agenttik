@@ -45,8 +45,8 @@ const actions = [
   { action: "push", icon: "i-lucide-arrow-up", label: "Push current branch" },
   { action: "clean", icon: "i-lucide-brush-cleaning", label: "Clean branches merged into main or master" },
 ];
-async function act(action, branch = S.log.branch, remotes = []) {
-  if (busy.value || (!branch && !["continue", "abort"].includes(action))) return;
+async function act(action, branch = S.log.branch, remotes = [], hash = "") {
+  if (busy.value || (!branch && !["continue", "abort", "checkout"].includes(action))) return;
   const id = currentProjectID();
   const repo = S.repository;
   const stillHere = () => id === currentProjectID() && repo === S.repository;
@@ -54,7 +54,7 @@ async function act(action, branch = S.log.branch, remotes = []) {
   error.value = "";
   notice.value = "";
   try {
-    const result = await api("POST", `/api/projects/${id}/branches/${action}?repo=${encodeURIComponent(repo)}`, { branch, ...(action === "clean-remote" ? { remotes } : {}), ...(["merge", "rebase"].includes(action) ? { target: target.value } : {}) });
+    const result = await api("POST", `/api/projects/${id}/branches/${action}?repo=${encodeURIComponent(repo)}`, { branch, ...(action === "checkout" ? { hash } : {}), ...(action === "clean-remote" ? { remotes } : {}), ...(["merge", "rebase"].includes(action) ? { target: target.value } : {}) });
     if (stillHere()) {
       branchSearch.value = "";
       if (result?.message) notice.value = result.message;
@@ -139,6 +139,12 @@ const menu = computed(() => [
     icon: "i-lucide-copy",
     disabled: !aimed.value.hash,
     onSelect: () => copyText(aimed.value.hash),
+  },
+  {
+    label: "Checkout commit",
+    icon: "i-lucide-git-commit-horizontal",
+    disabled: !aimed.value.hash || blocked.value,
+    onSelect: () => act("checkout", S.log.branch, [], aimed.value.hash),
   },
   {
     label: "Show in tree",

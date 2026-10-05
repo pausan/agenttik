@@ -79,7 +79,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [087](087-large-files.md) | Large text editing, plain rendering and latency checks |
 | [076](076-tab-scroll.md) | Scroll positions for every open tab, file modes, transcripts and terminals |
 | [075](075-page-find.md) | Find in the current page or text file, match navigation and shortcuts |
-| [013](013-project-logs.md) | Commits, graph, branch actions, files and diffs |
+| [013](013-project-logs.md) | Commits, graph, commit checkout, branch actions, files and diffs |
 | [014](014-transcript-messages.md) | Human-message navigation, compact sticky prompts, copying and editing |
 | [016](016-file-tab-reuse.md) | The temporary file tab a click reuses |
 | [019](019-file-watching.md) | Tree and Changed following the disk as it moves |

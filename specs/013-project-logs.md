@@ -133,8 +133,12 @@ tree**. That switches the left sidebar to Tree, clears any Tree filter, opens
 the folders above the file, selects and scrolls to its row, and opens the
 working-tree file in the editor.
 
-Right-clicking a commit row offers **Copy hash**. Right-clicking one of its
-expanded files offers both **Copy hash** and **Show in tree** — that file
+Right-clicking a commit row offers **Copy hash** and **Checkout commit** in both
+views. Checkout switches to that commit with a detached HEAD and refreshes the
+log, changes and tree. It uses Git's normal local-change checks; conflicts appear
+in the pane. The branch selector shows **detached** and can switch back to a local
+branch. Checkout is disabled while a request or merge/rebase is in progress.
+Right-clicking one of its expanded files also offers **Show in tree** — that file
 belongs to the commit. One menu serves the whole list rather than one per row,
 which would be 500 of them for a full log: the row under the pointer is read
 off the event on its way to the trigger, and a click that reaches no row leaves
@@ -155,7 +159,7 @@ other, revision included.
 | Method | Path | Answers |
 |---|---|---|
 | GET | `/api/projects/:id/log?limit=&graph=` | `{branch, branches[], head, operation, commits[]}` — up to 500 commits in topological order; graph includes all branch/tag histories |
-| POST | `/api/projects/:id/branches/:action?repo=` | `{branch, target?}`; switch/pull/push return 204, clean returns `{deleted[]}`; check-remote returns `{remotes[{remote,branch,tip}]}`; clean-remote accepts `{branch,remotes[]}` and returns `{deleted[],error?}`; merge/rebase/continue/abort return `{message}` |
+| POST | `/api/projects/:id/branches/:action?repo=` | `{branch, target?}`; switch/pull/push return 204; checkout accepts `{hash}` and returns 204; clean returns `{deleted[]}`; check-remote returns `{remotes[{remote,branch,tip}]}`; clean-remote accepts `{branch,remotes[]}` and returns `{deleted[],error?}`; merge/rebase/continue/abort return `{message}` |
 | GET | `/api/projects/:id/commit?hash=` | `{hash, files[{path,status,additions,deletions,binary}]}` |
 | GET | `/api/projects/:id/commit/diff?hash=&path=` | the same `{path, diff, partial}` a working-tree diff answers |
 
@@ -171,6 +175,7 @@ branch, available branches and history without reopening the pane.
 
 `hash` is matched against `^[0-9a-fA-F]{4,40}$` rather than merely escaped: anything else could
 be read as a flag. Switch accepts only validated, existing local branch names.
+Checkout accepts only a validated commit hash and also works from a detached HEAD.
 Other branch actions reject requests if the current branch no longer matches.
 Paths go through the same `resolveInRoot` check as every other file route. A folder that is not a repository, and one with no commits
 yet, both answer with an empty log rather than an error.

@@ -23,6 +23,7 @@ func (s *Server) branchAction(c *fiber.Ctx) error {
 	var body struct {
 		Branch  string         `json:"branch"`
 		Target  string         `json:"target"`
+		Hash    string         `json:"hash"`
 		Remotes []remoteBranch `json:"remotes"`
 	}
 	if err := c.BodyParser(&body); err != nil {
@@ -32,18 +33,23 @@ func (s *Server) branchAction(c *fiber.Ctx) error {
 	if action == "merge" || action == "rebase" || action == "continue" || action == "abort" {
 		return s.integrateBranches(c, root, action, body.Branch, body.Target)
 	}
-	if body.Branch == "" {
+	if body.Branch == "" && action != "checkout" {
 		return badRequest("branch is required")
 	}
 	if operation := gitOperation(root); operation != "" {
 		return badRequest("finish or abort the existing %s first", operation)
 	}
 	current, err := runGit(root, "symbolic-ref", "--quiet", "--short", "HEAD")
-	if action != "switch" && (err != nil || strings.TrimSpace(current) != body.Branch) {
+	if action != "switch" && action != "checkout" && (err != nil || strings.TrimSpace(current) != body.Branch) {
 		return badRequest("current branch changed; refresh and try again")
 	}
 	var args []string
 	switch action {
+	case "checkout":
+		if !commitHash.MatchString(body.Hash) {
+			return badRequest("invalid commit hash")
+		}
+		args = []string{"switch", "--detach", "--", body.Hash}
 	case "switch":
 		if _, err := runGit(root, "check-ref-format", "refs/heads/"+body.Branch); err != nil || strings.HasPrefix(body.Branch, "-") {
 			return badRequest("invalid branch")

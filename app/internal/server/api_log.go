@@ -41,8 +41,9 @@ type commitEntry struct {
 }
 
 type projectLog struct {
-	Branches  []string `json:"branches"`
-	Operation string   `json:"operation"`
+	Branches       []string       `json:"branches"`
+	RemoteBranches []remoteBranch `json:"remoteBranches"`
+	Operation      string         `json:"operation"`
 	// Branch is empty on a detached HEAD, where Head is all there is to say.
 	Branch  string        `json:"branch"`
 	Head    string        `json:"head"`
@@ -57,13 +58,26 @@ func (s *Server) projectLog(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	body := projectLog{Commits: []commitEntry{}, Branches: []string{}}
+	body := projectLog{Commits: []commitEntry{}, Branches: []string{}, RemoteBranches: []remoteBranch{}}
 	if !isGitRepo(root) {
 		return c.JSON(body)
 	}
 	body.Operation = gitOperation(root)
-	if out, err := runGit(root, "for-each-ref", "--format=%(refname:strip=2)", "refs/heads/"); err == nil {
-		body.Branches = strings.Fields(out)
+	if out, err := runGit(root, "for-each-ref", "--format=%(refname)%09%(symref)", "refs/heads/", "refs/remotes/"); err == nil {
+		for _, line := range splitLines(out) {
+			name, symref, _ := strings.Cut(line, "\t")
+			if symref != "" {
+				continue
+			}
+			if local, ok := strings.CutPrefix(name, "refs/heads/"); ok {
+				body.Branches = append(body.Branches, local)
+			} else if remoteRef, ok := strings.CutPrefix(name, "refs/remotes/"); ok {
+				remote, branch, ok := strings.Cut(remoteRef, "/")
+				if ok && branch != "HEAD" {
+					body.RemoteBranches = append(body.RemoteBranches, remoteBranch{Remote: remote, Branch: branch})
+				}
+			}
+		}
 	}
 	limit := c.QueryInt("limit", maxLogCommits)
 	if limit <= 0 || limit > maxLogCommits {

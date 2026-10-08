@@ -14,6 +14,54 @@ type remoteBranch struct {
 	Tip    string `json:"tip"`
 }
 
+// Remote selection makes a same-name local branch and tracks the chosen remote.
+// Existing local commits are preserved: syncing only permits a fast-forward.
+func switchRemoteBranch(c *fiber.Ctx, root, remote, branch string) error {
+	if strings.HasPrefix(remote, "-") {
+		return badRequest("invalid remote")
+	}
+	if _, err := runGit(root, "remote", "get-url", "--", remote); err != nil {
+		return badRequest("remote does not exist")
+	}
+	ref := "refs/remotes/" + remote + "/" + branch
+	if _, err := runGit(root, "check-ref-format", ref); err != nil {
+		return badRequest("invalid remote branch")
+	}
+	if _, err := runGitWithTimeout(root, 2*time.Minute, "fetch", "--no-tags", "--", remote, "+refs/heads/"+branch+":"+ref); err != nil {
+		return badRequest("%s", err)
+	}
+	// A single-branch clone needs a fetch mapping for this selected branch
+	// before Git can recognize its upstream. Leave normal mappings alone.
+	mappings, _ := runGit(root, "config", "--get-all", "remote."+remote+".fetch")
+	mapped := false
+	for _, mapping := range strings.Fields(mappings) {
+		mapping = strings.TrimPrefix(mapping, "+")
+		if mapping == "refs/heads/*:refs/remotes/"+remote+"/*" || mapping == "refs/heads/"+branch+":"+ref {
+			mapped = true
+			break
+		}
+	}
+	if !mapped {
+		if _, err := runGit(root, "config", "--add", "remote."+remote+".fetch", "+refs/heads/"+branch+":"+ref); err != nil {
+			return badRequest("%s", err)
+		}
+	}
+	if _, err := runGit(root, "show-ref", "--verify", "--quiet", "refs/heads/"+branch); err == nil {
+		if _, err := runGit(root, "switch", "--no-guess", "--", branch); err != nil {
+			return badRequest("%s", err)
+		}
+		if _, err := runGit(root, "merge", "--ff-only", "--", ref); err != nil {
+			return badRequest("%s", err)
+		}
+		if _, err := runGit(root, "branch", "--set-upstream-to="+ref, "--", branch); err != nil {
+			return badRequest("%s", err)
+		}
+	} else if _, err := runGit(root, "switch", "--track", "-c", branch, "--", ref); err != nil {
+		return badRequest("%s", err)
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
 // Fetch explicit heads so narrow fetch configurations cannot hide a base or
 // leave stale candidates. Only compare branches within the same remote.
 func mergedRemoteBranches(root string) ([]remoteBranch, error) {

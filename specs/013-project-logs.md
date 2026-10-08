@@ -4,14 +4,29 @@ The right-hand panel carries a **Commits** pane beside Changed for a task and
 beside Project Options and Changed for a project — the history of the branch the project is on.
 A branch autocomplete sits above a commit filter box. A reserved message area
 below the branch holds operation results and errors; it does not show the head hash.
-The autocomplete lists local branches, ranked by the same fuzzy subsequence
-search as the commit filter. Selecting a branch runs Git switch; checkout
-conflicts are reported in the pane.
+The autocomplete lists local branches first, then remote branches grouped by
+remote name. Fuzzy subsequence search ranks matches within each group, preserving
+local-first ordering. Remote entries show `remote/branch`; symbolic remote HEAD
+refs are excluded. Selecting a local branch runs Git switch. Selecting a remote
+branch fetches it and creates a same-name local tracking branch, or switches to
+the existing local branch and syncs fast-forward only. After successful sync,
+the local branch tracks the selected remote branch. For a narrow fetch configuration,
+selection adds that branch's fetch mapping so future pulls resolve its upstream.
+Divergence and checkout
+conflicts are reported in the pane without overwriting local changes or commits.
 
-To its right, buttons with tooltips pull (down arrow), push (up arrow), and
-clean merged branches (brush). Pull is fast-forward only. Push sends
-only HEAD to the current branch's configured upstream; a missing upstream is
-reported as an error. Controls are disabled while an action runs and remote
+To its right, buttons with tooltips fetch remote branches (refresh), pull (down
+arrow), push (up arrow), and clean merged branches (brush). Fetch refreshes and
+prunes remote refs, including when HEAD is detached, even with narrow fetch
+configurations. The picker uses cached refs; routine log refreshes do not make
+network requests. Pull is fast-forward only. Push sends only HEAD to the current
+branch's configured upstream. It checks the live remote: an unset upstream or
+an upstream branch deleted remotely opens **Push branch to origin?**, offering
+**Push to origin** or **Cancel**. Confirm pushes only that branch to origin with
+the same name and sets its upstream. Cancel or dismiss sends nothing. Missing
+origin and remote connection errors are reported in the pane. Confirmation for
+a branch no longer checked out is rejected.
+Controls are disabled while an action runs and remote
 actions have a two-minute timeout. The log, changes, and tree refresh afterward.
 Spinners and busy controls track Git requests, including failures, rather than
 the follow-up refreshes. Cleanup checks remote branches directly after local
@@ -158,8 +173,8 @@ other, revision included.
 
 | Method | Path | Answers |
 |---|---|---|
-| GET | `/api/projects/:id/log?limit=&graph=` | `{branch, branches[], head, operation, commits[]}` — up to 500 commits in topological order; graph includes all branch/tag histories |
-| POST | `/api/projects/:id/branches/:action?repo=` | `{branch, target?}`; switch/pull/push return 204; checkout accepts `{hash}` and returns 204; clean returns `{deleted[]}`; check-remote returns `{remotes[{remote,branch,tip}]}`; clean-remote accepts `{branch,remotes[]}` and returns `{deleted[],error?}`; merge/rebase/continue/abort return `{message}` |
+| GET | `/api/projects/:id/log?limit=&graph=` | `{branch, branches[], remoteBranches[{remote,branch,tip}], head, operation, commits[]}` — up to 500 commits in topological order; graph includes all branch/tag histories; picker refs have empty `tip` |
+| POST | `/api/projects/:id/branches/:action?repo=` | `{branch, target?}`; switch/pull/push/fetch return 204; switch optionally accepts `remote` to fetch and sync a local tracking branch; push returns `{confirmPush:true}` when confirmation is needed, and accepts `setUpstream:true` to publish to origin; fetch also accepts an empty branch; checkout accepts `{hash}` and returns 204; clean returns `{deleted[]}`; check-remote returns `{remotes[{remote,branch,tip}]}`; clean-remote accepts `{branch,remotes[]}` and returns `{deleted[],error?}`; merge/rebase/continue/abort return `{message}` |
 | GET | `/api/projects/:id/commit?hash=` | `{hash, files[{path,status,additions,deletions,binary}]}` |
 | GET | `/api/projects/:id/commit/diff?hash=&path=` | the same `{path, diff, partial}` a working-tree diff answers |
 

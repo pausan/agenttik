@@ -1,9 +1,144 @@
 package server
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
+
+func TestPushRequiresConfirmationWithoutUpstream(t *testing.T) {
+	s, st := newTestServer(t)
+	root, remote := t.TempDir(), t.TempDir()
+	git := func(dir string, args ...string) string {
+		t.Helper()
+		out, err := runGit(dir, args...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return strings.TrimSpace(out)
+	}
+	git(remote, "init", "--bare")
+	git(root, "init", "-b", "feature/topic")
+	git(root, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-m", "initial")
+	git(root, "remote", "add", "origin", remote)
+	p, err := st.CreateProject("push confirmation", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	url := "/api/projects/" + itoa(p.ID) + "/branches/push"
+	check := func() {
+		t.Helper()
+		result := decode[struct {
+			ConfirmPush bool `json:"confirmPush"`
+		}](t, do(t, s, "POST", url, map[string]string{"branch": "feature/topic"}))
+		if !result.ConfirmPush {
+			t.Fatal("missing confirmation")
+		}
+		if _, err := runGit(remote, "show-ref", "--verify", "refs/heads/feature/topic"); err == nil {
+			t.Fatal("pushed without consent")
+		}
+	}
+	check()
+	// Consent captured for a branch that is no longer current cannot push.
+	git(root, "switch", "-c", "other")
+	r := do(t, s, "POST", url, map[string]any{"branch": "feature/topic", "setUpstream": true})
+	r.Body.Close()
+	if r.StatusCode != 400 {
+		t.Fatal(r.StatusCode)
+	}
+	git(root, "switch", "feature/topic")
+	r = do(t, s, "POST", url, map[string]any{"branch": "feature/topic", "setUpstream": true})
+	r.Body.Close()
+	if r.StatusCode != 204 {
+		t.Fatal(r.StatusCode)
+	}
+	if git(root, "rev-parse", "--abbrev-ref", "@{upstream}") != "origin/feature/topic" {
+		t.Fatal("upstream not set")
+	}
+	if git(remote, "for-each-ref", "--format=%(refname:short)", "refs/heads/") != "feature/topic" {
+		t.Fatal("pushed an unrelated branch")
+	}
+	// Deletion on the remote still asks, even with a cached upstream ref.
+	git(remote, "update-ref", "-d", "refs/heads/feature/topic")
+	check()
+}
+
+func TestSwitchAndPullRemoteBranch(t *testing.T) {
+	s, st := newTestServer(t)
+	root, remote := t.TempDir(), t.TempDir()
+	git := func(dir string, args ...string) string {
+		t.Helper()
+		out, err := runGit(dir, args...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return strings.TrimSpace(out)
+	}
+	git(remote, "init", "--bare")
+	git(root, "init", "-b", "main")
+	git(root, "config", "user.name", "Test")
+	git(root, "config", "user.email", "test@example.com")
+	git(root, "commit", "--allow-empty", "-m", "initial")
+	initial := git(root, "rev-parse", "HEAD")
+	git(root, "remote", "add", "origin", remote)
+	git(root, "remote", "add", "other", remote)
+	git(root, "config", "remote.other.fetch", "+refs/heads/main:refs/remotes/other/main")
+	git(root, "push", "origin", "HEAD:feature/topic")
+	p, err := st.CreateProject("remote selection", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	url := "/api/projects/" + itoa(p.ID)
+	request := func(action string, body map[string]string, want int) {
+		t.Helper()
+		r := do(t, s, "POST", url+"/branches/"+action, body)
+		r.Body.Close()
+		if r.StatusCode != want {
+			t.Fatalf("%s: %d, want %d", action, r.StatusCode, want)
+		}
+	}
+	git(root, "switch", "--detach")
+	request("fetch", map[string]string{}, 204)
+	git(root, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/feature/topic")
+	log := decode[projectLog](t, do(t, s, "GET", url+"/log", nil))
+	if !slices.Equal(log.Branches, []string{"main"}) || len(log.RemoteBranches) != 2 || log.RemoteBranches[0].Remote != "origin" || log.RemoteBranches[0].Branch != "feature/topic" || log.RemoteBranches[1].Remote != "other" {
+		t.Fatalf("branch lists: %+v %+v", log.Branches, log.RemoteBranches)
+	}
+	request("switch", map[string]string{"branch": "feature/topic", "remote": "origin"}, 204)
+	if git(root, "branch", "--show-current") != "feature/topic" || git(root, "rev-parse", "--abbrev-ref", "@{upstream}") != "origin/feature/topic" {
+		t.Fatal("remote selection did not create a local tracking branch")
+	}
+	git(root, "switch", "main")
+	git(root, "commit", "--allow-empty", "-m", "remote advance")
+	advanced := git(root, "rev-parse", "HEAD")
+	git(root, "push", "origin", "HEAD:feature/topic")
+	request("switch", map[string]string{"branch": "feature/topic", "remote": "origin"}, 204)
+	if git(root, "rev-parse", "HEAD") != advanced {
+		t.Fatal("existing local branch did not fast-forward")
+	}
+	git(root, "commit", "--allow-empty", "-m", "local commit")
+	localTip := git(root, "rev-parse", "HEAD")
+	git(root, "switch", "main")
+	git(root, "commit", "--allow-empty", "-m", "divergent remote")
+	git(root, "push", "origin", "HEAD:feature/topic")
+	request("switch", map[string]string{"branch": "feature/topic", "remote": "origin"}, 400)
+	if git(root, "rev-parse", "HEAD") != localTip {
+		t.Fatal("divergent pull overwrote local commits")
+	}
+	request("switch", map[string]string{"branch": "missing", "remote": "origin"}, 400)
+	request("switch", map[string]string{"branch": "--detach", "remote": "origin"}, 400)
+	request("switch", map[string]string{"branch": "main", "remote": "--upload-pack=evil"}, 400)
+	request("switch", map[string]string{"branch": "main", "remote": "missing"}, 400)
+	if git(root, "rev-parse", "main~2") != initial {
+		t.Fatal("main changed unexpectedly")
+	}
+	git(root, "push", "origin", "main", "main:feature/narrow")
+	request("switch", map[string]string{"branch": "feature/narrow", "remote": "other"}, 204)
+	if git(root, "rev-parse", "--abbrev-ref", "@{upstream}") != "other/feature/narrow" {
+		t.Fatal("narrow fetch configuration did not get a working upstream")
+	}
+	request("pull", map[string]string{"branch": "feature/narrow"}, 204)
+}
 
 func TestBranchActions(t *testing.T) {
 	s, st := newTestServer(t)

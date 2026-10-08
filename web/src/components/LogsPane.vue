@@ -7,6 +7,7 @@ import { api } from "../api";
 import { fuzzy, segments } from "../fuzzy";
 import { commitGraph, graphColor, graphX, graphPath } from "../commitGraph";
 import { useCommitFiles } from "../commitFiles";
+import { branchOptions } from "../branches";
 
 watch(() => S.logGraph, () => refreshLog());
 
@@ -18,35 +19,34 @@ const error = ref("");
 const notice = ref("");
 const operation = ref("merge");
 const remoteCleanup = ref(null);
+const pushConfirmation = ref(null);
 const target = ref("");
 const targets = computed(() => (S.log.branches || []).filter((name) => name !== S.log.branch));
 const blocked = computed(() => !!busy.value || !!S.log.operation);
 watch(() => [S.log.branch, S.log.branches], () => {
   if (!targets.value.includes(target.value)) target.value = "";
 });
-const branches = computed(() => {
-  const names = S.log.branches || [];
-  const query = branchSearch.value.trim();
-  if (!query) return names;
-  return names.map((name) => ({ name, match: fuzzy(name, query) }))
-    .filter((item) => item.match)
-    .sort((a, b) => a.match.score - b.match.score)
-    .map((item) => item.name);
-});
+const branches = computed(() => branchOptions(S.log.branches, S.log.remoteBranches, branchSearch.value));
+function selectBranch(value) {
+  const item = branches.value.flat().find(item => item.value === value);
+  if (item) act("switch", item.branch, [], "", { remote: item.remote });
+}
 watch(() => [currentProjectID(), S.repository], () => {
   remoteCleanup.value = null;
+  pushConfirmation.value = null;
   branchSearch.value = "";
   target.value = "";
   error.value = "";
   notice.value = "";
 });
 const actions = [
+  { action: "fetch", icon: "i-lucide-refresh-cw", label: "Fetch remote branches" },
   { action: "pull", icon: "i-lucide-arrow-down", label: "Pull current branch" },
   { action: "push", icon: "i-lucide-arrow-up", label: "Push current branch" },
   { action: "clean", icon: "i-lucide-brush-cleaning", label: "Clean branches merged into main or master" },
 ];
-async function act(action, branch = S.log.branch, remotes = [], hash = "") {
-  if (busy.value || (!branch && !["continue", "abort", "checkout"].includes(action))) return;
+async function act(action, branch = S.log.branch, remotes = [], hash = "", options = {}) {
+  if (busy.value || (!branch && !["continue", "abort", "checkout", "fetch"].includes(action))) return;
   const id = currentProjectID();
   const repo = S.repository;
   const stillHere = () => id === currentProjectID() && repo === S.repository;
@@ -54,9 +54,10 @@ async function act(action, branch = S.log.branch, remotes = [], hash = "") {
   error.value = "";
   notice.value = "";
   try {
-    const result = await api("POST", `/api/projects/${id}/branches/${action}?repo=${encodeURIComponent(repo)}`, { branch, ...(action === "checkout" ? { hash } : {}), ...(action === "clean-remote" ? { remotes } : {}), ...(["merge", "rebase"].includes(action) ? { target: target.value } : {}) });
+    const result = await api("POST", `/api/projects/${id}/branches/${action}?repo=${encodeURIComponent(repo)}`, { branch, ...options, ...(action === "checkout" ? { hash } : {}), ...(action === "clean-remote" ? { remotes } : {}), ...(["merge", "rebase"].includes(action) ? { target: target.value } : {}) });
     if (stillHere()) {
       branchSearch.value = "";
+      if (action === "push") pushConfirmation.value = result?.confirmPush ? { branch } : null;
       if (result?.message) notice.value = result.message;
       if (action === "clean-remote") {
         remoteCleanup.value = null;
@@ -73,6 +74,7 @@ async function act(action, branch = S.log.branch, remotes = [], hash = "") {
   } catch (e) {
     if (stillHere()) {
       if (action === "clean-remote") remoteCleanup.value = null;
+      if (action === "push") pushConfirmation.value = null;
       error.value = e.message;
     }
   } finally {
@@ -159,18 +161,19 @@ const menu = computed(() => [
   <div class="flex min-h-0 flex-col gap-2">
     <div class="flex shrink-0 items-center gap-1">
       <USelectMenu
-        :model-value="S.log.branch || undefined"
+        :model-value="S.log.branch ? `refs/heads/${S.log.branch}` : undefined"
         v-model:search-term="branchSearch"
         :items="branches"
+        value-key="value"
         ignore-filter
         icon="i-lucide-git-branch"
         :placeholder="S.log.head ? 'detached' : 'no branch'"
         aria-label="Current branch"
         :search-input="{ placeholder: 'Search branches…' }"
-        :disabled="blocked || !S.log.branches?.length"
+        :disabled="blocked || (!S.log.branches?.length && !S.log.remoteBranches?.length)"
         class="min-w-0 flex-1"
         :ui="{ base: 'font-mono text-xs' }"
-        @update:model-value="act('switch', $event)"
+        @update:model-value="selectBranch"
       />
       <UTooltip v-for="item in actions" :key="item.action" :text="item.label">
         <UButton
@@ -180,11 +183,20 @@ const menu = computed(() => [
           variant="ghost"
           color="neutral"
           :loading="busy === item.action"
-          :disabled="blocked || !S.log.branch"
+          :disabled="blocked || (!S.log.branch && item.action !== 'fetch')"
           @click="act(item.action)"
         />
       </UTooltip>
     </div>
+    <UModal :open="!!pushConfirmation" title="Push branch to origin?" @update:open="(open) => { if (!open) pushConfirmation = null; }">
+      <template #body>
+        <p class="text-sm">This branch has no upstream branch. Push <span class="font-mono">{{ pushConfirmation?.branch }}</span> to origin with the same name and set it as the upstream?</p>
+      </template>
+      <template #footer>
+        <UButton color="neutral" variant="ghost" label="Cancel" :disabled="!!busy" @click="pushConfirmation = null" />
+        <UButton label="Push to origin" :loading="busy === 'push'" :disabled="!!busy" @click="act('push', pushConfirmation.branch, [], '', { setUpstream: true })" />
+      </template>
+    </UModal>
     <UModal :open="!!remoteCleanup" title="Delete merged remote branches?" @update:open="(open) => { if (!open) remoteCleanup = null; }">
       <template #body>
         <p class="text-sm">Local cleanup is complete. These branches are merged into their remote's main or master. Delete them from the remote?</p>

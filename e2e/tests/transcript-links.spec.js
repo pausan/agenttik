@@ -131,6 +131,12 @@ test("Markdown preview links resolve from their document and keep existing tabs"
     await expect(page.getByRole("tab", { name: "index.md", exact: true })).toBeVisible();
     await expect(page.getByRole("tab", { name: "README.md", exact: true })).not.toHaveAttribute("title", /temporary/i);
     await page.getByRole("tab", { name: "index.md", exact: true }).click();
+    await page.getByRole("button", { name: "sibling", exact: true }).click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Show in tree", exact: true }).click();
+    await expect(sidebar(page).getByRole("button", { name: "my file.md", exact: true })).toHaveAttribute("aria-current", "true");
+    await expect(siblingTab).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("heading", { name: "Sibling document" })).toBeVisible();
+    await page.getByRole("tab", { name: "index.md", exact: true }).click();
     await page.getByRole("button", { name: "parent", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Parent document" })).toBeVisible();
     await expect(page.getByRole("tab", { name: "README.md", exact: true })).toHaveCount(1);

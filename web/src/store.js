@@ -2217,7 +2217,7 @@ export function resolveFileRef(path, basePath = "") {
   return parts.join("/");
 }
 
-export async function openFileRef(path, line = 0, basePath = "", hints = [], system = false) {
+export async function openFileRef(path, line = 0, basePath = "", hints = [], system = false, showInTree = null) {
   const projectID = currentProjectID();
   const ownerID = S.owner?.id || "";
   if (!projectID) return;
@@ -2232,6 +2232,10 @@ export async function openFileRef(path, line = 0, basePath = "", hints = [], sys
   try {
     const info = await api("GET", `/api/projects/${projectID}/file-info?${query}`);
     path = info.path || path;
+    if (showInTree && !isOutsideProject(path)) {
+      await showInTree(path);
+      if (info.dir) return;
+    }
     if (info.dir || system) return openInSystem(path, projectID);
     return openFileIn(projectID, ownerID, path, { line, pin: true });
   } catch (e) {

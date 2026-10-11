@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from "vue";
+import { computed, inject, ref } from "vue";
 
 import { markdown } from "../markdown";
 import { copyText, openExternal, openFileRef, resolveFileRef } from "../store";
@@ -14,16 +14,17 @@ const html = computed(() => markdown(props.text));
 const block = ref(null);
 const aimedLink = ref("");
 const aimedFile = ref(null);
+const showInTree = inject("showInTree");
 
 function fileAt(e) {
   const hit = e.target.closest("button.file");
   return hit ? { path: hit.dataset.file, line: Number(hit.dataset.line) || 0 } : null;
 }
 
-function openFile(file, system = false) {
+function openFile(file, system = false, tree = false) {
   if (file) {
     const hints = [...block.value.querySelectorAll("button.file")].map((link) => link.dataset.file);
-    openFileRef(file.path, file.line, props.basePath, hints, system);
+    openFileRef(file.path, file.line, props.basePath, hints, system, tree ? showInTree : null);
   }
 }
 
@@ -63,6 +64,7 @@ function openLink() {
 const menu = computed(() => aimedFile.value ? [
   { label: "Open in new tab", icon: "i-lucide-file-plus", onSelect: () => openFile(aimedFile.value) },
   { label: "Open in system browser", icon: "i-lucide-external-link", onSelect: () => openFile(aimedFile.value, true) },
+  { label: "Show in tree", icon: "i-lucide-folder-tree", onSelect: () => openFile(aimedFile.value, false, true) },
   { label: "Copy path", icon: "i-lucide-copy", onSelect: () => copyText(resolveFileRef(aimedFile.value.path, props.basePath) || ".") },
 ] : [
   { label: "Open in browser", icon: "i-lucide-external-link", disabled: !aimedLink.value, onSelect: openLink },

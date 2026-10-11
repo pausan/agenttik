@@ -124,6 +124,7 @@ async function showFileInTree(path) {
   await showSidebar("tree", path);
   return openFile(path);
 }
+provide("showInTree", (path) => showSidebar("tree", path));
 
 // File selections from Tree or Changed also return to the main view.
 watch([() => S.activeTab, () => S.activeProjectID], closePanels);

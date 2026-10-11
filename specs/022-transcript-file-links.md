@@ -9,8 +9,13 @@ behaviour and the menu's open action does the same.
 A file the agent names in its reply is clickable, and clicking it opens that
 file in a kept app tab. An already open file is selected and kept instead of
 creating a duplicate. Right-clicking a local link offers **Open in new tab**
-and **Open in system browser**, plus **Copy path**. Copy uses the resolved
-project-relative path, or an absolute path for a target outside the project,
+and **Open in system browser**, plus **Show in tree** and **Copy path**. Show in
+tree switches the sidebar to Tree, clears its filter, expands parent folders
+and selects the resolved file before opening its kept tab with any requested
+line selected. Directory targets are selected without opening the system file
+explorer. Files outside the project open read-only without a Tree selection.
+Copy uses the resolved project-relative path, or an absolute path for a target
+outside the project,
 without a line suffix. Directory links open the system file explorer without
 creating an editor tab. System opening uses the same file opener
 as the Tree ([048](048-open-in-system-browser.md)). A reference that names a
@@ -46,7 +51,8 @@ folder (or project root for transcripts), the
 original target's folder, and the project root are checked with the linked
 relative path and filename, then searched recursively by filename. The first
 regular file found opens with the original line selection. System opening
-uses the same fallback. Absolute targets can also fall back to a local file.
+and Show in tree use the same fallback. Absolute targets can also fall back to
+a local file.
 
 Search runs on the server only for missing link targets, skips Git internals
 and dependency folders, and does not follow directory symlinks. A scan stops

@@ -83,7 +83,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [014](014-transcript-messages.md) | Human-message navigation, compact sticky prompts, copying and editing |
 | [016](016-file-tab-reuse.md) | The temporary file tab a click reuses |
 | [019](019-file-watching.md) | Tree and Changed following the disk as it moves |
-| [022](022-transcript-file-links.md) | Web link actions and local file tabs/system opening in transcripts and previews |
+| [022](022-transcript-file-links.md) | Web links and local file opening, tree reveal and copying in transcripts and previews |
 | [023](023-tool-call-groups.md) | Collapsing a run of tool calls to its latest |
 | [026](026-image-preview.md) | Previewing images, zooming, mouse and touch panning, and image diffs |
 | [086](086-html-preview.md) | Sandboxed HTML, local images, stylesheets and fonts |

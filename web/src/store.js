@@ -2109,7 +2109,7 @@ export async function reorderSidebarTasks(project, ids) {
 
 /* ------------------------------------------------------------------ files */
 
-/* A file tab shows the file, its diff, or — for markdown, HTML, SVG, images
+/* A file tab shows the file, its diff, or — for CSV, markdown, HTML, SVG, images
    and fonts — what it renders as, and opens in whichever was read last: looking
    at one diff usually means the next changed file wants a diff too. Each view
    is fetched only when it is first asked for. An image has no text at all, so
@@ -2120,7 +2120,7 @@ export async function reorderSidebarTasks(project, ids) {
    file that has only been read carries nothing extra and switching tabs and
    coming back finds the edits where they were left. */
 const FILE_MODES = ["edit", "diff", "preview", "hex"];
-const PREVIEWABLE = /\.(md|markdown|html?|svg)$/i;
+const PREVIEWABLE = /\.(md|markdown|html?|svg|csv|tsv)$/i;
 
 /* The images the server will hand over as bytes — the same list, because a
    preview can only ask for what the raw endpoint agrees to send. An SVG is

@@ -76,6 +76,7 @@ screen, **session** for the row, the route or the CLI flag.
 | Doc | What it covers |
 |-----|----------------|
 | [088](088-binary-files.md) | Binary hex preview, byte replacements and save limits |
+| [089](089-csv-preview.md) | CSV separator detection, table columns and three-click sorting |
 | [087](087-large-files.md) | Large text editing, plain rendering and latency checks |
 | [076](076-tab-scroll.md) | Scroll positions for every open tab, file modes, transcripts and terminals |
 | [075](075-page-find.md) | Find in the current page or text file, match navigation and shortcuts |

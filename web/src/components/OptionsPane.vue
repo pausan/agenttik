@@ -174,12 +174,12 @@ const busy = computed(() => {
     />
 
     <p class="mt-3.5 mb-1.5 text-xs text-dimmed">
-      Deleting removes its tasks and history from agenttik. The folder on disk is untouched.
+      Removing the project deletes its tasks and history from agenttik. The folder on disk is untouched.
       <template v-if="S.project.project.kind === 'orchestrator'">
         Settings › Orchestrator can re-enable it with its saved name, folder and prompt.
       </template>
     </p>
-    <UButton block color="error" variant="soft" label="Delete project" @click="confirming = true" />
+    <UButton block color="error" variant="soft" label="Remove project from agenttik" @click="confirming = true" />
 
     <UModal v-model:open="browsing" title="Project folder" :ui="{ content: 'max-w-lg' }">
       <template #body>
@@ -193,17 +193,17 @@ const busy = computed(() => {
       </template>
     </UModal>
 
-    <UModal v-model:open="confirming" title="Delete project">
+    <UModal v-model:open="confirming" title="Remove project from agenttik">
       <template #body>
         <p class="text-muted">
-          Delete <span class="font-medium text-highlighted">{{ S.project.project.name }}</span>?
+          Remove <span class="font-medium text-highlighted">{{ S.project.project.name }}</span> from agenttik?
           Its tasks and their history are deleted from agenttik. The folder on disk is untouched.
         </p>
       </template>
       <template #footer>
         <div class="flex w-full justify-end gap-2">
           <UButton color="neutral" variant="ghost" label="Cancel" @click="confirming = false" />
-          <UButton color="error" label="Delete" @click="remove" />
+          <UButton color="error" label="Remove" @click="remove" />
         </div>
       </template>
     </UModal>

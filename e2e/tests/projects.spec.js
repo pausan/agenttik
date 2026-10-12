@@ -190,19 +190,20 @@ test("a project is renamed from its options", async ({ page }) => {
   await expect(sidebar(page).getByText("renamed")).toBeVisible();
 });
 
-test("deleting a project asks first, then clears the centre", async ({ page }) => {
+test("removing a project from agenttik asks first, then clears the centre", async ({ page }) => {
   await addProject(page);
   await openProject(page);
 
-  await inspector(page).getByRole("button", { name: "Delete project" }).click();
+  await inspector(page).getByRole("button", { name: "Remove project from agenttik", exact: true }).click();
+  await expect(page.getByRole("dialog").getByRole("heading", { name: "Remove project from agenttik", exact: true })).toBeVisible();
   await expect(page.getByText("Its tasks and their history are deleted")).toBeVisible();
 
   // Backing out leaves the project alone.
   await page.getByRole("button", { name: "Cancel" }).click();
   await expect(sidebar(page).getByText(REPO)).toBeVisible();
 
-  await inspector(page).getByRole("button", { name: "Delete project" }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click();
+  await inspector(page).getByRole("button", { name: "Remove project from agenttik", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Remove", exact: true }).click();
 
   await expect(page.getByText("No projects yet.")).toBeVisible();
   await expect(page.getByText("Pick a task, or a project to start one.")).toBeVisible();

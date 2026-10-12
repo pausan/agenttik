@@ -1,10 +1,10 @@
 # Project archiving
 
 A project can be put away without being deleted. **Archive project** sits
-above **Delete project** in the Options pane and takes one click: the project
-leaves the sidebar and the Go To list, its tabs close, and its schedules stop
-firing. Nothing is destroyed — its tasks, its transcripts, its stats and its
-place in the dragged order all wait for it.
+above **Remove project from agenttik** in the Options pane and takes one click:
+the project leaves the sidebar and the Go To list, its tabs close, and its
+schedules stop firing. Nothing is destroyed — its tasks, its transcripts, its
+stats and its place in the dragged order all wait for it.
 
 **Settings › Projects** is where they wait. Each row is a name, its folder,
 how long ago it was archived, and a **Restore** button that puts it straight
@@ -13,9 +13,9 @@ setting: typing a project's name or a fragment of its path narrows the list
 and the count beside *Projects* says how many matched. With nothing archived
 the section says so and points at the Options pane.
 
-Delete is unchanged and still the destructive one: it asks for confirmation
-and removes the project's tasks and history from agenttik. The folder on disk
-is untouched by either.
+**Remove project from agenttik** asks for confirmation in a dialog with the
+same title and a **Remove** button. It deletes the project's tasks and history
+from agenttik. The folder on disk is untouched by either action.
 
 Archive is refused while the project is busy — any task running or with a
 queued prompt, or a schedule mid-run. The button is disabled and says why.

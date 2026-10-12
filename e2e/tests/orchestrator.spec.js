@@ -110,8 +110,8 @@ test("disable restores tasks; deletion keeps files and options with fresh histor
   await settings(page).getByRole("button", { name: "Open project", exact: true }).click();
 
   await inspector(page).getByRole("tab", { name: "Project Options", exact: true }).click();
-  await inspector(page).getByRole("button", { name: "Delete project", exact: true }).click();
-  await settings(page).getByRole("button", { name: "Delete", exact: true }).click();
+  await inspector(page).getByRole("button", { name: "Remove project from agenttik", exact: true }).click();
+  await settings(page).getByRole("button", { name: "Remove", exact: true }).click();
   await expect(sidebar(page).getByText("Coordinator", { exact: true })).toHaveCount(0);
   await page.reload();
   await openSettings(page, "Orchestrator");

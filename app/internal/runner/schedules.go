@@ -102,9 +102,9 @@ func (r *Runner) fireSchedule(s *store.Schedule, now time.Time) {
 // of runs done, and a run that failed is still over.
 //
 // It is the run row that decides, not the session: a scheduled session the
-// user later prompts by hand has no open run, so it spends nothing and is not
-// archived a second time. A run started by RunScheduleNow spends nothing
-// either, forced-run marker set aside for exactly this moment.
+// user later prompts by hand has no open run, so it spends nothing. A run
+// started by RunScheduleNow spends nothing either, forced-run marker set aside
+// for exactly this moment. The task stays open until the user archives it.
 func (r *Runner) finishScheduledRun(sess *store.Session, turnStatus string) {
 	status := store.RunDone
 	if turnStatus != "ok" {
@@ -117,11 +117,6 @@ func (r *Runner) finishScheduledRun(sess *store.Session, turnStatus string) {
 	if !r.popForcedScheduleRun(sess.ID) {
 		_ = r.store.SpendScheduleRun(sess.ScheduleID)
 	}
-	// The run leaves the project views and stays in the Sessions list, which
-	// is what archiving already means. Otherwise forty runs bury the project
-	// they belong to; the schedule's own view is where they are kept.
-	_ = r.store.SetSessionDone(sess.ID, true)
-	r.SummarizeTask(sess.ID)
 	r.publishSchedule(sess.ProjectID)
 }
 
@@ -322,7 +317,7 @@ func monthDay(year int, month time.Month, day int, atMinute int64, loc *time.Loc
 }
 
 // RunPinnedPrompt starts an ordinary task from a saved prompt. It has no
-// schedule run, counter or automatic archive behavior.
+// schedule run or counter.
 func (r *Runner) RunPinnedPrompt(s *store.Schedule, prompt string) (*store.Session, error) {
 	sess := &store.Session{ID: uuid.NewString(), ProjectID: s.ProjectID,
 		Provider: s.Provider, AccountID: s.AccountID, Model: s.Model,

@@ -1594,9 +1594,8 @@ const reloadSchedules = debounce(() => {
   // The project page lists the project's jobs, archived ones included, so a
   // schedule that moved moves there too.
   reloadProjects();
-  // A finished run is archived rather than deleted, so the Sessions list is
-  // where it goes. Nothing else re-reads it: the run had no tab of its own,
-  // so its done event reached no session watcher here.
+  // Finished runs stay open until the user archives them. Refresh their
+  // status even when no task tab is watching the run's done event.
   refreshSessions().catch(() => {});
 }, 150);
 

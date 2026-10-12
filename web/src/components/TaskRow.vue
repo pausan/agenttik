@@ -158,11 +158,9 @@ defineExpose({ edit });
           </div>
         </template>
       </UTooltip>
-      <!-- The job this run came from. It is a control rather than a label
-           because a finished run is archived, so its job's page is the only
-           place its history is kept — and this is the way back to it. It sits
-           in the action strip since a button inside the row's own button is
-           not valid markup. -->
+      <!-- The job this run came from. The control opens the job's run history.
+           It sits in the action strip since a button inside the row's own
+           button is not valid markup. -->
       <button
         v-if="job"
         type="button"

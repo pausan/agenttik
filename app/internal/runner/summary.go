@@ -26,9 +26,6 @@ const summaryMax = 160
 // agent said in it, and returns at once. The request runs behind the archive
 // the way a refined title runs behind a new task: archiving is a click, and no
 // click waits on a provider.
-//
-// Both ways a task is archived come through here — the button, and a scheduled
-// run closing itself — since either one is a task finishing.
 func (r *Runner) SummarizeTask(sessionID string) { r.background(func() { r.summarize(sessionID) }) }
 
 // summarize asks for the summary and records it, or leaves the task blank.

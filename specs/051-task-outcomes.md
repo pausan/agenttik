@@ -26,11 +26,9 @@ before it ever ran — each leaves the line blank, and a row without one is
 simply a row with one line fewer. Every task archived before this existed is
 blank for the same reason and stays that way: there is no backfill.
 
-Both ways a task is archived write one. The archive button on any of its rows,
-and a scheduled run closing itself when its turn ends
-([028](028-scheduled-jobs.md)) — a job's run is a task that finished, and
-forty runs of one job are exactly the list where *which of these did
-anything* is worth answering without opening each.
+Archiving a task from any of its rows writes a summary. Scheduled runs
+([028](028-scheduled-jobs.md)) stay open when their turn ends; their summary is
+written when the user archives them.
 
 ## Choices
 

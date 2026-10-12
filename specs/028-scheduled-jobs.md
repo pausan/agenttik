@@ -46,8 +46,8 @@ its own page and in the sidebar, and `#7` again on every task it has spawned.
 `sessions.schedule_id` already recorded which job a run came from
 ([Data](#data)); drawing it is what makes the relation readable, since forty
 runs of one job otherwise share a name and nothing else. The badge on a run
-opens the job it belongs to, which is the only route back — a finished run is
-archived, so the job's page is where its history lives.
+opens the job it belongs to, where its run history lives. Finished runs stay
+open until the user archives them.
 
 It is the row id rather than a code of its own: it is already unique, already
 stored on both sides, and a second identifier would only be a thing to keep in
@@ -195,15 +195,13 @@ jobs, then its tasks ([004](004-ui.md#tabs)). A job is a row like any other and
 is reached like one; the numbered `Alt` chords stay on tasks, which are what
 gets typed into.
 
-**The project's sidebar list holds the schedule, not its runs.** A schedule
-that has fired forty times would otherwise bury the project it belongs to. A
-run appears there while it is going, the way any task does, and is archived the
-moment its turn ends — it leaves the sidebar for the grey half of the project
-page's Tasks tab, which is what archiving already means
-([007](007-task-closing.md)). The schedule's own view is where the forty are.
-Archiving itself asks what the run came to, so those forty rows each say
-whether anything happened without being opened one at a time
-([051](051-task-outcomes.md)).
+**Runs stay in the project's sidebar until the user archives them.** Finishing
+a turn closes the run history entry and spends a run from the schedule's
+counter, but leaves the task open, including when the turn fails. Runs started
+manually also stay open and do not spend the counter. The schedule's own view
+keeps every run in its history. Archiving a task by hand moves it to the grey
+half of the project's Tasks tab ([007](007-task-closing.md)) and asks what it
+came to ([051](051-task-outcomes.md)).
 
 ## The view
 
@@ -298,7 +296,7 @@ Migration 7 adds two tables and one column:
   finishing turn find the schedule that started it without a lookup per turn.
   It is the open **run row** that decides whether a run is spent, though, not
   this column: a scheduled task the user later prompts by hand has no open run,
-  so it neither spends a run nor is archived a second time.
+  so it does not spend another run.
 
 ## Firing
 

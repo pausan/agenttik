@@ -5,7 +5,7 @@
    was set to. See specs/028-scheduled-jobs.md. */
 import { ref, watch } from "vue";
 
-import { EVERY, createSchedule, loadScheduleDefaults } from "../store";
+import { EVERY, WEEKDAYS, createSchedule, loadScheduleDefaults } from "../store";
 
 const open = defineModel("open", { type: Boolean, default: false });
 
@@ -40,6 +40,7 @@ function submit() {
           :items="EVERY"
           :search-input="false"
           class="mt-1 w-full font-normal"
+          aria-label="Repeat every"
         />
       </label>
 
@@ -53,11 +54,24 @@ function submit() {
           <UInput v-model="form.minutes" type="number" min="0" class="mt-1 w-full font-normal" />
         </label>
       </div>
-      <label v-else class="mt-3 block text-xs font-medium text-muted">
+      <label v-if="form.every === 'days'" class="mt-3 block text-xs font-medium text-muted">
+        Days between runs
+        <UInput v-model="form.days" type="number" min="1" max="36500" aria-label="Days between runs" class="mt-1 w-full font-normal" />
+      </label>
+      <div v-if="form.every === 'weekdays'" class="mt-3 flex flex-wrap gap-3">
+        <UCheckbox
+          v-for="day in WEEKDAYS"
+          :key="day.value"
+          :label="day.label"
+          :model-value="!!(form.weekdayMask & day.value)"
+          @update:model-value="form.weekdayMask = $event ? form.weekdayMask | day.value : form.weekdayMask & ~day.value"
+        />
+      </div>
+      <label v-if="form.every !== 'interval'" class="mt-3 block text-xs font-medium text-muted">
         At
-        <UInput v-model="form.at" type="time" class="mt-1 w-full font-normal" />
+        <UInput v-model="form.at" type="time" aria-label="Time of day" class="mt-1 w-full font-normal" />
         <span class="mt-1 block font-normal text-dimmed">
-          Weekly and monthly repeat on the day you create them.
+          Server local time. <template v-if="form.every === 'week' || form.every === 'month'">Repeats on the day you create it.</template>
         </span>
       </label>
 
@@ -77,7 +91,7 @@ function submit() {
     <template #footer>
       <div class="flex w-full justify-end gap-2">
         <UButton color="neutral" variant="ghost" label="Cancel" @click="open = false" />
-        <UButton label="Schedule" @click="submit" />
+        <UButton label="Schedule" :disabled="form.every === 'weekdays' && !form.weekdayMask" @click="submit" />
       </div>
     </template>
   </UModal>

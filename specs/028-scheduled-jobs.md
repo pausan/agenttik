@@ -55,35 +55,30 @@ step with the first.
 
 ## The recurrence
 
-Two forms, which is what the dialog offers:
+The create dialog and the schedule view offer the same recurrence forms:
 
-- **Every X hours Y minutes.** Defaults to 15 minutes, and whatever was
-  entered last becomes the default for the next one, kept in `localStorage`
-  beside the other prompt-bar choices. A run every quarter of an hour is the
-  common case; typing it again each time is not.
-- **Every day, week or month at hh:mm.** The time is local, because it is read
-  off a clock on a wall.
+- **Every X hours Y minutes.** Defaults to 15 minutes. The last choices are
+  saved in `localStorage` beside the other prompt-bar choices.
+- **Every day at hh:mm.** Runs once each calendar day.
+- **Every N days at hh:mm.** N is a whole number from 1 to 36500. The date the
+  form was chosen is the first eligible date, followed by every Nth calendar
+  date. If today's time has passed, the first run is N days later.
+- **Selected weekdays at hh:mm.** Choose any nonempty set of weekdays, such
+  as Monday, Wednesday and Friday. Each chosen day runs once a week.
+- **Every week or month at hh:mm.** Uses the weekday or day of the month the
+  form was chosen. A monthly anchor past the end of a short month clamps to
+  that month's last day, so the 31st still fires in February.
 
-Day-of-week and day-of-month are **not** asked for. They are taken from the
-moment the form was chosen: a weekly schedule made on a Tuesday runs on
-Tuesdays, a monthly one made on the 14th runs on the 14th. The dialog offers
-exactly the three words the user gave it, and an anchor answers the rest
-without another control. A monthly schedule anchored past the end of a short
-month clamps to that month's last day, so the 31st still fires in February.
+Calendar times use the **server's local timezone**, including when the client
+is remote. The forms say this next to the time field. N-day spacing counts
+calendar dates rather than 24-hour durations, so daylight-saving changes keep
+an ordinary wall-clock time such as 09:00. Times inside a daylight-saving gap
+or repeated hour follow Go's local `time.Date` normalization.
 
-**The recurrence is as editable as the counter.** The schedule's view offers
-the same four forms the dialog does, and changing one restarts the cadence
-from now — the rule a resume already follows, since both mean "from here on,
-this". A prompt that turned out to be worth running hourly rather than every
-quarter of an hour should not have to be made again; remaking it would leave
-the runs it has already recorded behind in a schedule nobody wants.
-
-Changing the *form* re-anchors: switched to weekly on a Thursday, it runs on
-Thursdays. The anchor is when the form was chosen, and choosing it again is
-choosing it again. Moving only the time leaves the anchor alone, so a weekly
-schedule dragged from 09:00 to 10:00 keeps its Tuesday — otherwise the one
-control the dialog deliberately does not offer would move every time the clock
-beside it did.
+Editing a recurrence rebooks its next future slot. Changing the form or N-day
+spacing anchors it on today. Changing only its time keeps its anchor and
+selected weekdays. Resuming also books the next future slot and keeps the
+anchor. Runs already created and the run history stay with the schedule.
 
 `next_run_at` is stored, not recomputed from the created time on every tick, so
 a due schedule is one indexed comparison. Advancing it after a fire adds whole
@@ -242,14 +237,14 @@ and the reason it was skipped; a run of consecutive skips is still one row, its
 single timestamp widened to the range it spans and its reason naming how many
 fires it stands for — *skipped 12 times*, not twelve identical lines.
 
-Repeats is the dialog's own control less the number of runs: the four forms,
-then hours and minutes, or a time of day. A field commits when it is left, and
-the header's words and next run follow it — which is the confirmation that the
-new clock took, without a Save button to press. A calendar form says beside
-the time that the weekday or the day of the month is the one it was set on,
-since that is the control that is not there. Both Repeats and Runs left are
-only rebound to the schedule while nobody is typing in them: a fire arriving
-mid-edit would otherwise take the caret with it.
+Repeats is the dialog's own control less the number of runs: the recurrence,
+then hours and minutes, or a time of day with day spacing or weekday choices.
+A field commits when it is left, and the header's words and next run follow it — which is the confirmation that the
+new clock took, without a Save button to press. Weekly and monthly forms say
+that their day comes from the anchor. A weekday selection commits on each
+click, and its final selected day cannot be unchecked. Both Repeats and Runs
+left are only rebound to the schedule while nobody is typing in them: a fire
+arriving mid-edit would otherwise take the caret with it.
 
 A schedule stores only the half of the clock its form uses — the other is 0 —
 so switching form in the view offers what the dialog would have offered, a
@@ -267,16 +262,22 @@ the repository; the schedule page already carries everything its clock knows.
 
 ## Data
 
-Migration 7 adds two tables and one column:
+Schedules use two tables and link each spawned session through `schedule_id`:
 
 - **schedules** — `id, project_id, title, prompt, provider, model, effort,
-  permission, every, interval_minutes, at_minute, anchor_at, remaining, paused,
-  next_run_at, created_at, done_at, position`. `every` is `interval`, `day`,
-  `week` or `month` for repeating jobs (`pinned` for manual-only prompts). `at_minute` is minutes past local midnight for the three
-  calendar forms; `interval_minutes` is the whole X hours Y minutes for the
-  first. `anchor_at` is when the form was chosen — the creation time until
+  permission, every, interval_minutes, at_minute, day_interval, weekday_mask,
+  anchor_at, remaining, paused, next_run_at, created_at, done_at, position`.
+  `every` is `interval`, `day`,
+  `days`, `weekdays`, `week` or `month` for repeating jobs (`pinned` for manual-only
+  prompts). `day_interval` defaults to 1; `weekday_mask` defaults to 0 and uses
+  Sunday as bit 0 through Saturday as bit 6. Both fields are added through an
+  append-only migration, so existing clocks keep their behavior. `at_minute`
+  is minutes past server-local midnight for calendar forms; `interval_minutes`
+  is the whole X hours Y minutes for the first. `anchor_at` is when the form
+  was chosen — the creation time until
   the recurrence is edited into a different form — which is what fixes the
-  weekday and the day of the month. `done_at` and `position` mean what they mean on a
+  N-day starting date, weekday and day of the month. Changing N-day spacing
+  also moves this anchor. `done_at` and `position` mean what they mean on a
   session row: archived-at, and the order the sidebar was dragged into.
 - **schedule_runs** — `id, schedule_id, session_id, status, started_at,
   ended_at, count`. `status` is `running`, `done`, `error`, `interrupted` or

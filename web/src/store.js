@@ -12,6 +12,7 @@
    project's work. */
 
 import { nextTick, reactive, ref, watch } from "vue";
+import { DEFAULT_SCHEDULE, scheduleRecurrence } from "./schedules.js";
 import { createTaskSounds, TASK_SOUNDS_KEY } from "./task-sounds.js";
 import { trackTaskAttention, reconcileTaskCompletions } from "./task-attention.js";
 import { upsertBackgroundMessage } from "./background-tasks.js";
@@ -24,6 +25,8 @@ import { platformChord, primaryChord } from "./platform";
 import { initSmartSearch, setSmartSearch } from "./smart-search.js";
 import { compactModelLabel as compact } from "./model-labels.js";
 import { openEventStream } from "./eventStream.js";
+
+export { DEFAULT_SCHEDULE, EVERY, WEEKDAYS, intervalMinutes, atMinute, scheduleForm, scheduleLabel } from "./schedules.js";
 
 /* Sidebar widths are the user's, so they are kept across reloads. */
 const LAYOUT_KEY = "agenttik.layout";
@@ -1433,20 +1436,6 @@ export async function openProjectPrompt(projectID) {
    transcript, no turns — which is why it is its own list and its own kind of
    tab. See specs/028-scheduled-jobs.md. */
 
-/* What the dialog opens on. A quarter of an hour is the common case, and
-   whatever was entered last replaces it, so the second schedule is one
-   click. */
-export const DEFAULT_SCHEDULE = { every: "interval", hours: 0, minutes: 15, at: "09:00", remaining: -1 };
-
-/* The forms a schedule can take. The dialog asks for one and the schedule
-   view offers the same four, since a clock can be changed after the fact. */
-export const EVERY = [
-  { label: "Hours and minutes", value: "interval" },
-  { label: "Day", value: "day" },
-  { label: "Week", value: "week" },
-  { label: "Month", value: "month" },
-];
-
 export function loadScheduleDefaults() {
   try {
     const saved = JSON.parse(storage.getItem(SCHEDULE_KEY));
@@ -1486,9 +1475,7 @@ export async function createSchedule(form) {
       model: s.model,
       effort: s.effort || "",
       permission: s.permission,
-      every: form.every,
-      interval_minutes: form.every === "interval" ? intervalMinutes(form) : 0,
-      at_minute: form.every === "interval" ? 0 : atMinute(form.at),
+      ...scheduleRecurrence(form),
       remaining: form.remaining,
     });
     if (form.every !== "pinned") rememberScheduleDefaults(form);
@@ -1498,47 +1485,6 @@ export async function createSchedule(form) {
     if (!tab.draft) tab.draft = prompt;
     fail(e);
   }
-}
-
-/* The dialog asks for hours and minutes; the server stores the one number. */
-export function intervalMinutes(form) {
-  return Math.max(1, Number(form.hours || 0) * 60 + Number(form.minutes || 0));
-}
-
-/* "09:30" as minutes past midnight, local — the clock on the wall is what
-   "every day at 9" is read off. */
-export function atMinute(at) {
-  const [h, m] = String(at || "").split(":");
-  return Math.min(24 * 60 - 1, Math.max(0, (Number(h) || 0) * 60 + (Number(m) || 0)));
-}
-
-/* "09:30" from minutes past local midnight, the way the field wants it. */
-function clock(atMinute) {
-  return String(Math.floor(atMinute / 60)).padStart(2, "0") +
-    ":" + String(atMinute % 60).padStart(2, "0");
-}
-
-export function scheduleLabel(schedule) {
-  if (schedule.every === "pinned") return "Pinned task";
-  if (schedule.every === "interval") {
-    const h = Math.floor(schedule.interval_minutes / 60);
-    const m = schedule.interval_minutes % 60;
-    return "Every " + [h ? h + "h" : "", m ? m + "m" : ""].filter(Boolean).join(" ");
-  }
-  return `Every ${schedule.every} at ${clock(schedule.at_minute)}`;
-}
-
-/* A schedule as the dialog's fields, for the view that edits them. Only the
-   half of the clock its form uses is stored — the other is 0 — so switching
-   form offers what the dialog would have, not midnight or no interval. */
-export function scheduleForm(schedule) {
-  const interval = schedule.every === "interval";
-  return {
-    every: schedule.every,
-    hours: interval ? Math.floor(schedule.interval_minutes / 60) : DEFAULT_SCHEDULE.hours,
-    minutes: interval ? schedule.interval_minutes % 60 : DEFAULT_SCHEDULE.minutes,
-    at: interval ? DEFAULT_SCHEDULE.at : clock(schedule.at_minute),
-  };
 }
 
 /* openSchedule puts a schedule in the project's context slot — the same one a
@@ -1669,15 +1615,14 @@ export function setScheduleModel(schedule, provider, model, effort, accountID) {
    every morning without being made again. Changing the form re-anchors on the
    server, so one switched to weekly today runs on today's weekday. */
 export function setScheduleFrequency(schedule, form) {
-  const body = {
-    every: form.every,
-    interval_minutes: form.every === "interval" ? intervalMinutes(form) : 0,
-    at_minute: form.every === "interval" ? 0 : atMinute(form.at),
-  };
+  const body = scheduleRecurrence(form);
+  if (body.every === "weekdays" && !body.weekday_mask) return;
   if (
     body.every === schedule.every &&
     body.interval_minutes === schedule.interval_minutes &&
-    body.at_minute === schedule.at_minute
+    body.at_minute === schedule.at_minute &&
+    body.day_interval === (schedule.day_interval || 1) &&
+    body.weekday_mask === (schedule.weekday_mask || 0)
   ) {
     return;
   }

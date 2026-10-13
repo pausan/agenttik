@@ -160,11 +160,13 @@ type Schedule struct {
 
 	// Every is how the next run is worked out. IntervalMinutes carries the
 	// whole X hours Y minutes for EveryInterval; AtMinute is minutes past
-	// local midnight for the calendar forms, whose weekday and day of the
-	// month come from AnchorAt rather than from a control nobody was offered.
+	// local midnight for the calendar forms. AnchorAt fixes the starting date,
+	// weekly weekday and monthly day. WeekdayMask uses Sunday as bit 0.
 	Every           string `json:"every"`
 	IntervalMinutes int64  `json:"interval_minutes"`
 	AtMinute        int64  `json:"at_minute"`
+	DayInterval     int64  `json:"day_interval"`
+	WeekdayMask     int64  `json:"weekday_mask"`
 	AnchorAt        int64  `json:"anchor_at"`
 
 	// Remaining is how many runs are left, -1 for forever. It goes down when a
@@ -395,6 +397,8 @@ const (
 	EveryPinned   = "pinned" // Saved prompt, only run by an explicit user action.
 	EveryInterval = "interval"
 	EveryDay      = "day"
+	EveryDays     = "days"
+	EveryWeekdays = "weekdays"
 	EveryWeek     = "week"
 	EveryMonth    = "month"
 )

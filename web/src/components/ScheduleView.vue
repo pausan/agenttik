@@ -13,6 +13,7 @@ import {
   S,
   enterDoes,
   EVERY,
+  WEEKDAYS,
   pickTask,
   removeSchedule,
   runScheduleNow,
@@ -265,6 +266,30 @@ function runTime(run) {
             <span class="text-xs text-dimmed">m</span>
           </template>
           <template v-else>
+            <template v-if="freq.every === 'days'">
+              <UInput
+                v-model="freq.days"
+                type="number"
+                min="1"
+                max="36500"
+                class="w-20"
+                aria-label="Days between runs"
+                @focus="editingFreq = true"
+                @blur="commitFreq"
+                @keydown.enter="$event.target.blur()"
+              />
+              <span class="text-xs text-dimmed">days</span>
+            </template>
+            <div v-if="freq.every === 'weekdays'" class="flex flex-wrap gap-3">
+              <UCheckbox
+                v-for="day in WEEKDAYS"
+                :key="day.value"
+                :label="day.label"
+                :model-value="!!(freq.weekdayMask & day.value)"
+                :disabled="freq.weekdayMask === day.value"
+                @update:model-value="freq.weekdayMask = $event ? freq.weekdayMask | day.value : freq.weekdayMask & ~day.value; commitFreq()"
+              />
+            </div>
             <UInput
               v-model="freq.at"
               type="time"
@@ -275,7 +300,7 @@ function runTime(run) {
               @keydown.enter="$event.target.blur()"
             />
             <span class="text-xs text-dimmed">
-              on the {{ freq.every === "week" ? "weekday" : "day" }} it was set
+              Server local time<template v-if="freq.every === 'week' || freq.every === 'month'">; on the {{ freq.every === "week" ? "weekday" : "day" }} it was set</template>
             </span>
           </template>
         </div>

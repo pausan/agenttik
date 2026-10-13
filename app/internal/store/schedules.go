@@ -11,7 +11,7 @@ import (
 // fire, so asking whether one is still open costs nothing extra and cannot
 // drift out of step with a column somebody forgot to clear.
 const scheduleCols = `s.id, s.project_id, s.title, s.prompt, s.provider, s.account_id, s.model, s.effort,
-	s.permission, s.every, s.interval_minutes, s.at_minute, s.anchor_at, s.remaining,
+	s.permission, s.every, s.interval_minutes, s.at_minute, s.day_interval, s.weekday_mask, s.anchor_at, s.remaining,
 	s.paused, s.next_run_at, s.created_at, s.done_at, s.position,
 	EXISTS(SELECT 1 FROM schedule_runs r WHERE r.schedule_id = s.id AND r.status = '` + RunRunning + `'),
 	p.name, p.path`
@@ -19,7 +19,7 @@ const scheduleCols = `s.id, s.project_id, s.title, s.prompt, s.provider, s.accou
 func scanSchedule(sc interface{ Scan(...any) error }) (*Schedule, error) {
 	var v Schedule
 	err := sc.Scan(&v.ID, &v.ProjectID, &v.Title, &v.Prompt, &v.Provider, &v.AccountID, &v.Model, &v.Effort,
-		&v.Permission, &v.Every, &v.IntervalMinutes, &v.AtMinute, &v.AnchorAt, &v.Remaining,
+		&v.Permission, &v.Every, &v.IntervalMinutes, &v.AtMinute, &v.DayInterval, &v.WeekdayMask, &v.AnchorAt, &v.Remaining,
 		&v.Paused, &v.NextRunAt, &v.CreatedAt, &v.DoneAt, &v.Position,
 		&v.Running, &v.ProjectName, &v.ProjectPath)
 	if err != nil {
@@ -35,14 +35,17 @@ func (s *Store) CreateSchedule(v *Schedule) error {
 	if v.AnchorAt == 0 {
 		v.AnchorAt = v.CreatedAt
 	}
+	if v.DayInterval == 0 {
+		v.DayInterval = 1
+	}
 	res, err := s.db.Exec(
 		`INSERT INTO schedules (project_id, title, prompt, provider, account_id, model, effort, permission,
-		    every, interval_minutes, at_minute, anchor_at, remaining, paused, next_run_at,
+		    every, interval_minutes, at_minute, day_interval, weekday_mask, anchor_at, remaining, paused, next_run_at,
 		    created_at, position)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
 		    (SELECT COALESCE(MAX(position), 0) + 1 FROM schedules WHERE project_id = ?))`,
 		v.ProjectID, v.Title, v.Prompt, v.Provider, v.AccountID, v.Model, v.Effort, v.Permission,
-		v.Every, v.IntervalMinutes, v.AtMinute, v.AnchorAt, v.Remaining, v.Paused, v.NextRunAt,
+		v.Every, v.IntervalMinutes, v.AtMinute, v.DayInterval, v.WeekdayMask, v.AnchorAt, v.Remaining, v.Paused, v.NextRunAt,
 		v.CreatedAt, v.ProjectID)
 	if err != nil {
 		return fmt.Errorf("create schedule: %w", err)
@@ -166,9 +169,10 @@ func (s *Store) SetScheduleNextRun(id, at int64) error {
 // in with it because the weekday and the day of the month are read off the
 // moment the form was chosen: switching to weekly re-anchors, moving a weekly
 // schedule's time does not.
-func (s *Store) SetScheduleRecurrence(id int64, every string, intervalMinutes, atMinute, anchorAt int64) error {
+func (s *Store) SetScheduleRecurrence(id int64, every string, intervalMinutes, atMinute, dayInterval, weekdayMask, anchorAt int64) error {
 	res, err := s.db.Exec(`UPDATE schedules SET every = ?, interval_minutes = ?, at_minute = ?,
-		anchor_at = ? WHERE id = ?`, every, intervalMinutes, atMinute, anchorAt, id)
+		day_interval = ?, weekday_mask = ?, anchor_at = ? WHERE id = ?`,
+		every, intervalMinutes, atMinute, dayInterval, weekdayMask, anchorAt, id)
 	if err != nil {
 		return fmt.Errorf("set schedule recurrence: %w", err)
 	}

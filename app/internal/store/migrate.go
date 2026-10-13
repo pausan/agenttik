@@ -384,6 +384,8 @@ ALTER TABLE general_config ADD COLUMN approval_timeout INTEGER NOT NULL DEFAULT 
 ALTER TABLE server_config ADD COLUMN tunnel_credentials TEXT NOT NULL DEFAULT '';`,
 	`ALTER TABLE server_identity ADD COLUMN machine_id TEXT NOT NULL DEFAULT '';
 UPDATE server_identity SET machine_id = lower(hex(randomblob(16)));`,
+	`ALTER TABLE schedules ADD COLUMN day_interval INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE schedules ADD COLUMN weekday_mask INTEGER NOT NULL DEFAULT 0;`,
 }
 
 func migrate(db *sql.DB, path string) error {

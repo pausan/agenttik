@@ -247,6 +247,37 @@ func FirstRun(s *store.Schedule, now time.Time) time.Time {
 		}
 		return at
 
+	case store.EveryDays:
+		anchor := time.UnixMilli(s.AnchorAt).In(now.Location())
+		step := max(1, s.DayInterval)
+		// Compare calendar dates in UTC, so a 23- or 25-hour local day still
+		// counts as one day. Jump directly to the next matching date.
+		date := func(t time.Time) time.Time {
+			return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+		}
+		days := int64(date(now).Sub(date(anchor)) / (24 * time.Hour))
+		if days < 0 {
+			return atClock(anchor, s.AtMinute)
+		}
+		offset := (step - days%step) % step
+		at := atClock(now.AddDate(0, 0, int(offset)), s.AtMinute)
+		if !at.After(now) {
+			at = atClock(now.AddDate(0, 0, int(offset+step)), s.AtMinute)
+		}
+		return at
+
+	case store.EveryWeekdays:
+		for offset := 0; offset <= 7; offset++ {
+			day := now.AddDate(0, 0, offset)
+			at := atClock(day, s.AtMinute)
+			if s.WeekdayMask&(1<<day.Weekday()) != 0 && at.After(now) {
+				return at
+			}
+		}
+		// Invalid masks are rejected by the API; keep a corrupt row from
+		// becoming due again on every tick.
+		return atClock(now.AddDate(0, 0, 7), s.AtMinute)
+
 	case store.EveryWeek:
 		// The weekday is the one the schedule was created on. The dialog asks
 		// for the three words the user gave it and nothing more; the anchor

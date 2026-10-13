@@ -48,10 +48,10 @@ func (s *Server) listSchedules(c *fiber.Ctx) error {
 }
 
 // checkRecurrence is the one place a clock is read, since creating a schedule
-// and changing one later take the same three fields and must not drift apart.
-func checkRecurrence(every string, intervalMinutes, atMinute int64) error {
+// and changing one later must not drift apart.
+func checkRecurrence(every string, intervalMinutes, atMinute, dayInterval, weekdayMask int64) error {
 	switch every {
-	case store.EveryInterval, store.EveryDay, store.EveryWeek, store.EveryMonth:
+	case store.EveryInterval, store.EveryDay, store.EveryDays, store.EveryWeekdays, store.EveryWeek, store.EveryMonth:
 	default:
 		return badRequest("unknown recurrence %q", every)
 	}
@@ -60,6 +60,12 @@ func checkRecurrence(every string, intervalMinutes, atMinute int64) error {
 	}
 	if atMinute < 0 || atMinute > 24*60-1 {
 		return badRequest("time of day must be within the day")
+	}
+	if every == store.EveryDays && (dayInterval < 1 || dayInterval > 36500) {
+		return badRequest("day interval must be between 1 and 36500")
+	}
+	if every == store.EveryWeekdays && (weekdayMask < 1 || weekdayMask > 127) {
+		return badRequest("select at least one weekday (weekday mask must be between 1 and 127)")
 	}
 	return nil
 }
@@ -82,6 +88,8 @@ func (s *Server) createSchedule(c *fiber.Ctx) error {
 		Every           string `json:"every"`
 		IntervalMinutes int64  `json:"interval_minutes"`
 		AtMinute        int64  `json:"at_minute"`
+		DayInterval     int64  `json:"day_interval"`
+		WeekdayMask     int64  `json:"weekday_mask"`
 		Remaining       int64  `json:"remaining"`
 	}
 	if err := c.BodyParser(&body); err != nil {
@@ -107,7 +115,7 @@ func (s *Server) createSchedule(c *fiber.Ctx) error {
 		body.Model = models[0].ID
 	}
 	if body.Every != store.EveryPinned {
-		if err := checkRecurrence(body.Every, body.IntervalMinutes, body.AtMinute); err != nil {
+		if err := checkRecurrence(body.Every, body.IntervalMinutes, body.AtMinute, body.DayInterval, body.WeekdayMask); err != nil {
 			return err
 		}
 	}
@@ -139,6 +147,8 @@ func (s *Server) createSchedule(c *fiber.Ctx) error {
 		Every:           body.Every,
 		IntervalMinutes: body.IntervalMinutes,
 		AtMinute:        body.AtMinute,
+		DayInterval:     body.DayInterval,
+		WeekdayMask:     body.WeekdayMask,
 		AnchorAt:        time.Now().UnixMilli(),
 		Remaining:       body.Remaining,
 	}
@@ -207,11 +217,13 @@ func (s *Server) updateSchedule(c *fiber.Ctx) error {
 		Model     string  `json:"model"`
 		Effort    string  `json:"effort"`
 
-		// The three recurrence fields move together, since they are one
-		// answer: every names the form, and the other two carry it.
+		// The recurrence fields move together: every names the form, and
+		// the remaining fields carry its clock and calendar choices.
 		Every           *string `json:"every"`
 		IntervalMinutes int64   `json:"interval_minutes"`
 		AtMinute        int64   `json:"at_minute"`
+		DayInterval     int64   `json:"day_interval"`
+		WeekdayMask     int64   `json:"weekday_mask"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return badRequest("invalid body: %v", err)
@@ -278,22 +290,23 @@ func (s *Server) updateSchedule(c *fiber.Ctx) error {
 	// run is booked once, after whichever came in has been applied.
 	rebook := false
 	if body.Every != nil {
-		if err := checkRecurrence(*body.Every, body.IntervalMinutes, body.AtMinute); err != nil {
+		if err := checkRecurrence(*body.Every, body.IntervalMinutes, body.AtMinute, body.DayInterval, body.WeekdayMask); err != nil {
 			return err
 		}
 		// The weekday and the day of the month come off the anchor, which is
 		// the moment the form was chosen — so choosing it again moves it, and
 		// a weekly schedule dragged from 09:00 to 10:00 keeps its Tuesday.
 		anchor := sched.AnchorAt
-		if *body.Every != sched.Every {
+		if *body.Every != sched.Every || (*body.Every == store.EveryDays && body.DayInterval != sched.DayInterval) {
 			anchor = time.Now().UnixMilli()
 		}
 		if err := s.store.SetScheduleRecurrence(sched.ID, *body.Every,
-			body.IntervalMinutes, body.AtMinute, anchor); err != nil {
+			body.IntervalMinutes, body.AtMinute, max(1, body.DayInterval), body.WeekdayMask, anchor); err != nil {
 			return err
 		}
 		sched.Every, sched.IntervalMinutes = *body.Every, body.IntervalMinutes
 		sched.AtMinute, sched.AnchorAt = body.AtMinute, anchor
+		sched.DayInterval, sched.WeekdayMask = max(1, body.DayInterval), body.WeekdayMask
 		rebook = true
 	}
 	if body.Paused != nil {

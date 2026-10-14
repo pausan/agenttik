@@ -85,6 +85,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [075](075-page-find.md) | Find in the current page or text file, match navigation and shortcuts |
 | [013](013-project-logs.md) | Commits, local/remote branches, push confirmation, graph, checkout and diffs |
 | [014](014-transcript-messages.md) | Human-message navigation, compact sticky prompts, copying and editing |
+| [093](093-long-transcripts.md) | Deferred message rendering, retained memory and long-history benchmarks |
 | [016](016-file-tab-reuse.md) | The temporary file tab a click reuses |
 | [019](019-file-watching.md) | Tree and Changed following the disk as it moves |
 | [022](022-transcript-file-links.md) | Web links and local file opening, tree reveal and copying in transcripts and previews |

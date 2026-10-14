@@ -12,9 +12,11 @@ directive saves before a view changes or unmounts and restores after rendering.
 File placeholders defer restoration until content is loaded. Project pages,
 scheduled jobs, pinned prompts, files and transcripts use the same directive.
 
-A transcript first opens at the bottom. Returning to an open transcript renders
-all its rows before restoring the saved position, including zero. New output
-follows the bottom only while the reader is already there.
+A transcript first opens at the bottom. Returning to an open transcript restores
+its lightweight rows and cached heights before the saved position, including
+zero. Message bodies near that position mount on demand; see
+[093](093-long-transcripts.md). New output follows the bottom only while the
+reader is already there.
 
 Terminal views save the emulator's viewport line and restore it after replaying
 the shell output. Terminal scrollback remains bounded by its existing buffers.

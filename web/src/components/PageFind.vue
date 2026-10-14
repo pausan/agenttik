@@ -4,6 +4,7 @@ import { findMatches, pageRanges } from "../page-find";
 import { revealText } from "../file-editor";
 
 const props = defineProps({ root: Object, context: String });
+const emit = defineEmits(["open-change"]);
 const open = ref(false);
 const query = ref("");
 const input = ref(null);
@@ -19,6 +20,7 @@ let textArea;
 async function show() {
   previousFocus = open.value ? previousFocus : document.activeElement;
   open.value = true;
+  emit("open-change", true);
   await nextTick();
   input.value?.focus();
   input.value?.select();
@@ -33,6 +35,7 @@ function clear() {
 }
 function close() {
   open.value = false;
+  emit("open-change", false);
   observer?.disconnect();
   clearTimeout(timer);
   clear();

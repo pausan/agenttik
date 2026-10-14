@@ -7,6 +7,8 @@ transcript; further presses do nothing.
 From the end, Up goes to the last human message. Manual scrolling resets the
 navigation position to the current viewport. Task switches reset the navigation
 cursor. Queued prompts and tool messages are not human-message stops.
+Long transcripts mount a navigation target before scrolling to it, without
+mounting the rest of the history; see [093](093-long-transcripts.md).
 Navigating to a human message pauses following live output; navigating to the
 end resumes it. The prompt draft is unchanged.
 

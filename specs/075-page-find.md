@@ -11,6 +11,9 @@ the central pane, excluding the sidebar, workspace, tab strip and prompt box.
 Inline formatting does not interrupt a phrase. Hidden or collapsed content,
 form fields, unrendered terminal scrollback and sandboxed HTML iframe contents
 are not searched.
+Opening find in a long transcript mounts its full history until the bar closes,
+so matches include earlier messages. Collapsed tool calls and closed threads
+remain excluded. Closing find releases message bodies outside the viewport.
 
 The bar shows the active match and total, or “No matches”. In the search field,
 Down / Enter moves to the next match and Up / Shift+Enter moves to the previous

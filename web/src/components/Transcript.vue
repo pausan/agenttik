@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, provide, ref, watch } from "vue";
 
 import {
   focusPrompt,
@@ -16,18 +16,17 @@ import {
 import { turnSummaries } from "../api";
 import { tabScroll, vTabScroll } from "../tab-scroll";
 import ApprovalCard from "./ApprovalCard.vue";
-import BackgroundTask from "./BackgroundTask.vue";
-import Message from "./Message.vue";
 import ModelSelection from "./ModelSelection.vue";
 import StickyPrompt from "./StickyPrompt.vue";
-import ToolGroup from "./ToolGroup.vue";
-import MessageThreads from "./MessageThreads.vue";
-import TurnOutputs from "./TurnOutputs.vue";
+import TranscriptRows from "./TranscriptRows.vue";
 
+defineProps({ findOpen: Boolean });
 const emit = defineEmits(["start-tour"]);
 const box = ref(null);
 const content = ref(null);
+const transcriptRows = ref(null);
 const now = ref(Date.now());
+provide("transcriptClock", now);
 const fallbackStartedAt = ref(0);
 let clock = null;
 
@@ -40,16 +39,6 @@ const elapsed = computed(() =>
 );
 const elapsedLabel = computed(() => `${elapsed.value} ${elapsed.value === 1 ? "second" : "seconds"}`);
 const clockFace = computed(() => CLOCK_FACES[Math.floor(now.value / 250) % CLOCK_FACES.length]);
-
-/* A long conversation costs more to draw than opening it is worth waiting
-   for: several hundred bubbles, each one a component and a markdown parse,
-   is most of what a launch onto a busy task spends. The box opens scrolled to
-   the bottom, so all but the last screenful of that is drawn where nobody is
-   looking — TAIL rows go in first and the rest follows once they are on
-   screen. Anything shorter than TAIL is drawn whole and never notices. */
-const TAIL = 40;
-const shown = ref(TAIL);
-let reveal = 0;
 
 /* A run of consecutive tool calls is handed to one ToolGroup, which shows
    only its latest until asked for the rest. Grouping reads role and nothing
@@ -100,8 +89,6 @@ const threadsByMessage = computed(() => {
   }
   return out;
 });
-const hasThreads = (message) =>
-  !!message.id && (threadsByMessage.value.has(message.id) || S.threadDraft?.messageID === message.id);
 
 /* Selecting text inside one stored message offers to ask about it in a
    thread. The button sits under the selection; the selection itself is the
@@ -149,10 +136,6 @@ async function openOrigin() {
   openThread(origin.thread_id);
 }
 
-const rows = computed(() =>
-  allRows.value.length > shown.value ? allRows.value.slice(-shown.value) : allRows.value,
-);
-
 /* Keep the prompt for the replies being read once its whole bubble has left
    the viewport. Cache the human nodes when rows change; a scroll needs only
    a binary search, and never parses or copies message text. */
@@ -190,7 +173,7 @@ function schedulePinnedPrompt() {
   if (!pinFrame) pinFrame = requestAnimationFrame(updatePinnedPrompt);
 }
 
-watch(rows, () => {
+watch(allRows, () => {
   humanNodes = [...(box.value?.querySelectorAll('[data-human-message]') || [])];
   if (content.value) pinObserver?.observe(content.value);
   schedulePinnedPrompt();
@@ -202,7 +185,7 @@ async function revealPinnedPrompt() {
   dismissedPrompt = prompt.at;
   pinned.value = null;
   follow = false;
-  const node = humanNodes.find(node => Number(node.dataset.humanMessage) === prompt.at);
+  const node = await transcriptRows.value?.reveal(prompt.at);
   if (!node || !box.value) return;
   const el = box.value;
   el.scrollTop += node.getBoundingClientRect().top - el.getBoundingClientRect().top - el.clientTop;
@@ -211,38 +194,6 @@ async function revealPinnedPrompt() {
   await nextTick();
   node.querySelector('button')?.focus({ preventScroll: true });
 }
-
-/* Paint the newest rows first, then add at most one screenful per frame.
-   Yielding between batches lets typing and tab changes interrupt a long
-   transcript. Returning to a saved reading position still restores all rows. */
-function revealTranscript() {
-  const turn = ++reveal;
-  shown.value = tabScroll(S.tab) ? Infinity : TAIL;
-  if (allRows.value.length <= shown.value) return;
-  const more = () => requestAnimationFrame(() => setTimeout(async () => {
-    if (turn !== reveal) return;
-    const el = box.value;
-    const height = el?.scrollHeight || 0;
-    const top = el?.scrollTop || 0;
-    shown.value += TAIL;
-    await nextTick();
-    if (turn !== reveal || !el) return;
-    el.scrollTop = follow ? el.scrollHeight : top + el.scrollHeight - height;
-    if (shown.value < allRows.value.length) more();
-  }, 0));
-  more();
-}
-
-watch(() => S.detail?.session.id, revealTranscript, { immediate: true });
-// A short live conversation can cross the threshold without changing tabs.
-// Keep the rows already on screen instead of briefly hiding them and
-// moving a reader who has scrolled up.
-watch(
-  () => [S.detail?.session.id, allRows.value.length],
-  ([id, count], [previousID, previousCount]) => {
-    if (id === previousID && count > previousCount) shown.value += count - previousCount;
-  },
-);
 
 /* Queued prompts are drawn under the transcript, each with how long it has
    been waiting, so opening a session shows the text that is going to run. */
@@ -393,7 +344,6 @@ onMounted(() => {
   schedulePinnedPrompt();
 });
 onUnmounted(() => {
-  reveal++;
   window.clearInterval(clock);
   pinObserver?.disconnect();
   cancelAnimationFrame(pinFrame);
@@ -402,6 +352,7 @@ onUnmounted(() => {
 /* Follow new output only while reading the bottom. A tab switch restores
    its saved position instead of being treated as new output. */
 let follow = true;
+const following = () => follow;
 let navigationTarget = null;
 let navigationTop = null;
 watch(() => S.detail?.session.id, () => {
@@ -417,9 +368,6 @@ async function navigateMessage(direction) {
   const el = box.value;
   const tab = S.tab;
   if (!el || !S.detail?.messages.length) return;
-  // Navigation needs even the rows whose initial paint was deferred.
-  reveal++;
-  shown.value = Infinity;
   await nextTick();
   if (S.tab !== tab || box.value !== el) return;
   const humans = [...el.querySelectorAll('[data-human-message]')];
@@ -437,6 +385,8 @@ async function navigateMessage(direction) {
   if (!target && direction < 0) return;
   navigationTarget = target ? Number(target.dataset.humanMessage) : Infinity;
   follow = !target;
+  if (target) await transcriptRows.value?.reveal(navigationTarget);
+  if (S.tab !== tab || box.value !== el) return;
   el.scrollTop = target ? el.scrollTop + target.getBoundingClientRect().top - top : el.scrollHeight;
   navigationTop = el.scrollTop;
 }
@@ -472,7 +422,7 @@ watch(
 </script>
 
 <template>
-  <div ref="box" v-tab-scroll="[S.tab, '', true]" class="min-h-0 flex-1 overflow-auto" @scroll="onScroll">
+  <div ref="box" v-tab-scroll="[S.tab, '', true]" data-transcript class="min-h-0 flex-1 overflow-auto" @scroll="onScroll">
     <div class="sticky top-0 z-10 h-0" data-find-ignore>
       <StickyPrompt v-if="pinned" :message="pinned.message" @reveal="revealPinnedPrompt" />
     </div>
@@ -544,20 +494,17 @@ watch(
         </template>
       </UTooltip>
 
-      <template v-for="row in rows" :key="row.at">
-        <ToolGroup v-if="row.tools" :tools="row.tools" />
-        <BackgroundTask v-else-if="row.message.role === 'background'" :message="row.message" :now="now" />
-        <Message v-else :message="row.message" :data-human-message="row.message.role === 'user' ? row.at : undefined" />
-        <MessageThreads
-          v-if="row.message && hasThreads(row.message)"
-          :message-id="row.message.id"
-          :threads="threadsByMessage.get(row.message.id) || []"
-        />
-        <TurnOutputs v-if="row.outputs" :outputs="row.outputs" :project-id="S.detail.session.project_id" :message-id="row.message?.id || 0" />
-        <p v-if="row.summary" class="-mt-2 mb-4 text-[11px] text-dimmed tabular-nums" aria-label="Turn usage">
-          {{ row.summary }}
-        </p>
-      </template>
+      <TranscriptRows
+        :key="S.detail.session.id"
+        ref="transcriptRows"
+        :rows="allRows"
+        :threads="threadsByMessage"
+        :root="box"
+        :tab="S.tab"
+        :expanded="findOpen"
+        :following="following"
+        @layout="schedulePinnedPrompt"
+      />
       <ApprovalCard v-for="a in approvals" :key="a.id" :session-id="S.detail.session.id" :approval="a" />
       <div v-if="S.detail.running" class="mb-3 flex items-center gap-2 text-xs text-dimmed" aria-label="Agent working">
         <span aria-hidden="true">{{ clockFace }}</span>

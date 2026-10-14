@@ -100,7 +100,8 @@ test("long transcripts restore their reading position instead of jumping to the 
     });
     await expect.poll(() => page.evaluate(() => localStorage.getItem("agenttik.openTabs"))).toContain("session");
     await page.reload();
-    await expect(page.getByRole("button", { name: "Copy Agent message", exact: true })).toHaveCount(100);
+    await expect(page.locator('[data-transcript-row]')).toHaveCount(100);
+    await expect.poll(() => page.getByRole("button", { name: "Copy Agent message", exact: true }).count()).toBeLessThan(40);
     const transcript = page.locator("main .overflow-auto").filter({ has: page.getByRole("button", { name: "Copy Agent message", exact: true }) });
     await expect.poll(() => transcript.evaluate(el => el.scrollHeight - el.clientHeight - el.scrollTop)).toBeLessThan(2);
     await transcript.evaluate(el => { el.scrollTop = 400; });
@@ -108,7 +109,7 @@ test("long transcripts restore their reading position instead of jumping to the 
     await sidebar(page).getByRole("button", { name: "file.txt", exact: true }).click();
     await expect(page.getByRole("textbox", { name: "file.txt", exact: true })).toBeVisible();
     await page.locator('main [role="tab"][aria-label*="scroll task"]').click();
-    await expect(page.getByRole("button", { name: "Copy Agent message", exact: true })).toHaveCount(100);
+    await expect(page.locator('[data-transcript-row]')).toHaveCount(100);
     await expect.poll(() => transcript.evaluate(el => el.scrollTop)).toBe(400);
     await transcript.evaluate(el => { el.scrollTop = 0; });
     await tab(page, "file.txt").click();

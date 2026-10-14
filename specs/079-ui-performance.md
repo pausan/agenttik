@@ -18,9 +18,10 @@ last message's content, without recursively watching historical messages.
 Turn footers accumulate usage once in transcript order. Grouping outputs and
 threads appends to their buckets without copying prior entries; these indexes
 use linear work and memory even for thousands of turns.
-Long transcripts paint 40 rows first, then add batches of 40 between frames.
-Tab switches cancel pending batches; saved reading positions restore all
-rows. Live output preserves rows already visible.
+[Long transcripts](093-long-transcripts.md) retain lightweight history rows
+and mount message bodies near the viewport. The progress clock updates outside
+the row list, so ticking does not scan historical rows. Saved reading positions
+use cached heights; live output follows only while reading at the bottom.
 
 Settings mounts panes on first visit, retaining them until the dialog closes.
 Searching mounts all panes so result counts cover every section. Modal and

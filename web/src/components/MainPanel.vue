@@ -23,6 +23,7 @@ import PageFind from "./PageFind.vue";
 
 const transcript = ref(null);
 const find = ref(null);
+const findOpen = ref(false);
 const content = ref(null);
 defineExpose({ find: () => find.value?.show() });
 
@@ -105,6 +106,7 @@ function onEnd(e, overID) {
 }
 
 const current = computed(() => S.tab);
+watch(() => current.value?.id, () => (findOpen.value = false));
 // Sandboxed HTML documents cannot expose their scroll offset to the parent.
 // Keep visited HTML previews mounted until their tabs close or change mode.
 const visitedHTML = new WeakSet();
@@ -235,7 +237,7 @@ const badge = computed(() => {
       </div>
     </div>
 
-    <PageFind ref="find" :root="content" :context="`${S.activeProjectID}:${current?.id}:${current?.mode}`" />
+    <PageFind ref="find" :root="content" :context="`${S.activeProjectID}:${current?.id}:${current?.mode}`" @open-change="findOpen = $event" />
     <div ref="content" class="flex min-h-0 flex-1 flex-col">
       <ProjectView v-if="current?.kind === 'project'" :tab="current" />
       <PinnedPromptView v-else-if="current?.kind === 'schedule' && current.data.schedule.every === 'pinned'" :key="current.id" :tab="current" />
@@ -244,7 +246,7 @@ const badge = computed(() => {
       <!-- Keyed by the tab, so switching between two terminals builds the one
            in front rather than rewriting the last one's screen. -->
       <TerminalView v-else-if="current?.kind === 'terminal'" :key="current.id" :tab="current" />
-      <Transcript ref="transcript" v-else-if="!current || current.kind === 'session'" @start-tour="emit('start-tour')" />
+      <Transcript ref="transcript" v-else-if="!current || current.kind === 'session'" :find-open="findOpen" @start-tour="emit('start-tour')" />
       <FileView
         v-for="tab in retainedHTML"
         v-show="tab === current"

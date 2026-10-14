@@ -14,7 +14,7 @@ import { computed, nextTick, ref } from "vue";
 
 import { S, copyText, editMessage, setModel } from "../store";
 import { promptImages, promptText } from "../prompt-images";
-import ImageFrame from "./ImageFrame.vue";
+import ConversationImage from "./ConversationImage.vue";
 import MarkdownContent from "./MarkdownContent.vue";
 import ModelSelection from "./ModelSelection.vue";
 
@@ -184,15 +184,12 @@ function onKey(e) {
         <span v-if="text">{{ text }}</span>
         <div v-if="images.length" class="mt-2 flex flex-wrap gap-2" aria-label="Message images">
           <button v-for="(image, i) in images" :key="i" type="button" :aria-label="`View attached image ${i + 1}`" class="max-w-full cursor-zoom-in rounded focus-visible:outline-2 focus-visible:outline-primary" @click="preview = image">
-            <img :src="image.url" :alt="`Attached image ${i + 1}`" loading="lazy" class="max-h-48 max-w-full rounded object-contain" />
+            <img :src="image.url" :alt="`Attached image ${i + 1}`" loading="lazy" class="max-h-80 max-w-full rounded object-contain" />
           </button>
         </div>
       </div>
     </template>
-    <UModal v-if="preview" :open="true" title="Attached image" :ui="{ content: 'max-w-5xl', body: 'flex h-[75vh] min-h-0' }" @update:open="preview = null">
-      <template #body>
-        <ImageFrame :src="preview.url" zoomable />
-      </template>
-    </UModal>
+    <ConversationImage v-if="preview" :src="preview.url" source="the attached image"
+      :message-id="!inThread && !message.streaming ? message.id || 0 : 0" @close="preview = null" />
   </div>
 </template>

@@ -20,7 +20,7 @@ const asking = ref(false);
 const box = ref(null);
 
 function focusBox() {
-  nextTick(() => box.value?.textarea?.focus());
+  nextTick(() => box.value?.textareaRef?.focus());
 }
 onMounted(() => drafting.value && focusBox());
 watch(drafting, (draft) => {
@@ -55,7 +55,7 @@ const label = (t) => `${t.replies} ${t.replies === 1 ? "reply" : "replies"}`;
       <button
         v-else
         type="button"
-        class="mb-2 ml-4 flex max-w-[calc(100%-1rem)] items-center gap-2 rounded-[var(--ui-radius)] border border-default px-2 py-1 text-left text-xs text-muted hover:bg-elevated"
+        class="mb-2 ml-4 flex max-w-[calc(100%-1rem)] items-center gap-2 rounded-[var(--ui-radius)] border border-default px-3 py-2 text-left text-sm text-muted hover:bg-elevated"
         :title="t.anchor_quote"
         :aria-label="`Open thread: ${t.title}`"
         @click="openThread(t.id)"
@@ -72,29 +72,31 @@ const label = (t) => `${t.replies} ${t.replies === 1 ? "reply" : "replies"}`;
 
     <form
       v-if="drafting"
-      class="mb-4 ml-4 rounded-[var(--ui-radius)] border border-default border-l-2 border-l-primary/60 bg-elevated/30 px-3 py-2"
+      class="mb-4 ml-4 rounded-[var(--ui-radius)] border border-default border-l-2 border-l-primary/60 bg-elevated/30 p-4 max-md:ml-0"
       aria-label="New thread"
       @submit.prevent="ask"
     >
-      <blockquote class="mb-2 line-clamp-3 border-l-2 border-default pl-2 text-xs whitespace-pre-wrap text-muted italic">
+      <blockquote class="mb-3 line-clamp-3 border-l-2 border-default pl-3 text-sm whitespace-pre-wrap text-muted italic">
         {{ drafting.quote }}
       </blockquote>
+      <img v-if="drafting.image" :src="drafting.image.url" alt="Circled image area" class="mb-3 max-h-80 max-w-full rounded object-contain" />
       <UTextarea
         ref="box"
         v-model="question"
-        :rows="1"
+        :rows="2"
+        size="lg"
         autoresize
         class="w-full"
-        placeholder="Ask about this passage… (Enter to send)"
+        :placeholder="drafting.image ? 'Ask about the circled area… (Enter to send)' : 'Ask about this passage… (Enter to send)'"
         aria-label="Thread question"
         @keydown="onKey"
       />
-      <p class="mt-1.5 mb-2 text-[11px] text-dimmed">
+      <p class="mt-2 mb-3 text-sm text-dimmed">
         Answered in a thread that knows this conversation. The conversation itself does not see it.
       </p>
       <div class="flex items-center gap-2">
-        <UButton type="submit" size="xs" icon="i-lucide-send" label="Ask" :loading="asking" :disabled="!question.trim()" />
-        <UButton type="button" size="xs" color="neutral" variant="ghost" label="Cancel" @click="S.threadDraft = null" />
+        <UButton type="submit" size="sm" icon="i-lucide-send" label="Ask" :loading="asking" :disabled="!question.trim()" />
+        <UButton type="button" size="sm" color="neutral" variant="ghost" label="Cancel" @click="S.threadDraft = null" />
       </div>
     </form>
   </div>

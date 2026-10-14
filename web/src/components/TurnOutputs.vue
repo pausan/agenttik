@@ -17,11 +17,13 @@ import { api, profileID, remoteID } from "../api";
 import { htmlPreviewDocument, htmlPreviewRoot, htmlPreviewURL } from "../html-preview";
 import { htmlPreviewToken, openFile, openInSystem, S } from "../store";
 import CsvPreview from "./CsvPreview.vue";
+import ConversationImage from "./ConversationImage.vue";
 import HtmlFrame from "./HtmlFrame.vue";
 
 const props = defineProps({
   outputs: { type: Array, required: true },
   projectId: { type: Number, required: true },
+  messageId: { type: Number, default: 0 },
 });
 
 const pages = computed(() => props.outputs.filter((o) => o.kind !== "image"));
@@ -73,6 +75,7 @@ function page(o) {
 }
 
 const annotating = ref("");
+const preview = ref(null);
 const canComment = computed(() => S.owner?.kind === "session");
 
 function toggle(o) {
@@ -156,23 +159,21 @@ function toggle(o) {
     </section>
 
     <div v-if="images.length" class="flex flex-wrap gap-2" aria-label="Output images">
-      <button
+      <div
         v-for="o in images"
         :key="o.path"
-        type="button"
-        class="max-w-full cursor-pointer rounded focus-visible:outline-2 focus-visible:outline-primary"
-        :title="o.path"
-        :aria-label="`Open ${name(o)} in a tab`"
-        @click="openFile(o.path, true, 'preview')"
+        class="flex max-w-full flex-col items-start gap-1"
       >
-        <img
-          v-if="src(o)"
-          :src="src(o)"
-          :alt="name(o)"
-          loading="lazy"
-          class="max-h-48 max-w-full rounded border border-default object-contain"
-        />
-      </button>
+        <button type="button" class="max-w-full cursor-zoom-in rounded focus-visible:outline-2 focus-visible:outline-primary"
+          :title="o.path" :aria-label="`View ${name(o)}`" @click="preview = o">
+          <img v-if="src(o)" :src="src(o)" :alt="name(o)" loading="lazy"
+            class="max-h-80 max-w-full rounded border border-default object-contain" />
+        </button>
+        <UButton size="xs" color="neutral" variant="ghost" icon="i-lucide-file-plus" label="Open in a tab"
+          :aria-label="`Open ${name(o)} in a tab`" @click="openFile(o.path, true, 'preview')" />
+      </div>
     </div>
+    <ConversationImage v-if="preview" :src="src(preview)" :title="name(preview)" :source="preview.path"
+      :message-id="messageId" @close="preview = null" />
   </div>
 </template>

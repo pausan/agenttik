@@ -23,7 +23,7 @@ test("a turn's presented results are drawn under its reply", async ({ page }) =>
     const report = '<!doctype html><h1>Conversion</h1><script>document.body.dataset.drawn = "yes"; document.querySelector("h1").onclick = () => { document.body.dataset.clicked = "yes"; };</script>';
     await writeFile(join(dir, "tasks", "r", "report.html"), report);
     await writeFile(join(dir, "tasks", "r", "rows.csv"), "week,users\n2026-10-05,42\n");
-    await writeFile(join(dir, "tasks", "r", "chart.svg"), '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20" fill="green"/></svg>');
+    await writeFile(join(dir, "tasks", "r", "chart.svg"), '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="400"><rect width="800" height="400" fill="green"/></svg>');
     await writeFile(join(dir, "tasks", "r", "check.png"), "not mentioned, so not a result");
 
     const outputs = page.getByLabel("Turn outputs");
@@ -34,7 +34,8 @@ test("a turn's presented results are drawn under its reply", async ({ page }) =>
     await expect(frame).toHaveAttribute("sandbox", "allow-scripts");
     await expect(frame.contentFrame().locator("body")).toHaveAttribute("data-drawn", "yes");
     await expect(outputs.getByRole("region", { name: "Output rows.csv" }).getByRole("table")).toContainText("42");
-    await expect.poll(() => outputs.getByAltText("chart.svg").evaluate((img) => img.naturalWidth)).toBe(40);
+    await expect.poll(() => outputs.getByAltText("chart.svg").evaluate((img) => img.naturalWidth)).toBe(800);
+    await expect.poll(async () => (await outputs.getByAltText("chart.svg").boundingBox()).height).toBeGreaterThan(192);
     await expect(outputs.getByAltText("check.png")).toHaveCount(0);
 
     await card.getByRole("button", { name: "Hide" }).click();
@@ -57,6 +58,27 @@ test("a turn's presented results are drawn under its reply", async ({ page }) =>
     await card.getByRole("button", { name: "Click an element" }).click();
     await frame.contentFrame().getByRole("heading", { name: "Conversion" }).click();
     await expect(frame.contentFrame().locator("body")).toHaveAttribute("data-clicked", "yes");
+
+    // An image result opens the same viewer and can be circled into a thread.
+    await outputs.getByRole("button", { name: "View chart.svg" }).click();
+    const viewer = page.getByRole("dialog", { name: "chart.svg", exact: true });
+    await viewer.getByRole("button", { name: "Circle an area" }).click();
+    await expect.poll(() => viewer.getByRole("img").evaluate((img) => img.naturalWidth)).toBe(800);
+    const picture = await viewer.getByRole("img").boundingBox();
+    await page.mouse.move(picture.x + picture.width * 0.25, picture.y + picture.height * 0.25);
+    await page.mouse.down();
+    await page.mouse.move(picture.x + picture.width * 0.75, picture.y + picture.height * 0.75, { steps: 5 });
+    await page.mouse.up();
+    await viewer.screenshot({ path: test.info().outputPath("circled-output.png") });
+    await viewer.getByRole("button", { name: "Ask in thread" }).click();
+    const imageQuestion = page.getByRole("form", { name: "New thread" });
+    await expect(imageQuestion).toContainText("Circled area of tasks/r/chart.svg: x 200–600, y 100–300");
+    await expect(imageQuestion.getByRole("img", { name: "Circled image area" })).toBeVisible();
+    await imageQuestion.getByRole("textbox", { name: "Thread question" }).fill("Explain this part of the chart");
+    await imageQuestion.getByRole("button", { name: "Ask", exact: true }).click();
+    const imageThread = page.getByRole("region", { name: "Thread: Explain this part of the chart" });
+    await expect(imageThread).toContainText("Read the attached image using your image-reading tool:");
+    await imageThread.getByRole("button", { name: "Close thread" }).click();
 
     await card.getByRole("button", { name: "Open report.html in a tab" }).click();
     await expect(page.getByRole("tab", { name: "Preview", exact: true })).toHaveAttribute("aria-selected", "true");

@@ -5,6 +5,9 @@ most tool calls before the turn starts. What it leaves open — a destructive
 command, a connector tool whose policy says "needs approval" — is put to the
 user mid-turn instead of being refused. The agent can also ask the user
 questions mid-turn, with options and typed answers.
+Question cards use 16 px headings and option labels, 14 px descriptions,
+16 px padding, and larger typed-answer fields so they are readable in the
+conversation and in threads.
 
 Claude Code and Codex ask. Copilot, OpenCode and the direct API runtime still
 refuse whatever their mode does not allow and cannot ask questions.

@@ -26,10 +26,13 @@ Drafts contain `![Attached image](/api/attachments/<name>)` references, hidden
 from the prompt text box and shown as previews. This uses the existing draft,
 queue, schedule, transcript and retry storage; the stored format supports images alone, but the prompt bar requires typed
 text before enabling its actions ([062](062-pinned-prompts.md)).
-Human transcript messages show attachment previews below the literal prompt
+Human transcript messages show attachment previews up to 320 px high below the literal prompt
 text. Clicking a preview opens a large image dialog with the existing image
 viewer, including zoom controls, wheel and pinch zoom, and panning. Escape or
-the close button returns to the transcript. Previews load lazily and use the
+the close button returns to the transcript. **Circle an area** fits the image
+for drawing an ellipse with a mouse, pen or finger; **Ask in thread** opens a
+question below the message with a marked image attached
+([092](092-threads.md)). Previews load lazily and use the
 current profile and remote API scope. Copying and editing preserve the stored
 references. Assistant Markdown still renders image references as links.
 Before starting a turn, the runner

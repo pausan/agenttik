@@ -38,7 +38,7 @@ const rows = computed(() => {
 });
 
 const box = ref(null);
-onMounted(() => nextTick(() => box.value?.textarea?.focus({ preventScroll: true })));
+onMounted(() => nextTick(() => box.value?.textareaRef?.focus({ preventScroll: true })));
 
 function send() {
   sendThread(props.thread, props.thread.draft || "");
@@ -66,12 +66,12 @@ function remove() {
 
 <template>
   <section
-    class="mb-4 ml-4 rounded-[var(--ui-radius)] border border-default border-l-2 border-l-primary/60 bg-elevated/30 px-3 pt-2 pb-3"
+    class="mb-4 ml-4 rounded-[var(--ui-radius)] border border-default border-l-2 border-l-primary/60 bg-elevated/30 p-4 max-md:ml-0"
     :aria-label="`Thread: ${detail?.session.title || 'loading'}`"
   >
     <header class="mb-2 flex items-start gap-2">
       <UIcon name="i-lucide-messages-square" class="mt-0.5 shrink-0 text-dimmed" />
-      <blockquote class="line-clamp-3 min-w-0 flex-1 border-l-2 border-default pl-2 text-xs whitespace-pre-wrap text-muted italic" :title="quote">
+      <blockquote class="line-clamp-3 min-w-0 flex-1 border-l-2 border-default pl-3 text-sm whitespace-pre-wrap text-muted italic" :title="quote">
         {{ quote }}
       </blockquote>
       <div class="flex shrink-0 items-center gap-0.5">
@@ -121,7 +121,8 @@ function remove() {
         <UTextarea
           ref="box"
           v-model="thread.draft"
-          :rows="1"
+          :rows="2"
+          size="lg"
           autoresize
           class="min-w-0 flex-1"
           placeholder="Ask a follow-up… (Enter to send, Shift+Enter for a new line)"

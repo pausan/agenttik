@@ -3604,11 +3604,11 @@ function isThread(id) {
 }
 
 /* startThread holds the passage while its question is written. */
-export function startThread(messageID, quote) {
+export function startThread(messageID, quote, image = null) {
   const tab = S.owner;
   quote = quote.trim();
   if (tab?.kind !== "session" || !messageID || !quote) return;
-  S.threadDraft = { parentID: tab.sessionID, messageID, quote };
+  S.threadDraft = { parentID: tab.sessionID, messageID, quote, image };
 }
 
 export async function createThread(prompt) {
@@ -3617,7 +3617,7 @@ export async function createThread(prompt) {
   if (!draft || !prompt) return false;
   try {
     const { thread } = await api("POST", `/api/sessions/${draft.parentID}/threads`, {
-      message_id: draft.messageID, quote: draft.quote, prompt,
+      message_id: draft.messageID, quote: draft.quote, prompt: withImages(prompt, draft.image ? [draft.image] : []),
     });
     if (S.threadDraft === draft) S.threadDraft = null;
     const parent = sessionTarget(draft.parentID);

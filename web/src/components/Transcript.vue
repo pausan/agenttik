@@ -486,7 +486,7 @@ watch(
         v-if="picked"
         class="absolute z-20 shadow"
         :style="{ top: `${picked.top}px`, left: `${picked.left}px` }"
-        size="xs"
+        size="sm"
         icon="i-lucide-messages-square"
         label="Ask in thread"
         title="Ask about the selected text in a thread, without adding to this conversation"
@@ -548,7 +548,7 @@ watch(
           :message-id="row.message.id"
           :threads="threadsByMessage.get(row.message.id) || []"
         />
-        <TurnOutputs v-if="row.outputs" :outputs="row.outputs" :project-id="S.detail.session.project_id" />
+        <TurnOutputs v-if="row.outputs" :outputs="row.outputs" :project-id="S.detail.session.project_id" :message-id="row.message?.id || 0" />
         <p v-if="row.summary" class="-mt-2 mb-4 text-[11px] text-dimmed tabular-nums" aria-label="Turn usage">
           {{ row.summary }}
         </p>

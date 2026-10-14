@@ -46,7 +46,10 @@ The transcript re-reads the session when a turn ends, which refreshes it.
   480 px tall and can be resized vertically, because the frame cannot
   measure a page on another origin.
 - **Tables** are a card with the CSV preview, at most 320 px tall.
-- **Images** are a row of thumbnails served through the same preview route.
+- **Images** are previews up to 320 px high, served through the same preview
+  route. Clicking one opens a zoomable dialog with **Circle an area** and
+  **Ask in thread** ([092](092-threads.md)), anchored to the turn's last stored
+  message. **Open in a tab** remains available below each image.
 
 Each card's header names the file and its folder, turns commenting on for a
 page, opens it in a kept tab on Preview, or opens it in the system browser.
@@ -60,5 +63,5 @@ Go tests cover the turn window, name-only and Markdown-link mentions, earlier
 mentions, unmentioned files, dependency folders, a named file outside the
 project, and a rewrite moving the output to a later turn. A browser test
 drives a fake turn that writes a report, a table, an SVG and an unmentioned
-screenshot, then checks the cards, script execution, hiding, and opening the
-report in a tab.
+screenshot, then checks the cards, script execution, hiding, circling the SVG
+into a thread with an attached marked image, and opening the report in a tab.

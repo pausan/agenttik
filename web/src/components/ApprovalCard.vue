@@ -39,20 +39,20 @@ function submit() {
 <template>
   <div
     v-if="questions.length"
-    class="mb-4 rounded-[var(--ui-radius)] border border-primary/40 bg-primary/5 px-3 py-2.5"
+    class="mb-4 rounded-[var(--ui-radius)] border border-primary/40 bg-primary/5 p-4"
     role="group"
     aria-label="Agent question"
   >
-    <div class="flex items-center gap-2 text-sm">
-      <UIcon name="i-lucide-message-circle-question" class="size-4 shrink-0 text-primary" aria-hidden="true" />
+    <div class="flex items-center gap-2 text-base">
+      <UIcon name="i-lucide-message-circle-question" class="size-5 shrink-0 text-primary" aria-hidden="true" />
       <span class="font-medium text-highlighted">
         {{ questions.length > 1 ? "The agent has questions" : "The agent has a question" }}
       </span>
     </div>
-    <p v-if="approval.description" class="mt-1 text-xs text-muted">{{ approval.description }}</p>
-    <form class="mt-2 space-y-3" @submit.prevent="submit">
+    <p v-if="approval.description" class="mt-2 text-sm text-muted">{{ approval.description }}</p>
+    <form class="mt-3 space-y-4" @submit.prevent="submit">
       <fieldset v-for="q in questions" :key="q.id" :disabled="approval.answering">
-        <legend class="text-sm text-default">
+        <legend class="text-base text-default">
           <span v-if="q.header" class="mr-1.5 rounded bg-elevated px-1.5 py-0.5 text-[11px] text-muted">{{ q.header }}</span>
           {{ q.question }}
           <span v-if="q.multi" class="text-xs text-dimmed">(pick any)</span>
@@ -62,7 +62,7 @@ function submit() {
             v-for="o in q.options"
             :key="o.label"
             type="button"
-            class="flex items-start gap-2 rounded border px-2 py-1.5 text-left text-sm"
+            class="flex items-start gap-3 rounded border px-3 py-2.5 text-left text-base"
             :class="state[q.id].picked.includes(o.label)
               ? 'border-primary bg-primary/10 text-highlighted'
               : 'border-default hover:bg-elevated'"
@@ -74,19 +74,19 @@ function submit() {
               :name="q.multi
                 ? (state[q.id].picked.includes(o.label) ? 'i-lucide-square-check' : 'i-lucide-square')
                 : (state[q.id].picked.includes(o.label) ? 'i-lucide-circle-dot' : 'i-lucide-circle')"
-              class="mt-0.5 size-3.5 shrink-0"
+              class="mt-1 size-4 shrink-0"
               aria-hidden="true"
             />
             <span>
               <span class="block">{{ o.label }}</span>
-              <span v-if="o.description" class="block text-xs text-muted">{{ o.description }}</span>
+              <span v-if="o.description" class="mt-0.5 block text-sm text-muted">{{ o.description }}</span>
             </span>
           </button>
         </div>
         <UInput
           v-if="q.other"
           class="mt-1.5 w-full"
-          size="sm"
+          size="lg"
           :type="q.secret ? 'password' : 'text'"
           :placeholder="q.options?.length ? 'Or type an answer' : 'Type an answer'"
           :aria-label="`Answer: ${q.question}`"

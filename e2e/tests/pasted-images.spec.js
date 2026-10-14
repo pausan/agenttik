@@ -54,6 +54,7 @@ test("submitted images stay visible and open a zoomable viewer after reload", as
   const message = page.locator("[data-human-message]").last();
   const images = message.getByRole("img", { name: /Attached image/ });
   await expect(images).toHaveCount(2);
+  await expect.poll(async () => (await images.first().boundingBox()).height).toBe(320);
   await expect(message.getByText(text, { exact: true })).toBeVisible();
   await expect(message).not.toContainText("/api/attachments/");
   await expect(page.getByText("idle", { exact: true })).toBeVisible();
@@ -75,6 +76,116 @@ test("submitted images stay visible and open a zoomable viewer after reload", as
   await page.keyboard.press("Escape");
   await expect(viewer).toBeHidden();
   await expect(images).toHaveCount(2);
+});
+
+test("a circled image area opens a thread with a marked image and survives reload", async ({ page }) => {
+  await addProject(page);
+  await openProject(page);
+  await newTask(page);
+  await pickModel(page);
+  await page.getByPlaceholder("Ask the agent…").fill("Describe this image");
+  await pasteImages(page, 1, 1024);
+  await expect(page.getByRole("status").filter({ hasText: "Saving images" })).toHaveCount(0);
+  await page.getByPlaceholder("Ask the agent…").press("Control+Enter");
+  await expect(page.getByLabel("Turn usage")).toHaveCount(1);
+  const mainMessages = () => page.locator("[data-message-id]:not([data-threads] [data-message-id])");
+  const count = await mainMessages().count();
+  await mainMessages().first().getByRole("button", { name: "View attached image 1", exact: true }).click();
+  const viewer = page.getByRole("dialog", { name: "Attached image", exact: true });
+  await viewer.getByRole("button", { name: "Circle an area" }).click();
+  await expect.poll(() => viewer.getByRole("img").evaluate((img) => img.naturalWidth)).toBe(1024);
+  const image = await viewer.getByRole("img").boundingBox();
+  const ask = viewer.getByRole("button", { name: "Ask in thread" });
+  await expect(ask).toBeDisabled();
+  // A click alone does not create an empty selection.
+  await page.mouse.click(image.x + image.width / 2, image.y + image.height / 2);
+  await expect(ask).toBeDisabled();
+  // Reverse dragging selects the same region as a forward drag.
+  await page.mouse.move(image.x + image.width * 0.75, image.y + image.height * 0.75);
+  await page.mouse.down();
+  await page.mouse.move(image.x + image.width * 0.25, image.y + image.height * 0.25, { steps: 5 });
+  await page.mouse.up();
+  await expect(ask).toBeEnabled();
+  await expect(viewer.getByLabel("Selected image area")).toBeVisible();
+  await page.route("**/api/attachments", (route) => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Image save unavailable" }) }), { times: 1 });
+  await ask.click();
+  await expect(viewer.getByRole("alert")).toHaveText("Image save unavailable");
+  await expect(viewer.getByLabel("Selected image area")).toBeVisible();
+  await ask.click();
+  await expect(viewer).toBeHidden();
+  const form = page.getByRole("form", { name: "New thread" });
+  await expect(form).toContainText("x 256–768, y 256–768 in the 1024 × 1024 image");
+  await expect(form.getByRole("textbox", { name: "Thread question" })).toBeFocused();
+  const marked = form.getByRole("img", { name: "Circled image area" });
+  await expect(marked).toBeVisible();
+  // Check the uploaded pixels, not just the temporary SVG overlay.
+  const red = await marked.evaluate(async (img) => {
+    await img.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 1024;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+    return Array.from(ctx.getImageData(512, 256, 1, 1).data);
+  });
+  expect(red).toEqual([239, 68, 68, 255]);
+  await form.getByRole("textbox", { name: "Thread question" }).fill("What is in the circle?");
+  const request = page.waitForRequest((r) => r.method() === "POST" && /\/threads$/.test(new URL(r.url()).pathname));
+  await form.getByRole("button", { name: "Ask", exact: true }).click();
+  const body = (await request).postDataJSON();
+  expect(body.prompt).toMatch(/^What is in the circle\?\n\n!\[Attached image\]\(\/api\/attachments\//);
+  const thread = page.getByRole("region", { name: "Thread: What is in the circle?" });
+  await expect(thread).toContainText("Read the attached image using your image-reading tool:");
+  await expect(thread.getByLabel("Thread working")).toHaveCount(0);
+  await expect(mainMessages()).toHaveCount(count);
+  await expect(thread.getByRole("img", { name: "Attached image 1", exact: true })).toBeVisible();
+  await thread.getByRole("button", { name: "Close thread" }).click();
+  await page.reload();
+  await page.getByRole("button", { name: "Open thread: What is in the circle?" }).click();
+  await expect(thread.getByRole("img", { name: "Attached image 1", exact: true })).toBeVisible();
+  // Threads cannot contain nested threads.
+  await thread.getByRole("button", { name: "View attached image 1", exact: true }).click();
+  await expect(viewer.getByRole("button", { name: "Circle an area" })).toHaveCount(0);
+});
+
+test.describe("touch image areas", () => {
+  test.use({ isMobile: true, hasTouch: true });
+
+  test("a finger can circle an image on a phone", async ({ page }) => {
+    await addProject(page);
+    await openProject(page);
+    await newTask(page);
+    await pickModel(page);
+    await page.getByPlaceholder("Ask the agent…").fill("Describe this image");
+    await pasteImages(page, 1, 1024);
+    await expect(page.getByRole("status").filter({ hasText: "Saving images" })).toHaveCount(0);
+    await page.getByPlaceholder("Ask the agent…").press("Control+Enter");
+    await expect(page.getByLabel("Turn usage")).toHaveCount(1);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole("button", { name: "View attached image 1", exact: true }).tap();
+    const viewer = page.getByRole("dialog", { name: "Attached image", exact: true });
+    await viewer.getByRole("button", { name: "Circle an area" }).tap();
+    await expect.poll(() => viewer.getByRole("img").evaluate((img) => img.naturalWidth)).toBe(1024);
+    const picture = await viewer.getByRole("img").boundingBox();
+    const client = await page.context().newCDPSession(page);
+    const x = picture.x + picture.width * 0.25, y = picture.y + picture.height * 0.25;
+    await client.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] });
+    for (let i = 1; i <= 5; i++) {
+      await client.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: x + picture.width * i / 10, y: y + picture.height * i / 10 }] });
+    }
+    await client.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await expect(viewer.getByRole("button", { name: "Ask in thread" })).toBeEnabled();
+    // Sliding off the action cancels it; a subsequent tap should act immediately.
+    const ask = await viewer.getByRole("button", { name: "Ask in thread" }).boundingBox();
+    await client.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: ask.x + ask.width / 2, y: ask.y + ask.height / 2 }] });
+    await client.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: ask.x + ask.width + 20, y: ask.y + ask.height / 2 }] });
+    await client.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await expect(viewer).toBeVisible();
+    await viewer.getByRole("button", { name: "Ask in thread" }).tap();
+    const form = page.getByRole("form", { name: "New thread" });
+    await expect(form.getByRole("img", { name: "Circled image area" })).toBeVisible();
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+    await form.screenshot({ path: test.info().outputPath("image-question-mobile.png") });
+  });
 });
 
 test("ordinary paste retains the browser default", async ({ page }) => {

@@ -1,7 +1,7 @@
 import { strictEqual } from "node:assert/strict";
 import { test } from "node:test";
 
-import { isoDate, taskStats, turnSummary, usageBreakdownRows, usageCost } from "./api.js";
+import { isoDate, taskStats, turnSummary, turnSummaries, usageBreakdownRows, usageCost } from "./api.js";
 
 test("stats dates use a locale-independent ISO timestamp", () => {
   strictEqual(isoDate(Date.UTC(2026, 8, 12, 13, 32, 11)), "2026-09-12 13:32:11");
@@ -158,4 +158,25 @@ test("later turn footers add the task's totals so far", () => {
     { started_at: 200_000, ended_at: 230_000, input_tokens: 300_000, output_tokens: 9_000, cost_usd: 0, estimated_cost_usd: 0.22 },
   ];
   strictEqual(turnSummary(turns), "30s · 300k in / 9k out · ≈$0.22 — total 2min · 1.3M in / 29k out · ≈$3.22");
+});
+
+test("all turn footers match prefix totals, including failed and edited-away turns", () => {
+  const turns = Array.from({ length: 25 }, (_, id) => ({
+    id, status: id % 3 ? "finished" : "failed", started_at: id * 100_000,
+    ended_at: id * 100_000 + 2500, input_tokens: id * 1234, output_tokens: id * 45,
+    cost_usd: id / 100, estimated_cost_usd: id === 5 ? 0.123 : 0,
+  }));
+  const summaries = turnSummaries([...turns, { id: 99, status: "running" }]);
+  strictEqual(summaries.size, turns.length);
+  for (let i = 0; i < turns.length; i++) strictEqual(summaries.get(i), turnSummary(turns.slice(0, i + 1)));
+  strictEqual(turnSummaries([]).size, 0);
+});
+
+test("10,000 turn footers read usage fields a bounded number of times", () => {
+  let reads = 0;
+  const turns = Array.from({ length: 10_000 }, (_, id) => new Proxy({
+    id, status: "finished", started_at: 0, ended_at: 1000, input_tokens: 10, output_tokens: 5,
+  }, { get(target, key) { reads++; return target[key]; } }));
+  strictEqual(turnSummaries(turns).size, turns.length);
+  strictEqual(reads < turns.length * 25, true);
 });

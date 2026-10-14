@@ -13,7 +13,7 @@ import {
   updateQueuedModel,
   updateQueuedPrompt,
 } from "../store";
-import { turnSummary } from "../api";
+import { turnSummaries } from "../api";
 import { tabScroll, vTabScroll } from "../tab-scroll";
 import ApprovalCard from "./ApprovalCard.vue";
 import BackgroundTask from "./BackgroundTask.vue";
@@ -74,15 +74,17 @@ const allRows = computed(() => {
   // count, as they do in Stats. Rows streamed before the turn ended carry no
   // turn id; the transcript is re-read when it ends, and that read supplies them.
   // The result files it presented go between its last row and that line.
-  const finished = (S.detail?.turns || []).filter((t) => t.status !== "running");
-  const upTo = new Map(finished.map((t, i) => [t.id, finished.slice(0, i + 1)]));
+  const summaries = turnSummaries(S.detail?.turns || []);
   const outputs = new Map();
-  for (const o of S.detail?.outputs || []) outputs.set(o.turn_id, [...(outputs.get(o.turn_id) || []), o]);
+  for (const o of S.detail?.outputs || []) {
+    if (!outputs.has(o.turn_id)) outputs.set(o.turn_id, []);
+    outputs.get(o.turn_id).push(o);
+  }
   const turnOf = (row) => (row.message || row.tools.at(-1)).turn_id;
   for (let i = 0; i < out.length; i++) {
     const id = turnOf(out[i]);
-    if (upTo.has(id) && (i === out.length - 1 || turnOf(out[i + 1]) !== id)) {
-      out[i].summary = turnSummary(upTo.get(id));
+    if (summaries.has(id) && (i === out.length - 1 || turnOf(out[i + 1]) !== id)) {
+      out[i].summary = summaries.get(id);
       out[i].outputs = outputs.get(id);
     }
   }
@@ -92,7 +94,10 @@ const allRows = computed(() => {
 /* Threads are drawn under the message they quote. */
 const threadsByMessage = computed(() => {
   const out = new Map();
-  for (const t of S.detail?.threads || []) out.set(t.anchor_message_id, [...(out.get(t.anchor_message_id) || []), t]);
+  for (const t of S.detail?.threads || []) {
+    if (!out.has(t.anchor_message_id)) out.set(t.anchor_message_id, []);
+    out.get(t.anchor_message_id).push(t);
+  }
   return out;
 });
 const hasThreads = (message) =>

@@ -15,6 +15,9 @@ all source text.
 
 Transcript follow-scroll observes message-list replacement, length and the
 last message's content, without recursively watching historical messages.
+Turn footers accumulate usage once in transcript order. Grouping outputs and
+threads appends to their buckets without copying prior entries; these indexes
+use linear work and memory even for thousands of turns.
 Long transcripts paint 40 rows first, then add batches of 40 between frames.
 Tab switches cancel pending batches; saved reading positions restore all
 rows. Live output preserves rows already visible.

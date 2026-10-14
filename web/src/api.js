@@ -235,3 +235,21 @@ export function turnSummary(turns) {
   const line = usage(turns.slice(-1));
   return turns.length > 1 ? `${line} — total ${usage(turns)}` : line;
 }
+
+// Build every footer in one pass, retaining only the formatted totals rather
+// than a copy of all earlier turns for each message row.
+export function turnSummaries(turns) {
+  const summaries = new Map();
+  let ms = 0, input = 0, output = 0, usd = 0, estimated = false, count = 0;
+  for (const turn of turns) {
+    if (turn.status === "running") continue;
+    ms += turn.ended_at - turn.started_at;
+    input += turn.input_tokens || 0;
+    output += turn.output_tokens || 0;
+    usd += (turn.cost_usd || 0) + (turn.estimated_cost_usd || 0);
+    estimated ||= !!turn.estimated_cost_usd;
+    const line = turnSummary([turn]);
+    summaries.set(turn.id, ++count > 1 ? `${line} — total ${roughUsage(ms, input, output, usd, estimated)}` : line);
+  }
+  return summaries;
+}

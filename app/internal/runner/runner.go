@@ -447,6 +447,17 @@ func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage) (*store.Turn
 // scheduler picked up straight away is already gone from that list and the
 // transcript never draws it as queued.
 func (r *Runner) Enqueue(sessionID, prompt string) ([]store.QueuedMessage, error) {
+	sess, err := r.enqueue(sessionID, prompt)
+	if err != nil {
+		return nil, err
+	}
+	r.schedule(sess.ProjectID, "")
+	return r.store.ListQueuedMessages(sessionID)
+}
+
+// enqueue accepts a prompt without dispatching it. Schedule ticks use this
+// while holding the transfer lock, then dispatch after releasing that lock.
+func (r *Runner) enqueue(sessionID, prompt string) (*store.Session, error) {
 	sess, err := r.store.GetSession(sessionID)
 	if err != nil {
 		return nil, err
@@ -467,8 +478,7 @@ func (r *Runner) Enqueue(sessionID, prompt string) ([]store.QueuedMessage, error
 	// session after the queue row exists, so the title is never ahead of the
 	// user's accepted prompt.
 	r.nameTask(sess, prompt)
-	r.schedule(sess.ProjectID, "")
-	return r.store.ListQueuedMessages(sessionID)
+	return sess, nil
 }
 
 // Accepted prompts reopen their task before it runs or waits in the queue.
@@ -598,15 +608,21 @@ func (r *Runner) dispatch(projectID int64, preferredSessionID string) {
 		return
 	}
 
-	_, queued, err := r.store.NextQueuedRun(projectID, preferredSessionID, time.Now().UnixMilli())
+	sess, queued, err := r.store.NextQueuedRun(projectID, preferredSessionID, time.Now().UnixMilli())
 	if err != nil || queued == nil {
 		return
 	}
 	// A prompt the provider was away for is already back in the queue under a
 	// new row, so this one is dropped either way: what is removed here is the
 	// row that was claimed, not the prompt.
-	if _, err := r.sendQueued(queued); err == ErrBusy {
-		return
+	if _, err := r.sendQueued(queued); err != nil {
+		if err == ErrBusy {
+			return
+		}
+		if !errors.Is(err, ErrProviderAway) && sess.ScheduleID != 0 {
+			r.closeUnstartedScheduleRun(sess.ID, store.RunError)
+			r.publishSchedule(projectID)
+		}
 	}
 	_ = r.store.RemoveQueuedMessage(queued.ID)
 }
@@ -654,10 +670,15 @@ func (r *Runner) Stop(sessionID string) error {
 	}
 	if ok {
 		turn.cancel()
-	} else if sess.Status == store.StatusWaiting {
-		// Nothing to cancel: the session was waiting on a provider, and the
-		// prompt it was waiting for has just been dropped.
-		_ = r.store.SetSessionStatus(sessionID, store.StatusIdle)
+	} else {
+		if sess.Status == store.StatusWaiting {
+			// Nothing to cancel: the provider retry has just been dropped.
+			_ = r.store.SetSessionStatus(sessionID, store.StatusIdle)
+		}
+		if sess.ScheduleID != 0 {
+			r.closeUnstartedScheduleRun(sessionID, store.RunInterrupted)
+			r.publishSchedule(sess.ProjectID)
+		}
 	}
 	return nil
 }

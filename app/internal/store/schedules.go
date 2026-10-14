@@ -7,9 +7,8 @@ import (
 	"strings"
 )
 
-// Running is a subquery rather than a column: a run row is already written per
-// fire, so asking whether one is still open costs nothing extra and cannot
-// drift out of step with a column somebody forgot to clear.
+// Running includes queued runs: their run row stays open until the first turn
+// finishes, so ticks cannot pile up another prompt while one is waiting.
 const scheduleCols = `s.id, s.project_id, s.title, s.prompt, s.provider, s.account_id, s.model, s.effort,
 	s.permission, s.every, s.interval_minutes, s.at_minute, s.day_interval, s.weekday_mask, s.anchor_at, s.remaining,
 	s.paused, s.next_run_at, s.created_at, s.done_at, s.position,
@@ -151,6 +150,28 @@ func (s *Store) DueSchedules(now int64) ([]Schedule, error) {
 			return nil, fmt.Errorf("due schedules: %w", err)
 		}
 		out = append(out, *v)
+	}
+	return out, rows.Err()
+}
+
+// QueuedScheduleProjects recovers ready scheduled prompts at startup. Their
+// next clock slot may be days away, but an accepted prompt is already due.
+func (s *Store) QueuedScheduleProjects(now int64) ([]int64, error) {
+	rows, err := s.db.Query(`SELECT DISTINCT sess.project_id
+		FROM queued_messages q JOIN sessions sess ON sess.id = q.session_id
+		JOIN projects p ON p.id = sess.project_id
+		WHERE sess.schedule_id <> 0 AND sess.done_at = 0 AND p.archived_at = 0 AND q.retry_at <= ?`, now)
+	if err != nil {
+		return nil, fmt.Errorf("queued schedule projects: %w", err)
+	}
+	defer rows.Close()
+	var out []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("queued schedule projects: %w", err)
+		}
+		out = append(out, id)
 	}
 	return out, rows.Err()
 }
@@ -427,11 +448,12 @@ func (s *Store) ListScheduleRuns(scheduleID int64, limit int) ([]ScheduleRun, er
 	return out, rows.Err()
 }
 
-// ResetRunningScheduleRuns clears the open runs a crash left behind. Without
-// it a schedule whose process died mid-run would read as busy forever and skip
-// every fire after it. An interrupted run spends nothing: it did not finish.
+// ResetRunningScheduleRuns clears runs a crash left without a waiting prompt.
+// Queued runs, including provider retries, keep their guard until executed.
+// An interrupted run spends nothing: it did not finish.
 func (s *Store) ResetRunningScheduleRuns() error {
-	_, err := s.db.Exec(`UPDATE schedule_runs SET status = ?, ended_at = ? WHERE status = ?`,
+	_, err := s.db.Exec(`UPDATE schedule_runs SET status = ?, ended_at = ? WHERE status = ?
+		AND NOT EXISTS (SELECT 1 FROM queued_messages q WHERE q.session_id = schedule_runs.session_id)`,
 		RunInterrupted, nowMillis(), RunRunning)
 	if err != nil {
 		return fmt.Errorf("reset running schedule runs: %w", err)

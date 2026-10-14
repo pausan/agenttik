@@ -153,8 +153,8 @@ func run() error {
 	defer db.Close()
 
 	// No turn survives a restart, so clear anything left marked running. The
-	// same goes for a schedule's open run: left as it was, its schedule would
-	// read as busy forever and skip every fire after it.
+	// same goes for a schedule's open run unless its prompt is still queued:
+	// a waiting prompt survives a restart and must keep its duplicate guard.
 	if err := db.ResetRunningSessions(); err != nil {
 		return err
 	}

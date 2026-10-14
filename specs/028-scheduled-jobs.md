@@ -4,8 +4,9 @@ A prompt can be scheduled to run again and again. Manual-only saved prompts
 use the same storage with `every = pinned`; see [062](062-pinned-prompts.md). The Send menu holds a third
 action, **Schedule**, beside Send and Enqueue. It asks for a recurrence and a
 number of runs, and leaves a schedule behind in the project. When each run
-comes due the schedule starts a *new* task with the same prompt, on the
-provider, model, effort and permission the prompt bar was set to.
+comes due the schedule creates a *new* task and queues its prompt, on the
+provider, model, effort and permission the prompt bar was set to. It starts
+when the project's active turns finish, following the ordinary task queue.
 
 A schedule is not a task. It has no transcript, no provider session id and no
 turns of its own — it is a prompt plus a clock, and what it produces are
@@ -107,16 +108,22 @@ asking for it.
 
 ## Skipping
 
-If a run comes due while this schedule's previous run is still going, the run
-is **skipped** — not queued behind it. A prompt whose whole point is "do this
-every 15 minutes" is not improved by running it four times back to back at
+If a run comes due while this schedule's previous prompt is queued, running,
+or waiting for a provider retry, the new run is **skipped**. A prompt whose
+whole point is "do this every 15 minutes" is not improved by running it four times back to back at
 17:00 because the 16:00 one was slow. The skip is recorded with its time, so
 the view says why there is a gap rather than leaving one.
 
-The check is per schedule, not per project. Two schedules in one project are as
-independent as two tasks in one project, and the project queue
-([012](012-task-queue.md)) is deliberately not involved: a schedule sends
-straight to its new task.
+The duplicate check is per schedule, identified by `schedules.id`: each job
+can have one automatic run queued or running. Different schedules can each
+queue one run in the same project. Their prompts wait behind active project
+work and follow the project queue ([012](012-task-queue.md)). An idle project
+starts its next queued prompt immediately.
+
+Stopping a queued run closes its history entry as `interrupted`, without
+spending the counter. Its schedule can queue another run at the next slot.
+A prompt that cannot start closes its run as `error`, so the schedule is not
+left busy forever. A provider outage keeps the prompt queued and the run open.
 
 A skip that follows another skip extends it rather than adding a row of its
 own: the view reads *skipped 12 times, 09:00–12:00* instead of twelve
@@ -137,8 +144,8 @@ outside its own clock, the way a tick does — a new session, a new
 ways forcing it implies:
 
 - **It ignores the schedule being busy.** A tick due while the previous run is
-  still going is skipped, not queued behind it ([above](#skipping)); a forced
-  run starts anyway, since each run is its own session and there is nothing
+  queued or running is skipped ([above](#skipping)); a forced run starts
+  anyway, since each run is its own session and there is nothing
   for two to conflict over. A schedule can show more than one run in flight at
   once, the same as a project can.
 - **It never spends the counter**, win or lose. This is what makes the button
@@ -289,10 +296,14 @@ Schedules use two tables and link each spawned session through `schedule_id`:
   instead of inserting another: a schedule stuck behind one slow run reads as
   one line, a count and a time range, not one row per fire it waited out.
 
-  `interrupted` is what a restart leaves behind, and clearing those at startup
-  is not optional: an open run row is what makes a schedule read as busy, so
-  one left by a killed process would skip every fire after it, forever. An
-  interrupted run spends nothing — it did not finish.
+  `running` means the run is open, including while its prompt is queued or
+  waiting for a provider retry. Startup preserves these open rows when a
+  queued prompt still exists, so restarting cannot enqueue a duplicate.
+  The schedule clock dispatches ready queued runs once at startup, without
+  waiting for their next recurrence slot. Held provider retries keep their
+  retry time and resume through the retry clock.
+  Runs with no queued prompt become `interrupted` at startup: no provider
+  process survives a restart. An interrupted run spends nothing.
 - **sessions.schedule_id** — 0 for an ordinary session. It is what lets a
   finishing turn find the schedule that started it without a lookup per turn.
   It is the open **run row** that decides whether a run is spent, though, not
@@ -304,8 +315,11 @@ Schedules use two tables and link each spawned session through `schedule_id`:
 The runner owns a ticker, started with the server and stopped with it. Every
 15 seconds it asks the store for schedules that are due — `paused = 0 AND
 done_at = 0 AND remaining <> 0 AND next_run_at <= now`, one index — and for
-each one either spawns, skips, or finishes. A tick that finds nothing costs one
-query, which is the point of storing `next_run_at`.
+each one either creates a queued task or records a skip. It then dispatches
+the affected projects through the ordinary queue. Enqueueing holds the project
+transfer read lock; dispatch happens after releasing it, since starting a turn
+also takes that lock. A tick that finds nothing costs one query, which is the
+point of storing `next_run_at`.
 
 Fifteen seconds is the resolution: a daily schedule set for 09:00 fires within
 fifteen seconds of it. Minute-accurate to the eye, and cheap enough that the

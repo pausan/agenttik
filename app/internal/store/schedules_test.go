@@ -30,3 +30,42 @@ VALUES(1,1,'morning check','fake','m','day',540,123,456,123);`)
 		t.Fatalf("upgraded schedule = %+v, %v", s, err)
 	}
 }
+
+func TestResetScheduleRunsPreservesQueuedRuns(t *testing.T) {
+	s := testStore(t)
+	p, err := s.CreateProject("project", "/project")
+	must(t, err)
+	for _, queued := range []bool{false, true} {
+		job := &Schedule{ProjectID: p.ID, Provider: "fake", Every: EveryInterval, Remaining: 2, NextRunAt: 1}
+		must(t, s.CreateSchedule(job))
+		id := "running"
+		if queued {
+			id = "queued"
+		}
+		must(t, s.CreateSession(&Session{ID: id, ProjectID: p.ID, Provider: "fake", ScheduleID: job.ID}))
+		_, err := s.StartScheduleRun(job.ID, id)
+		must(t, err)
+		if queued {
+			_, err := s.EnqueueMessage(id, "scheduled", "fake", 0, "m1", "high")
+			must(t, err)
+		}
+	}
+	must(t, s.ResetRunningSessions())
+	must(t, s.ResetRunningScheduleRuns())
+	due, err := s.DueSchedules(1)
+	must(t, err)
+	if len(due) != 2 {
+		t.Fatalf("due schedules = %+v", due)
+	}
+	for _, job := range due {
+		runs, err := s.ListScheduleRuns(job.ID, 0)
+		must(t, err)
+		want := RunInterrupted
+		if runs[0].SessionID == "queued" {
+			want = RunRunning
+		}
+		if runs[0].Status != want || job.Running != (want == RunRunning) || job.Remaining != 2 {
+			t.Fatalf("reset job = %+v, run = %+v; want %s", job, runs[0], want)
+		}
+	}
+}

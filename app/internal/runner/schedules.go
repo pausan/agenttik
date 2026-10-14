@@ -26,9 +26,14 @@ const scheduleTick = 15 * time.Second
 // the dialog opens on.
 const defaultInterval = 15 * time.Minute
 
-// RunSchedules fires due schedules until ctx is cancelled. One goroutine for
-// every schedule in the database, since being due is a single comparison.
+// RunSchedules resumes queued runs and queues due schedules until ctx is
+// cancelled. One goroutine serves all schedules; being due is one comparison.
 func (r *Runner) RunSchedules(ctx context.Context) {
+	if projects, err := r.store.QueuedScheduleProjects(time.Now().UnixMilli()); err == nil {
+		for _, projectID := range projects {
+			r.schedule(projectID, "")
+		}
+	}
 	ticker := time.NewTicker(scheduleTick)
 	defer ticker.Stop()
 	for {
@@ -43,13 +48,23 @@ func (r *Runner) RunSchedules(ctx context.Context) {
 
 func (r *Runner) tickSchedules(now time.Time) {
 	r.transfer.RLock()
-	defer r.transfer.RUnlock()
 	due, err := r.store.DueSchedules(now.UnixMilli())
 	if err != nil {
+		r.transfer.RUnlock()
 		return
 	}
 	for i := range due {
 		r.fireSchedule(&due[i], now)
+	}
+	r.transfer.RUnlock()
+	// Dispatch can start a turn and take the transfer lock itself. Keep it
+	// outside the tick's read lock so a waiting project move cannot deadlock.
+	projects := make(map[int64]bool)
+	for _, s := range due {
+		if !projects[s.ProjectID] {
+			projects[s.ProjectID] = true
+			r.schedule(s.ProjectID, "")
+		}
 	}
 }
 
@@ -60,7 +75,7 @@ func (r *Runner) fireSchedule(s *store.Schedule, now time.Time) {
 	_ = r.store.SetScheduleNextRun(s.ID, AdvanceRun(s, prev, now).UnixMilli())
 	defer r.publishSchedule(s.ProjectID)
 
-	// Still busy with its own previous run. Queueing this one would only pile
+	// Still busy with its own queued or running prompt. Queueing another would pile
 	// four 15-minute runs onto 17:00 because 16:00 was slow, so it is passed
 	// over — recorded, since a gap with no reason reads as a bug.
 	if s.Running {
@@ -85,15 +100,10 @@ func (r *Runner) fireSchedule(s *store.Schedule, now time.Time) {
 	if _, err := r.store.StartScheduleRun(s.ID, sess.ID); err != nil {
 		return
 	}
-	// Straight to Send: the project queue is for prompts waiting on a project,
-	// and a schedule that waited would stop being a schedule.
-	//
-	// A provider that is away is the exception, and Send has already put the
-	// prompt in the queue for it. The run stays open, so the schedule reads as
-	// busy and passes over its next slot rather than piling up a run an hour
-	// for as long as the outage lasts; the retry closes it.
-	if _, err := r.sendDuringTransferLock(store.QueuedMessage{SessionID: sess.ID, Prompt: s.Prompt, CreatedAt: now.UnixMilli()}); err != nil && !errors.Is(err, ErrProviderAway) {
-		_, _ = r.store.FinishScheduleRun(sess.ID, store.RunError)
+	// The open run guards the schedule while its prompt waits in the project
+	// queue, executes, or waits for a provider retry. Only its first turn closes it.
+	if _, err := r.enqueue(sess.ID, s.Prompt); err != nil {
+		r.closeUnstartedScheduleRun(sess.ID, store.RunError)
 	}
 }
 
@@ -163,16 +173,16 @@ func (r *Runner) RunScheduleNow(scheduleID int64, enqueue bool) error {
 
 	if enqueue {
 		if _, err := r.Enqueue(sess.ID, s.Prompt); err != nil {
-			r.closeFailedForcedRun(sess.ID)
+			r.closeUnstartedScheduleRun(sess.ID, store.RunError)
 			return err
 		}
 		return nil
 	}
-	// Same exception fireSchedule makes for Send: a provider away is not a
+	// As with the project queue, a provider away is not a
 	// failure, the prompt is already waiting for it and the run stays open
 	// for the retry to close.
 	if _, err := r.Send(sess.ID, s.Prompt); err != nil && !errors.Is(err, ErrProviderAway) {
-		r.closeFailedForcedRun(sess.ID)
+		r.closeUnstartedScheduleRun(sess.ID, store.RunError)
 		return err
 	}
 	return nil
@@ -189,15 +199,13 @@ func (r *Runner) popForcedScheduleRun(sessionID string) bool {
 	return forced
 }
 
-// closeFailedForcedRun closes a forced run that never got a turn started —
-// Send or Enqueue failed synchronously — so it does not sit "running"
-// forever. Nothing spends here either way: fireSchedule does not spend a
-// same-request failure, since no turn was ever attempted for it to spend on.
-func (r *Runner) closeFailedForcedRun(sessionID string) {
+// closeUnstartedScheduleRun releases a run whose prompt was stopped while
+// queued or could not start. No completed turn means no counter is spent.
+func (r *Runner) closeUnstartedScheduleRun(sessionID, status string) {
 	r.mu.Lock()
 	delete(r.forcedScheduleRuns, sessionID)
 	r.mu.Unlock()
-	_, _ = r.store.FinishScheduleRun(sessionID, store.RunError)
+	_, _ = r.store.FinishScheduleRun(sessionID, status)
 }
 
 // NameSchedule names a job the way a task is named (020-task-titles.md): the

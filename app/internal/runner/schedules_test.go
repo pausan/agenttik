@@ -1,6 +1,8 @@
 package runner
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -67,8 +69,9 @@ func TestIntervalScheduleDoesNotDriftOrReplay(t *testing.T) {
 	}
 }
 
-func TestAutomaticSchedulesRunConcurrentlyAndSkipTheirOwnBusyRuns(t *testing.T) {
-	r, st, original := setup(t, &fakeProvider{gate: make(chan struct{})})
+func TestAutomaticSchedulesQueueAndSkipTheirOwnPendingRuns(t *testing.T) {
+	fp := &fakeProvider{gate: make(chan struct{})}
+	r, st, original := setup(t, fp)
 	t.Cleanup(r.Shutdown)
 	if _, err := r.Send(original.ID, "existing task"); err != nil {
 		t.Fatal(err)
@@ -76,7 +79,8 @@ func TestAutomaticSchedulesRunConcurrentlyAndSkipTheirOwnBusyRuns(t *testing.T) 
 	now := time.Now()
 	for _, title := range []string{"A", "B"} {
 		s := &store.Schedule{ProjectID: original.ProjectID, Title: title, Prompt: title, Provider: "fake",
-			Every: store.EveryInterval, IntervalMinutes: 15, Remaining: -1, NextRunAt: now.UnixMilli()}
+			Model: "m1", Effort: "high", Permission: "workspace",
+			Every: store.EveryInterval, IntervalMinutes: 15, Remaining: 2, NextRunAt: now.UnixMilli()}
 		if err := st.CreateSchedule(s); err != nil {
 			t.Fatal(err)
 		}
@@ -88,16 +92,262 @@ func TestAutomaticSchedulesRunConcurrentlyAndSkipTheirOwnBusyRuns(t *testing.T) 
 	}
 	for _, job := range jobs {
 		runs, err := st.ListScheduleRuns(job.ID, 0)
-		if err != nil || len(runs) != 1 || !r.Running(runs[0].SessionID) {
-			t.Fatalf("job %s did not start alongside the existing task: %+v, %v", job.Title, runs, err)
+		if err != nil || len(runs) != 1 || r.Running(runs[0].SessionID) {
+			t.Fatalf("job %s did not wait behind the existing task: %+v, %v", job.Title, runs, err)
+		}
+		queued, err := st.ListQueuedMessages(runs[0].SessionID)
+		if err != nil || len(queued) != 1 || queued[0].Prompt != job.Prompt || queued[0].Provider != job.Provider ||
+			queued[0].Model != job.Model || queued[0].Effort != job.Effort {
+			t.Fatalf("job %s queue = %+v, %v", job.Title, queued, err)
+		}
+		if hasTurns, err := st.HasTurns(runs[0].SessionID); err != nil || hasTurns {
+			t.Fatalf("job %s started a turn before the project was free: %v", job.Title, err)
 		}
 	}
 	r.tickSchedules(now.Add(15 * time.Minute))
 	for _, job := range jobs {
 		runs, err := st.ListScheduleRuns(job.ID, 0)
 		if err != nil || len(runs) != 2 || runs[0].Status != store.RunSkipped {
-			t.Fatalf("job %s did not skip its busy run: %+v, %v", job.Title, runs, err)
+			t.Fatalf("job %s did not skip its queued run: %+v, %v", job.Title, runs, err)
 		}
+		if count, err := st.QueueCount(runs[1].SessionID); err != nil || count != 1 {
+			t.Fatalf("job %s queued %d prompts, want 1: %v", job.Title, count, err)
+		}
+	}
+	firstRuns, _ := st.ListScheduleRuns(jobs[0].ID, 0)
+	secondRuns, _ := st.ListScheduleRuns(jobs[1].ID, 0)
+	first, second := firstRuns[1].SessionID, secondRuns[1].SessionID
+	if err := st.ReorderSessions(original.ProjectID, []string{original.ID, first, second}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Stop(original.ID); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return r.Running(first) }, "first scheduled run")
+	if r.Running(second) {
+		t.Fatal("second schedule started while the first was running")
+	}
+	r.tickSchedules(now.Add(30 * time.Minute))
+	for _, job := range jobs {
+		runs, err := st.ListScheduleRuns(job.ID, 0)
+		if err != nil || len(runs) != 2 || runs[0].Status != store.RunSkipped || runs[0].Count != 2 {
+			t.Fatalf("job %s did not skip its running or queued run: %+v, %v", job.Title, runs, err)
+		}
+		updated, err := st.GetSchedule(job.ID)
+		if err != nil || updated.Remaining != 2 || !updated.Running {
+			t.Fatalf("pending job = %+v, %v", updated, err)
+		}
+	}
+	if err := r.Stop(first); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return r.Running(second) }, "second scheduled run")
+	if r.Running(first) {
+		t.Fatal("first schedule still running when the second started")
+	}
+	close(fp.gate)
+	waitFor(t, func() bool { return !r.Running(second) }, "scheduled runs to finish")
+	for _, job := range jobs {
+		updated, err := st.GetSchedule(job.ID)
+		if err != nil || updated.Remaining != 1 || updated.Running {
+			t.Fatalf("finished job = %+v, %v", updated, err)
+		}
+	}
+}
+
+func TestStoppingQueuedScheduleAllowsNextRun(t *testing.T) {
+	r, st, original := setup(t, &fakeProvider{gate: make(chan struct{})})
+	t.Cleanup(r.Shutdown)
+	if _, err := r.Send(original.ID, "existing task"); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	s := &store.Schedule{ProjectID: original.ProjectID, Title: "scheduled", Prompt: "scheduled", Provider: "fake",
+		Every: store.EveryInterval, IntervalMinutes: 15, Remaining: 2, NextRunAt: now.UnixMilli()}
+	if err := st.CreateSchedule(s); err != nil {
+		t.Fatal(err)
+	}
+	r.tickSchedules(now)
+	runs, err := st.ListScheduleRuns(s.ID, 0)
+	if err != nil || len(runs) != 1 {
+		t.Fatalf("runs = %+v, %v", runs, err)
+	}
+	if err := r.Stop(runs[0].SessionID); err != nil {
+		t.Fatal(err)
+	}
+	job, err := st.GetSchedule(s.ID)
+	if err != nil || job.Running || job.Remaining != 2 {
+		t.Fatalf("stopped job = %+v, %v", job, err)
+	}
+	runs, err = st.ListScheduleRuns(s.ID, 0)
+	if err != nil || len(runs) != 1 || runs[0].Status != store.RunInterrupted {
+		t.Fatalf("stopped runs = %+v, %v", runs, err)
+	}
+	r.tickSchedules(now.Add(15 * time.Minute))
+	runs, err = st.ListScheduleRuns(s.ID, 0)
+	if err != nil || len(runs) != 2 || runs[0].Status != store.RunRunning {
+		t.Fatalf("next run = %+v, %v", runs, err)
+	}
+	if count, err := st.QueueCount(runs[0].SessionID); err != nil || count != 1 {
+		t.Fatalf("next queue count = %d, %v", count, err)
+	}
+}
+
+func TestAutomaticScheduleStartsWhenProjectIsIdle(t *testing.T) {
+	fp := &fakeProvider{gate: make(chan struct{})}
+	r, st, original := setup(t, fp)
+	t.Cleanup(r.Shutdown)
+	now := time.Now()
+	s := &store.Schedule{ProjectID: original.ProjectID, Title: "scheduled", Prompt: "scheduled", Provider: "fake",
+		Every: store.EveryInterval, IntervalMinutes: 15, Remaining: 1, NextRunAt: now.UnixMilli()}
+	if err := st.CreateSchedule(s); err != nil {
+		t.Fatal(err)
+	}
+	r.tickSchedules(now)
+	runs, err := st.ListScheduleRuns(s.ID, 0)
+	if err != nil || len(runs) != 1 || !r.Running(runs[0].SessionID) {
+		t.Fatalf("idle project run = %+v, %v", runs, err)
+	}
+	if count, err := st.QueueCount(runs[0].SessionID); err != nil || count != 0 {
+		t.Fatalf("started queue count = %d, %v", count, err)
+	}
+	close(fp.gate)
+	waitFor(t, func() bool { return !r.Running(runs[0].SessionID) }, "scheduled run to finish")
+	job, err := st.GetSchedule(s.ID)
+	if err != nil || job.Running || job.Remaining != 0 {
+		t.Fatalf("finished job = %+v, %v", job, err)
+	}
+	r.tickSchedules(now.Add(15 * time.Minute))
+	runs, err = st.ListScheduleRuns(s.ID, 0)
+	if err != nil || len(runs) != 1 || runs[0].Status != store.RunDone {
+		t.Fatalf("exhausted schedule runs = %+v, %v", runs, err)
+	}
+}
+
+func TestQueuedScheduleStartupFailureReleasesSchedule(t *testing.T) {
+	for _, provider := range []string{"missing", "fake"} {
+		t.Run(provider, func(t *testing.T) {
+			r, st, original := setup(t, &fakeProvider{runErr: errors.New("invalid configuration")})
+			t.Cleanup(r.Shutdown)
+			now := time.Now()
+			s := &store.Schedule{ProjectID: original.ProjectID, Title: "scheduled", Prompt: "scheduled", Provider: provider,
+				Every: store.EveryInterval, IntervalMinutes: 15, Remaining: 1, NextRunAt: now.UnixMilli()}
+			if err := st.CreateSchedule(s); err != nil {
+				t.Fatal(err)
+			}
+			r.tickSchedules(now)
+			job, err := st.GetSchedule(s.ID)
+			if err != nil || job.Running {
+				t.Fatalf("failed job = %+v, %v", job, err)
+			}
+			runs, err := st.ListScheduleRuns(s.ID, 0)
+			if err != nil || len(runs) != 1 || runs[0].Status != store.RunError {
+				t.Fatalf("failed runs = %+v, %v", runs, err)
+			}
+			r.tickSchedules(now.Add(15 * time.Minute))
+			runs, err = st.ListScheduleRuns(s.ID, 0)
+			if err != nil || len(runs) != 2 || runs[0].Status != store.RunError {
+				t.Fatalf("next attempt = %+v, %v", runs, err)
+			}
+		})
+	}
+}
+
+func TestScheduleDispatchDoesNotHoldProjectTransferLock(t *testing.T) {
+	r, st, original := setup(t, &fakeProvider{gate: make(chan struct{})})
+	t.Cleanup(r.Shutdown)
+	now := time.Now()
+	s := &store.Schedule{ProjectID: original.ProjectID, Title: "scheduled", Prompt: "scheduled", Provider: "fake",
+		Every: store.EveryInterval, IntervalMinutes: 15, Remaining: 1, NextRunAt: now.UnixMilli()}
+	if err := st.CreateSchedule(s); err != nil {
+		t.Fatal(err)
+	}
+	lock := r.dispatchLock(original.ProjectID)
+	lock.Lock()
+	locked := true
+	defer func() {
+		if locked {
+			lock.Unlock()
+		}
+	}()
+	ticked := make(chan struct{})
+	go func() {
+		r.tickSchedules(now)
+		close(ticked)
+	}()
+	waitFor(t, func() bool {
+		runs, err := st.ListScheduleRuns(s.ID, 0)
+		if err != nil || len(runs) != 1 {
+			return false
+		}
+		count, err := st.QueueCount(runs[0].SessionID)
+		return err == nil && count == 1
+	}, "scheduled prompt to be queued")
+	moved := make(chan error, 1)
+	go func() { moved <- r.WithIdleProject(original.ProjectID, func() error { return nil }) }()
+	select {
+	case err := <-moved:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("queue dispatch held the project transfer lock")
+	}
+	lock.Unlock()
+	locked = false
+	select {
+	case <-ticked:
+	case <-time.After(2 * time.Second):
+		t.Fatal("schedule tick did not finish dispatching")
+	}
+}
+
+func TestRestartResumesQueuedScheduleBeforeItsNextSlot(t *testing.T) {
+	fp := &fakeProvider{gate: make(chan struct{})}
+	r, st, original := setup(t, fp)
+	t.Cleanup(r.Shutdown)
+	if _, err := r.Send(original.ID, "existing task"); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	s := &store.Schedule{ProjectID: original.ProjectID, Title: "scheduled", Prompt: "scheduled", Provider: "fake",
+		Every: store.EveryInterval, IntervalMinutes: 15, Remaining: 1, NextRunAt: now.UnixMilli()}
+	if err := st.CreateSchedule(s); err != nil {
+		t.Fatal(err)
+	}
+	r.tickSchedules(now)
+	r.Shutdown()
+	if err := st.ResetRunningSessions(); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.ResetRunningScheduleRuns(); err != nil {
+		t.Fatal(err)
+	}
+	r = New(st, r.registry, NewHub())
+	t.Cleanup(r.Shutdown)
+	// The next slot is still in the future. A due-schedules tick must neither
+	// enqueue a duplicate nor be necessary to start the persisted prompt.
+	r.tickSchedules(now.Add(time.Minute))
+	runs, err := st.ListScheduleRuns(s.ID, 0)
+	if err != nil || len(runs) != 1 {
+		t.Fatalf("restored runs = %+v, %v", runs, err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		r.RunSchedules(ctx)
+		close(done)
+	}()
+	t.Cleanup(func() { cancel(); <-done })
+	waitFor(t, func() bool { return r.Running(runs[0].SessionID) }, "restored scheduled run")
+	close(fp.gate)
+	waitFor(t, func() bool { return !r.Running(runs[0].SessionID) }, "restored run to finish")
+	if fp.lastReq.Prompt != s.Prompt {
+		t.Fatalf("restored prompt = %q, want %q", fp.lastReq.Prompt, s.Prompt)
+	}
+	job, err := st.GetSchedule(s.ID)
+	if err != nil || job.Running || job.Remaining != 0 {
+		t.Fatalf("restored finished job = %+v, %v", job, err)
 	}
 }
 

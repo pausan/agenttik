@@ -92,7 +92,7 @@ for (const remote of [false, true]) {
         expect(inputs).toEqual([]);
         await run(page, "printf 'clean-%s\\n' input");
         await expectScreen(page, "clean-input");
-        expect(inputs.join("")).toBe("printf 'clean-%s\\n' input\r");
+        await expect.poll(() => inputs.join("")).toBe("printf 'clean-%s\\n' input\r");
       }
     } finally {
       if (client) { client.kill(); await exited; }

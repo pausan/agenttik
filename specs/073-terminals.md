@@ -115,11 +115,24 @@ shell prompt when a tab is selected again or the window reloads. The first
 watcher answers pending shell startup queries. Live output and incremental
 reconnects keep their replies enabled for running programs.
 
-The view finishes parsing each frame before changing its replay state or
-resetting for the next frame. Query handlers fall through to xterm.js so screen
+The view writes arriving output immediately when idle. Frames received during
+a write join the next batch, up to 128 KiB of combined bytes. A reset or a
+change in replay state starts a new batch. Single frames, including a history
+snapshot, keep their original size. This avoids paying an emulator timer for
+every small pty read while keeping joined parser work small enough for input
+and paint between writes. Disposing a view releases queued frames.
+
+The view finishes parsing each batch before changing its replay state or
+resetting for the next batch. Query handlers fall through to xterm.js so screen
 and color changes still apply, including commands that mix color setters and
 queries. Only synchronous query replies are muted; keyboard, paste and mouse
 input keep working between parser slices.
+
+Clearing scrollback (`CSI 3 J`, used by `clear`) resumes following new output.
+A parser handler lets xterm perform the erase, then scrolls to the bottom in
+a microtask. This keeps rapid output from remaining pinned to the top of the
+new scrollback. Other erase modes and ordinary scrollback reading keep their
+normal behavior.
 
 The replay is a byte slice cut at an arbitrary point, so a very old escape
 sequence can be halved by the cut. An emulator discards a partial sequence,
@@ -203,8 +216,10 @@ keystrokes keep their order across an in-flight request, report-mode bytes are
 not widened into text, keystrokes travel as bytes rather than as a `Blob`, and
 a reopened stream resumes each terminal where its view got to.
 `web/src/terminal-output.test.js` checks silent replay, input during replay,
-live replies after queued historical output, and disposal during a pending
-write. The Go tests distinguish first-watch startup output, redrawn history,
+live replies after queued historical output, byte order across UTF-8 and escape
+boundaries, bounded batches, reset/replay boundaries, following after a
+scrollback clear, and disposal during a pending write. The Go tests distinguish
+first-watch startup output, redrawn history,
 incremental reconnects and live frames.
 
 `make test-desktop-terminal` types through the real module inside Wails/WebKit,
@@ -224,3 +239,9 @@ verify that only the typed command reaches the shell. Live queries still get
 their replies.
 The fixture pins `SHELL` to `/bin/sh` so the tab names and the screen read the
 same on every machine.
+
+`e2e/tests/terminal-speed.spec.js` checks final rendered output for listings of
+20,000, 200,000 and 1,000,000 lines, including repeated clears, and Ctrl+C
+followed by another command during continuous output. The budgets are five
+seconds for the smaller listings and interrupt, and fifteen seconds for the
+million-line listing. See [079](079-ui-performance.md) for measurements.

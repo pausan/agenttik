@@ -26,6 +26,37 @@ switching retains a full page navigation and its existing storage isolation.
 
 ## Reproducing measurements
 
+Terminal output batches queued frames instead of waiting for a write timer
+for each frame. Batches stop at reset/replay boundaries and combine at most
+128 KiB; single history snapshots keep their size. See [073](073-terminals.md).
+Run its real-shell Chromium check after building the UI and web binary:
+
+```
+cd e2e
+npx playwright test tests/terminal-speed.spec.js --workers=1 --repeat-each=3
+```
+
+On the development Linux host, baseline commit `83d910f` and the changed build
+gave these command-to-final-marker timings. Baseline is one run; changed is
+the median of three serial runs, with a 1440 × 900 viewport and `/bin/sh`:
+
+| Terminal listing | Baseline | Changed |
+| --- | ---: | ---: |
+| 20,000 lines | 7,621 ms | 101 ms |
+| 200,000 lines | 54,085 ms | 1,131 ms |
+| 1,000,000 lines | Not completed | 1,112 ms |
+
+These measure delivery and display of the final output, including keyboard
+submission and assertion overhead. Fast producers can fill the existing
+server watcher queue and trigger a one-second reconnect with a 256 KiB tail
+snapshot; these are not measurements of parsing every generated line. The
+million-line baseline was interrupted after measuring the smaller cases.
+For an older binary, set `AGENTTIK_E2E_BIN` and `PERF_BASELINE=1`, and select
+`--grep 'large terminal listings'` to measure the smaller cases without the
+new budgets. All three interrupt checks and the terminal browser regressions
+passed. Native throughput was not measured; the native input check timed out
+under Xvfb on this host.
+
 Build the UI and web binary, then run:
 
 ```

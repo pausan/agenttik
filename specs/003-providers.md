@@ -155,7 +155,7 @@ Events consumed from stdout JSONL:
 | `{"type":"user","message":{"content":[{"type":"tool_result",...}]}}` | `tool_result` |
 | `{"type":"control_request","request":{"subtype":"can_use_tool",...}}` | `approval` |
 | `{"type":"control_cancel_request",...}` | `approval_resolved` |
-| `{"type":"system","subtype":"background_tasks_changed","tasks":[...]}` | nothing; counts running background tasks |
+| `{"type":"system","subtype":"background_tasks_changed","tasks":[...]}` | `background` states for tasks that started or ended |
 | `{"type":"result",...}` | `done` with running turn totals; stdin is closed unless background tasks run |
 
 A result is one reply, not always the end of the turn. When the agent ends a
@@ -169,6 +169,21 @@ Closing stdin earlier makes the CLI kill the tasks and never wake the agent.
 Each result's `usage` covers its own reply and is summed; `total_cost_usd` is
 already the process total, so the last one is kept. The runner stores each
 reply as its own message.
+
+Completion checks the latest task states from both the running list and
+individual updates. Completed, failed and
+stopped tasks no longer hold stdin open; unrecognised states still do. The
+check happens at a result, allowing the agent to handle a task notification
+and finish its follow-up reply first.
+
+Every task prompt, including resumes, carries lifecycle guidance: once the
+requested work is complete, stop disposable helpers the agent started before
+the final reply. Keep waiting for needed tests, builds and agents, and respect
+processes the user asked to keep running. This is agent guidance, not an
+automatic timeout or cancellation. It is sent with the prompt so resumed
+conversations receive it even when the CLI reuses a saved system prompt.
+The app transcript retains the user's original prompt. Isolated requests
+keep their original input and receive no lifecycle guidance.
 
 Models are aliases (`fable`, `opus`, `sonnet`, `haiku`) so they track the latest
 release without a code change. Labels include the version reported by the

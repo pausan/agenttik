@@ -49,8 +49,18 @@ func (h *host) close() {
 	}
 }
 
+// Sent with each task prompt, including resumes. CLI system-prompt snapshots
+// can otherwise keep new lifecycle guidance out of existing conversations.
+const backgroundTaskGuidance = `Agenttik keeps this turn open while background tasks are running.
+Once the user's requested work is complete, stop disposable background helpers
+you started that are no longer needed, using TaskStop where available, before
+your final reply. Keep waiting for tests, builds, or agents whose results are
+still needed. Do not stop work just to end the turn, or stop processes the user
+explicitly asked to keep running.`
+
 func (h *host) sendPrompt(prompt string) error {
-	return h.send(userInput{Type: "user", Message: userMessage{Role: "user", Content: prompt}})
+	return h.send(userInput{Type: "user", Message: userMessage{Role: "user",
+		Content: backgroundTaskGuidance + "\n\n" + prompt}})
 }
 
 func (h *host) answerTool(requestID string, input json.RawMessage, allow bool, message string) error {

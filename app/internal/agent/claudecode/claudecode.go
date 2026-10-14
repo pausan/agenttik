@@ -259,10 +259,6 @@ func parse(r io.Reader, model string, h *host, out chan<- agent.Event) {
 type streamParser struct {
 	model string
 	host  *host
-	// background is how many background tasks are still running. While any
-	// are, a result does not end the turn: the CLI wakes the agent when one
-	// finishes and it replies again, as long as stdin is open.
-	background int
 	// tasks are the background tasks this turn started, by task id, as last
 	// reported to the runner.
 	tasks         map[string]*agent.BackgroundTask
@@ -304,7 +300,6 @@ func (p *streamParser) handleLine(line []byte, out chan<- agent.Event) {
 				out <- agent.Event{Type: agent.EventSessionStarted, ProviderSessionID: env.SessionID}
 			}
 		case "background_tasks_changed":
-			p.background = len(env.Tasks)
 			p.backgroundChanged(env.Tasks, out)
 		case "task_started":
 			if env.IsBackgrounded {
@@ -407,10 +402,24 @@ func (p *streamParser) handleLine(line []byte, out chan<- agent.Event) {
 		// waiting for another prompt. It also kills the background tasks the
 		// agent said it would wait for, so stdin stays open until a reply
 		// ends with none running.
-		if p.host != nil && p.background == 0 {
+		if p.host != nil && !p.hasBackgroundTasks() {
 			p.host.close()
 		}
 	}
+}
+
+// A task list and individual status updates describe the same tasks. Use
+// their latest states so a missing list refresh cannot leave a stale count.
+// Unknown states keep stdin open rather than risk interrupting active work.
+func (p *streamParser) hasBackgroundTasks() bool {
+	for _, t := range p.tasks {
+		switch t.Status {
+		case "completed", "failed", "stopped":
+		default:
+			return true
+		}
+	}
+	return false
 }
 
 // backgroundChanged reconciles the CLI's list of running background tasks
@@ -421,9 +430,13 @@ func (p *streamParser) backgroundChanged(running []backgroundTask, out chan<- ag
 	for _, bt := range running {
 		listed[bt.TaskID] = true
 		p.startTask(bt, out)
+		if t := p.tasks[bt.TaskID]; t != nil && t.Status != "running" {
+			t.Status, t.EndedAt, t.Summary = "running", 0, ""
+			out <- agent.BackgroundEvent(*t)
+		}
 	}
 	for id, t := range p.tasks {
-		if !listed[id] && t.Status == "running" {
+		if !listed[id] && t.Status != "completed" && t.Status != "failed" && t.Status != "stopped" {
 			t.Status, t.EndedAt = "completed", time.Now().UnixMilli()
 			out <- agent.BackgroundEvent(*t)
 		}

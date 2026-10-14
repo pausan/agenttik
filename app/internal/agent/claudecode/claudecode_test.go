@@ -365,6 +365,80 @@ func TestParseWaitsForBackgroundTasks(t *testing.T) {
 	}
 }
 
+func TestParseUsesLatestBackgroundTaskStates(t *testing.T) {
+	for name, ending := range map[string]string{
+		"completed patch":      `{"type":"system","subtype":"task_updated","task_id":"helper","patch":{"status":"completed","end_time":1791011226631}}`,
+		"stopped notification": `{"type":"system","subtype":"task_notification","task_id":"helper","status":"killed"}`,
+		"failed notification":  `{"type":"system","subtype":"task_notification","task_id":"helper","status":"failed"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			stdin := &pipe{}
+			p := streamParser{host: &host{w: stdin}, subagents: map[string]struct{}{}}
+			out := make(chan agent.Event, 16)
+			feed := func(line string) { p.handleLine([]byte(line), out) }
+			result := `{"type":"result","subtype":"success","usage":{}}`
+			feed(`{"type":"system","subtype":"background_tasks_changed","tasks":[{"task_id":"helper","task_type":"local_bash"},{"task_id":"tests","task_type":"local_bash"}]}`)
+			feed(ending)
+			feed(ending) // Duplicate updates must not finish the other task.
+			feed(result)
+			if stdin.closed {
+				t.Fatal("closed stdin while tests were still running")
+			}
+			// No new task list arrives before the closing reply.
+			feed(`{"type":"system","subtype":"task_notification","task_id":"tests","status":"completed"}`)
+			if stdin.closed {
+				t.Fatal("closed stdin before the agent handled the completion")
+			}
+			feed(result)
+			if !stdin.closed {
+				t.Fatal("kept stdin open after all tasks ended")
+			}
+		})
+	}
+}
+
+func TestParseWaitsForTaskStartedWithoutTaskList(t *testing.T) {
+	stdin := &pipe{}
+	p := streamParser{host: &host{w: stdin}, subagents: map[string]struct{}{}}
+	out := make(chan agent.Event, 4)
+	p.handleLine([]byte(`{"type":"system","subtype":"task_started","task_id":"tests","task_type":"local_bash","description":"Run tests","is_backgrounded":true}`), out)
+	p.handleLine([]byte(`{"type":"result","subtype":"success","usage":{}}`), out)
+	if stdin.closed {
+		t.Fatal("closed stdin before the background tests completed")
+	}
+}
+
+func TestParseKeepsUnresolvedBackgroundTasksOpen(t *testing.T) {
+	for name, updates := range map[string][]string{
+		"unknown state": {
+			`{"type":"system","subtype":"task_updated","task_id":"tests","patch":{"status":"unrecognised"}}`,
+		},
+		"listed running after completion": {
+			`{"type":"system","subtype":"task_notification","task_id":"tests","status":"completed"}`,
+			`{"type":"system","subtype":"background_tasks_changed","tasks":[{"task_id":"tests","task_type":"local_bash"}]}`,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			stdin := &pipe{}
+			p := streamParser{host: &host{w: stdin}, subagents: map[string]struct{}{}}
+			out := make(chan agent.Event, 8)
+			p.handleLine([]byte(`{"type":"system","subtype":"background_tasks_changed","tasks":[{"task_id":"tests","task_type":"local_bash"}]}`), out)
+			for _, line := range updates {
+				p.handleLine([]byte(line), out)
+			}
+			p.handleLine([]byte(`{"type":"result","subtype":"success","usage":{}}`), out)
+			if stdin.closed {
+				t.Fatal("closed stdin while the background task was unresolved")
+			}
+			p.handleLine([]byte(`{"type":"system","subtype":"background_tasks_changed","tasks":[]}`), out)
+			p.handleLine([]byte(`{"type":"result","subtype":"success","usage":{}}`), out)
+			if !stdin.closed {
+				t.Fatal("kept stdin open after the running list became empty")
+			}
+		})
+	}
+}
+
 func TestApprovalAnswerWritesControlResponse(t *testing.T) {
 	for _, allow := range []bool{true, false} {
 		stdin := &pipe{}
@@ -396,8 +470,14 @@ func TestPromptIsAStreamJSONLine(t *testing.T) {
 		t.Fatal(err)
 	}
 	line := stdin.lines(t)[0]
-	if line["type"] != "user" || line["message"].(map[string]any)["content"] != "hi\nthere" {
+	content := line["message"].(map[string]any)["content"].(string)
+	if line["type"] != "user" || !strings.HasSuffix(content, "\n\nhi\nthere") {
 		t.Errorf("prompt line = %v", line)
+	}
+	for _, guidance := range []string{"stop disposable background helpers", "Keep waiting for tests", "explicitly asked to keep running"} {
+		if !strings.Contains(content, guidance) {
+			t.Errorf("prompt missing guidance %q", guidance)
+		}
 	}
 }
 

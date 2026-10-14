@@ -49,7 +49,10 @@ ones. `task_started` (with `is_backgrounded`), `task_updated` (`patch.status`,
 `output_file`) follow one task. A task is reported when it first appears. It
 is marked completed when it leaves the list, and the notification then sets
 how it really ended. The CLI's `killed` reads as `stopped`. A subagent the
-agent waits on (`is_backgrounded: false`) is not a background task.
+agent waits on (`is_backgrounded: false`) is not a background task. Every
+`result` closes stdin so the CLI exits and stops remaining tasks. Missing
+completion notifications do not keep the turn open; the runner marks any
+task still running `stopped · turn ended`.
 
 **Codex** has no background flag. Unified exec runs a command in a PTY. When
 the command outlives its yield time, the agent carries on and the

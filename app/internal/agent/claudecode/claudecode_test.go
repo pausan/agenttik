@@ -3,10 +3,12 @@ package claudecode
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"os"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pausan/agenttik/app/internal/agent"
 )
@@ -313,10 +315,9 @@ func TestParseTurnsToolRequestsIntoApprovals(t *testing.T) {
 	}
 }
 
-// A reply that ends with background work running does not end the turn: the
-// CLI wakes the agent when the work finishes, which needs stdin still open.
-// Stdin closes at the first reply that leaves nothing running.
-func TestParseWaitsForBackgroundTasks(t *testing.T) {
+// A leftover helper must not keep a finished reply open, even when its
+// completion notification never arrives. The CLI exits when stdin closes.
+func TestParseEndsReplyWithBackgroundTasks(t *testing.T) {
 	stdin := &pipe{}
 	p := streamParser{host: &host{w: stdin}, subagents: map[string]struct{}{}}
 	out := make(chan agent.Event, 16)
@@ -339,29 +340,70 @@ func TestParseWaitsForBackgroundTasks(t *testing.T) {
 		}
 	}
 
-	// The build runs in the background; the agent says it will wait.
-	feed(`{"type":"system","subtype":"background_tasks_changed","tasks":[{"task_id":"b1"}]}`,
+	feed(`{"type":"system","subtype":"background_tasks_changed","tasks":[{"task_id":"b1","task_type":"local_bash","description":"Keep scratch Chrome audio at 4% while it runs"},{"task_id":"a1","task_type":"local_agent","description":"explore"}]}`,
 		`{"type":"result","subtype":"success","total_cost_usd":0.1,"usage":{"input_tokens":10,"output_tokens":1}}`)
-	if u := done(); u.OutputTokens != 1 || stdin.closed {
+	if u := done(); u.InputTokens != 10 || u.OutputTokens != 1 || u.CostUSD != 0.1 || !stdin.closed {
 		t.Fatalf("first reply: usage=%+v closed=%v", u, stdin.closed)
 	}
-	// The build finishes; the agent starts the emulator and waits again.
+	// Trailing notifications and results still retain the final task state
+	// and process totals while the CLI shuts down.
 	feed(`{"type":"system","subtype":"background_tasks_changed","tasks":[]}`,
-		`{"type":"system","subtype":"init","session_id":"s"}`,
-		`{"type":"system","subtype":"background_tasks_changed","tasks":[{"task_id":"b2"}]}`,
 		`{"type":"result","subtype":"success","total_cost_usd":0.2,"usage":{"input_tokens":20,"output_tokens":2}}`)
-	if done(); stdin.closed {
-		t.Fatal("stdin closed while the emulator still runs")
-	}
-	// The emulator is up; the last reply leaves nothing running.
-	feed(`{"type":"system","subtype":"background_tasks_changed","tasks":[]}`,
-		`{"type":"result","subtype":"success","total_cost_usd":0.3,"usage":{"input_tokens":30,"output_tokens":3}}`)
 	u := done()
-	if !stdin.closed {
-		t.Fatal("stdin still open after the last reply")
-	}
-	if u.InputTokens != 60 || u.OutputTokens != 6 || u.CostUSD != 0.3 {
+	if u.InputTokens != 30 || u.OutputTokens != 3 || u.CostUSD != 0.2 {
 		t.Errorf("turn totals = %+v", u)
+	}
+}
+
+func TestParseFinishesWithoutBackgroundCompletion(t *testing.T) {
+	stdin, input := io.Pipe()
+	stdout, output := io.Pipe()
+	t.Cleanup(func() {
+		stdin.Close()
+		input.Close()
+		stdout.Close()
+		output.Close()
+	})
+	out := make(chan agent.Event, 16)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		parse(stdout, "opus", &host{w: input}, out)
+	}()
+	cliDone := make(chan error, 1)
+	go func() {
+		_, err := io.WriteString(output, `{"type":"system","subtype":"background_tasks_changed","tasks":[{"task_id":"helper","task_type":"local_bash","description":"Keep Chrome quiet"}]}
+{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Work finished."}}}
+{"type":"result","subtype":"success","usage":{"input_tokens":10,"output_tokens":1}}
+`)
+		if err == nil {
+			_, err = io.ReadAll(stdin)
+		}
+		output.Close()
+		cliDone <- err
+	}()
+	select {
+	case err := <-cliDone:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("CLI still waiting for stdin after its result")
+	}
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("parser did not finish after the CLI exited")
+	}
+	close(out)
+	var finished bool
+	for ev := range out {
+		if ev.Type == agent.EventDone && ev.Usage.OutputTokens == 1 {
+			finished = true
+		}
+	}
+	if !finished {
+		t.Fatal("missing final reply usage")
 	}
 }
 

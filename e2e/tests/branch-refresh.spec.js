@@ -61,7 +61,7 @@ for (const [action, refresh, failed] of [["merge", "tree", false], ["rebase", "l
       await pane.getByText("Merge / rebase", { exact: true }).click();
       if (action === "rebase") {
         await pane.getByRole("combobox", { name: "Branch operation", exact: true }).click();
-        await page.getByRole("option", { name: "rebase into", exact: true }).click();
+        await page.getByRole("option", { name: "rebase onto", exact: true }).click();
       }
       await pane.getByRole("button", { name: "Destination branch", exact: true }).click();
       await page.getByRole("option", { name: "main", exact: true }).click();

@@ -216,7 +216,7 @@ const menu = computed(() => [
       </summary>
       <div class="mt-2 space-y-2">
         <div class="flex shrink-0 items-center gap-1">
-          <USelect v-model="operation" :items="[{ label: 'merge into', value: 'merge' }, { label: 'rebase into', value: 'rebase' }]"
+          <USelect v-model="operation" :items="[{ label: 'merge into', value: 'merge' }, { label: 'rebase onto', value: 'rebase' }]"
             aria-label="Branch operation" size="sm" :disabled="!!busy" class="shrink-0" />
           <USelectMenu v-model="target" :items="targets" icon="i-lucide-git-branch"
             aria-label="Destination branch" placeholder="Select branch" :search-input="{ placeholder: 'Search destination branches…' }"

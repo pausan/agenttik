@@ -38,7 +38,7 @@ remote check answers.
 Below the current branch selector, a **Merge / rebase** disclosure starts collapsed.
 Expanding it shows the operation and destination selectors, a right-aligned action
 button, and the help text. The operation selector reads **merge into** or
-**rebase into**, followed by a destination autocomplete. Every other local branch
+**rebase onto**, followed by a destination autocomplete. Every other local branch
 is selectable; neither side is restricted to main/master. The four-point sparkle
 button reads **Merge & solve conflicts** or **Rebase & solve conflicts**. A tooltip on
 the button explains temporary stashing and AI conflict resolution using the model

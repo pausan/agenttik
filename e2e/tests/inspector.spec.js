@@ -214,7 +214,7 @@ test("merge and rebase choose a destination and show recovery", async ({ page })
   await merge.click();
   await expect(pane.getByRole("button", { name: "Current branch", exact: true })).toContainText("fix/colors");
   await pane.getByRole("combobox", { name: "Branch operation", exact: true }).click();
-  await page.getByRole("option", { name: "rebase into", exact: true }).click();
+  await page.getByRole("option", { name: "rebase onto", exact: true }).click();
   await pane.getByRole("button", { name: "Destination branch", exact: true }).click();
   await page.getByRole("option", { name: "main", exact: true }).click();
   await pane.getByRole("button", { name: "Rebase & solve conflicts", exact: true }).click();

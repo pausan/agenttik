@@ -104,3 +104,24 @@ func (s *Store) ListMessages(sessionID string) ([]Message, error) {
 	}
 	return out, rows.Err()
 }
+
+// ToolCalls lists a session's tool rows in order, for reading which files
+// its calls named. Only the columns that needs are read.
+func (s *Store) ToolCalls(sessionID string) ([]Message, error) {
+	rows, err := s.db.Query(
+		`SELECT COALESCE(turn_id,0), content FROM messages
+		  WHERE session_id = ? AND role = ? ORDER BY id`, sessionID, RoleTool)
+	if err != nil {
+		return nil, fmt.Errorf("tool calls of %s: %w", sessionID, err)
+	}
+	defer rows.Close()
+	out := []Message{}
+	for rows.Next() {
+		m := Message{SessionID: sessionID, Role: RoleTool}
+		if err := rows.Scan(&m.TurnID, &m.Content); err != nil {
+			return nil, fmt.Errorf("tool calls of %s: %w", sessionID, err)
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}

@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/pausan/agenttik/app/internal/store"
 )
 
 func TestFileRefFallback(t *testing.T) {
@@ -69,5 +71,57 @@ func TestFileRefFallback(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != 400 {
 		t.Fatalf("status = %d", resp.StatusCode)
+	}
+}
+
+// A bare name in a reply resolves to the file the task's tool calls worked on,
+// before any search that would find another file of the same name.
+func TestFileRefPrefersTaskPaths(t *testing.T) {
+	s, st := newTestServer(t)
+	root := t.TempDir()
+	p, err := st.CreateProject("links", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := st.CreateProject("other", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"a/index.html", "tasks/r/index.html", "tasks/r/notes/report.md", "z/report.md"} {
+		abs := filepath.Join(root, path)
+		if err := os.MkdirAll(filepath.Dir(abs), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(abs, []byte("test"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sess := &store.Session{ID: "task", ProjectID: p.ID, Provider: "claude"}
+	if err := st.CreateSession(sess); err != nil {
+		t.Fatal(err)
+	}
+	turn, err := st.StartTurn(sess.ID, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.AddMessage(sess.ID, turn.ID, store.RoleTool, `Bash {"command":"cd tasks/r && python3 build.py"}`)
+	st.AddMessage(sess.ID, turn.ID, store.RoleTool, `Write {"file_path":"`+filepath.Join(root, "tasks/r/notes/report.md")+`","content":"x"}`)
+	foreign := &store.Session{ID: "foreign", ProjectID: other.ID, Provider: "claude"}
+	if err := st.CreateSession(foreign); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ name, path, session, want string }{
+		{"folder the task worked in", "index.html", sess.ID, "tasks/r/index.html"},
+		{"file the task wrote", "report.md", sess.ID, "tasks/r/notes/report.md"},
+		{"no session searches", "index.html", "", "a/index.html"},
+		{"session of another project", "index.html", foreign.ID, "a/index.html"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			query := url.Values{"path": {tc.path}, "locate": {"1"}, "target": {tc.path}, "hints": {"[]"}, "session": {tc.session}}
+			got := decode[fileInfo](t, do(t, s, "GET", "/api/projects/"+itoa(p.ID)+"/file-info?"+query.Encode(), nil))
+			if got.Path != tc.want {
+				t.Fatalf("path = %q, want %q", got.Path, tc.want)
+			}
+		})
 	}
 }

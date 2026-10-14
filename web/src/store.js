@@ -2173,6 +2173,8 @@ export async function openFileRef(path, line = 0, basePath = "", hints = [], sys
   // Keep link-heavy replies within the server's request-header limit.
   while (folders.length && encodeURIComponent(JSON.stringify(folders)).length > 2000) folders.pop();
   query.set("hints", JSON.stringify(folders));
+  // A transcript link may name only a file the task's tool calls worked on.
+  if (!basePath && S.detail?.session.id) query.set("session", S.detail.session.id);
   try {
     const info = await api("GET", `/api/projects/${projectID}/file-info?${query}`);
     path = info.path || path;

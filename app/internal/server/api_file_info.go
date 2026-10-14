@@ -62,7 +62,9 @@ func (s *Server) projectFileInfo(c *fiber.Ctx) error {
 		if os.IsNotExist(err) && c.Query("locate") == "1" {
 			var hints []string
 			_ = json.Unmarshal([]byte(c.Query("hints")), &hints)
-			if found := locateFileRef(root, abs, c.Query("target"), hints); found != "" {
+			projectID, _ := strconv.ParseInt(c.Params("id"), 10, 64)
+			touched := s.sessionPaths(projectID, c.Query("session"))
+			if found := locateFileRef(root, abs, c.Query("target"), hints, touched); found != "" {
 				abs = found
 				rel = found
 				if local, e := filepath.Rel(root, found); e == nil && local != ".." && !strings.HasPrefix(local, ".."+string(os.PathSeparator)) {

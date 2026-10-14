@@ -44,7 +44,17 @@ Document fragments are stripped; `:line` and `#Lline` retain line navigation.
 Transcript paths resolve from the project root. Markdown preview paths resolve
 from the displayed file's folder, including `./` and `../`. Absolute paths
 inside the project have the project folder trimmed off. Copy uses this resolved path. Opening first checks that exact path. If it is
-missing, other local links in the same Markdown block supply folder hints:
+missing, a transcript link next tries what the task's own tool calls named.
+Agents often reply with `report.md` after working in `tasks/2026-10-08-x/`,
+and a project can hold hundreds of `index.html` files. The server reads the
+session's stored tool rows with `app/internal/toolpaths`, which follows each
+turn's shell `cd`, file inputs (`file_path`, `path`, …), Codex patches and
+command arguments. Newest first, it takes a named file whose path ends with
+the link, then the link inside a folder the task worked in, then a file of
+that name there. These are stats of at most 200 paths; touched folders are
+never walked. A session from another project contributes nothing.
+
+Then other local links in the same Markdown block supply folder hints:
 existing directories and the parents of existing files. Hints are capped at
 100 paths and 2 KB of URL-encoded text. Those folders, the Markdown document
 folder (or project root for transcripts), the

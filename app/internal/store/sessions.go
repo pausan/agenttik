@@ -22,7 +22,8 @@ const sessionCols = `s.id, s.project_id, s.title, s.provider, s.account_id, s.pr
 	s.model, s.effort, s.permission, s.source, s.status,
 	s.created_at, s.updated_at, s.last_active_at, s.done_at, s.position,
 	(SELECT COUNT(*) FROM queued_messages q WHERE q.session_id = s.id),
-	s.schedule_id, s.project_prompt, s.summary, p.name, p.path, p.kind, ` + firstPromptCol
+	s.schedule_id, s.project_prompt, s.summary,
+	s.parent_id, s.anchor_message_id, s.anchor_quote, s.origin_id, p.name, p.path, p.kind, ` + firstPromptCol
 
 func scanSession(sc interface{ Scan(...any) error }) (*Session, error) {
 	var v Session
@@ -30,6 +31,7 @@ func scanSession(sc interface{ Scan(...any) error }) (*Session, error) {
 		&v.Model, &v.Effort, &v.Permission, &v.Source, &v.Status,
 		&v.CreatedAt, &v.UpdatedAt, &v.LastActiveAt, &v.DoneAt, &v.Position,
 		&v.QueueCount, &v.ScheduleID, &v.ProjectPrompt, &v.Summary,
+		&v.ParentID, &v.AnchorMessageID, &v.AnchorQuote, &v.OriginID,
 		&v.ProjectName, &v.ProjectPath, &v.ProjectKind, &v.Prompt)
 	if err != nil {
 		return nil, err
@@ -49,14 +51,15 @@ func (s *Store) CreateSession(v *Session) error {
 	_, err := s.db.Exec(
 		`INSERT INTO sessions (id, project_id, title, provider, account_id, provider_session_id,
 		    model, effort, permission, source, status, created_at, updated_at, last_active_at,
-		    schedule_id, position)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
+		    schedule_id, parent_id, anchor_message_id, anchor_quote, origin_id, position)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
 		    (SELECT CASE (SELECT new_item_position FROM general_config WHERE id = 1)
 		      WHEN 'bottom' THEN COALESCE(MAX(position), 0) + 1
 		      ELSE COALESCE(MIN(position), 0) - 1 END FROM sessions WHERE project_id = ?))`,
 		v.ID, v.ProjectID, v.Title, v.Provider, v.AccountID, v.ProviderSessionID,
 		v.Model, v.Effort, v.Permission, v.Source, v.Status,
-		v.CreatedAt, v.UpdatedAt, v.LastActiveAt, v.ScheduleID, v.ProjectID)
+		v.CreatedAt, v.UpdatedAt, v.LastActiveAt, v.ScheduleID,
+		v.ParentID, v.AnchorMessageID, v.AnchorQuote, v.OriginID, v.ProjectID)
 	if err != nil {
 		return fmt.Errorf("create session: %w", err)
 	}
@@ -94,7 +97,8 @@ type SessionFilter struct {
 // archived-only listing is history rather than a list anyone arranged, so it
 // comes back newest first whether or not it is scoped to a project.
 func (s *Store) ListSessions(f SessionFilter) ([]Session, error) {
-	var where []string
+	// Threads are drawn under their message, never in a list of tasks.
+	where := []string{"s.parent_id = ''"}
 	var args []any
 	// Running sessions always show, however old their last activity is.
 	if f.Since > 0 {
@@ -116,10 +120,8 @@ func (s *Store) ListSessions(f SessionFilter) ([]Session, error) {
 		like := "%" + q + "%"
 		args = append(args, like, like, like)
 	}
-	sqlStr := `SELECT ` + sessionCols + ` FROM sessions s JOIN projects p ON p.id = s.project_id`
-	if len(where) > 0 {
-		sqlStr += " WHERE " + strings.Join(where, " AND ")
-	}
+	sqlStr := `SELECT ` + sessionCols + ` FROM sessions s JOIN projects p ON p.id = s.project_id
+		WHERE ` + strings.Join(where, " AND ")
 	if f.Newest {
 		sqlStr += ` ORDER BY s.created_at DESC, s.id DESC`
 	} else if f.OnlyDone {
@@ -543,7 +545,11 @@ func (s *Store) NextQueuedRun(projectID int64, preferredSessionID string, now in
 	return nil, nil, nil
 }
 
+// DeleteSession deletes a session and the threads opened from it.
 func (s *Store) DeleteSession(id string) error {
+	if _, err := s.db.Exec(`DELETE FROM sessions WHERE parent_id = ?`, id); err != nil {
+		return fmt.Errorf("delete threads of %s: %w", id, err)
+	}
 	res, err := s.db.Exec(`DELETE FROM sessions WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("delete session %s: %w", id, err)
@@ -576,6 +582,78 @@ func (s *Store) ResetRunningSessions() error {
 		nowMillis(), RoleBackground)
 	if err != nil {
 		return fmt.Errorf("reset background tasks: %w", err)
+	}
+	return nil
+}
+
+// ThreadRef is a thread as its conversation draws it: a chip under the
+// message it quotes, until it is opened. Replies counts the agent's answers.
+type ThreadRef struct {
+	ID              string `json:"id"`
+	Title           string `json:"title"`
+	Status          string `json:"status"`
+	AnchorMessageID int64  `json:"anchor_message_id"`
+	AnchorQuote     string `json:"anchor_quote"`
+	CreatedAt       int64  `json:"created_at"`
+	LastActiveAt    int64  `json:"last_active_at"`
+	Replies         int64  `json:"replies"`
+}
+
+// ListThreads lists the threads opened from a session, oldest first.
+func (s *Store) ListThreads(parentID string) ([]ThreadRef, error) {
+	rows, err := s.db.Query(
+		`SELECT s.id, s.title, s.status, s.anchor_message_id, s.anchor_quote,
+		        s.created_at, s.last_active_at,
+		        (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id AND m.role = ?)
+		   FROM sessions s WHERE s.parent_id = ? ORDER BY s.created_at, s.id`,
+		RoleAssistant, parentID)
+	if err != nil {
+		return nil, fmt.Errorf("threads of %s: %w", parentID, err)
+	}
+	defer rows.Close()
+	out := []ThreadRef{}
+	for rows.Next() {
+		var t ThreadRef
+		if err := rows.Scan(&t.ID, &t.Title, &t.Status, &t.AnchorMessageID, &t.AnchorQuote,
+			&t.CreatedAt, &t.LastActiveAt, &t.Replies); err != nil {
+			return nil, fmt.Errorf("threads of %s: %w", parentID, err)
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// ThreadsFrom names the threads quoting a message at or after from: the ones
+// an edit that truncates the transcript there takes with it.
+func (s *Store) ThreadsFrom(parentID string, from int64) ([]string, error) {
+	rows, err := s.db.Query(
+		`SELECT id FROM sessions WHERE parent_id = ? AND anchor_message_id >= ?`, parentID, from)
+	if err != nil {
+		return nil, fmt.Errorf("threads of %s from %d: %w", parentID, from, err)
+	}
+	defer rows.Close()
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// CopyMessages copies a session's transcript into another, without turns: a
+// task spawned from a thread shows the thread it continues, and its cost
+// stays with the thread that spent it.
+func (s *Store) CopyMessages(from, to string) error {
+	_, err := s.db.Exec(
+		`INSERT INTO messages (session_id, turn_id, role, content, created_at)
+		 SELECT ?, NULL, role, content, created_at FROM messages
+		  WHERE session_id = ? AND role IN (?, ?, ?, ?) ORDER BY id`,
+		to, from, RoleUser, RoleAssistant, RoleTool, RoleError)
+	if err != nil {
+		return fmt.Errorf("copy messages %s to %s: %w", from, to, err)
 	}
 	return nil
 }

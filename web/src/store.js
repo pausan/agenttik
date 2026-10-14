@@ -99,6 +99,10 @@ export const S = reactive({
      session tab the text was typed into; the text is the user's and outlives
      that tab. */
   drafts: {},
+  // Open threads by session id, and the thread being started: the passage
+  // picked from a message, waiting for its question. See specs/092-threads.md.
+  threads: {},
+  threadDraft: null,
   // [projectID, repository] -> commit text, independent of the open pane/tab.
   commitDrafts: {},
   unreadTasks: {},
@@ -2944,7 +2948,7 @@ let stream = null;
 let streamURL = "";
 
 function subscriptionURL() {
-  const sessions = S.tabs.filter((t) => t.kind === "session").map((t) => t.sessionID);
+  const sessions = [...S.tabs.filter((t) => t.kind === "session").map((t) => t.sessionID), ...Object.keys(S.threads)];
   // Every project, not just the ones with a page open: the sidebar draws a
   // dot per task, and a task loses its tab as soon as another replaces it, so
   // the turn events that move its dot can only come from its project.
@@ -2995,6 +2999,7 @@ function resubscribe() {
     // refreshes the lists; only a network reconnect needs those again.
     if (refreshOnOpen || opened) {
       for (const tab of S.tabs) if (tab.kind === "session") syncMessages(tab, true);
+      for (const thread of Object.values(S.threads)) if (thread.detail) syncMessages(thread, true);
     }
     // Every open, the first too: requests published while no stream was
     // listening — between two subscriptions, or across a dropped connection
@@ -3099,14 +3104,14 @@ function onEvent(msg) {
   // A tool call waits on the user, or stopped waiting. Both topics carry it,
   // so it arrives twice; keyed by id, the repeat changes nothing.
   if (msg.event?.type === "approval") {
-    const tab = S.tabs.find((t) => t.kind === "session" && t.sessionID === msg.session_id);
+    const tab = sessionTarget(msg.session_id);
     if (tab) endLive(tab);
     addApproval(msg.session_id, { ...msg.event.approval, turn_id: msg.turn_id });
     return;
   }
   if (msg.event?.type === "approval_resolved") {
     removeApproval(msg.session_id, msg.event.approval?.id);
-    const tab = S.tabs.find((t) => t.kind === "session" && t.sessionID === msg.session_id);
+    const tab = sessionTarget(msg.session_id);
     if (tab && msg.message && !tab.detail.messages.some((m) => m.id === msg.message.id)) {
       endLive(tab);
       tab.detail.messages.push(msg.message);
@@ -3120,17 +3125,24 @@ function onEvent(msg) {
     if (seen === lastTurnEvent) return;
     lastTurnEvent = seen;
   }
-  if (msg.event?.type === "done" && msg.stats) {
+  // A thread is read where it is drawn; it marks no task unread.
+  const thread = isThread(msg.session_id);
+  if (!thread && msg.event?.type === "done" && msg.stats) {
     S.unreadTasks[msg.session_id] = msg.turn_id;
     completedTasks[msg.session_id] = Math.max(completedTasks[msg.session_id] || 0, msg.turn_id);
     saveTaskAttention();
-  } else if (msg.event?.type === "started") {
+  } else if (!thread && msg.event?.type === "started") {
     delete S.unreadTasks[msg.session_id];
     completedTasks[msg.session_id] ??= 0;
     saveTaskAttention();
   }
-  const tab = S.tabs.find((t) => t.kind === "session" && t.sessionID === msg.session_id);
-  if (tab) onSessionEvent(tab, msg);
+  const tab = sessionTarget(msg.session_id);
+  if (tab?.detail) onSessionEvent(tab, msg);
+  // The parent's chip counts the thread's replies.
+  if (thread && msg.event?.type === "done" && msg.stats) {
+    const parent = sessionTarget(tab?.detail?.session.parent_id || threadParent(msg.session_id));
+    if (parent?.detail) syncMessages(parent, true);
+  }
   // A turn starting or ending anywhere in a project moves its totals, its
   // sidebar dot and the Sessions list, whether or not that session has a tab
   // open here. Most do not — one conversation per project is on screen at a
@@ -3274,9 +3286,10 @@ async function syncMessages(tab, preserveLive = false) {
   try {
     const detail = await api("GET", "/api/sessions/" + tab.sessionID);
     // The tab can have been closed, or a new turn started, while we waited.
-    if (read !== tab.messagesRead || lastTurn !== tab.detail.turns.at(-1)?.id ||
-        !S.tabs.some((open) => open.id === tab.id)) return;
+    if (read !== tab.messagesRead || lastTurn !== tab.detail.turns.at(-1)?.id || !isOpen(tab)) return;
     tab.detail.queued = detail.queued;
+    tab.detail.threads = detail.threads;
+    tab.detail.origin = detail.origin;
     // Queue edits can arrive while an assistant reply is still streaming
     // and not yet persisted. Preserve it only if the same turn is still
     // running remotely; a reconnect may have missed its start or completion.
@@ -3554,10 +3567,129 @@ export async function stopTask(sessionID) {
   if (!sessionID) return;
   try {
     await api("POST", `/api/sessions/${sessionID}/stop`);
-    const tab = S.tabs.find((open) => open.kind === "session" && open.sessionID === sessionID);
-    if (tab) await syncMessages(tab);
+    const tab = sessionTarget(sessionID);
+    if (tab?.detail) await syncMessages(tab);
     await Promise.all([refreshProjects(), refreshSessions()]);
     reloadProjects();
+  } catch (e) {
+    fail(e);
+  }
+}
+
+/* --------------------------------------------------------------- threads */
+
+/* A thread answers about a passage of a conversation without adding to it.
+   It is a session of its own that the server keeps out of every task list,
+   drawn here under the message it quotes. An open thread is shaped like a
+   session tab — a sessionID and a detail — so the stream's session events,
+   syncMessages and the transcript's bubbles serve it as they serve a tab.
+   See specs/092-threads.md. */
+
+function sessionTarget(id) {
+  if (!id) return null;
+  return S.tabs.find((t) => t.kind === "session" && t.sessionID === id) || S.threads[id] || null;
+}
+
+function isOpen(tab) {
+  return tab.kind === "thread" ? S.threads[tab.sessionID] === tab : S.tabs.some((open) => open.id === tab.id);
+}
+
+// The conversation a known thread belongs to, from the open tabs' lists.
+function threadParent(id) {
+  return S.tabs.find((t) => t.kind === "session" && t.detail?.threads?.some((ref) => ref.id === id))?.sessionID || "";
+}
+
+function isThread(id) {
+  return !!S.threads[id] || !!threadParent(id);
+}
+
+/* startThread holds the passage while its question is written. */
+export function startThread(messageID, quote) {
+  const tab = S.owner;
+  quote = quote.trim();
+  if (tab?.kind !== "session" || !messageID || !quote) return;
+  S.threadDraft = { parentID: tab.sessionID, messageID, quote };
+}
+
+export async function createThread(prompt) {
+  const draft = S.threadDraft;
+  prompt = prompt.trim();
+  if (!draft || !prompt) return false;
+  try {
+    const { thread } = await api("POST", `/api/sessions/${draft.parentID}/threads`, {
+      message_id: draft.messageID, quote: draft.quote, prompt,
+    });
+    if (S.threadDraft === draft) S.threadDraft = null;
+    const parent = sessionTarget(draft.parentID);
+    if (parent?.detail) parent.detail.threads = [...(parent.detail.threads || []), {
+      id: thread.id, title: thread.title, status: "running", anchor_message_id: draft.messageID,
+      anchor_quote: thread.anchor_quote, created_at: thread.created_at, replies: 0,
+    }];
+    await openThread(thread.id);
+    return true;
+  } catch (e) {
+    fail(e);
+    return false;
+  }
+}
+
+export async function openThread(id) {
+  if (S.threads[id]) return;
+  S.threads[id] = { id: `thread:${id}`, kind: "thread", sessionID: id, detail: null, draft: "", messagesRead: 0 };
+  resubscribe();
+  try {
+    const detail = await api("GET", "/api/sessions/" + id);
+    if (S.threads[id]) S.threads[id].detail = detail;
+  } catch (e) {
+    closeThread(id);
+    fail(e);
+  }
+}
+
+export function closeThread(id) {
+  if (!S.threads[id]) return;
+  delete S.threads[id];
+  resubscribe();
+}
+
+export async function sendThread(thread, prompt) {
+  prompt = prompt.trim();
+  if (!prompt || !thread.detail || thread.detail.running) return;
+  const typed = thread.draft;
+  thread.draft = "";
+  endLive(thread);
+  const echo = push(thread, "user", prompt);
+  thread.detail.running = true;
+  try {
+    startLocal(thread, "", await api("POST", `/api/sessions/${thread.sessionID}/messages`, { prompt }));
+  } catch (e) {
+    const at = thread.detail.messages.indexOf(echo);
+    if (at >= 0) thread.detail.messages.splice(at, 1);
+    if (!thread.draft) thread.draft = typed;
+    thread.detail.running = false;
+    fail(e);
+  }
+}
+
+export async function deleteThread(thread) {
+  const parentID = thread.detail?.session.parent_id;
+  try {
+    await api("DELETE", "/api/sessions/" + thread.sessionID);
+    closeThread(thread.sessionID);
+    const parent = sessionTarget(parentID);
+    if (parent?.detail) parent.detail.threads = (parent.detail.threads || []).filter((ref) => ref.id !== thread.sessionID);
+  } catch (e) {
+    fail(e);
+  }
+}
+
+/* spawnThread opens a thread as a task of its own, which starts from a copy
+   of the thread; the thread stays under its message. */
+export async function spawnThread(thread) {
+  try {
+    const task = await api("POST", `/api/sessions/${thread.sessionID}/spawn`);
+    await openTask(task.id);
+    focusPrompt();
   } catch (e) {
     fail(e);
   }

@@ -41,6 +41,18 @@ func TestBuildArgsResumesWithProviderSessionID(t *testing.T) {
 	}
 }
 
+// A thread's first turn copies its conversation; later turns resume the copy.
+func TestBuildArgsForksOnFirstTurn(t *testing.T) {
+	got := strings.Join(buildArgs(agent.TurnRequest{SessionID: "abc", ForkFrom: "parent"}), " ")
+	if !strings.Contains(got, "--resume parent --fork-session") || strings.Contains(got, "--session-id") {
+		t.Errorf("first turn should fork parent without picking an id: %q", got)
+	}
+	got = strings.Join(buildArgs(agent.TurnRequest{SessionID: "abc", ProviderSessionID: "copy", ForkFrom: "parent"}), " ")
+	if !strings.Contains(got, "--resume copy") || strings.Contains(got, "--fork-session") {
+		t.Errorf("later turn should resume the copy: %q", got)
+	}
+}
+
 func TestBuildEnvWaitsForMCPServers(t *testing.T) {
 	t.Setenv("MCP_CONNECTION_NONBLOCKING", "")
 	os.Unsetenv("MCP_CONNECTION_NONBLOCKING")

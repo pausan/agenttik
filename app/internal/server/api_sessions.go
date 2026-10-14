@@ -131,6 +131,11 @@ type sessionDetail struct {
 
 	// Outputs are the result files each turn left, drawn under its reply.
 	Outputs []turnOutput `json:"outputs"`
+
+	// Threads were opened from this conversation's messages; Origin is the
+	// thread a spawned task came from. See specs/092-threads.md.
+	Threads []store.ThreadRef `json:"threads"`
+	Origin  *threadOrigin     `json:"origin,omitempty"`
 }
 
 func (s *Server) getSession(c *fiber.Ctx) error {
@@ -155,10 +160,15 @@ func (s *Server) getSession(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
+	threads, err := s.store.ListThreads(id)
+	if err != nil {
+		return err
+	}
 	return c.JSON(sessionDetail{Session: sess, Messages: messages,
 		Turns: turns, Stats: stats, Running: s.runner.Running(id), Queued: queued,
 		Background: s.runner.BackgroundTasks(id),
-		Outputs:    turnOutputs(sess.ProjectPath, turns, messages)})
+		Outputs:    turnOutputs(sess.ProjectPath, turns, messages),
+		Threads:    threads, Origin: s.origin(sess)})
 }
 
 // updateSession changes the model, effort or title mid-session.
@@ -299,6 +309,9 @@ func (s *Server) reorderSessions(c *fiber.Ctx) error {
 func (s *Server) deleteSession(c *fiber.Ctx) error {
 	id := c.Params("id")
 	s.runner.Stop(id) // no-op when idle
+	if threads, err := s.store.ThreadsFrom(id, 0); err == nil {
+		s.stopThreads(threads)
+	}
 	if err := s.store.DeleteSession(id); err != nil {
 		return err
 	}
@@ -380,6 +393,17 @@ func (s *Server) editMessage(c *fiber.Ctx) error {
 	// tail of its transcript and not get a turn for it.
 	if s.runner.Running(sessionID) {
 		return runner.ErrBusy
+	}
+	// Threads about the removed messages go with them.
+	threads, err := s.store.ThreadsFrom(sessionID, messageID)
+	if err != nil {
+		return err
+	}
+	s.stopThreads(threads)
+	for _, id := range threads {
+		if err := s.store.DeleteSession(id); err != nil {
+			return err
+		}
 	}
 	if err := s.store.DeleteMessagesFrom(sessionID, messageID); err != nil {
 		return err

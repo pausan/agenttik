@@ -101,6 +101,15 @@ type Session struct {
 	// the two are readable as parent and child. See 028-scheduled-jobs.md.
 	ScheduleID int64 `json:"schedule_id"`
 
+	// ParentID is set on a thread: the conversation it was opened from, at
+	// AnchorMessageID, about AnchorQuote. Threads stay out of every task list
+	// and are drawn under their message instead. OriginID is set on a task
+	// spawned from a thread, naming that thread. See specs/092-threads.md.
+	ParentID        string `json:"parent_id,omitempty"`
+	AnchorMessageID int64  `json:"anchor_message_id,omitempty"`
+	AnchorQuote     string `json:"anchor_quote,omitempty"`
+	OriginID        string `json:"origin_id,omitempty"`
+
 	// ProjectPrompt is the copy of the project's prompt this conversation was
 	// opened with, taken when it accepted its first prompt and prepended to
 	// the first prompt the provider was given. It is kept rather than looked

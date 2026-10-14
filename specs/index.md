@@ -79,6 +79,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [089](089-csv-preview.md) | CSV separator detection, table columns and three-click sorting |
 | [090](090-turn-outputs.md) | Reports, charts and tables a turn presented, drawn under its reply |
 | [091](091-page-annotations.md) | Commenting on elements of previewed pages into the task's prompt |
+| [092](092-threads.md) | Side threads on a passage of a conversation, forked context, opening one as a task |
 | [087](087-large-files.md) | Large text editing, plain rendering and latency checks |
 | [076](076-tab-scroll.md) | Scroll positions for every open tab, file modes, transcripts and terminals |
 | [075](075-page-find.md) | Find in the current page or text file, match navigation and shortcuts |

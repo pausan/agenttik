@@ -386,6 +386,14 @@ ALTER TABLE server_config ADD COLUMN tunnel_credentials TEXT NOT NULL DEFAULT ''
 UPDATE server_identity SET machine_id = lower(hex(randomblob(16)));`,
 	`ALTER TABLE schedules ADD COLUMN day_interval INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE schedules ADD COLUMN weekday_mask INTEGER NOT NULL DEFAULT 0;`,
+	// A thread is a session that answers about a passage of another one
+	// without adding to it; a task spawned from a thread remembers it. See
+	// specs/092-threads.md.
+	`ALTER TABLE sessions ADD COLUMN parent_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE sessions ADD COLUMN anchor_message_id INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE sessions ADD COLUMN anchor_quote TEXT NOT NULL DEFAULT '';
+ALTER TABLE sessions ADD COLUMN origin_id TEXT NOT NULL DEFAULT '';
+CREATE INDEX idx_sessions_parent ON sessions(parent_id) WHERE parent_id != '';`,
 }
 
 func migrate(db *sql.DB, path string) error {

@@ -18,7 +18,12 @@ import ImageFrame from "./ImageFrame.vue";
 import MarkdownContent from "./MarkdownContent.vue";
 import ModelSelection from "./ModelSelection.vue";
 
-const props = defineProps({ message: { type: Object, required: true } });
+const props = defineProps({
+  message: { type: Object, required: true },
+  // A thread's prompts are not the conversation's: editing one would rewrite
+  // the conversation in front, so they are only copied.
+  inThread: { type: Boolean, default: false },
+});
 
 const WHO = { user: "You", assistant: "Agent", tool: "Tool", thinking: "Thinking", error: "Error", question: "Question", answer: "Your answer", automatic_answer: "Automatic answer" };
 
@@ -49,7 +54,7 @@ const classes = computed(() => [
 ]);
 
 const editable = computed(
-  () => props.message.role === "user" && !!props.message.id && !props.message.streaming,
+  () => !props.inThread && props.message.role === "user" && !!props.message.id && !props.message.streaming,
 );
 
 const copied = ref(false);
@@ -95,7 +100,7 @@ function onKey(e) {
 </script>
 
 <template>
-  <div class="group mb-4" :class="message.role === 'user' ? 'flex flex-col items-end' : ''">
+  <div class="group mb-4" :class="message.role === 'user' ? 'flex flex-col items-end' : ''" :data-message-id="message.id">
     <div
       class="mb-0.5 flex items-center gap-1.5"
       :class="message.role === 'user' ? 'flex-row-reverse' : ''"

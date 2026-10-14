@@ -70,8 +70,19 @@ type TurnRequest struct {
 	// ProviderSessionID is empty on the first turn and carries the provider's
 	// own id afterwards, which is what resume needs.
 	ProviderSessionID string
+	// ForkFrom, on a first turn, names a provider conversation to start as a
+	// copy of: a thread opened from a conversation, or a task spawned from a
+	// thread. Only providers that are a Forker are given one.
+	ForkFrom string
 
 	Permission Permission
+}
+
+// Forker is a provider that can start a conversation as a copy of another,
+// leaving the original as it was. Others are given the conversation as text
+// instead. See specs/092-threads.md.
+type Forker interface {
+	CanFork() bool
 }
 
 // CheckWorkDir reports whether the turn can still be run where it was asked to

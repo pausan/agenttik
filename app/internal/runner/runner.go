@@ -320,8 +320,17 @@ func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage) (*store.Turn
 	if err != nil {
 		return nil, err
 	}
-	r.claimProjectPrompt(sess, hasRun)
-	providerPrompt := withProjectPrompt(sess, hasRun, attachments.Resolve(prompt, r.store.Dir()))
+	// A thread, or a task spawned from one, starts from the conversation it
+	// came from. A forked copy already holds the project prompt.
+	forkFrom, inherited := "", ""
+	if !hasRun && sess.ProviderSessionID == "" {
+		forkFrom, inherited = r.inherit(sess, provider)
+	}
+	if forkFrom == "" {
+		r.claimProjectPrompt(sess, hasRun)
+	}
+	providerPrompt := withProjectPrompt(sess, hasRun, inherited+threadPreamble(sess, hasRun)+
+		attachments.Resolve(prompt, r.store.Dir()))
 	if sess.ProjectKind == "orchestrator" {
 		executable, err := os.Executable()
 		if err != nil {
@@ -402,6 +411,7 @@ func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage) (*store.Turn
 		AccountHome:       home,
 		SessionID:         startID(sess, hasRun),
 		ProviderSessionID: sess.ProviderSessionID,
+		ForkFrom:          forkFrom,
 		Permission:        agent.Permission(sess.Permission),
 	})
 	if err != nil {

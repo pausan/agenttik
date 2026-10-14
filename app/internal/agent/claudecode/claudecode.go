@@ -32,6 +32,9 @@ func New() *Provider { return &Provider{} }
 func (p *Provider) Name() string        { return "claude" }
 func (p *Provider) DisplayName() string { return "Claude Code" }
 
+// CanFork is true: `--resume <id> --fork-session` copies a conversation.
+func (p *Provider) CanFork() bool { return true }
+
 func (p *Provider) Efforts() []string {
 	return []string{"low", "medium", "high", "xhigh", "max"}
 }
@@ -99,6 +102,10 @@ func buildArgs(req agent.TurnRequest) []string {
 	args = append(args, permissionFlag(req.Permission)...)
 	if req.ProviderSessionID != "" {
 		args = append(args, "--resume", req.ProviderSessionID)
+	} else if req.ForkFrom != "" {
+		// A copy of that conversation under a new id, which the CLI picks
+		// and reports when the turn starts.
+		args = append(args, "--resume", req.ForkFrom, "--fork-session")
 	} else if req.SessionID != "" {
 		// First turn: we pick the id so ours and the CLI's agree.
 		args = append(args, "--session-id", req.SessionID)

@@ -5,6 +5,9 @@ import {
   focusPrompt,
   forceQueued,
   openProjectPrompt,
+  openTask,
+  openThread,
+  startThread,
   providerOf,
   S,
   updateQueuedModel,
@@ -18,6 +21,7 @@ import Message from "./Message.vue";
 import ModelSelection from "./ModelSelection.vue";
 import StickyPrompt from "./StickyPrompt.vue";
 import ToolGroup from "./ToolGroup.vue";
+import MessageThreads from "./MessageThreads.vue";
 import TurnOutputs from "./TurnOutputs.vue";
 
 const emit = defineEmits(["start-tour"]);
@@ -84,6 +88,61 @@ const allRows = computed(() => {
   }
   return out;
 });
+
+/* Threads are drawn under the message they quote. */
+const threadsByMessage = computed(() => {
+  const out = new Map();
+  for (const t of S.detail?.threads || []) out.set(t.anchor_message_id, [...(out.get(t.anchor_message_id) || []), t]);
+  return out;
+});
+const hasThreads = (message) =>
+  !!message.id && (threadsByMessage.value.has(message.id) || S.threadDraft?.messageID === message.id);
+
+/* Selecting text inside one stored message offers to ask about it in a
+   thread. The button sits under the selection; the selection itself is the
+   passage. Messages inside a thread are not offered: a thread has no threads. */
+const picked = ref(null);
+function elementOf(node) {
+  return node?.nodeType === 1 ? node : node?.parentElement;
+}
+function readSelection() {
+  const sel = window.getSelection();
+  const text = sel?.toString().trim();
+  if (!sel || sel.isCollapsed || !sel.rangeCount || !text || !content.value) return (picked.value = null);
+  const range = sel.getRangeAt(0);
+  const start = elementOf(range.startContainer)?.closest("[data-message-id]");
+  if (!start || start !== elementOf(range.endContainer)?.closest("[data-message-id]") ||
+      !content.value.contains(start) || start.closest("[data-threads]")) return (picked.value = null);
+  const rect = range.getBoundingClientRect();
+  const base = content.value.getBoundingClientRect();
+  picked.value = {
+    messageID: Number(start.dataset.messageId),
+    quote: text,
+    top: rect.bottom - base.top + 4,
+    left: Math.max(0, Math.min(rect.left - base.left, base.width - 150)),
+  };
+}
+function onSelectionChange() {
+  if (picked.value && window.getSelection()?.isCollapsed) picked.value = null;
+}
+onMounted(() => document.addEventListener("selectionchange", onSelectionChange));
+onUnmounted(() => document.removeEventListener("selectionchange", onSelectionChange));
+watch(() => S.detail?.session.id, () => (picked.value = null));
+
+function askInThread() {
+  if (!picked.value) return;
+  startThread(picked.value.messageID, picked.value.quote);
+  picked.value = null;
+  window.getSelection()?.removeAllRanges();
+}
+
+// The thread a spawned task came from, open under its message.
+async function openOrigin() {
+  const origin = S.detail?.origin;
+  if (!origin) return;
+  await openTask(origin.parent_id);
+  openThread(origin.thread_id);
+}
 
 const rows = computed(() =>
   allRows.value.length > shown.value ? allRows.value.slice(-shown.value) : allRows.value,
@@ -416,7 +475,37 @@ watch(
       <p>Pick a task, or a project to start one.</p>
       <UButton class="mt-4" label="Take the Quick Start Tour" icon="i-lucide-graduation-cap" @click="emit('start-tour')" />
     </div>
-    <div v-else ref="content" class="mx-auto max-w-[860px] px-6 pt-5 pb-2 max-md:px-3 max-md:pt-3">
+    <div
+      v-else
+      ref="content"
+      class="relative mx-auto max-w-[860px] px-6 pt-5 pb-2 max-md:px-3 max-md:pt-3"
+      @mouseup="readSelection"
+      @keyup.shift="readSelection"
+    >
+      <UButton
+        v-if="picked"
+        class="absolute z-20 shadow"
+        :style="{ top: `${picked.top}px`, left: `${picked.left}px` }"
+        size="xs"
+        icon="i-lucide-messages-square"
+        label="Ask in thread"
+        title="Ask about the selected text in a thread, without adding to this conversation"
+        @mousedown.prevent
+        @click="askInThread"
+      />
+      <!-- A task opened from a thread links back to it. -->
+      <button
+        v-if="S.detail.origin"
+        type="button"
+        class="mb-4 flex max-w-full items-center gap-1.5 text-left text-[11px] text-dimmed hover:text-primary"
+        :title="S.detail.origin.quote"
+        @click="openOrigin"
+      >
+        <UIcon name="i-lucide-messages-square" class="size-3.5 shrink-0" aria-hidden="true" />
+        <span class="truncate underline decoration-dotted underline-offset-2">
+          Continued from a thread in “{{ S.detail.origin.parent_title || "another task" }}”
+        </span>
+      </button>
       <!-- The project's own prompt went in ahead of the first thing asked
            here, so the conversation says so at the point it happened: what was
            added, on hover, and the page it is set on, on click. It is drawn
@@ -454,6 +543,11 @@ watch(
         <ToolGroup v-if="row.tools" :tools="row.tools" />
         <BackgroundTask v-else-if="row.message.role === 'background'" :message="row.message" :now="now" />
         <Message v-else :message="row.message" :data-human-message="row.message.role === 'user' ? row.at : undefined" />
+        <MessageThreads
+          v-if="row.message && hasThreads(row.message)"
+          :message-id="row.message.id"
+          :threads="threadsByMessage.get(row.message.id) || []"
+        />
         <TurnOutputs v-if="row.outputs" :outputs="row.outputs" :project-id="S.detail.session.project_id" />
         <p v-if="row.summary" class="-mt-2 mb-4 text-[11px] text-dimmed tabular-nums" aria-label="Turn usage">
           {{ row.summary }}

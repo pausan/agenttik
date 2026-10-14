@@ -381,7 +381,7 @@ func (s *Store) recentSessions(projectID int64, limit int) ([]SessionRef, error)
 		 ORDER BY t.id DESC LIMIT 1), 0),
 		s.schedule_id, ` +
 		firstPromptCol + ` FROM sessions s
-		 WHERE s.project_id = ? AND s.done_at = 0
+		 WHERE s.project_id = ? AND s.done_at = 0 AND s.parent_id = ''
 		 ORDER BY s.position, s.last_active_at DESC`
 	args := []any{projectID}
 	if limit > 0 {

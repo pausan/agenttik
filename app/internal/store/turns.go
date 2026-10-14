@@ -187,7 +187,7 @@ func (s *Store) ProjectStats(projectID int64) (*ProjectStats, error) {
 	ps := &ProjectStats{Stats: *st}
 	var last sql.NullInt64
 	err = s.db.QueryRow(
-		`SELECT COUNT(*), COALESCE(SUM(status = ?),0), MAX(last_active_at)
+		`SELECT COALESCE(SUM(parent_id = ''),0), COALESCE(SUM(status = ?),0), MAX(last_active_at)
 		 FROM sessions WHERE project_id = ?`, StatusRunning, projectID).
 		Scan(&ps.Sessions, &ps.Running, &last)
 	if err != nil {

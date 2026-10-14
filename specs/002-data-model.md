@@ -54,7 +54,10 @@ All timestamps are **unix milliseconds**, so turn timings need no second table.
   opened it ([050](050-subscription-accounts.md)). `summary` is one sentence
   saying what the task came to, written from its last reply when it is archived
   and blank for every task archived before there was one
-  ([051](051-task-outcomes.md)).
+  ([051](051-task-outcomes.md)). `parent_id`, `anchor_message_id` and
+  `anchor_quote` make a session a thread about a passage of another one, kept
+  out of task lists; `origin_id` names the thread a task was opened from
+  ([092](092-threads.md)).
 - **turns** — one row per prompt. `session_id, provider, account_id, model, effort, started_at,
   ended_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
   cost_usd, context_tokens, context_window, rate_limits, status, error`. This

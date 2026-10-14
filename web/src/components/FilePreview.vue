@@ -4,9 +4,11 @@
 
    Markdown goes through the transcript's own renderer, which emits a fixed
    list of tags and escapes everything else. HTML cannot be rendered that way
-   — it *is* markup — so it goes in a fully sandboxed iframe: no scripts, no
-   same-origin, no top-level navigation. A base URL serves local images and
-   stylesheets through the passive preview endpoint, including CSS imports.
+   — it *is* markup — so it goes in a sandboxed iframe that runs its scripts
+   but has no same-origin access and no top-level navigation: charts and
+   toggles work, the app's API and storage stay out of reach. A base URL
+   serves local images, stylesheets, scripts and data files through the
+   preview endpoint, behind a token for this one root.
 
    An SVG is markup too, and an <img> draws the same boundary for less work:
    a document there cannot run a script or fetch anything. Its source is the
@@ -17,12 +19,12 @@
    Raster images and fonts have no text to follow: their bytes come from the
    raw endpoint. FontPreview registers a face only while it is displayed.
    Videos stream from their own endpoint, in ranges, through VideoPreview. */
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { profileID, remoteID } from "../api";
 import { htmlPreviewDocument, htmlPreviewURL } from "../html-preview";
 
 import MarkdownContent from "./MarkdownContent.vue";
-import { isFont, isImage, isVideo, rawURL } from "../store";
+import { fail, htmlPreviewToken, isFont, isImage, isVideo, rawURL } from "../store";
 import FontPreview from "./FontPreview.vue";
 import ImageFrame from "./ImageFrame.vue";
 import VideoPreview from "./VideoPreview.vue";
@@ -35,8 +37,21 @@ const text = computed(() => props.tab.edited ?? props.tab.content ?? "");
 const isHTML = computed(() => /\.html?$/i.test(props.tab.path));
 const isSVG = computed(() => /\.svg$/i.test(props.tab.path));
 const image = computed(() => isImage(props.tab.path));
-const html = computed(() => isHTML.value ? htmlPreviewDocument(text.value,
-  new URL(htmlPreviewURL(props.tab, { remote: remoteID, profile: profileID }), window.location.href).href) : "");
+const token = ref("");
+let asked = 0;
+watch(() => isHTML.value && [props.tab.projectID, props.tab.path], async (scope) => {
+  const ask = ++asked;
+  token.value = "";
+  if (!scope) return;
+  try {
+    const value = await htmlPreviewToken(...scope);
+    if (ask === asked) token.value = value;
+  } catch (e) {
+    fail(e);
+  }
+}, { immediate: true });
+const html = computed(() => isHTML.value && token.value ? htmlPreviewDocument(text.value,
+  new URL(htmlPreviewURL(props.tab, { remote: remoteID, profile: profileID, token: token.value }), window.location.href).href) : "");
 
 /* A data URL keeps the markup exact without a base64 round trip, and costs
    one encode per keystroke on a file small enough to be drawn as a picture. */
@@ -47,7 +62,7 @@ const svg = computed(() => "data:image/svg+xml;charset=utf-8," + encodeURICompon
   <iframe
     v-if="isHTML"
     class="h-full w-full border-0 bg-white"
-    sandbox
+    sandbox="allow-scripts"
     referrerpolicy="no-referrer"
     :title="tab.path"
     :srcdoc="html"

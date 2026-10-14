@@ -19,11 +19,15 @@ func TestHTMLPreviewAssets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	base := "/api/html/-/default/projects/" + itoa(p.ID) + "/preview/-/"
+	token := func(root string) string {
+		return decode[map[string]string](t, do(t, s, "GET", "/api/projects/"+itoa(p.ID)+"/preview-token?root="+root, nil))["token"]
+	}
+	base := "/api/html/-/default/projects/" + itoa(p.ID) + "/preview/" + token("-") + "/-/"
 	for _, tc := range []struct{ name, kind string }{
 		{"image #1.png", "image/png"}, {"image.svg", "image/svg+xml"},
 		{"style.css", "text/css; charset=utf-8"}, {"font.woff2", "font/woff2"},
-		{"page.html", "text/html; charset=utf-8"},
+		{"page.html", "text/html; charset=utf-8"}, {"chart.js", "text/javascript; charset=utf-8"},
+		{"data.json", "application/json"}, {"rows.csv", "text/csv; charset=utf-8"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(dir, tc.name), []byte("fixture"), 0o644); err != nil {
@@ -35,19 +39,16 @@ func TestHTMLPreviewAssets(t *testing.T) {
 			if resp.StatusCode != 200 || string(body) != "fixture" || resp.Header.Get("Content-Type") != tc.kind {
 				t.Fatalf("asset: %d %s %q", resp.StatusCode, resp.Header.Get("Content-Type"), body)
 			}
-			if resp.Header.Get("Cache-Control") != "no-store" || resp.Header.Get("X-Content-Type-Options") != "nosniff" || resp.Header.Get("Content-Security-Policy") != "sandbox; script-src 'none'; object-src 'none'" {
+			if resp.Header.Get("Cache-Control") != "no-store" || resp.Header.Get("X-Content-Type-Options") != "nosniff" || resp.Header.Get("Content-Security-Policy") != "sandbox allow-scripts; object-src 'none'" {
 				t.Fatalf("asset headers: %v", resp.Header)
 			}
-			cors := ""
-			if strings.HasPrefix(tc.kind, "font/") {
-				cors = "*"
-			}
-			if resp.Header.Get("Access-Control-Allow-Origin") != cors {
-				t.Fatalf("unexpected CORS header for %s", tc.kind)
+			// Scripts and fonts load from the page's opaque origin.
+			if resp.Header.Get("Access-Control-Allow-Origin") != "*" {
+				t.Fatalf("missing CORS header for %s", tc.kind)
 			}
 		})
 	}
-	for _, path := range []string{"code.js", "secret.txt", "../escape.css", "%2e%2e/escape.css", "/absolute.css"} {
+	for _, path := range []string{"binary.exe", "notes", "../escape.css", "%2e%2e/escape.css", "/absolute.css"} {
 		resp := do(t, s, "GET", base+path, nil)
 		resp.Body.Close()
 		if resp.StatusCode != 400 {
@@ -66,11 +67,23 @@ func TestHTMLPreviewAssets(t *testing.T) {
 		}
 	}
 	scope := base64.RawURLEncoding.EncodeToString([]byte(outside))
-	resp := do(t, s, "GET", strings.Replace(base, "/preview/-/", "/preview/"+scope+"/", 1)+"style.css", nil)
+	resp := do(t, s, "GET", strings.Replace(base, "/"+token("-")+"/-/", "/"+token(scope)+"/"+scope+"/", 1)+"style.css", nil)
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 || string(body) != "external" {
 		t.Fatalf("external document asset: %d %q", resp.StatusCode, body)
+	}
+	// A token opens one root: a page cannot reuse its own for another folder,
+	// and a guessed one opens nothing.
+	for _, bad := range []string{
+		strings.Replace(base, "/"+token("-")+"/-/", "/"+token("-")+"/"+scope+"/", 1) + "style.css",
+		strings.Replace(base, token("-"), "guess", 1) + "style.css",
+	} {
+		resp := do(t, s, "GET", bad, nil)
+		resp.Body.Close()
+		if resp.StatusCode != 403 {
+			t.Fatalf("token accepted for %s: %d", bad, resp.StatusCode)
+		}
 	}
 	large, err := os.Create(filepath.Join(dir, "large.png"))
 	if err != nil {
@@ -100,7 +113,8 @@ func TestHTMLPreviewRemoteProfileScope(t *testing.T) {
 	if state.Status != "ok" {
 		t.Fatalf("remote: %+v", state)
 	}
-	resp := do(t, local, "GET", "/api/html/"+state.Remote.ID+"/"+profile.ID+"/projects/"+itoa(p.ID)+"/preview/-/main.css", nil)
+	token := decode[map[string]string](t, do(t, local, "GET", "/api/projects/"+itoa(p.ID)+"/preview-token?root=-&remote="+state.Remote.ID+"&profile="+profile.ID, nil))["token"]
+	resp := do(t, local, "GET", "/api/html/"+state.Remote.ID+"/"+profile.ID+"/projects/"+itoa(p.ID)+"/preview/"+token+"/-/main.css", nil)
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 || string(body) != "remote profile CSS" {

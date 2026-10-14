@@ -9,6 +9,7 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"log"
@@ -96,6 +97,10 @@ type Server struct {
 	// still in force for the very next request.
 	auth  *netauth.Gate
 	creds atomic.Pointer[netauth.Credentials]
+
+	// previewKey signs HTML preview tokens. It lives as long as the process;
+	// a preview opened again after a restart fetches a fresh one.
+	previewKey []byte
 }
 
 func New(s *store.Store, reg *agent.Registry, r *runner.Runner) *Server {
@@ -133,7 +138,10 @@ func New(s *store.Store, reg *agent.Registry, r *runner.Runner) *Server {
 
 	srv := &Server{app: app, store: s, runner: r, registry: reg,
 		watchers: newWatchers(r.Hub()), terminals: terminals.NewManager(),
-		closing: make(chan struct{})}
+		closing: make(chan struct{}), previewKey: make([]byte, 32)}
+	if _, err := rand.Read(srv.previewKey); err != nil {
+		panic(err)
+	}
 	srv.auth = netauth.New(srv.credentials)
 	srv.search = smartsearch.New(filepath.Join(s.Dir(), "smart-search"), func() ([]store.Session, error) {
 		return s.ListSessions(store.SessionFilter{})
@@ -285,7 +293,8 @@ func (s *Server) routes() {
 	api.Post("/projects/:id/open", s.openEntry)
 	api.Get("/projects/:id/diff", s.projectDiff)
 	api.Get("/projects/:id/raw", s.projectRawImage)
-	api.Get("/projects/:id/preview/:root/*", s.projectHTMLAsset)
+	api.Get("/projects/:id/preview-token", s.getPreviewToken)
+	api.Get("/projects/:id/preview/:token/:root/*", s.projectHTMLAsset)
 	api.Get("/projects/:id/video", s.projectVideo)
 	api.Get("/projects/:id/video-info", s.projectVideoInfo)
 	api.Get("/projects/:id/terminals", s.listTerminals)

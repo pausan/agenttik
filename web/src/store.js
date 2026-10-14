@@ -25,6 +25,7 @@ import { platformChord, primaryChord } from "./platform";
 import { initSmartSearch, setSmartSearch } from "./smart-search.js";
 import { compactModelLabel as compact } from "./model-labels.js";
 import { openEventStream } from "./eventStream.js";
+import { htmlPreviewRoot } from "./html-preview.js";
 
 export { DEFAULT_SCHEDULE, EVERY, WEEKDAYS, intervalMinutes, atMinute, scheduleForm, scheduleLabel } from "./schedules.js";
 
@@ -2116,6 +2117,13 @@ export function rawURL(tab, rev = "") {
   return apiURL(`/api/projects/${projectOfTab(tab)}/raw?path=${encodeURIComponent(tab.path)}${at}`);
 }
 
+/* htmlPreviewToken opens one preview root for the scripts of a page shown
+   in the app. A token dies with the server process, so each preview asks. */
+export async function htmlPreviewToken(projectID, path) {
+  const { root } = htmlPreviewRoot(path);
+  return (await api("GET", `/api/projects/${projectID}/preview-token?root=${encodeURIComponent(root)}`)).token;
+}
+
 /* videoURL streams a video in ranges or, when convert is set, converted by
    ffmpeg from start seconds on. */
 export function videoURL(tab, convert = false, start = 0) {
@@ -2345,6 +2353,23 @@ async function loadFileTab(tab) {
   tab.readOnly = !!f.partial || isOutsideProject(tab.path);
   tab.content = f.binary ? f.hex || "" : f.content + (f.partial ? "\n\n… truncated" : "");
   if (f.binary) tab.mode = "hex";
+}
+
+/* refreshPreviewTabs redraws what an agent rewrote while it is on show: a
+   report it regenerates updates in place. Only clean text tabs on Preview
+   are re-read; an edit in progress is the user's, and media reads its bytes
+   from the disk on its own. */
+function refreshPreviewTabs(projectID) {
+  for (const tab of S.tabs) {
+    if (tab.kind !== "file" || tab.commit || tab.mode !== "preview" || projectOfTab(tab) !== projectID) continue;
+    if (tab.content === null || tab.binary || tab.partial || isDirty(tab) || isMedia(tab.path)) continue;
+    api("GET", `/api/projects/${projectID}/file?path=${encodeURIComponent(tab.path)}`).then((f) => {
+      if (f.binary || f.partial || f.version === tab.version || isDirty(tab)) return;
+      tab.version = f.version || "";
+      tab.content = f.content;
+      tab.edited = null;
+    }).catch(() => {});
+  }
 }
 
 /* setFileMode switches one tab and remembers the choice for file links —
@@ -3003,6 +3028,7 @@ function onEvent(msg) {
       // is always changing.
       if (!S.treeTruncated) refreshTree();
     }
+    refreshPreviewTabs(msg.project_id);
     return;
   }
   // The CLI, orchestrator and other windows use the same project routes.

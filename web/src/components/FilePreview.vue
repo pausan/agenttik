@@ -24,11 +24,12 @@ import { profileID, remoteID } from "../api";
 import { htmlPreviewDocument, htmlPreviewURL } from "../html-preview";
 
 import MarkdownContent from "./MarkdownContent.vue";
-import { fail, htmlPreviewToken, isFont, isImage, isVideo, rawURL } from "../store";
+import { fail, htmlPreviewToken, isFont, isImage, isVideo, rawURL, S } from "../store";
 import FontPreview from "./FontPreview.vue";
 import ImageFrame from "./ImageFrame.vue";
 import VideoPreview from "./VideoPreview.vue";
 import CsvPreview from "./CsvPreview.vue";
+import HtmlFrame from "./HtmlFrame.vue";
 
 const props = defineProps({ tab: { type: Object, required: true } });
 const emit = defineEmits(["dimensions"]);
@@ -50,6 +51,7 @@ watch(() => isHTML.value && [props.tab.projectID, props.tab.path], async (scope)
     fail(e);
   }
 }, { immediate: true });
+const annotating = ref(false);
 const html = computed(() => isHTML.value && token.value ? htmlPreviewDocument(text.value,
   new URL(htmlPreviewURL(props.tab, { remote: remoteID, profile: profileID, token: token.value }), window.location.href).href) : "");
 
@@ -59,14 +61,22 @@ const svg = computed(() => "data:image/svg+xml;charset=utf-8," + encodeURICompon
 </script>
 
 <template>
-  <iframe
-    v-if="isHTML"
-    class="h-full w-full border-0 bg-white"
-    sandbox="allow-scripts"
-    referrerpolicy="no-referrer"
-    :title="tab.path"
-    :srcdoc="html"
-  ></iframe>
+  <div v-if="isHTML" class="relative h-full w-full">
+    <HtmlFrame v-model:annotating="annotating" :html="html" :title="tab.path" :path="tab.path" />
+    <!-- Comments go to the task this file was opened from. -->
+    <UButton
+      v-if="S.owner?.kind === 'session'"
+      class="absolute top-2 right-3 shadow"
+      size="xs"
+      :color="annotating ? 'primary' : 'neutral'"
+      :variant="annotating ? 'solid' : 'outline'"
+      icon="i-lucide-message-square-plus"
+      :label="annotating ? 'Click an element' : 'Comment'"
+      :aria-pressed="annotating"
+      title="Click an element of the page to comment on it in the task's prompt"
+      @click="annotating = !annotating"
+    />
+  </div>
 
   <div v-else-if="isSVG || image" class="flex h-full min-h-0 px-5 py-4">
     <ImageFrame v-if="isSVG" :src="svg" fit zoomable missing="This is not an SVG a browser can draw." @dimensions="emit('dimensions', $event)" />

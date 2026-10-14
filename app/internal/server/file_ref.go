@@ -150,15 +150,11 @@ func (s *Server) sessionPaths(projectID int64, sessionID string) []string {
 	if err != nil || sess.ProjectID != projectID {
 		return nil
 	}
-	project, err := s.store.GetProject(projectID)
-	if err != nil {
-		return nil
-	}
 	calls, err := s.store.ToolCalls(sessionID)
 	if err != nil {
 		return nil
 	}
-	tracker := toolpaths.New(project.Path)
+	tracker := toolpaths.New(sess.ProjectPath)
 	turn := int64(-1)
 	for _, call := range calls {
 		if call.TurnID != turn {

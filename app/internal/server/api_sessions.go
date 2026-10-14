@@ -128,6 +128,9 @@ type sessionDetail struct {
 
 	// Background is what the running turn has left working behind it.
 	Background []agent.BackgroundTask `json:"background"`
+
+	// Outputs are the result files each turn left, drawn under its reply.
+	Outputs []turnOutput `json:"outputs"`
 }
 
 func (s *Server) getSession(c *fiber.Ctx) error {
@@ -154,7 +157,8 @@ func (s *Server) getSession(c *fiber.Ctx) error {
 	}
 	return c.JSON(sessionDetail{Session: sess, Messages: messages,
 		Turns: turns, Stats: stats, Running: s.runner.Running(id), Queued: queued,
-		Background: s.runner.BackgroundTasks(id)})
+		Background: s.runner.BackgroundTasks(id),
+		Outputs:    turnOutputs(sess.ProjectPath, turns, messages)})
 }
 
 // updateSession changes the model, effort or title mid-session.

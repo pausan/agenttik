@@ -77,6 +77,8 @@ screen, **session** for the row, the route or the CLI flag.
 |-----|----------------|
 | [088](088-binary-files.md) | Binary hex preview, byte replacements and save limits |
 | [089](089-csv-preview.md) | CSV separator detection, table columns and three-click sorting |
+| [090](090-turn-outputs.md) | Reports, charts and tables a turn presented, drawn under its reply |
+| [091](091-page-annotations.md) | Commenting on elements of previewed pages into the task's prompt |
 | [087](087-large-files.md) | Large text editing, plain rendering and latency checks |
 | [076](076-tab-scroll.md) | Scroll positions for every open tab, file modes, transcripts and terminals |
 | [075](075-page-find.md) | Find in the current page or text file, match navigation and shortcuts |
@@ -87,7 +89,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [022](022-transcript-file-links.md) | Web links and local file opening, tree reveal and copying in transcripts and previews |
 | [023](023-tool-call-groups.md) | Collapsing a run of tool calls to its latest |
 | [026](026-image-preview.md) | Previewing images, zooming, mouse and touch panning, and image diffs |
-| [086](086-html-preview.md) | Sandboxed HTML, local images, stylesheets and fonts |
+| [086](086-html-preview.md) | Sandboxed HTML with scripts, local assets, data files and preview tokens |
 | [058](058-font-preview.md) | Font samples, custom text, size controls and glyph squares |
 | [081](081-video-preview.md) | Video player controls, ranged streaming and ffmpeg conversion |
 | [059](059-file-information.md) | File byte sizes, image dimensions and color depth in the central header |

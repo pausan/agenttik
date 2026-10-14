@@ -26,6 +26,7 @@ import { initSmartSearch, setSmartSearch } from "./smart-search.js";
 import { compactModelLabel as compact } from "./model-labels.js";
 import { openEventStream } from "./eventStream.js";
 import { htmlPreviewRoot } from "./html-preview.js";
+import { promptImages, promptText, withImages } from "./prompt-images.js";
 
 export { DEFAULT_SCHEDULE, EVERY, WEEKDAYS, intervalMinutes, atMinute, scheduleForm, scheduleLabel } from "./schedules.js";
 
@@ -737,6 +738,17 @@ export function persistTabOrder(id) {
   if (tab?.kind !== "session") return;
   const project = S.projects.find((p) => p.id === projectOfTab(tab));
   if (project) reorderSidebarTasks(project, project.recent_sessions.map((session) => session.id));
+}
+
+/* addToPrompt appends to the draft of the task the current tab belongs to,
+   so a comment made on a result waits where the next prompt is written.
+   Attached images stay attached. */
+export function addToPrompt(text) {
+  const owner = S.owner;
+  if (owner?.kind !== "session") return false;
+  const typed = promptText(owner.draft).trimEnd();
+  owner.draft = withImages(typed ? `${typed}\n\n${text}` : text, promptImages(owner.draft));
+  return true;
 }
 
 /* The prompt bar watches this counter. A counter, rather than a Boolean,
@@ -3279,6 +3291,7 @@ async function syncMessages(tab, preserveLive = false) {
     if (keepLive) return;
     tab.detail.messages = detail.messages;
     tab.detail.turns = detail.turns;
+    tab.detail.outputs = detail.outputs;
     if (!detail.running) {
       tab.detail.stats = detail.stats;
       tab.detail.liveUsage = null;

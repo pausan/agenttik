@@ -18,6 +18,7 @@ import Message from "./Message.vue";
 import ModelSelection from "./ModelSelection.vue";
 import StickyPrompt from "./StickyPrompt.vue";
 import ToolGroup from "./ToolGroup.vue";
+import TurnOutputs from "./TurnOutputs.vue";
 
 const emit = defineEmits(["start-tour"]);
 const box = ref(null);
@@ -68,13 +69,17 @@ const allRows = computed(() => {
   // then the task's totals so far. Turns whose messages an edit removed still
   // count, as they do in Stats. Rows streamed before the turn ended carry no
   // turn id; the transcript is re-read when it ends, and that read supplies them.
+  // The result files it presented go between its last row and that line.
   const finished = (S.detail?.turns || []).filter((t) => t.status !== "running");
   const upTo = new Map(finished.map((t, i) => [t.id, finished.slice(0, i + 1)]));
+  const outputs = new Map();
+  for (const o of S.detail?.outputs || []) outputs.set(o.turn_id, [...(outputs.get(o.turn_id) || []), o]);
   const turnOf = (row) => (row.message || row.tools.at(-1)).turn_id;
   for (let i = 0; i < out.length; i++) {
     const id = turnOf(out[i]);
     if (upTo.has(id) && (i === out.length - 1 || turnOf(out[i + 1]) !== id)) {
       out[i].summary = turnSummary(upTo.get(id));
+      out[i].outputs = outputs.get(id);
     }
   }
   return out;
@@ -449,6 +454,7 @@ watch(
         <ToolGroup v-if="row.tools" :tools="row.tools" />
         <BackgroundTask v-else-if="row.message.role === 'background'" :message="row.message" :now="now" />
         <Message v-else :message="row.message" :data-human-message="row.message.role === 'user' ? row.at : undefined" />
+        <TurnOutputs v-if="row.outputs" :outputs="row.outputs" :project-id="S.detail.session.project_id" />
         <p v-if="row.summary" class="-mt-2 mb-4 text-[11px] text-dimmed tabular-nums" aria-label="Turn usage">
           {{ row.summary }}
         </p>

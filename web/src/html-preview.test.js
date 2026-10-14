@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { htmlPreviewURL } from "./html-preview.js";
+import { annotationText, htmlPreviewURL } from "./html-preview.js";
 
 test("relative asset resolution keeps routing scope and URL-encodes filenames", () => {
   const url = new URL(htmlPreviewURL({ projectID: 7, path: "docs/mock up/overview.html" }, { remote: "office", profile: "work", token: "t0k" }), "https://app.example");
@@ -14,4 +14,13 @@ test("absolute documents use their own directory, including Unicode paths", () =
   assert.equal(Buffer.from(parts.at(-2), "base64url").toString(), "/tmp/maquetas/日本語");
   assert.equal(parts.at(-1), "overview.html");
   assert.equal(new URL("images/home.png", `https://app.example${url}`).pathname, url.replace("overview.html", "images/home.png"));
+});
+
+test("a comment names the file, the element and where it sits", () => {
+  const el = { tag: "circle", selector: "svg > g > circle:nth-of-type(7)", label: "Sep 7: 4.9%", text: "", heading: "Install → trial", data: ['data-week="2026-09-07"'] };
+  assert.equal(annotationText("tasks/r.html", el, "  Why the dip?\n"),
+    'On `tasks/r.html`, at the <circle> "Sep 7: 4.9%" under "Install → trial" (`svg > g > circle:nth-of-type(7)`, data-week="2026-09-07"):\nWhy the dip?');
+  const long = "x".repeat(100);
+  assert.equal(annotationText("a.html", { tag: "h1", selector: "body > h1", label: "", text: long, heading: long, data: [] }, "c"),
+    `On \`a.html\`, at the <h1> "${"x".repeat(79)}…" (\`body > h1\`):\nc`);
 });

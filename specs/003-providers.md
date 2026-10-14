@@ -155,19 +155,20 @@ Events consumed from stdout JSONL:
 | `{"type":"user","message":{"content":[{"type":"tool_result",...}]}}` | `tool_result` |
 | `{"type":"control_request","request":{"subtype":"can_use_tool",...}}` | `approval` |
 | `{"type":"control_cancel_request",...}` | `approval_resolved` |
-| `{"type":"system","subtype":"background_tasks_changed","tasks":[...]}` | `background` states for tasks that started or ended |
-| `{"type":"result",...}` | `done` with turn totals; stdin is closed |
+| `{"type":"system","subtype":"background_tasks_changed","tasks":[...]}` | nothing; counts running background tasks |
+| `{"type":"result",...}` | `done` with running turn totals; stdin is closed unless background tasks run |
 
-Every result ends the reply and closes stdin, which lets the CLI exit and
-stop its remaining background shells and agents. A helper with no completion
-record cannot keep a finished conversation working. The agent must wait for
-background work whose output it needs before ending its reply. Agenttik does
-not keep the CLI open for later background notifications to wake the agent.
-Stdout is drained until the CLI exits, preserving any final task updates and
-usage. Tasks still reported running become `stopped · turn ended` in the
-transcript. Each result's `usage` covers its own reply and is summed;
-`total_cost_usd` is already the process total, so the last one is kept. The
-runner stores each reply as its own message.
+A result is one reply, not always the end of the turn. When the agent ends a
+reply with background tasks running (`run_in_background` commands, background
+agents) and says it will wait, stdin stays open. When a task finishes, the CLI
+wakes the agent itself (`task_notification`, a fresh `init`) and it replies
+again, possibly starting more background work. Stdin closes at the first
+result with no background task running, and the turn ends when the CLI exits.
+Until then the task shows as working; Stop kills the CLI and its tasks.
+Closing stdin earlier makes the CLI kill the tasks and never wake the agent.
+Each result's `usage` covers its own reply and is summed; `total_cost_usd` is
+already the process total, so the last one is kept. The runner stores each
+reply as its own message.
 
 Models are aliases (`fable`, `opus`, `sonnet`, `haiku`) so they track the latest
 release without a code change. Labels include the version reported by the

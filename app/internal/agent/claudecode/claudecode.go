@@ -259,6 +259,10 @@ func parse(r io.Reader, model string, h *host, out chan<- agent.Event) {
 type streamParser struct {
 	model string
 	host  *host
+	// background is how many background tasks are still running. While any
+	// are, a result does not end the turn: the CLI wakes the agent when one
+	// finishes and it replies again, as long as stdin is open.
+	background int
 	// tasks are the background tasks this turn started, by task id, as last
 	// reported to the runner.
 	tasks         map[string]*agent.BackgroundTask
@@ -300,6 +304,7 @@ func (p *streamParser) handleLine(line []byte, out chan<- agent.Event) {
 				out <- agent.Event{Type: agent.EventSessionStarted, ProviderSessionID: env.SessionID}
 			}
 		case "background_tasks_changed":
+			p.background = len(env.Tasks)
 			p.backgroundChanged(env.Tasks, out)
 		case "task_started":
 			if env.IsBackgrounded {
@@ -398,10 +403,11 @@ func (p *streamParser) handleLine(line []byte, out chan<- agent.Event) {
 			UsageBreakdown:           p.hasBreakdown,
 		}
 		out <- agent.Event{Type: agent.EventDone, Usage: &usage}
-		// Every result ends the reply. Closing stdin lets the CLI exit and
-		// stop its remaining background tasks, even if a helper never reports
-		// completion. Keep reading stdout for its final task states.
-		if p.host != nil {
+		// Closing stdin is what lets a stream-json CLI exit instead of
+		// waiting for another prompt. It also kills the background tasks the
+		// agent said it would wait for, so stdin stays open until a reply
+		// ends with none running.
+		if p.host != nil && p.background == 0 {
 			p.host.close()
 		}
 	}

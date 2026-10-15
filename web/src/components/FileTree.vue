@@ -3,11 +3,12 @@
    and restarts; filtering temporarily reveals matching non-ignored paths. */
 import { computed, nextTick, ref, watch } from "vue";
 
-import { S, copyText, currentProjectID, focusPrompt, openFile, openInSystem, selectTab, startCurrentTask } from "../store";
+import { S, copyDropped, copyText, currentProjectID, fail, focusPrompt, openFile, openInSystem, selectTab, startCurrentTask } from "../store";
 import { storage } from "../api";
 import { buildTree, countFiles, filterTree } from "../tree";
 import { segments } from "../fuzzy";
 import { promptImages, promptText, withImages } from "../prompt-images";
+import { existing, join, readDrop } from "../upload";
 import TreeActionModal from "./TreeActionModal.vue";
 
 /* The flat listing only changes when the project does, so the tree is built
@@ -241,6 +242,80 @@ watch(full, async () => {
   rowRefs.get(selected.value)?.scrollIntoView({ block: "nearest" });
 }, { flush: "post" });
 
+/* Files dragged in from the desktop are copied where they are dropped: into
+   the folder under the pointer, beside the file under it, or at the top of
+   the project. The bytes go through the API, so a window on another
+   machine's project copies to that machine. See specs/095-tree-file-drop.md. */
+const dropAt = ref(null);
+const copying = ref(null);
+const percent = computed(() => {
+  const c = copying.value;
+  return c && c.total ? Math.floor((c.sent / c.total) * 100) : 0;
+});
+
+const fromDesktop = (e) => !!e.dataTransfer?.types?.includes("Files");
+
+function dragOver(e) {
+  if (!fromDesktop(e)) return;
+  // Taken even when refused: a file let go of where nothing takes it is
+  // opened by the window in place of the app.
+  e.preventDefault();
+  if (!currentProjectID() || copying.value) {
+    e.dataTransfer.dropEffect = "none";
+    dropAt.value = null;
+    return;
+  }
+  e.dataTransfer.dropEffect = "copy";
+  const row = e.target.closest("[data-path]");
+  const path = row?.dataset.path || "";
+  dropAt.value = !row || row.dataset.dir === "true" ? path : path.split("/").slice(0, -1).join("/");
+}
+
+function dragLeave(e) {
+  if (!e.currentTarget.contains(e.relatedTarget)) dropAt.value = null;
+}
+
+async function drop(e) {
+  if (!fromDesktop(e)) return;
+  e.preventDefault();
+  const parent = dropAt.value;
+  const projectID = currentProjectID();
+  dropAt.value = null;
+  if (parent === null || !projectID) return;
+  let dropped;
+  try {
+    dropped = await readDrop(e.dataTransfer);
+  } catch (err) {
+    return fail(err);
+  }
+  if (!dropped.files.length && !dropped.dirs.length) return;
+  const clash = existing(dropped.files, parent, new Set(S.tree));
+  if (clash.length) {
+    action.value = { kind: "replace", path: parent, paths: clash, run: () => copy(projectID, parent, dropped, true) };
+  } else {
+    copy(projectID, parent, dropped, false);
+  }
+}
+
+async function copy(projectID, parent, dropped, replace) {
+  const controller = new AbortController();
+  const total = dropped.files.reduce((n, f) => n + f.file.size, 0);
+  copying.value = { count: dropped.files.length, total, sent: 0, controller };
+  try {
+    await copyDropped(projectID, parent, dropped, {
+      replace,
+      signal: controller.signal,
+      progress: (sent) => (copying.value.sent = sent),
+    });
+    const first = (dropped.files[0]?.path ?? dropped.dirs[0]).split("/")[0];
+    if (currentProjectID() === projectID) select(join(parent, first));
+  } catch (err) {
+    if (!controller.signal.aborted) fail(err);
+  } finally {
+    copying.value = null;
+  }
+}
+
 defineExpose({
   focus: () => filter.value?.inputRef?.focus(),
   show: select,
@@ -284,12 +359,35 @@ const rows = computed(() => {
     <p v-if="S.treeTruncated" class="shrink-0 px-1 text-xs text-dimmed">
       Too many files to list. Showing part of this folder; it does not update as files change.
     </p>
+    <div v-if="copying" class="flex shrink-0 items-center gap-1.5 px-1 text-xs text-dimmed">
+      <UIcon name="i-lucide-loader-circle" class="size-3 shrink-0 animate-spin" />
+      <span class="truncate tabular-nums">
+        Copying {{ copying.count }} {{ copying.count === 1 ? "file" : "files" }}<template v-if="copying.total"> · {{ percent }}%</template>
+      </span>
+      <UButton
+        class="ml-auto"
+        size="xs"
+        color="neutral"
+        variant="ghost"
+        icon="i-lucide-x"
+        aria-label="Stop copying"
+        title="Stop copying"
+        @click="copying.controller.abort()"
+      />
+    </div>
 
     <!-- The trigger is the pane itself, as-child so it adds no element: a
          right click that misses every row still offers New file, and the
          empty states are inside it for the same reason. -->
     <UContextMenu :items="menu" :ui="{ content: 'w-56' }" :content="{ onCloseAutoFocus: releaseFocus }">
-      <div class="min-h-0 flex-1" @contextmenu="aim">
+      <div
+        class="min-h-0 flex-1 rounded-[var(--ui-radius)]"
+        :class="dropAt === '' ? 'ring-1 ring-primary ring-inset bg-primary/5' : ''"
+        @contextmenu="aim"
+        @dragover="dragOver"
+        @dragleave="dragLeave"
+        @drop="drop"
+      >
         <p v-if="!S.tree.length && !S.treeDirs.length" class="px-3 py-5 text-center text-dimmed">
           {{ S.owner ? "No files." : "Pick a project or task to browse its files." }}
         </p>
@@ -309,7 +407,9 @@ const rows = computed(() => {
             <button
               type="button"
               class="flex w-full min-w-0 select-none items-center gap-1 rounded-[var(--ui-radius)] px-1 py-0.5 text-left hover:bg-elevated hover:text-highlighted"
-              :class="selected === row.node.path
+              :class="dropAt && dropAt === row.node.path
+                ? 'bg-primary/10 text-highlighted ring-1 ring-primary ring-inset'
+                : selected === row.node.path
                 ? 'bg-primary/10 text-highlighted'
                 : row.node.ig
                   ? 'text-dimmed hover:bg-elevated hover:text-highlighted'

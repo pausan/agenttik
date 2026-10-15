@@ -27,6 +27,7 @@ import { compactModelLabel as compact } from "./model-labels.js";
 import { openEventStream } from "./eventStream.js";
 import { htmlPreviewRoot } from "./html-preview.js";
 import { promptImages, promptText, withImages } from "./prompt-images.js";
+import { uploadDrop } from "./upload.js";
 
 export { DEFAULT_SCHEDULE, EVERY, WEEKDAYS, intervalMinutes, atMinute, scheduleForm, scheduleLabel } from "./schedules.js";
 
@@ -2862,6 +2863,17 @@ export async function deleteEntry(path) {
   await api("DELETE", `/api/projects/${id}/entry?path=${encodeURIComponent(path)}`);
   for (const tab of fileTabsUnder(id, path)) await closeTab(tab.id, false, true, false);
   await refreshFiles();
+}
+
+/* Files dropped on the Tree from the desktop; see upload.js. The listing is
+   re-read however the copy ended, since a stopped one has still copied what
+   it got through. */
+export async function copyDropped(projectID, parent, dropped, options) {
+  try {
+    await uploadDrop(projectID, parent, dropped, options);
+  } finally {
+    refreshFiles().catch(fail);
+  }
 }
 
 export async function revertFile(path, projectID, repository) {

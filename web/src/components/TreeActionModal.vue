@@ -15,6 +15,7 @@ const KINDS = {
   rename: { title: "Rename", confirm: "Rename", label: "New name" },
   revert: { title: "Revert changes", confirm: "Revert" },
   delete: { title: "Delete", confirm: "Delete" },
+  replace: { title: "Replace files", confirm: "Replace" },
 };
 
 const name = ref("");
@@ -52,7 +53,12 @@ async function submit() {
   busy.value = true;
   try {
     let landed = now.path;
-    if (now.kind === "revert") await revertFile(now.path, now.projectID, now.repository);
+    // A dropped copy runs on in the Tree's own progress line; the dialog
+    // only asks.
+    if (now.kind === "replace") {
+      now.run();
+      landed = "";
+    } else if (now.kind === "revert") await revertFile(now.path, now.projectID, now.repository);
     else if (now.kind === "delete") await deleteEntry(now.path);
     else if (now.kind === "rename") landed = await renameEntry(now.path, name.value);
     else {
@@ -94,6 +100,15 @@ async function submit() {
           in <span>{{ parent || "the project folder" }}</span>
         </p>
       </template>
+      <template v-else-if="at.kind === 'replace'">
+        <p class="text-muted">
+          {{ at.paths.length === 1 ? "This file already exists" : `These ${at.paths.length} files already exist` }}
+          and will be overwritten by the dropped copy. It cannot be undone.
+        </p>
+        <ul class="mt-2 max-h-40 overflow-y-auto font-mono text-xs text-highlighted">
+          <li v-for="path in at.paths" :key="path" class="path-clip truncate"><span>{{ path }}</span></li>
+        </ul>
+      </template>
       <template v-else>
         <p class="path-clip truncate font-mono text-xs text-highlighted">
           <span>{{ at.path }}</span>
@@ -114,7 +129,7 @@ async function submit() {
       <div class="flex w-full justify-end gap-2">
         <UButton color="neutral" variant="ghost" label="Cancel" @click="action = null" />
         <UButton
-          :color="['delete', 'revert'].includes(at.kind) ? 'error' : 'primary'"
+          :color="['delete', 'revert', 'replace'].includes(at.kind) ? 'error' : 'primary'"
           :label="kind?.confirm"
           :loading="busy"
           @click="submit"

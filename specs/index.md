@@ -98,6 +98,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [059](059-file-information.md) | File byte sizes, image dimensions and color depth in the central header |
 | [027](027-ignored-files-in-the-tree.md) | Alphabetical Tree listings up to a 200,000-entry cap, ignored files gray |
 | [046](046-tree-file-actions.md) | Tree file actions, copying paths and adding paths to prompts |
+| [095](095-tree-file-drop.md) | Copying desktop files into the Tree by drag and drop, locally and on remotes |
 | [048](048-open-in-system-browser.md) | Opening a project folder or a Tree row on the desktop itself |
 
 ## Settings, shell and packaging

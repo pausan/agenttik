@@ -10,6 +10,9 @@ asks first: three ask for a name, the fourth asks for a yes. All four are
 `TreeActionModal`, because three of them differ only in their wording and a
 component each would have been four copies of the same dialog.
 
+Files dragged in from the desktop are copied where they are dropped; see
+[095](095-tree-file-drop.md).
+
 ## Reverting changes
 
 Changed files in the Tree and file lists offer **Revert changes…** on right click.

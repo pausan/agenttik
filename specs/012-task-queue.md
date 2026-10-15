@@ -45,6 +45,22 @@ The sidebar keeps its own **Stop** for a queued task
 ([021](021-stop-active-tasks.md)); running now and dropping the queue are
 different intents and both are worth one click.
 
+## Deleting a queued item
+
+Each waiting bubble has a trash button that deletes just that prompt. It
+leaves the running turn, the remaining queue and the prompt-box draft alone.
+Deleted text is removed from the queue rather than saved in the transcript.
+The button is disabled until the server has accepted the prompt and while
+another queue action is in progress. A failed deletion keeps the bubble and
+shows the error.
+
+`DELETE /api/sessions/:id/queue/:queuedID` checks that the item belongs to the
+session and holds the project's dispatch lock while removing it. An item
+already claimed by a turn returns 404. Queue counts and other windows refresh
+through the usual session-change event. Removing the last provider retry
+returns a waiting task to idle; removing the last prompt from an unstarted
+scheduled run closes that run as interrupted without spending its counter.
+
 ## Reconciling the queue
 
 `GET /api/sessions/:id` carries the queue, so opening a task or reloading the

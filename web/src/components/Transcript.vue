@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, provide, ref, watch } from "vue";
 
 import {
+  deleteQueued,
   focusPrompt,
   forceQueued,
   openProjectPrompt,
@@ -203,6 +204,7 @@ const queued = computed(() => [
 ]);
 const forcing = ref(0);
 const changing = ref(0);
+const deleting = ref(0);
 const editing = ref(0); // id of the queued prompt whose text is being edited, 0 for none
 const editDraft = ref("");
 const editBox = ref(null);
@@ -259,7 +261,7 @@ async function setQueuedChoice(q, provider, model, effort, accountID) {
    (Message.vue), just without that editor's warnings about rewinding the
    agent or the disk: nothing has run yet, so there is nothing to undo. */
 async function startEdit(q) {
-  if (q.pending || forcing.value || changing.value || editing.value) return;
+  if (q.pending || forcing.value || changing.value || deleting.value || editing.value) return;
   editing.value = q.id;
   editDraft.value = q.prompt;
   await nextTick();
@@ -321,6 +323,19 @@ async function force(q) {
     /* forceQueued has already shown the failure */
   } finally {
     forcing.value = 0;
+  }
+}
+
+async function removeQueued(q) {
+  if (q.pending || forcing.value || changing.value || deleting.value || editing.value) return;
+  deleting.value = q.id;
+  try {
+    await deleteQueued(q);
+    focusPrompt();
+  } catch {
+    /* deleteQueued has already shown the failure */
+  } finally {
+    deleting.value = 0;
   }
 }
 
@@ -564,7 +579,7 @@ watch(
               variant="ghost"
               size="xs"
               icon="i-lucide-pencil"
-              :disabled="q.pending || forcing !== 0 || changing !== 0 || editing !== 0"
+              :disabled="q.pending || forcing !== 0 || changing !== 0 || deleting !== 0 || editing !== 0"
               aria-label="Edit queued prompt"
               title="Edit this prompt"
               @click="startEdit(q)"
@@ -575,7 +590,7 @@ watch(
               :model="q.model"
               :effort="q.effort || ''"
               size="xs"
-              :disabled="q.pending || forcing !== 0 || changing !== 0 || editing !== 0"
+              :disabled="q.pending || forcing !== 0 || changing !== 0 || deleting !== 0 || editing !== 0"
               :loading="changing === q.id"
               title="Change queued model"
               @change="chooseQueuedModel(q, $event)"
@@ -586,9 +601,20 @@ watch(
               size="xs"
               :label="sendNowLabel"
               :loading="forcing === q.id"
-              :disabled="q.pending || forcing !== 0 || changing !== 0 || editing !== 0"
+              :disabled="q.pending || forcing !== 0 || changing !== 0 || deleting !== 0 || editing !== 0"
               :title="sendNowHint"
               @click="force(q)"
+            />
+            <UButton
+              color="error"
+              variant="ghost"
+              size="xs"
+              icon="i-lucide-trash-2"
+              :loading="deleting === q.id"
+              :disabled="q.pending || forcing !== 0 || changing !== 0 || deleting !== 0 || editing !== 0"
+              aria-label="Delete queued prompt"
+              title="Delete this queued prompt"
+              @click="removeQueued(q)"
             />
           </div>
         </template>

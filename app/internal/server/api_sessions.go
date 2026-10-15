@@ -441,6 +441,18 @@ func (s *Server) enqueueMessage(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"queued": queued, "queue_count": len(queued)})
 }
 
+func (s *Server) deleteQueuedMessage(c *fiber.Ctx) error {
+	queuedID, err := strconv.ParseInt(c.Params("queuedID"), 10, 64)
+	if err != nil || queuedID <= 0 {
+		return badRequest("queued id is required")
+	}
+	if err := s.runner.DeleteQueued(c.Params("id"), queuedID); err != nil {
+		return err
+	}
+	s.sessionQueueChanged(c.Params("id"))
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
 // updateQueuedMessage changes the text or model choice held by one prompt
 // that has not started yet. It deliberately does not change the session's
 // picker: the queued choice becomes active only when the runner claims that

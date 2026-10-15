@@ -452,7 +452,7 @@ func (s *Store) SetQueuedMessage(id int64, prompt, provider string, accountID in
 	return nil
 }
 
-// RemoveQueuedMessage is called immediately after its turn has claimed it.
+// RemoveQueuedMessage drops a prompt after its turn claims it or the user deletes it.
 func (s *Store) RemoveQueuedMessage(id int64) error {
 	_, err := s.db.Exec(`DELETE FROM queued_messages WHERE id = ?`, id)
 	if err != nil {

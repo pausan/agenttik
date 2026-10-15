@@ -3529,6 +3529,22 @@ export async function updateQueuedPrompt(q, prompt) {
   return patchQueued(q, { prompt });
 }
 
+export async function deleteQueued(q) {
+  const tab = S.owner;
+  if (tab?.kind !== "session" || !q?.id || q.pending) return;
+  try {
+    await api("DELETE", `/api/sessions/${tab.sessionID}/queue/${q.id}`);
+    tab.detail.queued = tab.detail.queued.filter((item) => item.id !== q.id);
+    tab.detail.session.queue_count = tab.detail.queued.length + (tab.detail.pendingQueued || []).length;
+    await syncMessages(tab, true);
+    await Promise.all([refreshProjects(), refreshSessions()]);
+    reloadProjects();
+  } catch (e) {
+    fail(e);
+    throw e;
+  }
+}
+
 /* The chord that opens that editor is pressed where the caret already is —
    the prompt box, or the transcript above it — and neither owns the editor,
    so the request travels as a counter the transcript watches, the same shape

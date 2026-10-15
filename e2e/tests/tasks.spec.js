@@ -261,6 +261,71 @@ test("a second prompt queues behind a running turn and runs in order", async ({ 
   await expect(page.getByText("Queued", { exact: true })).toHaveCount(0);
 });
 
+test("deleting a queued prompt keeps the running turn, other prompts and draft", async ({ page, agenttik }) => {
+  await addProject(page);
+  await openProject(page);
+  await newTask(page);
+  await pickModel(page);
+  await sendPrompt(page, "@wait 60000");
+  await expect(page.getByText("running", { exact: true })).toBeVisible();
+
+  for (const prompt of ["same queued comment", "same queued comment", "keep this comment"]) {
+    await page.getByPlaceholder("Ask the agent…").fill(prompt);
+    await page.getByRole("button", { name: "More prompt actions" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Enqueue", exact: true }).click();
+  }
+  const bubbles = page.getByLabel("Queued prompt", { exact: true });
+  await expect(bubbles).toHaveCount(3);
+  const [session] = await (await page.request.get(`${agenttik.url}/api/sessions`)).json();
+  const detailURL = `${agenttik.url}/api/sessions/${session.id}`;
+  const before = await (await page.request.get(detailURL)).json();
+  await page.getByPlaceholder("Ask the agent…").fill("My next draft");
+
+  // A rejected deletion must leave the original item available to retry.
+  // fail() logs handled errors too; allow only this deliberate failure.
+  await page.evaluate(() => {
+    const error = console.error.bind(console);
+    console.error = (...args) => {
+      if (args[0]?.message !== "Deletion unavailable") error(...args);
+    };
+  });
+  const deleteURL = `${detailURL}/queue/${before.queued[1].id}`;
+  await page.route(deleteURL, (route) => route.fulfill({
+    status: 500, contentType: "application/json", body: JSON.stringify({ error: "Deletion unavailable" }),
+  }));
+  await bubbles.nth(1).getByRole("button", { name: "Delete queued prompt" }).click();
+  await expect(page.getByText("Deletion unavailable", { exact: true })).toBeVisible();
+  await expect(bubbles).toHaveCount(3);
+  await expect(bubbles.nth(1).getByRole("button", { name: "Delete queued prompt" })).toBeEnabled();
+  await page.unroute(deleteURL);
+
+  await bubbles.nth(1).getByRole("button", { name: "Delete queued prompt" }).click();
+  await expect(bubbles).toHaveCount(2);
+  await expect(page.getByPlaceholder("Ask the agent…")).toHaveValue("My next draft");
+  await expect(page.getByPlaceholder("Ask the agent…")).toBeFocused();
+  await expect(page.getByText("running", { exact: true })).toBeVisible();
+  const after = await (await page.request.get(detailURL)).json();
+  expect(after.queued.map((q) => q.id)).toEqual([before.queued[0].id, before.queued[2].id]);
+  expect(after.session.queue_count).toBe(2);
+  expect(after.messages).toEqual(before.messages);
+
+  await page.reload();
+  await expect(bubbles).toHaveCount(2);
+  await expect(bubbles.nth(0)).toContainText("same queued comment");
+  await expect(bubbles.nth(1)).toContainText("keep this comment");
+  await expect(page.getByPlaceholder("Ask the agent…")).toHaveValue("My next draft");
+  for (const remaining of [1, 0]) {
+    await bubbles.first().getByRole("button", { name: "Delete queued prompt" }).click();
+    await expect(bubbles).toHaveCount(remaining);
+  }
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await expect(page.getByText("idle", { exact: true })).toBeVisible();
+  const finished = await (await page.request.get(detailURL)).json();
+  expect(finished.session.queue_count).toBe(0);
+  expect(finished.turns).toHaveLength(1);
+  expect(finished.messages.filter((m) => m.role === "user").map((m) => m.content)).toEqual(["@wait 60000"]);
+});
+
 test("Stop keeps an unstarted task's text after reload without replacing its draft", async ({ page }) => {
   await addProject(page);
   await openProject(page);

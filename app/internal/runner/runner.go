@@ -493,6 +493,51 @@ func (r *Runner) unarchiveTask(sess *store.Session) error {
 	return nil
 }
 
+// DeleteQueued removes one waiting prompt under the dispatch lock, so a
+// successful deletion cannot race a scheduler that has already claimed it.
+func (r *Runner) DeleteQueued(sessionID string, queuedID int64) error {
+	sess, err := r.store.GetSession(sessionID)
+	if err != nil {
+		return err
+	}
+	lock := r.dispatchLock(sess.ProjectID)
+	lock.Lock()
+	defer lock.Unlock()
+
+	queued, err := r.store.GetQueuedMessage(queuedID)
+	if err != nil {
+		return err
+	}
+	if queued.SessionID != sessionID {
+		return store.ErrNotFound
+	}
+	if err := r.store.RemoveQueuedMessage(queuedID); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	if r.forced[sessionID] == queuedID {
+		delete(r.forced, sessionID)
+	}
+	_, running := r.active[sessionID]
+	r.mu.Unlock()
+	count, err := r.store.QueueCount(sessionID)
+	if err != nil {
+		return err
+	}
+	if !running && count == 0 {
+		if sess.Status == store.StatusWaiting {
+			if err := r.store.SetSessionStatus(sessionID, store.StatusIdle); err != nil {
+				return err
+			}
+		}
+		if sess.ScheduleID != 0 {
+			r.closeUnstartedScheduleRun(sessionID, store.RunInterrupted)
+			r.publishSchedule(sess.ProjectID)
+		}
+	}
+	return nil
+}
+
 // ForceQueued runs one of a session's waiting prompts now instead of when the
 // project's queue reaches it. Turns elsewhere in the project keep running: the
 // prompt starts beside them, since a session waiting behind another session is

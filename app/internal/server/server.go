@@ -313,6 +313,7 @@ func (s *Server) routes() {
 	api.Post("/sessions/:id/messages/:message/edit", s.editMessage)
 	api.Post("/sessions/:id/queue", s.enqueueMessage)
 	api.Patch("/sessions/:id/queue/:queuedID", s.updateQueuedMessage)
+	api.Delete("/sessions/:id/queue/:queuedID", s.deleteQueuedMessage)
 	api.Post("/sessions/:id/queue/force", s.forceQueuedMessage)
 	api.Post("/sessions/:id/stop", s.stopSession)
 	api.Get("/approvals", s.listApprovals)

@@ -394,6 +394,16 @@ ALTER TABLE sessions ADD COLUMN anchor_message_id INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE sessions ADD COLUMN anchor_quote TEXT NOT NULL DEFAULT '';
 ALTER TABLE sessions ADD COLUMN origin_id TEXT NOT NULL DEFAULT '';
 CREATE INDEX idx_sessions_parent ON sessions(parent_id) WHERE parent_id != '';`,
+	// Machines that signed in to the exposed server with its password and
+	// sign in with their key from then on. See specs/094-trusted-machines.md.
+	`CREATE TABLE trusted_machines (
+    public_key   TEXT PRIMARY KEY,
+    machine_id   TEXT NOT NULL DEFAULT '',
+    name         TEXT NOT NULL DEFAULT '',
+    address      TEXT NOT NULL DEFAULT '',
+    added_at     INTEGER NOT NULL,
+    last_seen_at INTEGER NOT NULL
+);`,
 }
 
 // migrate reports whether it created the schema in an empty database.

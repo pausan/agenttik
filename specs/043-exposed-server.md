@@ -50,7 +50,9 @@ The authenticator seed is shown as selectable text to copy, as a QR to scan,
 and as a field to type into: a seed that already exists somewhere can be
 pasted in rather than paired afresh, and the button beside it rolls a random
 one for a seed that has been seen by the wrong person. Changing either the
-seed, password, or either switch signs every browser out.
+seed, password, or either switch signs every browser out. Trusted agenttik
+machines sign in again with their key; the pane lists them and removes them
+([094](094-trusted-machines.md)).
 
 ## Choices
 

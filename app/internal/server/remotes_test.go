@@ -75,7 +75,7 @@ func TestRemoteProfilesForwardAPIAndPersist(t *testing.T) {
 	}
 
 	// A new manager over the same directory finds the remote without asking it.
-	again := newRemoteManager(localStore.Dir(), localStore.MachineID)
+	again := newRemoteManager(localStore.Dir(), localStore.MachineID, localStore.ServerName)
 	if r, err := again.get(id); err != nil || r.Name == "" || len(r.Profiles) != 1 {
 		t.Fatalf("saved remote: %+v %v", r, err)
 	}

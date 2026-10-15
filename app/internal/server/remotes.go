@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"encoding/json"
 	"errors"
 	"html"
@@ -21,6 +22,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/pausan/agenttik/app/internal/netauth"
 	"github.com/pausan/agenttik/app/internal/remote"
 )
 
@@ -59,7 +61,9 @@ type remoteScan struct {
 
 type remoteManager struct {
 	path     string
+	keyPath  string
 	self     func() (string, error)
+	selfName func() (string, error)
 	networks func() ([]netip.Prefix, error)
 	client   *http.Client
 
@@ -74,13 +78,23 @@ type remoteManager struct {
 	scan         *remoteScan
 	discoveryMu  sync.Mutex
 	discovery    *machineDiscovery
+
+	// keyMu serialises key sign-ins, so requests that all hit an expired
+	// session sign in once. keyRefused remembers remotes that refused the
+	// key until a password sign-in trusts it again.
+	keyMu      sync.Mutex
+	key        ed25519.PrivateKey
+	keyRefused map[string]bool
 }
 
-func newRemoteManager(dir string, self func() (string, error)) *remoteManager {
+func newRemoteManager(dir string, self, selfName func() (string, error)) *remoteManager {
 	return &remoteManager{
-		path:     filepath.Join(dir, "remotes.json"),
-		self:     self,
-		networks: remote.LocalNetworks,
+		path:       filepath.Join(dir, "remotes.json"),
+		keyPath:    filepath.Join(dir, "machine.key"),
+		self:       self,
+		selfName:   selfName,
+		keyRefused: map[string]bool{},
+		networks:   remote.LocalNetworks,
 		// No overall timeout: event streams and videos stay open. Redirects
 		// are answered to the UI rather than followed with its cookies.
 		client: &http.Client{
@@ -170,7 +184,101 @@ func (r savedRemote) view() remoteView {
 }
 
 // request calls the remote with its saved session. Cookies it sets are kept.
+// When the remote asks for sign-in, this machine signs in with its key and
+// tries once more; body must then be seekable, as every caller's is.
 func (m *remoteManager) request(ctx context.Context, r savedRemote, method, path string, body io.Reader, header http.Header) (*http.Response, error) {
+	res, err := m.send(ctx, r, method, path, body, header)
+	if err != nil || res.StatusCode != http.StatusUnauthorized || strings.HasPrefix(path, "/__auth/") {
+		return res, err
+	}
+	seeker, rewindable := body.(io.Seeker)
+	if body != nil && !rewindable {
+		return res, nil
+	}
+	fresh, ok := m.keySignIn(ctx, r)
+	if !ok {
+		return res, nil
+	}
+	res.Body.Close()
+	if seeker != nil {
+		if _, err := seeker.Seek(0, io.SeekStart); err != nil {
+			return nil, err
+		}
+	}
+	return m.send(ctx, fresh, method, path, body, header)
+}
+
+// keySignIn signs in to a remote that trusts this machine's key, answering
+// the remote with its new session. A remote that refuses is not asked again
+// until a password sign-in, so a revoked machine does not keep knocking.
+func (m *remoteManager) keySignIn(ctx context.Context, r savedRemote) (savedRemote, bool) {
+	m.keyMu.Lock()
+	defer m.keyMu.Unlock()
+	current, err := m.get(r.ID)
+	if err != nil {
+		return r, false
+	}
+	if !maps.Equal(current.Cookies, r.Cookies) {
+		return current, true // another request already signed in
+	}
+	if m.keyRefused[r.ID] {
+		return r, false
+	}
+	key, err := m.machineKey()
+	if err != nil {
+		return r, false
+	}
+	res, err := m.send(ctx, r, "GET", netauth.ChallengePath, nil, http.Header{"Accept": {"application/json"}})
+	if err != nil {
+		return r, false
+	}
+	var challenge struct {
+		Nonce string `json:"nonce"`
+	}
+	decodeErr := json.NewDecoder(io.LimitReader(res.Body, 4096)).Decode(&challenge)
+	res.Body.Close()
+	if res.StatusCode != http.StatusOK || decodeErr != nil || challenge.Nonce == "" {
+		m.keyRefused[r.ID] = res.StatusCode < 500
+		return r, false
+	}
+	id, _ := m.self()
+	name, _ := m.selfName()
+	body, _ := json.Marshal(map[string]string{
+		"key":       netauth.EncodeKey(key.Public().(ed25519.PublicKey)),
+		"nonce":     challenge.Nonce,
+		"signature": netauth.Sign(key, r.ID, challenge.Nonce),
+		"id":        id,
+		"name":      name,
+	})
+	res, err = m.send(ctx, r, "POST", netauth.KeyPath, bytes.NewReader(body), http.Header{"Content-Type": {"application/json"}})
+	if err != nil {
+		return r, false
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusNoContent {
+		m.keyRefused[r.ID] = res.StatusCode < 500
+		return r, false
+	}
+	current, err = m.get(r.ID)
+	return current, err == nil
+}
+
+// machineKey is this machine's own key, made the first time it is needed.
+// Callers hold keyMu.
+func (m *remoteManager) machineKey() (ed25519.PrivateKey, error) {
+	if m.key == nil {
+		key, err := netauth.LoadOrCreateKey(m.keyPath)
+		if err != nil {
+			return nil, err
+		}
+		m.key = key
+	}
+	return m.key, nil
+}
+
+// send makes one request with the saved session and keeps the cookies the
+// remote sets.
+func (m *remoteManager) send(ctx context.Context, r savedRemote, method, path string, body io.Reader, header http.Header) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, r.Address+path, body)
 	if err != nil {
 		return nil, err
@@ -400,6 +508,20 @@ func (s *Server) signInRemote(c *fiber.Ctx) error {
 		return badRequest("invalid sign-in")
 	}
 	form := url.Values{"password": {body.Password}, "code": {body.Code}, "next": {"/"}}
+	// Naming this machine's key asks the remote to trust it from now on.
+	m.keyMu.Lock()
+	key, err := m.machineKey()
+	m.keyMu.Unlock()
+	if err != nil {
+		return err
+	}
+	form.Set("key", netauth.EncodeKey(key.Public().(ed25519.PublicKey)))
+	if id, err := m.self(); err == nil {
+		form.Set("id", id)
+	}
+	if name, err := m.selfName(); err == nil {
+		form.Set("name", name)
+	}
 	ctx, cancel := context.WithTimeout(c.Context(), 10*time.Second)
 	defer cancel()
 	res, err := m.request(ctx, r, "POST", "/__auth/login", strings.NewReader(form.Encode()),
@@ -416,6 +538,9 @@ func (s *Server) signInRemote(c *fiber.Ctx) error {
 		}
 		return fiber.NewError(401, reason)
 	}
+	m.keyMu.Lock()
+	delete(m.keyRefused, r.ID)
+	m.keyMu.Unlock()
 	return c.JSON(m.connect(c.Context(), r.ID))
 }
 

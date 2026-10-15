@@ -62,11 +62,22 @@ func (c Credentials) ready() bool {
 type Gate struct {
 	read func() Credentials
 
+	serverID string
+	trust    Trust
+
 	mu         sync.Mutex
-	sessions   map[string]time.Time // token -> when it goes stale
+	sessions   map[string]session   // token -> its deadline and key
+	nonces     map[string]time.Time // key sign-in challenge -> when it expires
 	failures   map[string]*failure  // client address -> recent bad attempts
 	usedSteps  map[uint64]bool      // accepted counters for the current seed
 	usedSecret string
+}
+
+// session is one signed-in client. key is the trusted machine that opened
+// it, blank for a browser, so removing that machine can end it.
+type session struct {
+	deadline time.Time
+	key      string
 }
 
 type failure struct {
@@ -79,7 +90,8 @@ type failure struct {
 func New(read func() Credentials) *Gate {
 	return &Gate{
 		read:     read,
-		sessions: map[string]time.Time{},
+		sessions: map[string]session{},
+		nonces:   map[string]time.Time{},
 		failures: map[string]*failure{},
 	}
 }
@@ -105,6 +117,12 @@ func (g *Gate) Wrap(next http.Handler) http.Handler {
 		case logoutPath:
 			g.logout(w, r)
 			return
+		case ChallengePath:
+			g.challengeKey(w)
+			return
+		case KeyPath:
+			g.loginKey(w, r, creds)
+			return
 		}
 		if g.authorized(r) {
 			next.ServeHTTP(w, r)
@@ -117,7 +135,8 @@ func (g *Gate) Wrap(next http.Handler) http.Handler {
 // Revoke ends every open browser session. Changing the password or the seed
 // calls it: whoever was already logged in got in with a secret that no longer
 // exists, and the point of changing one is usually that somebody else knows
-// it.
+// it. Trusted machines lose their sessions too, but stay trusted: they sign
+// in again with their key, which no changed secret has exposed.
 func (g *Gate) Revoke() {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -134,15 +153,16 @@ func (g *Gate) authorized(r *http.Request) bool {
 	now := time.Now()
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	deadline, ok := g.sessions[c.Value]
+	s, ok := g.sessions[c.Value]
 	if !ok {
 		return false
 	}
-	if now.After(deadline) {
+	if now.After(s.deadline) {
 		delete(g.sessions, c.Value)
 		return false
 	}
-	g.sessions[c.Value] = now.Add(idleTimeout)
+	s.deadline = now.Add(idleTimeout)
+	g.sessions[c.Value] = s
 	return true
 }
 
@@ -191,16 +211,26 @@ func (g *Gate) login(w http.ResponseWriter, r *http.Request, creds Credentials) 
 		return
 	}
 
-	token, err := newToken()
-	if err != nil {
+	g.mu.Lock()
+	delete(g.failures, clientAddr(r))
+	g.mu.Unlock()
+	if err := g.startSession(w, g.remember(r)); err != nil {
 		http.Error(w, "could not start a session", http.StatusInternalServerError)
 		return
 	}
-	g.mu.Lock()
-	g.sessions[token] = time.Now().Add(idleTimeout)
-	delete(g.failures, clientAddr(r))
-	g.mu.Unlock()
+	http.Redirect(w, r, next, http.StatusSeeOther)
+}
 
+// startSession mints a session token and hands it over as the cookie. key is
+// the trusted machine it belongs to, blank for a browser.
+func (g *Gate) startSession(w http.ResponseWriter, key string) error {
+	token, err := newToken()
+	if err != nil {
+		return err
+	}
+	g.mu.Lock()
+	g.sessions[token] = session{deadline: time.Now().Add(idleTimeout), key: key}
+	g.mu.Unlock()
 	http.SetCookie(w, &http.Cookie{
 		Name:     cookieName,
 		Value:    token,
@@ -209,7 +239,7 @@ func (g *Gate) login(w http.ResponseWriter, r *http.Request, creds Credentials) 
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(idleTimeout / time.Second),
 	})
-	http.Redirect(w, r, next, http.StatusSeeOther)
+	return nil
 }
 
 // logout drops this browser's session and sends it back to the form.

@@ -143,10 +143,13 @@ func New(s *store.Store, reg *agent.Registry, r *runner.Runner) *Server {
 		panic(err)
 	}
 	srv.auth = netauth.New(srv.credentials)
+	if id, err := s.MachineID(); err == nil {
+		srv.auth.UseTrust(id, trustList{s})
+	}
 	srv.search = smartsearch.New(filepath.Join(s.Dir(), "smart-search"), func() ([]store.Session, error) {
 		return s.ListSessions(store.SessionFilter{})
 	})
-	srv.remotes = newRemoteManager(s.Dir(), s.MachineID)
+	srv.remotes = newRemoteManager(s.Dir(), s.MachineID, s.ServerName)
 	app.Use(routeHTMLScope)
 	app.Use(srv.routeRemote)
 	app.Use(srv.routeProfile)
@@ -258,6 +261,8 @@ func (s *Server) routes() {
 	api.Post("/server/auth/totp", s.resetServerTOTP)
 	api.Get("/server/auth/totp.png", s.serverTOTPQR)
 	api.Get("/server/auth/code", s.serverTOTPCode)
+	api.Get("/server/trusted", s.listTrustedMachines)
+	api.Delete("/server/trusted/:key", s.forgetTrustedMachine)
 	api.Put("/server/tunnel", s.putServerTunnel)
 	api.Get("/orchestrator", s.getOrchestratorConfig)
 	api.Put("/orchestrator", s.putOrchestratorConfig)

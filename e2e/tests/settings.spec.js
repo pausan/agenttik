@@ -124,6 +124,32 @@ test("authentication enables before a password and the current code refreshes", 
   await expect(dialog.getByLabel("Current code")).toBeHidden();
 });
 
+test("trusted machines are listed and can be removed", async ({ page }) => {
+  const config = { available: true, enabled: true, host: "0.0.0.0", port: 7717, listening: true, addr: "0.0.0.0:7717",
+    auth_enabled: true, totp_enabled: true, has_password: true, totp_secret: "GEZDGNBVGY3TQOJQ" };
+  let machines = [{ key: "a2V5LW9uZQ", fingerprint: "6b65792d6f6e65", machine_id: "m1", name: "laptop",
+    address: "192.168.1.20", added_at: Date.now() - 86400000, last_seen_at: Date.now() - 120000 }];
+  const removed = [];
+  await page.route("**/api/server", (route) => route.fulfill({ json: config }));
+  await page.route("**/api/server/auth/totp.png?*", (route) => route.fulfill({ status: 204 }));
+  await page.route("**/api/server/auth/code", (route) => route.fulfill({ json: { code: "123456", refresh_after_ms: 30000 } }));
+  await page.route("**/api/server/trusted", (route) => route.fulfill({ json: { machines } }));
+  await page.route("**/api/server/trusted/*", async (route) => {
+    expect(route.request().method()).toBe("DELETE");
+    removed.push(route.request().url().split("/").pop());
+    machines = [];
+    await route.fulfill({ status: 204 });
+  });
+  await openSettings(page, "Server");
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText("Trusted machines", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("laptop", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("192.168.1.20 · seen 2m ago", { exact: false })).toBeVisible();
+  await dialog.getByRole("button", { name: "Remove laptop" }).click();
+  await expect(dialog.getByText("None yet.", { exact: true })).toBeVisible();
+  expect(removed).toEqual(["a2V5LW9uZQ"]);
+});
+
 test("new item position defaults to top and remembers bottom", async ({ page }) => {
   await openSettings(page);
   const dialog = page.getByRole("dialog");

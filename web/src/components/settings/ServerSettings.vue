@@ -16,7 +16,7 @@ import {
   setServerConfig,
   setServerTunnel,
 } from "../../store";
-import { api } from "../../api";
+import { ago, api } from "../../api";
 import { fuzzyAny } from "../../fuzzy";
 
 const props = defineProps({
@@ -29,7 +29,8 @@ const rows = computed(() =>
   fuzzyAny(
     ["Server", "name", "instance", "network", "expose", "browser", "host", "port", "0.0.0.0", "127.0.0.1", "localhost", "lan",
      "login", "password", "totp", "2fa", "authenticator", "qr", "seed", "secure",
-     "public", "internet", "tunnel", "cloudflare", "trycloudflare", "https"],
+     "public", "internet", "tunnel", "cloudflare", "trycloudflare", "https",
+     "trusted", "machines", "keys", "revoke"],
     props.filter,
   ) !== null
     ? [1]
@@ -305,6 +306,33 @@ async function copyTunnel() {
   window.setTimeout(() => (tunnelCopied.value = false), 1200);
 }
 
+/* Machines that signed in here with the password and sign in with their key
+   from then on. Read while the pane shows the lock; removing one ends its
+   session, so its next request asks for the password again. */
+const trusted = ref([]);
+async function loadTrusted() {
+  try {
+    trusted.value = (await api("GET", "/api/server/trusted")).machines;
+  } catch (e) {
+    fail(e);
+  }
+}
+watch(
+  () => [props.active, rows.value.length, S.serverConfig.available, S.serverConfig.auth_enabled],
+  ([active, visible, available, on]) => {
+    if (active && visible && available && on) loadTrusted();
+  },
+  { immediate: true },
+);
+async function forgetTrusted(machine) {
+  try {
+    await api("DELETE", `/api/server/trusted/${encodeURIComponent(machine.key)}`);
+  } catch (e) {
+    fail(e);
+  }
+  await loadTrusted();
+}
+
 /* The QR is an endpoint rather than a data URI, so the seed itself is the
    cache key: it changes exactly when the picture has to. */
 const qr = computed(() =>
@@ -495,6 +523,30 @@ const qr = computed(() =>
                 </p>
               </div>
             </div>
+          </div>
+
+          <div class="mt-4 text-xs font-medium text-muted">Trusted machines</div>
+          <p class="mt-0.5 max-w-120 text-xs text-dimmed">
+            Other agenttik instances that signed in here with the password{{ S.serverConfig.totp_enabled ? " and code" : "" }}.
+            They sign in with their own key from then on, from any address. Remove one to make it sign in again.
+          </p>
+          <p v-if="!trusted.length" class="mt-1.5 text-xs text-dimmed">None yet.</p>
+          <div v-for="m in trusted" :key="m.key" class="mt-1.5 flex max-w-120 items-center gap-2 border-t border-default pt-1.5">
+            <div class="min-w-0 flex-1">
+              <div class="truncate text-sm">{{ m.name || m.machine_id || "Unnamed machine" }}</div>
+              <div class="truncate text-xs text-dimmed" :title="m.key">
+                {{ m.address }} · seen {{ ago(m.last_seen_at) }} · key <span class="font-mono">{{ m.fingerprint }}</span>
+              </div>
+            </div>
+            <UButton
+              color="error"
+              variant="ghost"
+              icon="i-lucide-trash-2"
+              size="xs"
+              :aria-label="`Remove ${m.name || m.fingerprint}`"
+              title="Remove: it must sign in with the password again"
+              @click="forgetTrusted(m)"
+            />
           </div>
         </div>
       </div>

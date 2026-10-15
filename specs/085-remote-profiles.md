@@ -99,8 +99,9 @@ code when its form has one. This instance posts the remote's own login form
 and keeps the session cookie in `remotes.json`, which is mode 0600 and never
 sent to the browser. A forwarded request that comes back 401 carries
 `X-Agenttik-Remote-Auth: required`, and the UI opens the sign-in dialog rather
-than reloading. Sessions end when the remote restarts or after its idle
-timeout.
+than reloading. The sign-in also makes the remote trust this machine's key,
+so later sessions, after a restart, an idle timeout or a new address, start
+by themselves. See [094](094-trusted-machines.md).
 
 ## When the machine is gone
 

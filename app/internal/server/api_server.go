@@ -351,3 +351,54 @@ func (s *Server) putServerName(c *fiber.Ctx) error {
 	}
 	return c.JSON(fiber.Map{"name": name})
 }
+
+// trustList keeps the gate's trusted machines in SQLite.
+type trustList struct{ store *store.Store }
+
+func (t trustList) Visit(m netauth.Machine) bool {
+	ok, err := t.store.VisitTrustedMachine(trustedMachine(m))
+	if err != nil {
+		log.Printf("server: visit trusted machine: %v", err)
+	}
+	return ok
+}
+
+func (t trustList) Add(m netauth.Machine) error {
+	return t.store.TrustMachine(trustedMachine(m))
+}
+
+func trustedMachine(m netauth.Machine) store.TrustedMachine {
+	return store.TrustedMachine{Key: m.Key, MachineID: m.ID, Name: m.Name, Address: m.Address}
+}
+
+// listTrustedMachines answers the machines that sign in with their key.
+func (s *Server) listTrustedMachines(c *fiber.Ctx) error {
+	machines, err := s.store.TrustedMachines()
+	if err != nil {
+		return err
+	}
+	type view struct {
+		store.TrustedMachine
+		Fingerprint string `json:"fingerprint"`
+	}
+	out := make([]view, 0, len(machines))
+	for _, m := range machines {
+		out = append(out, view{m, netauth.Fingerprint(m.Key)})
+	}
+	return c.JSON(fiber.Map{"machines": out})
+}
+
+// forgetTrustedMachine removes a machine and ends its sessions, so its next
+// request asks for the password again.
+func (s *Server) forgetTrustedMachine(c *fiber.Ctx) error {
+	key := c.Params("key")
+	ok, err := s.store.ForgetTrustedMachine(key)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fiber.NewError(fiber.StatusNotFound, "that machine is not trusted")
+	}
+	s.auth.RevokeKey(key)
+	return c.SendStatus(fiber.StatusNoContent)
+}

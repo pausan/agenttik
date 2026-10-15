@@ -209,6 +209,64 @@ func TestLockoutAfterRepeatedFailures(t *testing.T) {
 	}
 }
 
+// TestLockoutsGrowAndAreForgotten walks the lockout schedule on a moved
+// clock: each lockout in a row is longer, attempts during one change nothing,
+// and a quiet hour or a good sign-in starts over.
+func TestLockoutsGrowAndAreForgotten(t *testing.T) {
+	g, h := gated(testCreds())
+	now := time.Now()
+	g.now = func() time.Time { return now }
+	const addr = "10.0.0.9"
+	fail := func() {
+		for range maxFailures {
+			attempt(h, "wrong", "000000")
+		}
+	}
+	for _, step := range []struct {
+		wait time.Duration
+		says string
+	}{
+		{time.Minute, "a minute"},
+		{2 * time.Minute, "2 minutes"},
+		{5 * time.Minute, "5 minutes"},
+		{10 * time.Minute, "10 minutes"},
+		{15 * time.Minute, "15 minutes"},
+		{15 * time.Minute, "15 minutes"},
+	} {
+		fail()
+		if got := g.lockedOut(addr); got != step.wait {
+			t.Fatalf("lockout = %v, want %v", got, step.wait)
+		}
+		w := attempt(h, testPassword, liveCode(t))
+		if !strings.Contains(w.Body.String(), "Try again in "+step.says+".") {
+			t.Fatalf("want %q in %q", step.says, w.Body.String())
+		}
+		if got := g.lockedOut(addr); got != step.wait {
+			t.Fatalf("an attempt while locked out moved the lockout to %v", got)
+		}
+		now = now.Add(step.wait)
+		if got := g.lockedOut(addr); got != 0 {
+			t.Fatalf("still locked out for %v", got)
+		}
+	}
+
+	now = now.Add(forgetAfter + time.Second)
+	fail()
+	if got := g.lockedOut(addr); got != time.Minute {
+		t.Fatalf("after a quiet hour: %v, want a minute", got)
+	}
+	now = now.Add(time.Minute)
+	fail()
+	now = now.Add(2 * time.Minute)
+	if w := attempt(h, testPassword, liveCode(t)); w.Code != http.StatusSeeOther {
+		t.Fatalf("good sign-in: %d", w.Code)
+	}
+	fail()
+	if got := g.lockedOut(addr); got != time.Minute {
+		t.Fatalf("after a good sign-in: %v, want a minute", got)
+	}
+}
+
 // TestHalfSetLockOpensForNobody checks the case an interrupted setup leaves
 // behind: asking for a password that was never set must not mean asking for
 // nothing.

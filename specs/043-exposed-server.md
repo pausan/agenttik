@@ -158,7 +158,12 @@ immediately. Reusing a code shows a message to wait for the next code.
 contains its random salt, cost, and hash; plaintext passwords are never stored
 or returned by the API. bcrypt's default cost
 puts about a tenth of a second under every attempt on its own; five wrong
-ones from an address lock that address out for a quarter of an hour, counted
+ones from an address lock that address out. Each lockout in a row lasts
+longer: 1, 2, 5, 10, then 15 minutes, and 15 from then on. After each one the
+address gets five more tries. Attempts during a lockout are refused without
+counting. A good sign-in, or an hour without a failure, starts the address
+over at one minute. The form says how long is left, rounded up to whole
+minutes. Addresses are counted
 from the connection's own remote address rather than a forwarding header,
 which would otherwise be a way to get somebody else locked out. Both halves
 of the login are checked even when the first already failed, so a wrong

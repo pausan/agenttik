@@ -3,8 +3,10 @@ package netauth
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"math"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -24,12 +26,13 @@ const (
 	// again. Every request it makes pushes the deadline back.
 	idleTimeout = 12 * time.Hour
 
-	// maxFailures failed attempts from one address within failWindow lock
-	// that address out for the rest of the window. bcrypt already puts about
+	// maxFailures failed attempts from one address lock that address out,
+	// for longer each time in a row (see lockouts). bcrypt already puts about
 	// a tenth of a second under every guess; this is what stops a patient
-	// script rather than a fast one.
+	// script rather than a fast one. An address with no failure for
+	// forgetAfter starts again from the first, shortest lockout.
 	maxFailures = 5
-	failWindow  = 15 * time.Minute
+	forgetAfter = time.Hour
 
 	// prefix namespaces the two paths the gate answers itself. Everything
 	// else it either proxies or refuses, so these must be paths the UI's own
@@ -57,10 +60,16 @@ func (c Credentials) ready() bool {
 	return c.Enabled && c.PasswordHash != "" && (c.TOTPDisabled || c.Secret != "")
 }
 
+// lockouts is how long each lockout in a row lasts; the last one repeats. A
+// few typos cost a minute, while a script keeps to five guesses every
+// quarter of an hour.
+var lockouts = []time.Duration{time.Minute, 2 * time.Minute, 5 * time.Minute, 10 * time.Minute, 15 * time.Minute}
+
 // Gate is the lock in front of the exposed listener. Its zero value is not
 // usable; call New.
 type Gate struct {
 	read func() Credentials
+	now  func() time.Time // the lockout clock; tests move it
 
 	serverID string
 	trust    Trust
@@ -80,9 +89,13 @@ type session struct {
 	key      string
 }
 
+// failure is an address's recent wrong sign-ins: how many since its last
+// lockout, how many lockouts in a row, and when the current one ends.
 type failure struct {
-	count int
-	last  time.Time
+	count    int
+	last     time.Time
+	lockouts int
+	until    time.Time
 }
 
 // New returns a gate that checks every login against whatever read answers at
@@ -90,6 +103,7 @@ type failure struct {
 func New(read func() Credentials) *Gate {
 	return &Gate{
 		read:     read,
+		now:      time.Now,
 		sessions: map[string]session{},
 		nonces:   map[string]time.Time{},
 		failures: map[string]*failure{},
@@ -180,8 +194,10 @@ func (g *Gate) login(w http.ResponseWriter, r *http.Request, creds Credentials) 
 	}
 	next := safeNext(r.FormValue("next"))
 
-	if locked, until := g.lockedOut(clientAddr(r)); locked {
-		g.deny(w, r, creds, "Too many attempts. Try again in "+humanWait(until)+".")
+	// Attempts while locked out are not counted, so they do not stretch the
+	// lockout or skip to a longer one.
+	if wait := g.lockedOut(clientAddr(r)); wait > 0 {
+		g.challenge(w, r, creds, "Too many attempts. Try again in "+humanWait(wait)+".", r.FormValue("next"))
 		return
 	}
 	// A lock nobody can open is not a reason to let anybody in: an enabled
@@ -279,22 +295,28 @@ func (g *Gate) claimStep(secret string, step uint64) bool {
 
 // deny records a failed attempt against the client's address and answers with
 // the form again. Recording happens here rather than in login so that every
-// way of getting it wrong counts the same.
+// way of getting it wrong counts the same. The attempt that uses up the
+// address's turns starts its next lockout.
 func (g *Gate) deny(w http.ResponseWriter, r *http.Request, creds Credentials, why string) {
 	addr := clientAddr(r)
-	now := time.Now()
+	now := g.now()
 	g.mu.Lock()
 	f := g.failures[addr]
-	if f == nil || now.Sub(f.last) > failWindow {
+	if f == nil || now.Sub(f.last) > forgetAfter {
 		f = &failure{}
 		g.failures[addr] = f
 	}
 	f.count++
 	f.last = now
+	if f.count >= maxFailures {
+		f.until = now.Add(lockouts[min(f.lockouts, len(lockouts)-1)])
+		f.lockouts++
+		f.count = 0
+	}
 	// The map only ever holds addresses that got something wrong recently, so
 	// sweeping it here keeps it from growing for the life of the process.
 	for k, v := range g.failures {
-		if now.Sub(v.last) > failWindow {
+		if now.Sub(v.last) > forgetAfter {
 			delete(g.failures, k)
 		}
 	}
@@ -302,16 +324,15 @@ func (g *Gate) deny(w http.ResponseWriter, r *http.Request, creds Credentials, w
 	g.challenge(w, r, creds, why, r.FormValue("next"))
 }
 
-// lockedOut reports whether an address has used up its attempts, and when it
-// gets them back.
-func (g *Gate) lockedOut(addr string) (bool, time.Time) {
+// lockedOut answers how long an address must still wait, or zero.
+func (g *Gate) lockedOut(addr string) time.Duration {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	f := g.failures[addr]
-	if f == nil || f.count < maxFailures || time.Since(f.last) > failWindow {
-		return false, time.Time{}
+	if f == nil {
+		return 0
 	}
-	return true, f.last.Add(failWindow)
+	return max(f.until.Sub(g.now()), 0)
 }
 
 // challenge answers a request that has no session. A browser asking for a
@@ -371,11 +392,11 @@ func newToken() (string, error) {
 	return hex.EncodeToString(buf), nil
 }
 
-// humanWait rounds a deadline to something worth reading on a login form.
-func humanWait(until time.Time) string {
-	d := time.Until(until).Round(time.Minute)
-	if d < time.Minute {
+// humanWait rounds a wait up to whole minutes for a login form.
+func humanWait(d time.Duration) string {
+	m := int(math.Ceil(d.Minutes()))
+	if m <= 1 {
 		return "a minute"
 	}
-	return d.String()
+	return strconv.Itoa(m) + " minutes"
 }

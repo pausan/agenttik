@@ -31,6 +31,18 @@ const history = useTextHistory(text, (value) => (text.value = value));
 const prompt = ref(null);
 const queueOpen = ref(false);
 const scheduling = ref(false);
+/* Stop answers after a round trip, which over a remote link is long enough
+   to look ignored and be pressed again. */
+const stopping = ref(false);
+async function stop() {
+  if (stopping.value) return;
+  stopping.value = true;
+  try {
+    await stopTurn();
+  } finally {
+    stopping.value = false;
+  }
+}
 const images = computed(() => promptImages(S.owner?.draft));
 const empty = computed(() => !text.value.trim());
 const uploading = computed(() => !!S.owner?.imageUploads);
@@ -385,7 +397,8 @@ function runMenuAction(action) {
               variant="outline"
               size="sm"
               label="Stop"
-              @click="stopTurn"
+              :loading="stopping"
+              @click="stop"
             />
             <UFieldGroup size="sm">
               <UButton type="submit" :disabled="primary.disabled" :label="primary.label" :trailing-icon="primary.icon" />

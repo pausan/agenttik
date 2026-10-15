@@ -14,6 +14,9 @@ They have no turn attached because they did not run. Their text survives
 stopping from a closed tab, reopening the task, and restarting the app.
 An open tab reloads the saved transcript after Stop. Existing draft text is
 left untouched; saved prompts can be copied or edited from the transcript.
+The prompt bar's **Stop** spins and ignores further presses until the
+request and that reload are done, which over a remote link takes a round trip
+or two.
 
 The server rejects an archive request for either state, so the rule holds for
 callers outside the sidebar. The same rule stops a busy project being archived;

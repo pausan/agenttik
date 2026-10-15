@@ -90,3 +90,49 @@ func TestDeleteQueuedClosesUnstartedScheduleRun(t *testing.T) {
 		t.Fatalf("schedule after deletion = %+v, %v", updated, err)
 	}
 }
+
+func TestForceQueuedReturnsOnceThePromptHasStarted(t *testing.T) {
+	r, st, sess := setup(t, &fakeProvider{gate: make(chan struct{})})
+	t.Cleanup(r.Shutdown)
+	if _, err := r.Send(sess.ID, "running"); err != nil {
+		t.Fatal(err)
+	}
+	q, err := st.EnqueueMessage(sess.ID, "forced", sess.Provider, 0, sess.Model, sess.Effort)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ForceQueued(sess.ID, q.ID); err != nil {
+		t.Fatal(err)
+	}
+	// No waiting: the answer means the new turn is already on record.
+	messages, err := st.ListMessages(sess.ID)
+	if err != nil || len(messages) != 2 || messages[1].Content != "forced" {
+		t.Fatalf("transcript = %+v, %v", messages, err)
+	}
+	if !r.Running(sess.ID) {
+		t.Fatal("forced prompt is not running")
+	}
+	if n, _ := st.QueueCount(sess.ID); n != 0 {
+		t.Fatalf("queue count = %d", n)
+	}
+}
+
+func TestForceQueuedReportsAFailedStart(t *testing.T) {
+	fp := &fakeProvider{gate: make(chan struct{})}
+	r, st, sess := setup(t, fp)
+	t.Cleanup(r.Shutdown)
+	if _, err := r.Send(sess.ID, "running"); err != nil {
+		t.Fatal(err)
+	}
+	q, err := st.EnqueueMessage(sess.ID, "forced", sess.Provider, 0, sess.Model, sess.Effort)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fp.runErr = errors.New("provider would not start")
+	if err := r.ForceQueued(sess.ID, q.ID); err == nil || err.Error() != "provider would not start" {
+		t.Fatalf("force = %v, want the start failure", err)
+	}
+	if n, _ := st.QueueCount(sess.ID); n != 1 {
+		t.Fatalf("queue count = %d, want the prompt kept", n)
+	}
+}

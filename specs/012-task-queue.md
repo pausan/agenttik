@@ -41,6 +41,15 @@ The runner holds one forced prompt per *task*, claimed by that task's turn as
 it releases, and the project dispatch lock keeps it from racing the scheduler
 draining the same project.
 
+`POST /api/sessions/:id/queue/force` answers once the prompt has started, or
+with the reason it could not (a failed launch, a prompt deleted meanwhile).
+It waits at most 30 seconds for a turn to stop; past that it answers `202` and
+the prompt starts on its own. The UI then reads the session back before the
+button stops spinning, so the button never returns to idle between the answer
+and the new turn reaching the screen. That gap is seconds long over a remote
+link. The button keeps the word that was pressed while it spins, even though
+the cancelled turn's end would otherwise turn "Force send" into "Send now".
+
 The sidebar keeps its own **Stop** for a queued task
 ([021](021-stop-active-tasks.md)); running now and dropping the queue are
 different intents and both are worth one click.

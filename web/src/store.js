@@ -3564,11 +3564,17 @@ export function editLastQueued() {
 // a second prompt cannot share, is interrupted. The queue stays untouched here
 // until the started event claims it, so the UI cannot hide a prompt if
 // cancellation or startup fails.
+//
+// The server answers once the prompt has started, and the transcript is read
+// back before returning, so the button stays busy until the new turn is on
+// screen: over a slow link the stream's started event can come seconds after
+// the answer, and an idle "Force send" in between reads as a failure.
 export async function forceQueued(queuedID) {
   const tab = S.owner;
   if (tab?.kind !== "session" || !queuedID) return;
   try {
     await api("POST", `/api/sessions/${tab.sessionID}/queue/force`, { queued_id: queuedID });
+    if (tab.detail) await syncMessages(tab);
   } catch (e) {
     fail(e);
     throw e;

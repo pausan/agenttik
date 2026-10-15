@@ -203,6 +203,9 @@ const queued = computed(() => [
   ...(S.detail?.pendingQueued || []),
 ]);
 const forcing = ref(0);
+/* The word on the button that was pressed. The turn it cancels ends before
+   the new one starts, which would flip a busy button to "Send now". */
+const forcingLabel = ref("");
 const changing = ref(0);
 const deleting = ref(0);
 const editing = ref(0); // id of the queued prompt whose text is being edited, 0 for none
@@ -317,6 +320,7 @@ function chooseQueuedModel(q, choice) {
 async function force(q) {
   if (q.pending) return;
   forcing.value = q.id;
+  forcingLabel.value = sendNowLabel.value;
   try {
     await forceQueued(q.id);
   } catch {
@@ -599,7 +603,7 @@ watch(
               color="warning"
               variant="ghost"
               size="xs"
-              :label="sendNowLabel"
+              :label="forcing === q.id ? forcingLabel : sendNowLabel"
               :loading="forcing === q.id"
               :disabled="q.pending || forcing !== 0 || changing !== 0 || deleting !== 0 || editing !== 0"
               :title="sendNowHint"

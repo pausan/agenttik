@@ -81,7 +81,7 @@ type Runner struct {
 	mu             sync.Mutex
 	active         map[string]activeTurn       // session id -> turn in flight
 	sched          map[int64]*sync.Mutex       // project id -> serializes queue dispatch
-	forced         map[string]int64            // session id -> queued message to run next
+	forced         map[string]forcedPrompt     // session id -> queued message to run next
 	approvals      map[string]*PendingApproval // approval id -> tool call waiting on the user
 	// backgroundTasks are what each running turn has left working behind it,
 	// by session id, then task id. Their latest states also live in transcript
@@ -104,7 +104,7 @@ func New(s *store.Store, reg *agent.Registry, hub *Hub) *Runner {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Runner{store: s, registry: reg, hub: hub, lifetime: ctx, cancelLifetime: cancel,
 		active: make(map[string]activeTurn), sched: make(map[int64]*sync.Mutex),
-		forced: make(map[string]int64), forcedScheduleRuns: make(map[string]bool),
+		forced: make(map[string]forcedPrompt), forcedScheduleRuns: make(map[string]bool),
 		approvals:       make(map[string]*PendingApproval),
 		backgroundTasks: make(map[string]map[string]agent.BackgroundTask)}
 }
@@ -346,7 +346,7 @@ func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage) (*store.Turn
 	r.mu.Lock()
 	if r.stopping {
 		r.mu.Unlock()
-		return nil, errors.New("runner is shutting down")
+		return nil, errShuttingDown
 	}
 	if _, busy := r.active[sessionID]; busy {
 		r.mu.Unlock()
@@ -364,17 +364,20 @@ func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage) (*store.Turn
 		delete(r.active, sessionID)
 		// A forced prompt waits on the session it belongs to, not on the
 		// project: only this session's own turn could ever be in its way.
-		forcedID, forced := r.forced[sessionID]
+		next, forced := r.forced[sessionID]
 		delete(r.forced, sessionID)
 		r.busyChanged()
 		stopping := r.stopping
 		r.mu.Unlock()
 		cancel()
 		if stopping {
+			if forced {
+				next.done <- errShuttingDown
+			}
 			return
 		}
 		if forced {
-			go r.runForced(sess.ProjectID, forcedID)
+			go r.runForced(sess.ProjectID, next.id, next.done)
 		} else {
 			go r.schedule(sess.ProjectID, sessionID)
 		}
@@ -515,8 +518,9 @@ func (r *Runner) DeleteQueued(sessionID string, queuedID int64) error {
 		return err
 	}
 	r.mu.Lock()
-	if r.forced[sessionID] == queuedID {
+	if next, ok := r.forced[sessionID]; ok && next.id == queuedID {
 		delete(r.forced, sessionID)
+		next.done <- store.ErrNotFound
 	}
 	_, running := r.active[sessionID]
 	r.mu.Unlock()
@@ -546,6 +550,10 @@ func (r *Runner) DeleteQueued(sessionID string, queuedID int64) error {
 // take a second prompt in place — so that one is cancelled and the prompt
 // starts as it exits. The message stays in the queue until Send has accepted
 // it, so a failed launch cannot lose it.
+//
+// It returns once the prompt has started, or with why it could not, so the
+// window that asked keeps showing the request until then. A turn slower than
+// forceWait to stop is answered as accepted and the prompt starts on its own.
 func (r *Runner) ForceQueued(sessionID string, queuedID int64) error {
 	queued, err := r.store.GetQueuedMessage(queuedID)
 	if err != nil {
@@ -564,21 +572,39 @@ func (r *Runner) ForceQueued(sessionID string, queuedID int64) error {
 		r.mu.Unlock()
 		return ErrForcePending
 	}
+	done := make(chan error, 1)
 	turn, running := r.active[sessionID]
 	if running {
-		r.forced[sessionID] = queuedID
+		r.forced[sessionID] = forcedPrompt{id: queuedID, done: done}
 	}
 	r.mu.Unlock()
 
 	if running {
 		turn.cancel()
+	} else {
+		// Nothing of this session's own is in the way, so start it here
+		// rather than waiting for a turn that is not coming.
+		go r.runForced(sess.ProjectID, queuedID, done)
+	}
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(forceWait):
 		return nil
 	}
-	// Nothing of this session's own is in the way, so start it here rather
-	// than waiting for a turn that is not coming.
-	go r.runForced(sess.ProjectID, queuedID)
-	return nil
 }
+
+// forcedPrompt is a queued prompt waiting for its session's turn to end, and
+// where to say whether it then started.
+type forcedPrompt struct {
+	id   int64
+	done chan error // buffered: told once, whether or not anyone still waits
+}
+
+// forceWait bounds how long ForceQueued waits for the prompt to start.
+var forceWait = 30 * time.Second
+
+var errShuttingDown = errors.New("runner is shutting down")
 
 // runForced starts the chosen queued prompt, once the session's own cancelled
 // turn has fully released its provider process. It bypasses normal project
@@ -586,18 +612,20 @@ func (r *Runner) ForceQueued(sessionID string, queuedID int64) error {
 // is the whole point of forcing it — and the rest of the queue resumes its
 // ordinary scheduler order. The dispatch lock is what keeps it from racing a
 // scheduler that is already draining the same project.
-func (r *Runner) runForced(projectID int64, queuedID int64) {
+func (r *Runner) runForced(projectID int64, queuedID int64, done chan<- error) {
 	lock := r.dispatchLock(projectID)
 	lock.Lock()
 	defer lock.Unlock()
 
 	queued, err := r.store.GetQueuedMessage(queuedID)
 	if err == nil {
-		if _, err := r.sendQueued(queued); err == nil {
+		if _, err = r.sendQueued(queued); err == nil {
 			_ = r.store.RemoveQueuedMessage(queued.ID)
+			done <- nil
 			return
 		}
 	}
+	done <- err
 	r.dispatch(projectID, "")
 }
 

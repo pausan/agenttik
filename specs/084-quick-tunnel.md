@@ -78,21 +78,34 @@ same way over HTTP/2 and QUIC. agenttik's UI and terminals live on SSE
   websocket. That object offers `onopen`, `onmessage({data})`, `onerror`,
   `close()` and reconnects 3 s after an error, like EventSource.
 - The tunnel answers a websocket request (behind the lock) by `GET`ting the
-  same path from the backend and sending each SSE event's data as one text
-  frame, and each comment (the heartbeat) as a ping (`bridge.go`). Websocket
-  frames are not buffered by the edge.
+  same path from the backend (`bridge.go`). Websocket frames are not
+  buffered by the edge. The backend never sees a websocket.
 
-The backend never sees a websocket.
+The tunnel may be the slowest link there is, so the stream travels gzipped
+when the visitor can inflate it. A browser with `DecompressionStream` adds
+`encoding=gzip` to the address. The bridge then asks the backend for its
+gzipped stream ([052](052-launch-budget.md)) and sends the bytes as they
+come, as binary messages. The browser feeds them through one decompressor
+and reads the result as SSE. When the socket closes, every event already
+received is handed on before the error, as EventSource does: a terminal
+resumes from what it has drawn ([073](073-terminals.md#resuming)). After
+`close()` nothing more is handed on.
+
+A visitor that does not ask is sent each event's data as one text message,
+and each comment (the heartbeat) as a ping. Websockets' own compression
+(`permessage-deflate`) is not an option: the edge drops
+`Sec-WebSocket-Extensions` on the way to the backend.
 
 Another agenttik that forwards the UI to this one — a remote profile
 ([085](085-remote-profiles.md)) or `--remote` ([064](064-remote-connections.md))
 — has the same problem on its side of the edge. Its forwarding client uses
 `quicktunnel.StreamTransport`: a `GET` asking for `text/event-stream` from a
-`*.trycloudflare.com` host goes out as a websocket upgrade, and the reply is
-handed back as a `200` SSE response. Each text message becomes one event and
-each ping a `: ping` comment. Fragmented messages are joined. A refusal, such
-as the lock's `401`, is passed back unchanged. Every other request is
-untouched.
+`*.trycloudflare.com` host goes out as a websocket upgrade asking for gzip,
+and the reply is handed back as a `200` SSE response. Binary messages are
+inflated as one stream. From a bridge too old to send them, each text
+message becomes one event, each ping a `: ping` comment, and fragmented
+messages are joined. A refusal, such as the lock's `401`, is passed back
+unchanged. Every other request is untouched.
 
 ## Limits
 
@@ -103,11 +116,13 @@ untouched.
 ## Tests
 
 - `go test ./app/internal/quicktunnel` covers RPC layouts, header
-  serialization, the response writer, the SSE→websocket bridge and
-  `StreamTransport` reading it back, offline.
+  serialization, the response writer, the SSE→websocket bridge in both
+  modes and `StreamTransport` reading it back, offline.
+  `web/src/eventStream.test.js` covers the browser's end, including events
+  split across messages and the order of events and errors at a close.
 - `QUICKTUNNEL_LIVE=1 go test ./app/internal/quicktunnel -run Live` opens a
   real tunnel. It checks plain requests, the visitor address, the bridged
-  stream arriving event by event (as a websocket and through
+  stream arriving event by event (as text messages and gzipped through
   `StreamTransport`), reconnecting on the same address, and a
   deleted tunnel being replaced.
 - `QUICKTUNNEL_LIVE=1 go test ./app/internal/server -run TunnelLive` runs the

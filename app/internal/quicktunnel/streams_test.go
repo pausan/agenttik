@@ -2,6 +2,7 @@ package quicktunnel
 
 import (
 	"bufio"
+	"compress/gzip"
 	"context"
 	"crypto/sha1"
 	"encoding/base64"
@@ -10,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -22,9 +24,11 @@ func tunnelClient(server *httptest.Server) *http.Client {
 	return &http.Client{Transport: StreamTransport{Base: base}}
 }
 
+// TestStreamTransportReadsWebsocketAsSSE plays a bridge too old to gzip,
+// which ignores the request for it and sends text messages.
 func TestStreamTransportReadsWebsocketAsSSE(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Upgrade") != "websocket" || r.Header.Get("Accept") != "text/event-stream" || r.URL.RequestURI() != "/api/stream?x=1" {
+		if r.Header.Get("Upgrade") != "websocket" || r.Header.Get("Accept") != "text/event-stream" || r.URL.RequestURI() != "/api/stream?encoding=gzip&x=1" {
 			http.Error(w, "not a websocket", http.StatusBadRequest)
 			return
 		}
@@ -105,3 +109,51 @@ func TestStreamTransportPassesRefusals(t *testing.T) {
 		t.Fatalf("status %d", res.StatusCode)
 	}
 }
+
+// TestBridgeGzipsForStreamTransport runs the bridge for a visitor that asks
+// for the gzipped stream and reads its frames back the way StreamTransport
+// does, so the two ends are held to the same format.
+func TestBridgeGzipsForStreamTransport(t *testing.T) {
+	events := ": open\n\ndata: " + strings.Repeat(`{"terminal":"output"}`, 200) + "\n\n: ping\n\ndata: two\ndata: lines\n\n"
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Accept-Encoding") != "gzip" || r.URL.RawQuery != "ids=a%3A0" {
+			t.Errorf("origin asked for %q with %q", r.URL.RawQuery, r.Header.Get("Accept-Encoding"))
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Content-Encoding", "gzip")
+		gz := gzip.NewWriter(w)
+		io.WriteString(gz, events)
+		gz.Close()
+	}))
+	defer origin.Close()
+	c := New(strings.TrimPrefix(origin.URL, "http://"), nil, "test")
+
+	body, browser := io.Pipe()
+	defer browser.Close()
+	req := httptest.NewRequest(http.MethodGet, "/api/stream/terminals?ids=a:0&encoding=gzip", body)
+	req.Header.Set(upgradeHeader, "websocket")
+	req.Header.Set("Sec-Websocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+	rec := httptest.NewRecorder()
+	c.serve(rec, req)
+
+	wire := rec.Body.Len()
+	if rec.Body.Bytes()[0] != 0x80|opBinary {
+		t.Fatalf("first frame % x, want binary", rec.Body.Bytes()[:2])
+	}
+	got, err := io.ReadAll(&socketEvents{conn: nopConn{}, r: bufio.NewReader(rec.Body)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != events {
+		t.Fatalf("events differ: got %d bytes, want %d", len(got), len(events))
+	}
+	if wire > len(events)/4 {
+		t.Errorf("%d bytes on the wire for %d of events", wire, len(events))
+	}
+}
+
+type nopConn struct{}
+
+func (nopConn) Read([]byte) (int, error)    { return 0, io.EOF }
+func (nopConn) Write(p []byte) (int, error) { return len(p), nil }
+func (nopConn) Close() error                { return nil }

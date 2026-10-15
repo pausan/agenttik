@@ -2,6 +2,7 @@ package quicktunnel
 
 import (
 	"bufio"
+	"compress/gzip"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -37,8 +38,18 @@ func TestLive(t *testing.T) {
 	mux.HandleFunc("/sse", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
+		// Gzipped when asked, flushed per event, as agenttik's streams are.
+		var out io.Writer = w
+		flush := func() {}
+		if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			w.Header().Set("Content-Encoding", "gzip")
+			gz := gzip.NewWriter(w)
+			defer gz.Close()
+			out, flush = gz, func() { gz.Flush() }
+		}
 		for i := 0; i < 3; i++ {
-			fmt.Fprintf(w, "data: %d\n\n", i)
+			fmt.Fprintf(out, "data: %d\n\n", i)
+			flush()
 			w.(http.Flusher).Flush()
 			select {
 			case <-r.Context().Done():
@@ -100,6 +111,9 @@ func TestLive(t *testing.T) {
 	line, err := bufio.NewReader(res.Body).ReadString('\n')
 	if line != "data: 0\n" || time.Since(start) > 2500*time.Millisecond {
 		t.Fatalf("first line %q (%v) after %s", line, err, time.Since(start))
+	}
+	if events, _ := res.Body.(*socketEvents); events == nil || events.gz == nil {
+		t.Fatal("the stream did not arrive gzipped")
 	}
 	res.Body.Close()
 

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -16,8 +17,15 @@ import (
 // SSE streams. Websockets do pass through as they are written, so the UI,
 // when it finds itself on a trycloudflare.com address, opens its streams as
 // websockets instead, and this bridge answers each one by reading the same
-// path from the origin as SSE and sending every event's data as one text
-// message, and every comment — the stream's heartbeat — as a ping.
+// path from the origin as SSE.
+//
+// A visitor that adds `encoding=gzip` to the address is sent the origin's
+// gzipped stream as it comes, in binary messages, for it to inflate and read
+// as SSE. Terminal output and event JSON shrink several times, and the tunnel
+// may well be the slowest link there is. (Websockets' own compression cannot
+// be used: the edge drops the header that negotiates it.) Any other visitor
+// gets every event's data as one text message, and every comment — the
+// stream's heartbeat — as a ping.
 //
 // It sits behind the same lock as every other request, so a browser that is
 // not signed in gets that 401 instead of an upgrade.
@@ -30,12 +38,23 @@ func (o *origin) bridge(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing Sec-WebSocket-Key", http.StatusBadRequest)
 		return
 	}
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, "http://"+o.target+r.URL.RequestURI(), nil)
+	query := r.URL.Query()
+	gzipped := query.Get("encoding") == "gzip"
+	query.Del("encoding")
+	target := url.URL{Scheme: "http", Host: o.target, Path: r.URL.Path, RawQuery: query.Encode()}
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, target.String(), nil)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	req.Header.Set("Accept", "text/event-stream")
+	// Set by hand, so the transport passes the gzip through rather than
+	// undoing it; identity otherwise, as the origin is on this machine.
+	if gzipped {
+		req.Header.Set("Accept-Encoding", "gzip")
+	} else {
+		req.Header.Set("Accept-Encoding", "identity")
+	}
 	resp, err := http.DefaultTransport.RoundTrip(req)
 	if err != nil {
 		http.Error(w, "origin unreachable", http.StatusBadGateway)
@@ -62,13 +81,18 @@ func (o *origin) bridge(w http.ResponseWriter, r *http.Request) {
 		readFrames(r.Body) //nolint:errcheck // any end is the end
 		resp.Body.Close()
 	}()
-	err = pumpEvents(resp.Body, func(op byte, payload []byte) error {
+	send := func(op byte, payload []byte) error {
 		if _, err := w.Write(frame(op, payload)); err != nil {
 			return err
 		}
 		w.(http.Flusher).Flush()
 		return nil
-	})
+	}
+	if resp.Header.Get("Content-Encoding") == "gzip" {
+		err = pumpBytes(resp.Body, send)
+	} else {
+		err = pumpEvents(resp.Body, send)
+	}
 	if err == nil {
 		w.Write(frame(opClose, nil)) //nolint:errcheck // the origin ended the stream
 	}
@@ -76,10 +100,32 @@ func (o *origin) bridge(w http.ResponseWriter, r *http.Request) {
 }
 
 const (
-	opText  = 0x1
-	opClose = 0x8
-	opPing  = 0x9
+	opText   = 0x1
+	opBinary = 0x2
+	opClose  = 0x8
+	opPing   = 0x9
 )
+
+// pumpBytes sends a stream as it arrives, a binary message per read. The
+// origin flushes its compressor with every frame, so a read ends where a
+// frame does and nothing waits for the next one.
+func pumpBytes(body io.Reader, send func(op byte, payload []byte) error) error {
+	buf := make([]byte, 32<<10)
+	for {
+		n, err := body.Read(buf)
+		if n > 0 {
+			if err := send(opBinary, buf[:n]); err != nil {
+				return err
+			}
+		}
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+	}
+}
 
 // pumpEvents reads an SSE stream and sends each event's data as a text
 // message, and each comment as a ping. It returns nil when the stream ends.
@@ -130,11 +176,11 @@ func frame(op byte, payload []byte) []byte {
 // end of the stream.
 func readFrames(r io.Reader) error {
 	for {
-		op, _, _, err := readFrame(r)
+		f, err := readFrame(r)
 		if err != nil {
 			return err
 		}
-		if op == opClose {
+		if f.op == opClose {
 			return errors.New("closed by the browser")
 		}
 	}
@@ -143,44 +189,50 @@ func readFrames(r io.Reader) error {
 // maxFrame bounds one frame's payload, like the bridge's longest SSE line.
 const maxFrame = 64 << 20
 
-// readFrame reads one frame and returns its opcode, whether it is the last
-// of its message, and its payload, unmasked.
-func readFrame(r io.Reader) (op byte, fin bool, payload []byte, err error) {
+// wsFrame is one frame read off a websocket, its payload unmasked.
+type wsFrame struct {
+	op      byte
+	fin     bool // the last frame of its message
+	payload []byte
+}
+
+func readFrame(r io.Reader) (wsFrame, error) {
 	var hdr [8]byte
-	if _, err = io.ReadFull(r, hdr[:2]); err != nil {
-		return
+	if _, err := io.ReadFull(r, hdr[:2]); err != nil {
+		return wsFrame{}, err
 	}
-	op, fin, masked := hdr[0]&0x0f, hdr[0]&0x80 != 0, hdr[1]&0x80 != 0
+	f := wsFrame{op: hdr[0] & 0x0f, fin: hdr[0]&0x80 != 0}
+	masked := hdr[1]&0x80 != 0
 	n := uint64(hdr[1] & 0x7f)
 	switch n {
 	case 126:
-		if _, err = io.ReadFull(r, hdr[:2]); err != nil {
-			return
+		if _, err := io.ReadFull(r, hdr[:2]); err != nil {
+			return f, err
 		}
 		n = uint64(binary.BigEndian.Uint16(hdr[:2]))
 	case 127:
-		if _, err = io.ReadFull(r, hdr[:8]); err != nil {
-			return
+		if _, err := io.ReadFull(r, hdr[:8]); err != nil {
+			return f, err
 		}
 		n = binary.BigEndian.Uint64(hdr[:8])
 	}
 	if n > maxFrame {
-		return 0, false, nil, errors.New("websocket frame too large")
+		return f, errors.New("websocket frame too large")
 	}
 	var mask [4]byte
 	if masked {
-		if _, err = io.ReadFull(r, mask[:]); err != nil {
-			return
+		if _, err := io.ReadFull(r, mask[:]); err != nil {
+			return f, err
 		}
 	}
-	payload = make([]byte, n)
-	if _, err = io.ReadFull(r, payload); err != nil {
-		return
+	f.payload = make([]byte, n)
+	if _, err := io.ReadFull(r, f.payload); err != nil {
+		return f, err
 	}
 	if masked {
-		for i := range payload {
-			payload[i] ^= mask[i%4]
+		for i := range f.payload {
+			f.payload[i] ^= mask[i%4]
 		}
 	}
-	return
+	return f, nil
 }

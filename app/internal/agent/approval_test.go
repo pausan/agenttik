@@ -28,6 +28,19 @@ func TestCheckReply(t *testing.T) {
 	if err := (&Approval{}).CheckReply(Reply{Allow: true}); err != nil {
 		t.Errorf("plain approval: %v", err)
 	}
+	offered := &Approval{Remember: []string{RememberTurn}}
+	for _, tc := range []struct {
+		reply Reply
+		ok    bool
+	}{
+		{Reply{Allow: true, Remember: RememberTurn}, true},
+		{Reply{Allow: true, Remember: RememberAlways}, false},
+		{Reply{Remember: RememberTurn}, false},
+	} {
+		if err := offered.CheckReply(tc.reply); (err == nil) != tc.ok {
+			t.Errorf("remember %+v: err = %v, want ok=%v", tc.reply, err, tc.ok)
+		}
+	}
 }
 
 func TestAutoReply(t *testing.T) {

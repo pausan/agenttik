@@ -47,6 +47,19 @@ test("a reloaded window still shows the waiting request and can deny it", async 
   await expect(page.getByText("denied", { exact: true })).toBeVisible();
 });
 
+test("an allow can be remembered when the agent offers it", async ({ page }) => {
+  await addProject(page);
+  await openProject(page);
+  await newTask(page);
+  await pickModel(page);
+  await sendPrompt(page, "@approve-remember Bash ls");
+  const card = page.getByRole("group", { name: "Tool approval" });
+  await expect(card.getByRole("button", { name: "Always allow" })).toBeVisible();
+  await card.getByRole("button", { name: "Allow for this turn" }).click();
+  await expect(card).toHaveCount(0);
+  await expect(page.getByText("allowed remember=turn", { exact: true })).toBeVisible();
+});
+
 test("stopping the task withdraws its request", async ({ page }) => {
   const card = await askForApproval(page, "sleep 100");
   await sidebar(page).getByRole("button", { name: "Stop task", exact: true }).click();

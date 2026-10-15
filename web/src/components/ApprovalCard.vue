@@ -141,6 +141,24 @@ function submit() {
         @click="answerApproval(sessionId, approval.id, true)"
       />
       <UButton
+        v-if="approval.remember?.includes('turn')"
+        size="sm"
+        variant="soft"
+        label="Allow for this turn"
+        title="Don't ask again for this until the agent finishes its reply"
+        :disabled="approval.answering"
+        @click="answerApproval(sessionId, approval.id, true, undefined, 'turn')"
+      />
+      <UButton
+        v-if="approval.remember?.includes('always')"
+        size="sm"
+        variant="soft"
+        label="Always allow"
+        title="Don't ask again for this, in this task or any other"
+        :disabled="approval.answering"
+        @click="answerApproval(sessionId, approval.id, true, undefined, 'always')"
+      />
+      <UButton
         size="sm"
         color="neutral"
         variant="outline"

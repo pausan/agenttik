@@ -552,13 +552,14 @@ func (s *Server) listApprovals(c *fiber.Ctx) error {
 // questions. The first answer from any window wins; a later one gets 409.
 func (s *Server) answerApproval(c *fiber.Ctx) error {
 	var body struct {
-		Allow   *bool               `json:"allow"`
-		Answers map[string][]string `json:"answers"`
+		Allow    *bool               `json:"allow"`
+		Answers  map[string][]string `json:"answers"`
+		Remember string              `json:"remember"`
 	}
 	if err := c.BodyParser(&body); err != nil || body.Allow == nil {
 		return badRequest("allow must be true or false")
 	}
-	reply := agent.Reply{Allow: *body.Allow, Answers: body.Answers}
+	reply := agent.Reply{Allow: *body.Allow, Answers: body.Answers, Remember: body.Remember}
 	if err := s.runner.Answer(c.Params("id"), c.Params("approval"), reply); err != nil {
 		return err
 	}

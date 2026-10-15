@@ -59,11 +59,11 @@ user answers. Measured against codex-cli 0.159.2:
 
 | Request | Asked as | Result |
 |---------|----------|--------|
-| `item/commandExecution/requestApproval` | Shell: the command, its directory and reason | `{"decision":"accept"\|"decline"}` |
-| `item/fileChange/requestApproval` | Edit files: the paths from the item's `item/started` | `{"decision":"accept"\|"decline"}` |
+| `item/commandExecution/requestApproval` | Shell: the command, its directory and reason | `{"decision":"accept"\|"decline"}`, or a remembering decision below |
+| `item/fileChange/requestApproval` | Edit files: the paths from the item's `item/started` | `{"decision":"accept"\|"acceptForSession"\|"decline"}` |
 | `execCommandApproval`, `applyPatchApproval` (v1) | the same | `{"decision":"approved"\|"denied"}` |
 | `item/tool/requestUserInput` | questions, by `id`; `isOther` allows typing, `isSecret` hides it | `{"answers":{id:{"answers":[...]}}}`; skipping sends `{}` |
-| `mcpServer/elicitation/request`, form, no fields | "*server* MCP tool": the message and `_meta.tool_params` | `{"action":"accept","content":{}}` or `decline` |
+| `mcpServer/elicitation/request`, form, no fields | "*server* MCP tool": the message and `_meta.tool_params` | `{"action":"accept","content":{},"_meta":null\|{"persist":…}}` or `decline` |
 | `mcpServer/elicitation/request`, form with fields | questions, one per field in the server's order | `accept` with typed `content`, or `decline` |
 | `mcpServer/elicitation/request`, url | not asked | `decline` |
 | anything else | not asked | JSON-RPC error `-32601` |
@@ -73,6 +73,20 @@ Codex asks before an MCP tool call with an empty-form elicitation tagged
 enum, titled `oneOf`/`anyOf` or boolean gives options (titles shown, values
 sent; booleans as Yes / No), an array of those allows several picks, and a
 string or number field takes typed text, sent as a number when it parses.
+
+An allow can be remembered, so Codex does not ask again. A Codex session is
+one app-server process, which agenttik starts per turn, so `session` means
+this turn; `always` is saved in the account's Codex `config.toml` (for an MCP
+tool, `[mcp_servers.<server>.tools.<tool>] approval_mode = "approve"`).
+Remembering is offered only as Codex offers it:
+
+| Request | Offered when | Turn | Always |
+|---------|--------------|------|--------|
+| command | `availableDecisions` lists it | `acceptForSession` | the `acceptWithExecpolicyAmendment` object, as offered: a rule for the command's prefix |
+| file change | always | `acceptForSession` | — |
+| MCP tool | `_meta.persist` is `["session","always"]` or one of them | `_meta: {"persist":"session"}` | `_meta: {"persist":"always"}` |
+
+The v1 requests are never remembered.
 
 `serverRequest/resolved` withdraws a request. It also follows each answer;
 the runner ignores a withdrawal for a request no longer pending. The question
@@ -95,13 +109,16 @@ A provider emits `approval` with an `agent.Approval` and `approval_resolved`
 when it withdraws one. The approval carries `id` (unique across turns),
 `tool`, `description`, `input` as JSON, and, for questions, `questions`: each
 with `id`, `header`, `question`, `options` (`label`, `description`), `multi`,
-`other` (typing allowed) and `secret`. `Answer(Reply)` resumes the turn, where
-`Reply` is `{allow, answers}` and `answers` maps a question id to the picked
-labels or typed text.
+`other` (typing allowed) and `secret`. An approval may also carry `remember`: the
+choices of how long an allow lasts, `turn` and `always`. `Answer(Reply)`
+resumes the turn, where `Reply` is `{allow, answers, remember}`, `answers`
+maps a question id to the picked labels or typed text, and `remember` is one
+of the offered choices.
 
 `CheckReply` refuses an allowing reply that leaves a question unanswered,
 gives a single-choice question two answers, gives a blank answer, or picks an
-option that was not offered where typing is not allowed.
+option that was not offered where typing is not allowed. It also refuses a
+`remember` that was not offered or that comes with a denial.
 
 ## Runner
 
@@ -153,7 +170,7 @@ the call, and a window turns it into a local deadline on receipt.
 | Method | Path | |
 |--------|------|-|
 | GET | `/api/approvals` | every pending request: `session_id`, `project_id`, `turn_id`, `created_at`, `approval` |
-| POST | `/api/sessions/:id/approvals/:approval` | `{allow, answers?}` — 204; 400 if the answers are incomplete; 409 if already answered or withdrawn |
+| POST | `/api/sessions/:id/approvals/:approval` | `{allow, answers?, remember?}` — 204; 400 if the answers are incomplete or `remember` was not offered; 409 if already answered or withdrawn |
 | POST | `/api/sessions/:id/approvals/:approval/hold` | stop its countdown — 204, or 409 if gone |
 
 ## UI
@@ -163,7 +180,9 @@ every reopen after a tab change, and every reconnect — so a request published
 while it was not listening is still drawn. Events keep it current after that.
 
 - An approval card shows the tool, its description, the input (a shell
-  command as itself, other JSON indented) and Allow / Deny.
+  command as itself, other JSON indented) and Allow / Deny. When the
+  approval offers them, **Allow for this turn** and **Always allow** sit
+  between the two.
 - A question card shows each question with its header, options as radio or
   checkbox rows with their descriptions, and a text field where typing is
   allowed (a password field for secrets). In a single-choice question typing
@@ -203,5 +222,6 @@ modes and holding),
 `e2e/tests/approvals.spec.js` (two windows, reload, stop, questions, the
 setting, a timeout, holding from another window, answering at once). The fake
 provider's `@approve <tool> <input>` asks for approval and replies `allowed`
-or `denied`; `@ask <question> | <a>, <b>` asks a question and replies
+or `denied`; `@approve-remember` also offers both remember choices and
+replies `allowed remember=<choice>` when one is picked; `@ask <question> | <a>, <b>` asks a question and replies
 `answer=<picks>` or `declined`.

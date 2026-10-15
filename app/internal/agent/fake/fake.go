@@ -225,16 +225,21 @@ func runScript(ctx context.Context, req agent.TurnRequest, events chan<- agent.E
 				home = "system"
 			}
 			reply = append(reply, "account="+home)
-		case "approve":
+		case "approve", "approve-remember":
 			// Unique across turns, as a real provider's request id is.
 			id := fmt.Sprintf("approval-%d", atomic.AddInt64(&approvalCounter, 1))
 			toolName, input, _ := strings.Cut(strings.TrimSpace(rest), " ")
 			answer := make(chan agent.Reply, 1)
-			events <- agent.Event{Type: agent.EventApproval, Approval: agent.NewApproval(
-				id, toolName, "", input, func(r agent.Reply) error { answer <- r; return nil })}
+			a := agent.NewApproval(id, toolName, "", input, func(r agent.Reply) error { answer <- r; return nil })
+			if name == "approve-remember" {
+				a.Remember = []string{agent.RememberTurn, agent.RememberAlways}
+			}
+			events <- agent.Event{Type: agent.EventApproval, Approval: a}
 			select {
 			case r := <-answer:
-				if r.Allow {
+				if r.Allow && r.Remember != "" {
+					reply = append(reply, "allowed remember="+r.Remember)
+				} else if r.Allow {
 					reply = append(reply, "allowed")
 				} else {
 					reply = append(reply, "denied")
@@ -300,7 +305,7 @@ func cutDirective(line string) (name, rest string, ok bool) {
 	}
 	name, rest, _ = strings.Cut(trimmed[1:], " ")
 	switch name {
-	case "wait", "tool", "error", "account", "approve", "ask", "background":
+	case "wait", "tool", "error", "account", "approve", "approve-remember", "ask", "background":
 		return name, rest, true
 	default:
 		return "", "", false

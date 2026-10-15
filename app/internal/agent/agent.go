@@ -245,6 +245,9 @@ type Approval struct {
 	Input string `json:"input,omitempty"`
 	// Questions turns the request into a form. Allowing it means answering.
 	Questions []Question `json:"questions,omitempty"`
+	// Remember lists how long the provider can keep an allow, so the same
+	// call is not asked again: RememberTurn, RememberAlways.
+	Remember []string `json:"remember,omitempty"`
 	// Allowed is set on approval_resolved when it was answered.
 	Allowed *bool `json:"allowed,omitempty"`
 	// Auto is set on approval_resolved when agenttik answered it, because
@@ -284,11 +287,20 @@ type QuestionOption struct {
 
 // Reply is the user's answer to an Approval. Answers maps a question ID to
 // the chosen option labels or typed text; it is set only for questions, and
-// only when Allow is true.
+// only when Allow is true. Remember, when set, is one of the approval's
+// Remember choices.
 type Reply struct {
-	Allow   bool                `json:"allow"`
-	Answers map[string][]string `json:"answers,omitempty"`
+	Allow    bool                `json:"allow"`
+	Answers  map[string][]string `json:"answers,omitempty"`
+	Remember string              `json:"remember,omitempty"`
 }
+
+// How long an allow lasts. A turn is one provider process; always is saved
+// in the provider's own config.
+const (
+	RememberTurn   = "turn"
+	RememberAlways = "always"
+)
 
 // NewApproval builds a request the provider answers through answer.
 func NewApproval(id, tool, description, input string, answer func(Reply) error) *Approval {
@@ -329,8 +341,12 @@ func (a *Approval) AutoReply() Reply {
 }
 
 // CheckReply reports whether r answers every question, with an option
-// offered or, where typing is allowed, any text. A denial needs no answers.
+// offered or, where typing is allowed, any text, and remembers only as
+// offered. A denial needs no answers.
 func (a *Approval) CheckReply(r Reply) error {
+	if r.Remember != "" && (!r.Allow || !slices.Contains(a.Remember, r.Remember)) {
+		return fmt.Errorf("cannot remember %q", r.Remember)
+	}
 	if !r.Allow {
 		return nil
 	}

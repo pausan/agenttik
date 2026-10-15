@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -148,6 +149,46 @@ func TestFileChangeApprovalNamesTheFiles(t *testing.T) {
 	}
 }
 
+func TestCommandApprovalRemembersAsCodexOffers(t *testing.T) {
+	params := `{"command":"touch a","cwd":"/p","availableDecisions":["accept","acceptForSession",` +
+		`{"acceptWithExecpolicyAmendment":{"execpolicy_amendment":["touch","a"]}},"cancel"]}`
+	for remember, want := range map[string]string{
+		agent.RememberTurn:   `"acceptForSession"`,
+		agent.RememberAlways: `{"acceptWithExecpolicyAmendment":{"execpolicy_amendment":["touch","a"]}}`,
+	} {
+		run, buf, out := requestRun()
+		serverRequest(t, run, "7", "item/commandExecution/requestApproval", params)
+		a := (<-out).Approval
+		if !slices.Equal(a.Remember, []string{agent.RememberTurn, agent.RememberAlways}) {
+			t.Fatalf("remember = %v", a.Remember)
+		}
+		a.Answer(agent.Reply{Allow: true, Remember: remember})
+		got, _ := json.Marshal(written(t, buf)["result"].(map[string]any)["decision"])
+		if string(got) != want {
+			t.Errorf("remember %s wrote %s", remember, got)
+		}
+	}
+
+	run, _, out := requestRun()
+	serverRequest(t, run, "8", "item/commandExecution/requestApproval", `{"command":"x","availableDecisions":["accept","cancel"]}`)
+	if a := (<-out).Approval; a.Remember != nil {
+		t.Errorf("remember offered without Codex offering it: %v", a.Remember)
+	}
+}
+
+func TestFileChangeApprovalRemembersForTheTurn(t *testing.T) {
+	run, buf, out := requestRun()
+	serverRequest(t, run, "9", "item/fileChange/requestApproval", `{"itemId":"fc1"}`)
+	a := (<-out).Approval
+	if !slices.Equal(a.Remember, []string{agent.RememberTurn}) {
+		t.Fatalf("remember = %v", a.Remember)
+	}
+	a.Answer(agent.Reply{Allow: true, Remember: agent.RememberTurn})
+	if got := written(t, buf)["result"].(map[string]any)["decision"]; got != "acceptForSession" {
+		t.Errorf("wrote %v", got)
+	}
+}
+
 func TestUserInputBecomesQuestions(t *testing.T) {
 	run, buf, out := requestRun()
 	serverRequest(t, run, "3", "item/tool/requestUserInput",
@@ -180,6 +221,36 @@ func TestMCPToolElicitationIsAnApproval(t *testing.T) {
 	a.Answer(agent.Reply{Allow: false})
 	if got := written(t, buf)["result"].(map[string]any); got["action"] != "decline" {
 		t.Errorf("declined wrote %v", got)
+	}
+}
+
+// The request is as codex-cli 0.159.2 sends it.
+func TestMCPToolElicitationRemembers(t *testing.T) {
+	for persist, want := range map[string][]string{
+		`["session","always"]`: {agent.RememberTurn, agent.RememberAlways},
+		`"session"`:            {agent.RememberTurn},
+		`null`:                 nil,
+	} {
+		run, buf, out := requestRun()
+		serverRequest(t, run, "4", "mcpServer/elicitation/request",
+			`{"serverName":"probe","mode":"form","message":"Allow the probe MCP server to run tool \"poke\"?",`+
+				`"requestedSchema":{"type":"object","properties":{}},`+
+				`"_meta":{"codex_approval_kind":"mcp_tool_call","persist":`+persist+`,"tool_params":{"n":1}}}`)
+		a := (<-out).Approval
+		if !slices.Equal(a.Remember, want) {
+			t.Fatalf("persist %s: remember = %v", persist, a.Remember)
+		}
+		reply := agent.Reply{Allow: true}
+		if len(want) > 0 {
+			reply.Remember = want[len(want)-1]
+		}
+		a.Answer(reply)
+		meta, _ := json.Marshal(written(t, buf)["result"].(map[string]any)["_meta"])
+		wantMeta := map[string]string{agent.RememberTurn: `{"persist":"session"}`,
+			agent.RememberAlways: `{"persist":"always"}`, "": `null`}[reply.Remember]
+		if string(meta) != wantMeta {
+			t.Errorf("persist %s: _meta = %s, want %s", persist, meta, wantMeta)
+		}
 	}
 }
 

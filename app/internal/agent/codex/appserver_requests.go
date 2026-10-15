@@ -124,6 +124,7 @@ func (r *appServerRun) ask(rpcID json.RawMessage, a *agent.Approval, result func
 		return r.write(map[string]any{"id": rpcID, "result": result(reply)})
 	})
 	asked.Questions = a.Questions
+	asked.Remember = a.Remember
 	r.out <- agent.Event{Type: agent.EventApproval, Approval: asked}
 }
 
@@ -160,14 +161,36 @@ func (r *appServerRun) replyToServerRequest(message appRPCMessage) error {
 	switch message.Method {
 	case "item/commandExecution/requestApproval":
 		var p struct {
-			Command string `json:"command"`
-			Cwd     string `json:"cwd"`
-			Reason  string `json:"reason"`
+			Command   string            `json:"command"`
+			Cwd       string            `json:"cwd"`
+			Reason    string            `json:"reason"`
+			Decisions []json.RawMessage `json:"availableDecisions"`
 		}
 		json.Unmarshal(message.Params, &p)
-		r.ask(message.ID, agent.NewApproval(newID(), "Shell", p.Reason,
-			inputJSON(map[string]string{"command": p.Command, "cwd": p.Cwd}), nil),
-			func(reply agent.Reply) any { return decision(reply.Allow, "accept", "decline") })
+		a := agent.NewApproval(newID(), "Shell", p.Reason,
+			inputJSON(map[string]string{"command": p.Command, "cwd": p.Cwd}), nil)
+		// Remembering is offered only as Codex offers it. Always is a rule
+		// for the command's prefix, sent back as Codex proposed it.
+		var always json.RawMessage
+		for _, d := range p.Decisions {
+			var amendment map[string]json.RawMessage
+			switch {
+			case string(d) == `"acceptForSession"`:
+				a.Remember = append(a.Remember, agent.RememberTurn)
+			case json.Unmarshal(d, &amendment) == nil && amendment["acceptWithExecpolicyAmendment"] != nil:
+				always = d
+				a.Remember = append(a.Remember, agent.RememberAlways)
+			}
+		}
+		r.ask(message.ID, a, func(reply agent.Reply) any {
+			switch {
+			case reply.Allow && reply.Remember == agent.RememberTurn:
+				return map[string]any{"decision": "acceptForSession"}
+			case reply.Allow && reply.Remember == agent.RememberAlways:
+				return map[string]any{"decision": always}
+			}
+			return decision(reply.Allow, "accept", "decline")
+		})
 		return nil
 	case "item/fileChange/requestApproval":
 		var p struct {
@@ -180,8 +203,14 @@ func (r *appServerRun) replyToServerRequest(message appRPCMessage) error {
 		if p.GrantRoot != "" {
 			input["grantRoot"] = p.GrantRoot
 		}
-		r.ask(message.ID, agent.NewApproval(newID(), "Edit files", p.Reason, inputJSON(input), nil),
-			func(reply agent.Reply) any { return decision(reply.Allow, "accept", "decline") })
+		a := agent.NewApproval(newID(), "Edit files", p.Reason, inputJSON(input), nil)
+		a.Remember = []string{agent.RememberTurn}
+		r.ask(message.ID, a, func(reply agent.Reply) any {
+			if reply.Allow && reply.Remember == agent.RememberTurn {
+				return map[string]any{"decision": "acceptForSession"}
+			}
+			return decision(reply.Allow, "accept", "decline")
+		})
 		return nil
 	case "execCommandApproval":
 		var p struct {
@@ -275,6 +304,30 @@ type elicitationMeta struct {
 	Kind            string          `json:"codex_approval_kind"`
 	ToolDescription string          `json:"tool_description"`
 	ToolParams      json.RawMessage `json:"tool_params"`
+	// Persist is how Codex can remember an allow: "session", "always", or a
+	// list of them.
+	Persist json.RawMessage `json:"persist"`
+}
+
+// mcpPersist maps agenttik's remember choices to Codex's persist values. A
+// Codex session is one app-server process, which lives for one turn.
+var mcpPersist = map[string]string{agent.RememberTurn: "session", agent.RememberAlways: "always"}
+
+// remember lists the choices Persist offers, in agenttik's terms.
+func (m *elicitationMeta) remember() []string {
+	var offered []string
+	if json.Unmarshal(m.Persist, &offered) != nil {
+		var one string
+		json.Unmarshal(m.Persist, &one)
+		offered = []string{one}
+	}
+	var choices []string
+	for _, choice := range []string{agent.RememberTurn, agent.RememberAlways} {
+		if slices.Contains(offered, mcpPersist[choice]) {
+			choices = append(choices, choice)
+		}
+	}
+	return choices
 }
 
 type elicitSchema struct {
@@ -340,12 +393,17 @@ func (r *appServerRun) askElicitation(message appRPCMessage) error {
 			if p.Meta.ToolDescription != "" {
 				a.Description = p.Message + " " + p.Meta.ToolDescription
 			}
+			a.Remember = p.Meta.remember()
 		}
 		r.ask(message.ID, a, func(reply agent.Reply) any {
 			if !reply.Allow {
 				return decline
 			}
-			return map[string]any{"action": "accept", "content": map[string]any{}, "_meta": nil}
+			var meta any
+			if persist := mcpPersist[reply.Remember]; persist != "" {
+				meta = map[string]any{"persist": persist}
+			}
+			return map[string]any{"action": "accept", "content": map[string]any{}, "_meta": meta}
 		})
 		return nil
 	}

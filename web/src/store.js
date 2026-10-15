@@ -3758,16 +3758,19 @@ export async function loadApprovals() {
 
 /* answerApproval allows or denies one waiting tool call, or answers its
    questions: answers maps a question id to the picked labels or typed text.
-   Another window may have answered first; then the server refuses this one,
-   and the reload shows the request is gone rather than reporting an error
-   nobody needs to fix. */
-export async function answerApproval(sessionID, id, allow, answers) {
+   remember, one of the approval's remember choices, keeps an allow so the
+   same call is not asked again. Another window may have answered first; then
+   the server refuses this one, and the reload shows the request is gone
+   rather than reporting an error nobody needs to fix. */
+export async function answerApproval(sessionID, id, allow, answers, remember) {
   const approval = S.approvals[sessionID]?.find((a) => a.id === id);
   if (!approval || approval.answering) return;
   approval.answering = true;
+  const body = { allow };
+  if (answers) body.answers = answers;
+  if (remember) body.remember = remember;
   try {
-    await api("POST", `/api/sessions/${sessionID}/approvals/${encodeURIComponent(id)}`,
-      answers ? { allow, answers } : { allow });
+    await api("POST", `/api/sessions/${sessionID}/approvals/${encodeURIComponent(id)}`, body);
     removeApproval(sessionID, id);
   } catch (e) {
     await loadApprovals();

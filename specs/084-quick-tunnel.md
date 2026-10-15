@@ -84,21 +84,31 @@ same way over HTTP/2 and QUIC. agenttik's UI and terminals live on SSE
 
 The backend never sees a websocket.
 
+Another agenttik that forwards the UI to this one — a remote profile
+([085](085-remote-profiles.md)) or `--remote` ([064](064-remote-connections.md))
+— has the same problem on its side of the edge. Its forwarding client uses
+`quicktunnel.StreamTransport`: a `GET` asking for `text/event-stream` from a
+`*.trycloudflare.com` host goes out as a websocket upgrade, and the reply is
+handed back as a `200` SSE response. Each text message becomes one event and
+each ping a `: ping` comment. Fragmented messages are joined. A refusal, such
+as the lock's `401`, is passed back unchanged. Every other request is
+untouched.
+
 ## Limits
 
 - No uptime guarantee; subject to Cloudflare's terms. At most 200 requests
   in flight per tunnel; more get `429`.
-- `agenttik --remote <tunnel URL>` is not supported: the remote client
-  proxies SSE as SSE, so its live updates would be held back.
 - Not available on `--web` launches.
 
 ## Tests
 
 - `go test ./app/internal/quicktunnel` covers RPC layouts, header
-  serialization, the response writer and the SSE→websocket bridge, offline.
+  serialization, the response writer, the SSE→websocket bridge and
+  `StreamTransport` reading it back, offline.
 - `QUICKTUNNEL_LIVE=1 go test ./app/internal/quicktunnel -run Live` opens a
   real tunnel. It checks plain requests, the visitor address, the bridged
-  stream arriving event by event, reconnecting on the same address, and a
+  stream arriving event by event (as a websocket and through
+  `StreamTransport`), reconnecting on the same address, and a
   deleted tunnel being replaced.
 - `QUICKTUNNEL_LIVE=1 go test ./app/internal/server -run TunnelLive` runs the
   whole stack: API on, locked, signed in from outside, and a project event

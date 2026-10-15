@@ -16,7 +16,8 @@ import (
 )
 
 // TestLive opens a real quick tunnel on trycloudflare.com and checks a plain
-// request, an SSE stream carried as a websocket and reusing the saved tunnel all work
+// request, an SSE stream carried as a websocket (by a browser and by
+// StreamTransport) and reusing the saved tunnel all work
 // through it. It needs the internet, so it only runs when asked:
 //
 //	QUICKTUNNEL_LIVE=1 go test ./app/internal/quicktunnel -run Live -v
@@ -86,6 +87,21 @@ func TestLive(t *testing.T) {
 	if strings.Join(got, ",") != "0,1,2" {
 		t.Fatalf("events %q", got)
 	}
+
+	// A forwarding machine asking for the stream as SSE gets it event by
+	// event too, carried as a websocket by StreamTransport.
+	start = time.Now()
+	req, _ := http.NewRequest(http.MethodGet, url+"/sse", nil)
+	req.Header.Set("Accept", "text/event-stream")
+	res, err := (&http.Client{Transport: StreamTransport{Base: http.DefaultTransport}}).Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	line, err := bufio.NewReader(res.Body).ReadString('\n')
+	if line != "data: 0\n" || time.Since(start) > 2500*time.Millisecond {
+		t.Fatalf("first line %q (%v) after %s", line, err, time.Since(start))
+	}
+	res.Body.Close()
 
 	// Reconnect with the saved tunnel: same address.
 	c.Stop()

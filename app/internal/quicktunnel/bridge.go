@@ -129,32 +129,58 @@ func frame(op byte, payload []byte) []byte {
 // readFrames reads, and discards, client frames until a close frame or the
 // end of the stream.
 func readFrames(r io.Reader) error {
-	var hdr [14]byte
 	for {
-		if _, err := io.ReadFull(r, hdr[:2]); err != nil {
-			return err
-		}
-		op, n := hdr[0]&0x0f, uint64(hdr[1]&0x7f)
-		switch n {
-		case 126:
-			if _, err := io.ReadFull(r, hdr[2:4]); err != nil {
-				return err
-			}
-			n = uint64(binary.BigEndian.Uint16(hdr[2:4]))
-		case 127:
-			if _, err := io.ReadFull(r, hdr[2:10]); err != nil {
-				return err
-			}
-			n = binary.BigEndian.Uint64(hdr[2:10])
-		}
-		if hdr[1]&0x80 != 0 {
-			n += 4 // masking key
-		}
-		if _, err := io.CopyN(io.Discard, r, int64(n)); err != nil {
+		op, _, _, err := readFrame(r)
+		if err != nil {
 			return err
 		}
 		if op == opClose {
 			return errors.New("closed by the browser")
 		}
 	}
+}
+
+// maxFrame bounds one frame's payload, like the bridge's longest SSE line.
+const maxFrame = 64 << 20
+
+// readFrame reads one frame and returns its opcode, whether it is the last
+// of its message, and its payload, unmasked.
+func readFrame(r io.Reader) (op byte, fin bool, payload []byte, err error) {
+	var hdr [8]byte
+	if _, err = io.ReadFull(r, hdr[:2]); err != nil {
+		return
+	}
+	op, fin, masked := hdr[0]&0x0f, hdr[0]&0x80 != 0, hdr[1]&0x80 != 0
+	n := uint64(hdr[1] & 0x7f)
+	switch n {
+	case 126:
+		if _, err = io.ReadFull(r, hdr[:2]); err != nil {
+			return
+		}
+		n = uint64(binary.BigEndian.Uint16(hdr[:2]))
+	case 127:
+		if _, err = io.ReadFull(r, hdr[:8]); err != nil {
+			return
+		}
+		n = binary.BigEndian.Uint64(hdr[:8])
+	}
+	if n > maxFrame {
+		return 0, false, nil, errors.New("websocket frame too large")
+	}
+	var mask [4]byte
+	if masked {
+		if _, err = io.ReadFull(r, mask[:]); err != nil {
+			return
+		}
+	}
+	payload = make([]byte, n)
+	if _, err = io.ReadFull(r, payload); err != nil {
+		return
+	}
+	if masked {
+		for i := range payload {
+			payload[i] ^= mask[i%4]
+		}
+	}
+	return
 }

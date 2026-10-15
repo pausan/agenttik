@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+
+	"github.com/pausan/agenttik/app/internal/quicktunnel"
 )
 
 // Client belongs to one desktop window or one loopback-only browser client.
@@ -37,6 +39,9 @@ func (c *Client) Connect(target *url.URL) string {
 	jar, _ := cookiejar.New(nil)
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.FlushInterval = -1
+	// A server behind a quick tunnel has its event streams carried as
+	// websockets, since the edge holds SSE back.
+	proxy.Transport = quicktunnel.StreamTransport{Base: http.DefaultTransport}
 	director := proxy.Director
 	proxy.Director = func(r *http.Request) {
 		director(r)

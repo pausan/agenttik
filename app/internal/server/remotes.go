@@ -23,6 +23,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/pausan/agenttik/app/internal/netauth"
+	"github.com/pausan/agenttik/app/internal/quicktunnel"
 	"github.com/pausan/agenttik/app/internal/remote"
 )
 
@@ -96,9 +97,10 @@ func newRemoteManager(dir string, self, selfName func() (string, error)) *remote
 		keyRefused: map[string]bool{},
 		networks:   remote.LocalNetworks,
 		// No overall timeout: event streams and videos stay open. Redirects
-		// are answered to the UI rather than followed with its cookies.
+		// are answered to the UI rather than followed with its cookies. A
+		// remote behind a quick tunnel has its streams carried as websockets.
 		client: &http.Client{
-			Transport:     http.DefaultTransport.(*http.Transport).Clone(),
+			Transport:     quicktunnel.StreamTransport{Base: http.DefaultTransport.(*http.Transport).Clone()},
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
 	}

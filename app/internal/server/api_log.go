@@ -89,7 +89,10 @@ func (s *Server) projectLog(c *fiber.Ctx) error {
 	if out, err := runGit(root, "rev-parse", "--short=8", "HEAD"); err == nil {
 		body.Head = strings.TrimSpace(out)
 	}
-	args := []string{"log", "--no-color", "--topo-order", "--shortstat", "--diff-merges=first-parent", "--max-count=" + strconv.Itoa(limit),
+	// --name-only rather than --shortstat: the row shows a file count, not
+	// line counts, and counting lines reads every changed blob — seconds on a
+	// repository with large files, enough to hit the git timeout.
+	args := []string{"log", "--no-color", "--topo-order", "--name-only", "--diff-merges=first-parent", "--max-count=" + strconv.Itoa(limit),
 		"--pretty=format:" + logRecordSep + "%H" + logFieldSep + "%an" + logFieldSep + "%ad" + logFieldSep + "%s" + logFieldSep + "%P%n%B" + logFieldSep,
 		"--date=format:%Y-%m-%d %H:%M"}
 	if c.QueryBool("graph") {
@@ -121,7 +124,7 @@ func parseLog(out string) []commitEntry {
 		if strings.TrimSpace(record) == "" {
 			continue
 		}
-		header, stats, _ := strings.Cut(record, "\n")
+		header, files, _ := strings.Cut(record, "\n")
 		fields := strings.Split(header, logFieldSep)
 		if len(fields) < 4 {
 			continue
@@ -139,19 +142,20 @@ func parseLog(out string) []commitEntry {
 			}
 		}
 		entry.Message = entry.Subject
-		if message, remaining, ok := strings.Cut(stats, logFieldSep); ok {
+		if message, remaining, ok := strings.Cut(files, logFieldSep); ok {
 			entry.Message = strings.TrimRight(message, "\n")
-			stats = remaining
+			files = remaining
 		}
-		if match := logFileCount.FindStringSubmatch(stats); len(match) > 1 {
-			entry.FileCount, _ = strconv.Atoi(match[1])
+		// One path per line; git quotes a name that holds a newline.
+		for _, line := range strings.Split(files, "\n") {
+			if line != "" {
+				entry.FileCount++
+			}
 		}
 		commits = append(commits, entry)
 	}
 	return commits
 }
-
-var logFileCount = regexp.MustCompile(`(?m)^\s*(\d+) files? changed`)
 
 func attachLogRefs(commits []commitEntry, refs string) {
 	byHash := make(map[string]*commitEntry, len(commits))

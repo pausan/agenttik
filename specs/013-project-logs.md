@@ -179,8 +179,10 @@ other, revision included.
 | GET | `/api/projects/:id/commit/diff?hash=&path=` | the same `{path, diff, partial}` a working-tree diff answers |
 
 Each commit includes `hash`, `subject`, `message` (full subject and body), `author`, `date`, `parents[]`,
-`branches[]`, `tags[]` and `fileCount`. The log is one `git log --shortstat` with
-a record-separated pretty format and first-parent merge diffs. One
+`branches[]`, `tags[]` and `fileCount`. The log is one `git log --name-only` with
+a record-separated pretty format and first-parent merge diffs; the file count is
+the number of paths listed. `--shortstat` would read every changed blob to count
+lines the row never shows, which takes seconds on repositories with large files. One
 `for-each-ref` call attaches branch and tag names. The file
 list is `git show --numstat` plus `--name-status`, which override each
 other and so cannot be one call. A commit's files are fetched once per commit

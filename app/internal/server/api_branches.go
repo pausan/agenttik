@@ -1,6 +1,7 @@
 package server
 
 import (
+	"regexp"
 	"strings"
 	"time"
 
@@ -26,6 +27,7 @@ func (s *Server) branchAction(c *fiber.Ctx) error {
 		Hash        string         `json:"hash"`
 		Remote      string         `json:"remote"`
 		SetUpstream bool           `json:"setUpstream"`
+		Force       string         `json:"force"`
 		Remotes     []remoteBranch `json:"remotes"`
 	}
 	if err := c.BodyParser(&body); err != nil {
@@ -77,30 +79,7 @@ func (s *Server) branchAction(c *fiber.Ctx) error {
 	case "pull":
 		args = []string{"pull", "--ff-only"}
 	case "push":
-		// Explicit upstream refspec prevents push.default=matching from
-		// pushing unrelated branches.
-		if body.SetUpstream {
-			args = []string{"push", "--set-upstream", "--", "origin", "HEAD:refs/heads/" + body.Branch}
-			break
-		}
-		remote, remoteErr := runGit(root, "config", "--get", "branch."+body.Branch+".remote")
-		target, targetErr := runGit(root, "config", "--get", "branch."+body.Branch+".merge")
-		remote, target = strings.TrimSpace(remote), strings.TrimSpace(target)
-		missing := remoteErr != nil || remote == "" || targetErr != nil || !strings.HasPrefix(target, "refs/heads/")
-		if !missing {
-			out, err := runGitWithTimeout(root, 2*time.Minute, "ls-remote", "--heads", "--", remote, target)
-			if err != nil {
-				return badRequest("%s", err)
-			}
-			missing = strings.TrimSpace(out) == ""
-		}
-		if missing {
-			if _, err := runGit(root, "remote", "get-url", "origin"); err != nil {
-				return badRequest("current branch has no upstream branch and origin is not configured")
-			}
-			return c.JSON(fiber.Map{"confirmPush": true})
-		}
-		args = []string{"push", "--", remote, "HEAD:" + target}
+		return pushBranch(c, root, body.Branch, body.SetUpstream, body.Force)
 	case "clean-remote":
 		return cleanRemoteBranches(c, root, body.Remotes)
 	case "check-remote":
@@ -141,4 +120,64 @@ func (s *Server) branchAction(c *fiber.Ctx) error {
 		return badRequest("%s", err)
 	}
 	return c.SendStatus(fiber.StatusNoContent)
+}
+
+var objectID = regexp.MustCompile(`^[0-9a-f]{40}([0-9a-f]{24})?$`)
+
+// pushBranch sends HEAD to the branch's upstream, or to origin under the same
+// name with setUpstream. A rejection because the remote has commits HEAD lacks,
+// as after a local rebase, answers with the remote tip so the user can confirm
+// a force push. force is that tip: the lease refuses to overwrite anything
+// newer than what the user was shown.
+func pushBranch(c *fiber.Ctx, root, branch string, setUpstream bool, force string) error {
+	if force != "" && !objectID.MatchString(force) {
+		return badRequest("invalid commit hash")
+	}
+	remote, target := "origin", "refs/heads/"+branch
+	if !setUpstream {
+		configured, remoteErr := runGit(root, "config", "--get", "branch."+branch+".remote")
+		merge, targetErr := runGit(root, "config", "--get", "branch."+branch+".merge")
+		configured, merge = strings.TrimSpace(configured), strings.TrimSpace(merge)
+		missing := remoteErr != nil || configured == "" || targetErr != nil || !strings.HasPrefix(merge, "refs/heads/")
+		if !missing {
+			out, err := runGitWithTimeout(root, 2*time.Minute, "ls-remote", "--heads", "--", configured, merge)
+			if err != nil {
+				return badRequest("%s", err)
+			}
+			missing = strings.TrimSpace(out) == ""
+		}
+		if missing {
+			if _, err := runGit(root, "remote", "get-url", "origin"); err != nil {
+				return badRequest("current branch has no upstream branch and origin is not configured")
+			}
+			return c.JSON(fiber.Map{"confirmPush": true})
+		}
+		remote, target = configured, merge
+	}
+	// Explicit upstream refspec prevents push.default=matching from
+	// pushing unrelated branches.
+	args := []string{"push"}
+	if setUpstream {
+		args = append(args, "--set-upstream")
+	}
+	if force != "" {
+		args = append(args, "--force-with-lease="+target+":"+force)
+	}
+	args = append(args, "--", remote, "HEAD:"+target)
+	_, pushErr := runGitWithTimeout(root, 2*time.Minute, args...)
+	if pushErr == nil {
+		return c.SendStatus(fiber.StatusNoContent)
+	}
+	if force == "" {
+		// Ancestry rather than git's message, which may be translated. A tip
+		// unknown locally is not an ancestor either: the remote moved on.
+		out, err := runGitWithTimeout(root, 2*time.Minute, "ls-remote", "--heads", "--", remote, target)
+		tip, _, _ := strings.Cut(strings.TrimSpace(out), "\t")
+		if err == nil && objectID.MatchString(tip) {
+			if _, err := runGit(root, "merge-base", "--is-ancestor", tip, "HEAD"); err != nil {
+				return c.JSON(fiber.Map{"confirmForce": true, "remote": remote, "tip": tip, "error": pushErr.Error()})
+			}
+		}
+	}
+	return badRequest("%s", pushErr)
 }

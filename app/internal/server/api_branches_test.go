@@ -63,6 +63,66 @@ func TestPushRequiresConfirmationWithoutUpstream(t *testing.T) {
 	check()
 }
 
+func TestPushOffersForceAfterRebase(t *testing.T) {
+	s, st := newTestServer(t)
+	root, remote, other := t.TempDir(), t.TempDir(), t.TempDir()
+	git := func(dir string, args ...string) string {
+		t.Helper()
+		out, err := runGit(dir, append([]string{"-c", "user.name=Test", "-c", "user.email=test@example.com"}, args...)...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return strings.TrimSpace(out)
+	}
+	git(remote, "init", "--bare")
+	git(root, "init", "-b", "topic")
+	git(root, "commit", "--allow-empty", "-m", "initial")
+	git(root, "remote", "add", "origin", remote)
+	git(root, "push", "--set-upstream", "origin", "topic")
+	git(root, "commit", "--amend", "--allow-empty", "-m", "rebased")
+	p, err := st.CreateProject("force push", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	url := "/api/projects/" + itoa(p.ID) + "/branches/push"
+	type answer struct {
+		ConfirmForce bool   `json:"confirmForce"`
+		Remote       string `json:"remote"`
+		Tip          string `json:"tip"`
+		Error        string `json:"error"`
+	}
+	asked := decode[answer](t, do(t, s, "POST", url, map[string]string{"branch": "topic"}))
+	if !asked.ConfirmForce || asked.Remote != "origin" || asked.Tip != git(remote, "rev-parse", "topic") || asked.Error == "" {
+		t.Fatalf("no force confirmation: %+v", asked)
+	}
+	// The remote moves on after the user was asked: the lease refuses, and a
+	// fresh push asks again with the tip it does not know locally.
+	git(other, "clone", "-b", "topic", remote, ".")
+	git(other, "commit", "--allow-empty", "-m", "elsewhere")
+	git(other, "push")
+	r := do(t, s, "POST", url, map[string]string{"branch": "topic", "force": asked.Tip})
+	r.Body.Close()
+	if r.StatusCode != 400 || git(remote, "rev-parse", "topic") != git(other, "rev-parse", "HEAD") {
+		t.Fatal("force push overwrote commits the user was not shown")
+	}
+	asked = decode[answer](t, do(t, s, "POST", url, map[string]string{"branch": "topic"}))
+	if !asked.ConfirmForce || asked.Tip != git(other, "rev-parse", "HEAD") {
+		t.Fatalf("no force confirmation for unknown tip: %+v", asked)
+	}
+	r = do(t, s, "POST", url, map[string]string{"branch": "topic", "force": asked.Tip})
+	r.Body.Close()
+	if r.StatusCode != 204 || git(remote, "rev-parse", "topic") != git(root, "rev-parse", "HEAD") {
+		t.Fatal("force push did not replace the remote branch")
+	}
+	// Other failures stay errors.
+	git(root, "remote", "set-url", "origin", t.TempDir())
+	r = do(t, s, "POST", url, map[string]string{"branch": "topic"})
+	r.Body.Close()
+	if r.StatusCode != 400 {
+		t.Fatal(r.StatusCode)
+	}
+}
+
 func TestSwitchAndPullRemoteBranch(t *testing.T) {
 	s, st := newTestServer(t)
 	root, remote := t.TempDir(), t.TempDir()

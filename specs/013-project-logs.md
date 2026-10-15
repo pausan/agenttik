@@ -23,7 +23,13 @@ network requests. Pull is fast-forward only. Push sends only HEAD to the current
 branch's configured upstream. It checks the live remote: an unset upstream or
 an upstream branch deleted remotely opens **Push branch to origin?**, offering
 **Push to origin** or **Cancel**. Confirm pushes only that branch to origin with
-the same name and sets its upstream. Cancel or dismiss sends nothing. Missing
+the same name and sets its upstream. Cancel or dismiss sends nothing. A push
+rejected because the remote branch has commits HEAD lacks (as after a local
+rebase) opens **Force push branch?**. Force push uses `--force-with-lease`
+pinned to the remote tip read after the rejection, so commits pushed since are
+never overwritten; that push fails and the next push asks again. Cancel or
+dismiss shows Git's rejection as the error. Divergence is detected by ancestry,
+not Git's message, so translated Git output still works. Missing
 origin and remote connection errors are reported in the pane. Confirmation for
 a branch no longer checked out is rejected.
 Controls are disabled while an action runs and remote
@@ -174,7 +180,7 @@ other, revision included.
 | Method | Path | Answers |
 |---|---|---|
 | GET | `/api/projects/:id/log?limit=&graph=` | `{branch, branches[], remoteBranches[{remote,branch,tip}], head, operation, commits[]}` — up to 500 commits in topological order; graph includes all branch/tag histories; picker refs have empty `tip` |
-| POST | `/api/projects/:id/branches/:action?repo=` | `{branch, target?}`; switch/pull/push/fetch return 204; switch optionally accepts `remote` to fetch and sync a local tracking branch; push returns `{confirmPush:true}` when confirmation is needed, and accepts `setUpstream:true` to publish to origin; fetch also accepts an empty branch; checkout accepts `{hash}` and returns 204; clean returns `{deleted[]}`; check-remote returns `{remotes[{remote,branch,tip}]}`; clean-remote accepts `{branch,remotes[]}` and returns `{deleted[],error?}`; merge/rebase/continue/abort return `{message}` |
+| POST | `/api/projects/:id/branches/:action?repo=` | `{branch, target?}`; switch/pull/push/fetch return 204; switch optionally accepts `remote` to fetch and sync a local tracking branch; push returns `{confirmPush:true}` when confirmation is needed, and accepts `setUpstream:true` to publish to origin; a diverged push returns `{confirmForce:true,remote,tip,error}`, and `force:<tip>` force pushes with that lease; fetch also accepts an empty branch; checkout accepts `{hash}` and returns 204; clean returns `{deleted[]}`; check-remote returns `{remotes[{remote,branch,tip}]}`; clean-remote accepts `{branch,remotes[]}` and returns `{deleted[],error?}`; merge/rebase/continue/abort return `{message}` |
 | GET | `/api/projects/:id/commit?hash=` | `{hash, files[{path,status,additions,deletions,binary}]}` |
 | GET | `/api/projects/:id/commit/diff?hash=&path=` | the same `{path, diff, partial}` a working-tree diff answers |
 

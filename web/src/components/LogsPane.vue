@@ -20,6 +20,7 @@ const notice = ref("");
 const operation = ref("merge");
 const remoteCleanup = ref(null);
 const pushConfirmation = ref(null);
+const forceConfirmation = ref(null);
 const target = ref("");
 const targets = computed(() => (S.log.branches || []).filter((name) => name !== S.log.branch));
 const blocked = computed(() => !!busy.value || !!S.log.operation);
@@ -34,6 +35,7 @@ function selectBranch(value) {
 watch(() => [currentProjectID(), S.repository], () => {
   remoteCleanup.value = null;
   pushConfirmation.value = null;
+  forceConfirmation.value = null;
   branchSearch.value = "";
   target.value = "";
   error.value = "";
@@ -57,7 +59,10 @@ async function act(action, branch = S.log.branch, remotes = [], hash = "", optio
     const result = await api("POST", `/api/projects/${id}/branches/${action}?repo=${encodeURIComponent(repo)}`, { branch, ...options, ...(action === "checkout" ? { hash } : {}), ...(action === "clean-remote" ? { remotes } : {}), ...(["merge", "rebase"].includes(action) ? { target: target.value } : {}) });
     if (stillHere()) {
       branchSearch.value = "";
-      if (action === "push") pushConfirmation.value = result?.confirmPush ? { branch } : null;
+      if (action === "push") {
+        pushConfirmation.value = result?.confirmPush ? { branch } : null;
+        forceConfirmation.value = result?.confirmForce ? { branch, ...result, setUpstream: !!options.setUpstream } : null;
+      }
       if (result?.message) notice.value = result.message;
       if (action === "clean-remote") {
         remoteCleanup.value = null;
@@ -74,7 +79,7 @@ async function act(action, branch = S.log.branch, remotes = [], hash = "", optio
   } catch (e) {
     if (stillHere()) {
       if (action === "clean-remote") remoteCleanup.value = null;
-      if (action === "push") pushConfirmation.value = null;
+      if (action === "push") pushConfirmation.value = forceConfirmation.value = null;
       error.value = e.message;
     }
   } finally {
@@ -83,6 +88,11 @@ async function act(action, branch = S.log.branch, remotes = [], hash = "", optio
     // Refresh failures too: Git may have completed part of an operation.
     if (stillHere()) await Promise.all([refreshLog(), refreshChanged(), refreshTree()]);
   }
+}
+// Declining reports the rejected push as a plain failure.
+function declineForce() {
+  error.value = forceConfirmation.value?.error || "";
+  forceConfirmation.value = null;
 }
 
 /* Each commit is matched once against one string. Building it per keystroke
@@ -195,6 +205,15 @@ const menu = computed(() => [
       <template #footer>
         <UButton color="neutral" variant="ghost" label="Cancel" :disabled="!!busy" @click="pushConfirmation = null" />
         <UButton label="Push to origin" :loading="busy === 'push'" :disabled="!!busy" @click="act('push', pushConfirmation.branch, [], '', { setUpstream: true })" />
+      </template>
+    </UModal>
+    <UModal :open="!!forceConfirmation" title="Force push branch?" @update:open="(open) => { if (!open) declineForce(); }">
+      <template #body>
+        <p class="text-sm">The remote branch has commits that <span class="font-mono">{{ forceConfirmation?.branch }}</span> does not, as after a rebase. Force push to <span class="font-mono">{{ forceConfirmation?.remote }}</span>? Remote commits missing locally will be lost. The push is refused if the remote changes again first.</p>
+      </template>
+      <template #footer>
+        <UButton color="neutral" variant="ghost" label="Cancel" :disabled="!!busy" @click="declineForce" />
+        <UButton color="error" label="Force push" :loading="busy === 'push'" :disabled="!!busy" @click="act('push', forceConfirmation.branch, [], '', { setUpstream: forceConfirmation.setUpstream, force: forceConfirmation.tip })" />
       </template>
     </UModal>
     <UModal :open="!!remoteCleanup" title="Delete merged remote branches?" @update:open="(open) => { if (!open) remoteCleanup = null; }">

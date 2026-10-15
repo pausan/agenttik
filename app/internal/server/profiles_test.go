@@ -86,7 +86,8 @@ func TestProfilesPersistAndDeleteOnlyTheirData(t *testing.T) {
 		t.Fatal(err)
 	}
 	projects := decode[[]store.Project](t, do(t, s, "GET", "/api/projects?profile="+p.ID, nil))
-	if len(projects) != 1 {
+	// A new profile starts with its own orchestrator ahead of the project.
+	if len(projects) != 2 || projects[0].Kind != "orchestrator" || projects[1].Path != path {
 		t.Fatalf("projects did not persist: %+v", projects)
 	}
 	if resp := do(t, s, "DELETE", "/api/profiles/"+p.ID, nil); resp.StatusCode != 204 {

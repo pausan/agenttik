@@ -396,32 +396,33 @@ ALTER TABLE sessions ADD COLUMN origin_id TEXT NOT NULL DEFAULT '';
 CREATE INDEX idx_sessions_parent ON sessions(parent_id) WHERE parent_id != '';`,
 }
 
-func migrate(db *sql.DB, path string) error {
+// migrate reports whether it created the schema in an empty database.
+func migrate(db *sql.DB, path string) (bool, error) {
 	var version int
 	if err := db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
-		return fmt.Errorf("read schema version: %w", err)
+		return false, fmt.Errorf("read schema version: %w", err)
 	}
 	if version < 0 || version > len(migrations) {
-		return fmt.Errorf("database schema version %d is unsupported (this executable supports 0–%d); use a newer Agenttik version or restore a compatible backup", version, len(migrations))
+		return false, fmt.Errorf("database schema version %d is unsupported (this executable supports 0–%d); use a newer Agenttik version or restore a compatible backup", version, len(migrations))
 	}
 	if version == len(migrations) {
-		return nil
+		return false, nil
 	}
 	backup := ""
 	if version > 0 {
 		var err error
 		backup, err = backupBeforeMigration(db, path, version)
 		if err != nil {
-			return fmt.Errorf("back up database before migration: %w", err)
+			return false, fmt.Errorf("back up database before migration: %w", err)
 		}
 	}
 	if err := applyMigrations(db, version, migrations); err != nil {
 		if backup != "" {
-			return fmt.Errorf("%w (pre-upgrade backup: %s)", err, backup)
+			return false, fmt.Errorf("%w (pre-upgrade backup: %s)", err, backup)
 		}
-		return err
+		return false, err
 	}
-	return nil
+	return version == 0, nil
 }
 
 // Each step commits its SQL and version together, so a restart resumes at the

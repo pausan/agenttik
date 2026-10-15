@@ -1,6 +1,6 @@
 # Orchestrator project
 
-An optional app-wide project coordinates work across other projects using the
+An app-wide project, on by default, coordinates work across other projects using the
 same task, schedule, file and provider machinery. `projects.kind` identifies
 it independently of its editable name and folder. A partial unique index
 allows at most one. Active project lists always put it first, ahead of the
@@ -13,6 +13,12 @@ project page, and resets its prompt. The settings filter matches the section.
 Its sidebar row has a pin, occupies the first project shortcut, and cannot be
 dragged or displaced by another project's drag. Its tasks remain reorderable.
 
+The orchestrator is not a project of the user's own. With no other visible
+project the sidebar still says "No projects yet", startup selects nothing, and
+`Ctrl+N` shows its first-launch notice unless the orchestrator is open. When
+the selection must move after a removal, hide or archive, it goes to the first
+other project, or to nothing (`defaultProjectID` in `store.js`).
+
 The project retains the usual tasks, jobs, stats, name, folder, prompt, file
 views and deletion controls. The Prompt tab also offers Reset prompt to
 default. Reset waits for a pending editor save so the save cannot overwrite
@@ -20,6 +26,12 @@ the restored default. The enable switch is unavailable while its work is
 active or queued, matching the API's archive guard.
 
 ## Lifecycle and storage
+
+A new database, whether a fresh install, a new profile or a private instance,
+starts with the orchestrator enabled. Startup and `agenttik init` call
+`EnableDefaultOrchestrator`, which acts only when `store.Open` has just created
+the schema; tests opening a store directly start without it. An existing
+database keeps the user's choice, including never having enabled it.
 
 The first enable creates an empty `orchestrator/` folder inside the app's data
 directory and a project named Orchestrator with the built-in standing prompt.

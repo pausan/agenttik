@@ -12,7 +12,7 @@ for (const shortcut of ["Control+n", "Control+t"]) {
     const projects = await (await page.request.get(`${agenttik.url}/api/projects`)).json();
     const sessions = await (await page.request.get(`${agenttik.url}/api/sessions`)).json();
     expect(sessions).toHaveLength(1);
-    expect(sessions[0].project_id).toBe(projects[0].id);
+    expect(sessions[0].project_id).toBe(projects.find((p) => p.kind !== "orchestrator").id);
   });
 
   test(`${shortcut} guides users without projects instead of showing an error`, async ({ page, agenttik }) => {

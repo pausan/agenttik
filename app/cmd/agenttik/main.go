@@ -151,6 +151,9 @@ func run() error {
 		return err
 	}
 	defer db.Close()
+	if err := db.EnableDefaultOrchestrator(); err != nil {
+		return err
+	}
 
 	// No turn survives a restart, so clear anything left marked running. The
 	// same goes for a schedule's open run unless its prompt is still queued:

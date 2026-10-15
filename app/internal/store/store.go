@@ -19,6 +19,8 @@ type Store struct {
 	// where app-managed directories belong — a subscription's CLI config dir,
 	// for one. See 050-subscription-accounts.md.
 	dir string
+	// fresh is set when Open created the schema in an empty database.
+	fresh bool
 }
 
 // Open opens (creating if needed) the database at path and migrates it.
@@ -35,11 +37,12 @@ func Open(path string) (*Store, error) {
 	// modernc/sqlite is safe for concurrent use but a single writer avoids
 	// SQLITE_BUSY churn; reads are fast enough that this is not a bottleneck.
 	db.SetMaxOpenConns(1)
-	if err := migrate(db, absolutePath); err != nil {
+	fresh, err := migrate(db, absolutePath)
+	if err != nil {
 		db.Close()
 		return nil, err
 	}
-	return &Store{db: db, dir: filepath.Dir(path), path: absolutePath}, nil
+	return &Store{db: db, dir: filepath.Dir(path), path: absolutePath, fresh: fresh}, nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }

@@ -5,6 +5,7 @@ import {
   PROJECT_KEYS,
   S,
   TAB_CHORDS,
+  defaultProjectID,
   openInSystem,
   openProject,
   openSchedule,
@@ -241,9 +242,6 @@ function onTaskDrop(e, projectID, overID) {
     <!-- Projects -->
     <template v-if="tab === 'projects'">
       <div class="min-h-0 flex-1 overflow-auto">
-        <p v-if="!S.projects.length" class="px-3 py-5 text-center text-dimmed">
-          No projects yet. Add the folder you want to work in.
-        </p>
         <div
           v-for="(p, i) in S.projects"
           :key="p.id"
@@ -363,6 +361,11 @@ function onTaskDrop(e, projectID, overID) {
             />
           </div>
         </div>
+        <!-- The orchestrator is there from the first launch; it is not a
+             project of the user's own. -->
+        <p v-if="!defaultProjectID()" class="px-3 py-5 text-center text-dimmed">
+          No projects yet. Add the folder you want to work in.
+        </p>
       </div>
     </template>
 

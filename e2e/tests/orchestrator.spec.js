@@ -11,10 +11,9 @@ const binary = fileURLToPath(new URL("../../bin/agenttik-web", import.meta.url))
 const settings = (page) => page.getByRole("dialog");
 const toggle = (page) => settings(page).getByRole("switch", { name: "Enable orchestrator" });
 
-async function enable(page, agenttik) {
+// A new data directory starts with the orchestrator enabled.
+async function openOrchestratorSettings(page, agenttik) {
   await openSettings(page, "Orchestrator");
-  await expect(toggle(page)).not.toBeChecked();
-  await toggle(page).click();
   await expect(toggle(page)).toBeChecked();
   return (await page.request.get(agenttik.url + "/api/orchestrator")).json();
 }
@@ -30,7 +29,7 @@ async function command(agenttik, method, path, body) {
 test("orchestrator stays pinned through dragging, API ordering and reload", async ({ page, agenttik }) => {
   await addProject(page, REPO + "/app");
   await addProject(page, REPO + "/web");
-  const cfg = await enable(page, agenttik);
+  const cfg = await openOrchestratorSettings(page, agenttik);
   await settings(page).getByRole("button", { name: "Done", exact: true }).click();
   const rows = sidebar(page).locator("[draggable]");
   await expect(rows.first()).toContainText("Orchestrator");
@@ -53,7 +52,7 @@ test("orchestrator stays pinned through dragging, API ordering and reload", asyn
 });
 
 test("orchestrator prompt resets after a pending edit and from settings", async ({ page, agenttik }) => {
-  const cfg = await enable(page, agenttik);
+  const cfg = await openOrchestratorSettings(page, agenttik);
   await settings(page).getByRole("button", { name: "Open project", exact: true }).click();
   await page.getByRole("tab", { name: "Prompt", exact: true }).click();
   const editor = page.getByRole("textbox", { name: "Project prompt" });
@@ -83,7 +82,7 @@ test("orchestrator prompt resets after a pending edit and from settings", async 
 });
 
 test("disable restores tasks; deletion keeps files and options with fresh history on re-enable", async ({ page, agenttik }) => {
-  const cfg = await enable(page, agenttik);
+  const cfg = await openOrchestratorSettings(page, agenttik);
   await settings(page).getByRole("button", { name: "Open project", exact: true }).click();
   await inspector(page).getByRole("tab", { name: "Project Options", exact: true }).click();
   const name = inspector(page).getByRole("textbox", { name: "Name" });
@@ -130,7 +129,7 @@ test("disable restores tasks; deletion keeps files and options with fresh histor
 test("control commands update live task and project views without reloading", async ({ page, agenttik }) => {
   await addProject(page, REPO + "/app");
   await openProject(page, REPO + "/app");
-  const [project] = await command(agenttik, "GET", "/api/projects");
+  const project = (await command(agenttik, "GET", "/api/projects")).find((p) => p.kind !== "orchestrator");
   const task = await command(agenttik, "POST", "/api/sessions", {
     project_id: project.id, provider: "fake", title: "Command-created task",
   });
@@ -156,7 +155,7 @@ test("control commands update live task and project views without reloading", as
 });
 
 test("orchestrator tasks and jobs use normal views and waiting tasks update on commands", async ({ page, agenttik }) => {
-  const cfg = await enable(page, agenttik);
+  const cfg = await openOrchestratorSettings(page, agenttik);
   await settings(page).getByRole("button", { name: "Open project", exact: true }).click();
   const blocker = await command(agenttik, "POST", "/api/sessions", {
     project_id: cfg.project_id, provider: "fake", title: "Blocking task",
@@ -208,7 +207,7 @@ test("reconnecting refreshes a task after its stop event was missed", async ({ p
   await page.reload();
   await addProject(page, REPO + "/app");
   await openProject(page, REPO + "/app");
-  const [project] = await command(agenttik, "GET", "/api/projects");
+  const project = (await command(agenttik, "GET", "/api/projects")).find((p) => p.kind !== "orchestrator");
   const task = await command(agenttik, "POST", "/api/sessions", {
     project_id: project.id, provider: "fake", title: "Reconnect task",
   });

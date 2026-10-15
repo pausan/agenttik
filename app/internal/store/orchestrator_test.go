@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -158,5 +159,40 @@ func TestConcurrentOrchestratorEnableAndFolderCollision(t *testing.T) {
 	cfg, _ := s.GetOrchestratorConfig()
 	if cfg.Enabled || cfg.ProjectID != 0 {
 		t.Fatal("collision converted an ordinary project into the orchestrator")
+	}
+}
+
+func TestDefaultOrchestratorOnlyInNewDatabase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agenttik.db")
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.EnableDefaultOrchestrator(); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := s.GetOrchestratorConfig()
+	if err != nil || !cfg.Enabled || cfg.ProjectID == 0 {
+		t.Fatalf("new database config = %+v, %v", cfg, err)
+	}
+	if info, err := os.Stat(cfg.Path); err != nil || !info.IsDir() {
+		t.Fatalf("orchestrator folder: %v", err)
+	}
+	if err := s.SetOrchestratorEnabled(false); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+
+	// Reopening keeps the user's choice.
+	s, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if err := s.EnableDefaultOrchestrator(); err != nil {
+		t.Fatal(err)
+	}
+	if cfg, err := s.GetOrchestratorConfig(); err != nil || cfg.Enabled {
+		t.Fatalf("reopened config = %+v, %v", cfg, err)
 	}
 }

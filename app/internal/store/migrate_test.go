@@ -215,7 +215,7 @@ func TestBackupFailureStopsMigration(t *testing.T) {
 	if err := applyMigrations(db, 0, migrations[:1]); err != nil {
 		t.Fatal(err)
 	}
-	err := migrate(db, filepath.Join(t.TempDir(), "missing", "db"))
+	_, err := migrate(db, filepath.Join(t.TempDir(), "missing", "db"))
 	if err == nil || !strings.Contains(err.Error(), "back up database") {
 		t.Fatalf("error: %v", err)
 	}
@@ -234,7 +234,7 @@ func TestFailedUpgradeKeepsBackup(t *testing.T) {
 		t.Fatal(err)
 	}
 	execSQL(t, db, "CREATE INDEX idx_sessions_order ON sessions(title)")
-	err := migrate(db, path)
+	_, err := migrate(db, path)
 	if err == nil || !strings.Contains(err.Error(), "pre-upgrade backup:") {
 		t.Fatalf("error: %v", err)
 	}
@@ -246,7 +246,7 @@ func TestFailedUpgradeKeepsBackup(t *testing.T) {
 		t.Fatal(backups)
 	}
 	execSQL(t, db, "DROP INDEX idx_sessions_order")
-	if err := migrate(db, path); err != nil {
+	if _, err := migrate(db, path); err != nil {
 		t.Fatal(err)
 	}
 	after, _ := filepath.Glob(path + ".before-*.db")

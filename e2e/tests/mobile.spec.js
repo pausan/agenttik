@@ -22,7 +22,7 @@ const prompt = (page) => page.getByPlaceholder("Ask the agent…");
 
 async function selectProject(page, name) {
   await projectsButton(page).tap();
-  await projectDrawer(page).getByRole("button", { name: new RegExp(name) }).tap();
+  await projectDrawer(page).getByRole("button", { name: new RegExp("^" + name) }).tap();
   await expect(projectDrawer(page)).toBeHidden();
   await expect(page.locator("main").getByRole("heading", { name, exact: true })).toBeVisible();
 }

@@ -31,13 +31,17 @@ test("private instances coexist, keep browser state ephemeral, and clean up on S
     const dirs = (await readdir(root)).filter(name => name.startsWith("agenttik-private-"));
     expect(dirs).toHaveLength(2);
     await page.request.post(`${children[0].url}/api/projects`, { data: { path: REPO, name: "Private project" } });
-    expect(await (await page.request.get(`${children[1].url}/api/projects`)).json()).toEqual([]);
-    expect(await (await page.request.get(`${agenttik.url}/api/projects`)).json()).toEqual([]);
+    // Each instance has only its own orchestrator.
+    const kinds = async (url) => (await (await page.request.get(`${url}/api/projects`)).json()).map((p) => p.kind);
+    expect(await kinds(children[1].url)).toEqual(["orchestrator"]);
+    expect(await kinds(agenttik.url)).toEqual(["orchestrator"]);
     await page.goto(children[0].url);
     await expect(page.getByText("Private", { exact: true })).toBeVisible();
     await expect(page.getByText("Private project", { exact: true }).first()).toBeVisible();
     await page.reload();
     expect(await page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith("agenttik.")))).toEqual([]);
+    // Leave first: requests still loading would log errors once it stops.
+    await page.goto("about:blank");
     for (const child of children) { child.proc.kill("SIGTERM"); await child.exited; }
     expect((await readdir(root)).filter(name => name.startsWith("agenttik-private-"))).toEqual([]);
     expect((await page.request.get(`${agenttik.url}/api/projects`)).ok()).toBe(true);

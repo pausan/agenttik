@@ -1015,6 +1015,13 @@ export async function reopenClosedTab() {
 /* currentProjectID is the project the right panel works against, whichever
    kind of view is in front — and the selected project when the strip is
    empty, so closing the last tab does not empty the Tree as well. */
+/* defaultProjectID is the project to show when nothing else is selected. The
+   orchestrator exists from the first launch, so it is skipped: a window with
+   no project of the user's own shows the empty workspace instead. */
+export function defaultProjectID() {
+  return S.projects.find((p) => p.kind !== "orchestrator")?.id || 0;
+}
+
 export function currentProjectID() {
   if (S.detail) return S.detail.session.project_id;
   if (S.project) return S.project.project.id;
@@ -1143,7 +1150,7 @@ export async function refreshProjects() {
     syncProjectSessionOrder(project.id, project.recent_sessions.map((session) => session.id));
   }
   resubscribe();
-  if (detached && !S.activeProjectID && projects.length) await switchProject(projects[0].id);
+  if (detached && !S.activeProjectID && defaultProjectID()) await switchProject(defaultProjectID());
 }
 
 /* reorderProjects persists the sidebar order after it has already moved under
@@ -1258,7 +1265,7 @@ const reloadLists = debounce(() => {
 export async function addProject(path, name) {
   await api("POST", "/api/projects", { path, name });
   await refreshProjects();
-  if (!S.activeProjectID && S.projects.length) await switchProject(S.projects[0].id);
+  if (!S.activeProjectID && defaultProjectID()) await switchProject(defaultProjectID());
 }
 
 export async function removeProject(p) {
@@ -1266,7 +1273,7 @@ export async function removeProject(p) {
     await api("DELETE", "/api/projects/" + p.id);
     const wasShowing = detachProject(p.id);
     await Promise.all([refreshProjects(), refreshSessions()]);
-    if (wasShowing && S.projects.length) await switchProject(S.projects[0].id);
+    if (wasShowing && defaultProjectID()) await switchProject(defaultProjectID());
   } catch (e) {
     fail(e);
   }
@@ -1279,7 +1286,7 @@ export async function moveProject(p, profileID) {
   await api("POST", `/api/profiles/${encodeURIComponent(profileID)}/projects/${p.id}/move`);
   const wasShowing = detachProject(p.id);
   await Promise.all([refreshProjects(), refreshSessions()]);
-  if (wasShowing && S.projects.length) await switchProject(S.projects[0].id);
+  if (wasShowing && defaultProjectID()) await switchProject(defaultProjectID());
 }
 
 /* detachProject takes a project off the screen, and says whether it was the
@@ -1309,9 +1316,8 @@ export async function setProjectArchived(p, archived) {
     await Promise.all([refreshProjects(), refreshSessions(), loadArchivedProjects()]);
     // Restoring the only project there is leaves nothing selected, and the
     // sidebar, the Tree and Ctrl+N all want one.
-    if ((wasShowing || !S.activeProjectID) && S.projects.length) {
-      await switchProject(archived ? S.projects[0].id : p.id);
-    }
+    const next = archived ? defaultProjectID() : p.id;
+    if ((wasShowing || !S.activeProjectID) && next) await switchProject(next);
   } catch (e) {
     fail(e);
   }
@@ -1341,9 +1347,8 @@ export async function setProjectHidden(p, hidden) {
     await api("PATCH", "/api/projects/" + p.id, { hidden });
     const wasShowing = hidden && detachProject(p.id);
     await Promise.all([refreshProjects(), refreshSessions(), loadHiddenProjects()]);
-    if ((wasShowing || !S.activeProjectID) && S.projects.length) {
-      await switchProject(hidden ? S.projects[0].id : p.id);
-    }
+    const next = hidden ? defaultProjectID() : p.id;
+    if ((wasShowing || !S.activeProjectID) && next) await switchProject(next);
   } catch (e) {
     fail(e);
   }
@@ -1357,9 +1362,8 @@ export async function setOrchestratorEnabled(enabled) {
   try {
     S.orchestrator = await api("PUT", "/api/orchestrator", { enabled });
     await Promise.all([refreshProjects(), refreshSessions(), loadArchivedProjects()]);
-    if (!S.activeProjectID && S.projects.length) {
-      await switchProject(enabled ? S.orchestrator.project_id : S.projects[0].id);
-    }
+    const next = enabled ? S.orchestrator.project_id : defaultProjectID();
+    if (!S.activeProjectID && next) await switchProject(next);
   } catch (e) {
     fail(e);
   }
@@ -1882,9 +1886,9 @@ export async function startTask(project) {
    identify their owning project. */
 export async function startCurrentTask() {
   await startupReady;
-  // An empty sidebar has nowhere to put a task, and that is a first launch
+  // Nothing selected and no project of the user's own is a first launch
   // rather than a failure: say which step comes before this one.
-  if (!S.projects.length) {
+  if (!currentProjectID() && !defaultProjectID()) {
     return notice("No projects yet", "Add the folder you want to work in from the Projects panel, or take the Quick Start Tour in Settings → Help.");
   }
   const id = currentProjectID();
@@ -4026,7 +4030,7 @@ async function initialize() {
     await restoreOpenTabs();
     // A first launch has no tabs to say which project is selected, and the
     // sidebar, the Tree and Ctrl+N all want one.
-    if (!S.activeProjectID && S.projects.length) S.activeProjectID = S.projects[0].id;
+    if (!S.activeProjectID && defaultProjectID()) S.activeProjectID = defaultProjectID();
   } catch (e) {
     fail(e);
   }

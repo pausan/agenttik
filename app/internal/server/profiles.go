@@ -130,6 +130,10 @@ func (m *profileManager) open(id string) (*profileRuntime, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := db.EnableDefaultOrchestrator(); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if err := db.ResetRunningSessions(); err != nil {
 		db.Close()
 		return nil, err

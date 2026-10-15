@@ -43,6 +43,9 @@ func addProject(cfg config.Config, dir string) error {
 		return err
 	}
 	defer db.Close()
+	if err := db.EnableDefaultOrchestrator(); err != nil {
+		return err
+	}
 
 	if _, err := db.CreateProject(filepath.Base(path), path); err != nil {
 		if errors.Is(err, store.ErrPathInUse) {

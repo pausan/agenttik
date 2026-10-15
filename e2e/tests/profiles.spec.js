@@ -27,7 +27,7 @@ test("profiles appear only when needed and isolate the same project", async ({ p
   await expect(sidebar(page).getByText("Personal project", { exact: true })).toHaveCount(0);
   const id = new URL(page.url()).searchParams.get("profile");
   const project = await (await page.request.post(`${agenttik.url}/api/projects?profile=${id}`, { data: { path: REPO, name: "Work project" } })).json();
-  const personal = await (await page.request.get(`${agenttik.url}/api/projects`)).json();
+  const personal = (await (await page.request.get(`${agenttik.url}/api/projects`)).json()).filter((p) => p.kind !== "orchestrator");
   expect(personal).toHaveLength(1);
   expect(personal[0].name).toBe("Personal project");
   expect(project.name).toBe("Work project");

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/pausan/agenttik/app/internal/orchestrator"
@@ -40,6 +41,23 @@ func (s *Store) GetOrchestratorConfig() (OrchestratorConfig, error) {
 		}
 	}
 	return cfg, err
+}
+
+// EnableDefaultOrchestrator turns the orchestrator on in a database Open
+// just created. Existing databases keep the user's choice, including never
+// enabling it. Callers opt in so tests can start from an empty store.
+func (s *Store) EnableDefaultOrchestrator() error {
+	if !s.fresh {
+		return nil
+	}
+	cfg, err := s.orchestratorDefaults()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(cfg.Path, 0o755); err != nil {
+		return err
+	}
+	return s.SetOrchestratorEnabled(true)
 }
 
 // SetOrchestratorEnabled creates at most one project, or archives/restores

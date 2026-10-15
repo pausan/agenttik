@@ -28,8 +28,9 @@ Views reached only after a click or shortcut are separate browser chunks.
 Dialogs mount on demand; the add-project dialog remains mounted after first
 use so a minimized clone can continue. A long task initially draws its newest
 40 transcript rows, then fills in the rest in batches of 40, yielding to
-input and painting between batches. Static UI and
-ordinary API responses use fast gzip; event streams stay uncompressed.
+input and painting between batches. Static UI,
+ordinary API responses and event streams use fast gzip; a stream flushes the
+compressor with every batch it sends ([073](073-terminals.md#how-it-travels)).
 
 `make test-startup` runs `e2e/tests/startup.spec.js` against the built web
 binary, with one browser worker and no retries. It checks:

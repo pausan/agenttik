@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -446,5 +447,55 @@ func TestSince(t *testing.T) {
 	}
 	if missed, reset := term.since(4000); string(missed) != "abcdefghij" || !reset {
 		t.Errorf("a watcher claiming more than was ever written should be redrawn, got %q reset=%v", missed, reset)
+	}
+}
+
+func TestCoalesceJoinsQueuedOutput(t *testing.T) {
+	b64 := func(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
+	queue := func(frames ...Frame) chan Frame {
+		ch := make(chan Frame, len(frames))
+		for _, f := range frames {
+			ch <- f
+		}
+		return ch
+	}
+	more := queue(
+		Frame{ID: "a", Data: b64("bc"), At: 3},
+		Frame{ID: "a", Data: b64("def"), At: 6},
+		Frame{ID: "b", Data: b64("x"), At: 1}, // another terminal
+		Frame{ID: "b", Data: b64("y"), At: 2},
+		Frame{ID: "b", Data: b64("zz"), At: 4, Reset: true}, // a fresh screen
+		Frame{ID: "b", Data: b64("!"), At: 5},
+		Frame{ID: "b", At: 5, Exit: true},
+	)
+	got, open := Coalesce(Frame{ID: "a", Data: b64("a"), At: 1}, more)
+	want := []Frame{
+		{ID: "a", Data: b64("abcdef"), At: 6},
+		{ID: "b", Data: b64("xy"), At: 2},
+		{ID: "b", Data: b64("zz!"), At: 5, Reset: true},
+		{ID: "b", At: 5, Exit: true},
+	}
+	if !open || !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %+v (open %v)\nwant %+v", got, open, want)
+	}
+
+	// Replayed history and live output stay apart, and a closed channel is
+	// reported after what came before it.
+	more = queue(Frame{ID: "a", Data: b64("live"), At: 9})
+	close(more)
+	got, open = Coalesce(Frame{ID: "a", Data: b64("old"), At: 5, Replay: true}, more)
+	if open || len(got) != 2 || got[1].Data != b64("live") {
+		t.Fatalf("got %+v (open %v)", got, open)
+	}
+
+	// A long burst is cut into frames the emulator can draw between.
+	chunk := b64(strings.Repeat("x", 16<<10))
+	burst := make(chan Frame, 10)
+	for i := range 10 {
+		burst <- Frame{ID: "a", Data: chunk, At: int64(i+2) * 16 << 10}
+	}
+	got, _ = Coalesce(Frame{ID: "a", Data: chunk, At: 16 << 10}, burst)
+	if len(got) != 3 || got[2].At != 11*16<<10 {
+		t.Fatalf("%d frames, last at %d", len(got), got[len(got)-1].At)
 	}
 }

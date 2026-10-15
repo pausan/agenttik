@@ -508,6 +508,11 @@ func TestProjectStreamDeliversTurnEvents(t *testing.T) {
 	if ct := resp.Header.Get("Content-Type"); ct != "text/event-stream" {
 		t.Fatalf("content type = %q, want text/event-stream", ct)
 	}
+	// Go's client asked for gzip and undid it, so the event arriving below
+	// also shows the compressor is flushed with every frame.
+	if !resp.Uncompressed {
+		t.Fatal("stream was not gzipped")
+	}
 
 	lines := make(chan string, 8)
 	go func() {

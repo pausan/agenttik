@@ -593,3 +593,58 @@ func environ() []string {
 	}
 	return append(out, "TERM=xterm-256color", "COLORTERM=truecolor")
 }
+
+// maxJoined bounds the output Coalesce puts in one frame, so a burst still
+// reaches the emulator in pieces it can draw between.
+const maxJoined = 64 << 10
+
+// Coalesce is first and whatever else is already queued behind it, with each
+// run of one terminal's output joined into a single frame. A shell writing
+// fast is read a few dozen bytes at a time, and every frame carries its id,
+// its count and the JSON around them, so a burst sent frame by frame costs
+// several times its own size — and a slow link is where that shows. Nothing
+// waits to be joined: only frames already queued are taken.
+//
+// open is false once the channel has been closed, after the frames before
+// the close.
+func Coalesce(first Frame, more <-chan Frame) (frames []Frame, open bool) {
+	frames = []Frame{first}
+	var raw []byte // the last frame's output, decoded, while it is being joined
+	flush := func() {
+		if raw != nil {
+			frames[len(frames)-1].Data = base64.StdEncoding.EncodeToString(raw)
+			raw = nil
+		}
+	}
+	for range streamBuffer {
+		var f Frame
+		select {
+		case next, ok := <-more:
+			if !ok {
+				flush()
+				return frames, false
+			}
+			f = next
+		default:
+			flush()
+			return frames, true
+		}
+		last := &frames[len(frames)-1]
+		joinable := f.ID == last.ID && f.Data != "" && !f.Reset && !f.Exit &&
+			!last.Exit && last.Data != "" && f.Replay == last.Replay
+		if joinable && raw == nil {
+			raw, _ = base64.StdEncoding.DecodeString(last.Data)
+		}
+		if joinable && len(raw) < maxJoined {
+			if b, err := base64.StdEncoding.DecodeString(f.Data); err == nil {
+				raw = append(raw, b...)
+				last.At = f.At
+				continue
+			}
+		}
+		flush()
+		frames = append(frames, f)
+	}
+	flush()
+	return frames, true
+}

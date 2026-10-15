@@ -118,12 +118,10 @@ func (s *Server) resizeTerminal(c *fiber.Ctx) error {
 func (s *Server) streamTerminals(c *fiber.Ctx) error {
 	frames, unsubscribe := s.terminals.SubscribeMany(parseWatches(c.Query("ids")))
 
-	c.Set(fiber.HeaderContentType, "text/event-stream")
-	c.Set(fiber.HeaderCacheControl, "no-cache")
-	c.Set(fiber.HeaderConnection, "keep-alive")
-	c.Set("X-Accel-Buffering", "no")
-
-	c.Context().SetBodyStreamWriter(fasthttp.StreamWriter(func(w *bufio.Writer) {
+	open := startStream(c)
+	c.Context().SetBodyStreamWriter(fasthttp.StreamWriter(func(bw *bufio.Writer) {
+		w := open(bw)
+		defer w.Close()
 		defer unsubscribe()
 
 		ticker := time.NewTicker(heartbeat)
@@ -149,11 +147,19 @@ func (s *Server) streamTerminals(c *fiber.Ctx) error {
 					// and be handed the screen again.
 					return
 				}
-				payload, err := json.Marshal(frame)
-				if err != nil {
-					continue
+				// Everything already queued goes out under one flush.
+				batch, more := terminals.Coalesce(frame, frames)
+				for _, f := range batch {
+					payload, err := json.Marshal(f)
+					if err != nil {
+						continue
+					}
+					if _, err := w.WriteString("data: " + string(payload) + "\n\n"); err != nil {
+						return
+					}
 				}
-				if _, err := w.WriteString("data: " + string(payload) + "\n\n"); err != nil {
+				if !more {
+					w.Flush() //nolint:errcheck // ending either way
 					return
 				}
 			case <-ticker.C:

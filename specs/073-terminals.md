@@ -94,6 +94,17 @@ stream rather than part of that one because the two carry different things — a
 watcher that falls behind is dropped. Sharing one connection would let a busy
 shell cost the window its session events.
 
+Both streams are gzipped when the client accepts it, with the compressor
+flushed at the end of every batch, so nothing waits for more output. A shell
+writing fast is read a few dozen bytes at a time, and each frame carries its
+terminal's id, its count and the JSON around them. So each send takes every
+frame already queued and joins each run of one terminal's output into one
+frame of up to 64 KiB (`terminals.Coalesce`). Nothing is held back to be
+joined. The session stream likewise writes every event already queued, up to
+256, under one flush. On a slow link to a remote machine this is most of the
+difference: `seq 1 20000` went from 2,968 frames and 395 KB to a few hundred
+frames, about 60 KB gzipped.
+
 ### Resuming
 
 Each terminal keeps the last 256KB of its output, and each watcher says how many
@@ -204,7 +215,8 @@ than closing the tab.
 `app/internal/terminals` is tested against real shells: a command runs in the
 project's folder, a late watcher is handed the screen, one stream carries
 several terminals, a resize reaches the shell, a shell that exits reaches its
-watcher, and the scrollback stays capped. `api_terminals_test.go` covers the
+watcher, and the scrollback stays capped. `Coalesce` is tested for which
+frames it joins and where it stops. `api_terminals_test.go` covers the
 routes and the 404 a terminal that has gone answers with.
 
 `web/src/shortcuts.test.js` holds the chord apart from the three other things

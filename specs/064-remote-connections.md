@@ -27,10 +27,12 @@ origin, so matching task IDs on different servers do not share drafts.
 ## Finding instances from the CLI
 
 `agenttik --find-remotes` scans active, non-loopback private IPv4 interfaces
-and exits without opening a window, database, or instance lock. Each interface
-address is expanded to /8 and intersected with private address space:
-`10.0.0.0/8`, `172.16.0.0/12`, or `192.168.0.0/16`. Duplicate ranges are scanned
-once. Public, link-local, loopback, and IPv6 addresses are excluded.
+and exits without opening a window, database, or instance lock. Ranges go from
+the most local to the widest: every interface address's /24, then its /16,
+then its private block, `10.0.0.0/8` or `172.16.0.0/12` (`192.168.0.0/16` is
+already covered). Duplicate ranges are listed once, and a range skips the
+addresses an earlier one covered, so each address is probed once. Public,
+link-local, loopback, and IPv6 addresses are excluded.
 
 Discovery probes HTTP port 7717 by default. `--addr :PORT` selects another
 port; its host is ignored. Each match prints its URL, quoted name, and quoted

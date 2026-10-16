@@ -55,7 +55,7 @@ func run() error {
 		return update.Helper(os.Args[2])
 	}
 	cfg := config.Default()
-	findRemotes := flag.Bool("find-remotes", false, "find agenttik servers on local private IPv4 /8 ranges and exit (port from --addr)")
+	findRemotes := flag.Bool("find-remotes", false, "find agenttik servers on local private IPv4 ranges, nearest first, and exit (port from --addr)")
 	remoteAddress := flag.String("remote", "", "connect to an agenttik server at `host:port or URL`")
 	private := flag.Bool("private", false, "start an isolated temporary instance and remove its data on exit")
 	webOnly := flag.Bool("web", false, "serve the web UI only, no desktop window")

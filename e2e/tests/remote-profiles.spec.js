@@ -81,7 +81,21 @@ test("a remote machine's profiles open through this instance and wait for it whe
     await page.goto(remoteURL.href);
     const dialog = page.getByRole("dialog", { name: "Office machine" });
     await expect(dialog.getByText("This machine is not answering.")).toBeVisible();
-    await expect(dialog.getByRole("button", { name: "Find on network", exact: true })).toBeVisible();
+    // The search shows which range it is on, from the most local outwards.
+    const networks = [
+      { network: "192.168.1.0/24", hosts: 256 },
+      { network: "192.168.0.0/16", hosts: 65280 },
+      { network: "10.0.0.0/8", hosts: 16777216 },
+    ];
+    await page.route(/\/api\/remotes\/[^/]+\/find/, route => route.request().method() === "DELETE"
+      ? route.fulfill({ status: 204 })
+      : route.fulfill({ json: { running: true, probed: 388, total: 16842752, networks } }));
+    await dialog.getByRole("button", { name: "Find on network", exact: true }).click();
+    const progress = dialog.getByRole("status");
+    await expect(progress.getByText(/^Searching 192\.168\.x\.x \(132 of 65.280\)$/)).toBeVisible();
+    await expect(progress.getByText("Range 2 of 3 · next 10.x.x.x", { exact: true })).toBeVisible();
+    await dialog.getByRole("button", { name: "Stop searching", exact: true }).click();
+    await expect(progress).toHaveCount(0);
     await dialog.getByRole("button", { name: "Use a local profile", exact: true }).click();
     await expect(sidebar(page).getByText("Local project", { exact: true })).toBeVisible();
   } finally {

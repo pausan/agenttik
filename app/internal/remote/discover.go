@@ -10,27 +10,34 @@ import (
 	"time"
 )
 
-// DiscoveryNetworks expands private interface addresses to /8, intersected
-// with private address space. Deduplication avoids scanning a VPN range twice.
+// DiscoveryNetworks lists the ranges around private interface addresses from
+// the most local to the widest: every /24, then every /16, then the /12 or /8
+// private block. 192.168 stops at /16. Deduplication avoids scanning a VPN
+// range twice, and the scanner skips addresses an earlier range covered.
 func DiscoveryNetworks(addresses []netip.Addr) []netip.Prefix {
 	var networks []netip.Prefix
 	seen := make(map[netip.Prefix]bool)
-	for _, address := range addresses {
-		address = address.Unmap()
-		if !address.Is4() || !address.IsPrivate() {
-			continue
-		}
-		bits := 8
-		if address.As4()[0] == 172 {
-			bits = 12
-		}
-		if address.As4()[0] == 192 {
-			bits = 16
-		}
-		prefix := netip.PrefixFrom(address, bits).Masked()
-		if !seen[prefix] {
-			seen[prefix] = true
-			networks = append(networks, prefix)
+	for _, bits := range []int{24, 16, 12, 8} {
+		for _, address := range addresses {
+			address = address.Unmap()
+			if !address.Is4() || !address.IsPrivate() {
+				continue
+			}
+			widest := 8
+			switch address.As4()[0] {
+			case 172:
+				widest = 12
+			case 192:
+				widest = 16
+			}
+			if bits < 16 && bits != widest {
+				continue
+			}
+			prefix := netip.PrefixFrom(address, bits).Masked()
+			if !seen[prefix] {
+				seen[prefix] = true
+				networks = append(networks, prefix)
+			}
 		}
 	}
 	return networks
@@ -61,11 +68,30 @@ func LocalNetworks() ([]netip.Prefix, error) {
 	return DiscoveryNetworks(addresses), nil
 }
 
+// NetworkHosts counts, for each network, the addresses no earlier network
+// covers: the addresses a scan probes while working through that network.
+func NetworkHosts(networks []netip.Prefix) []uint64 {
+	hosts := make([]uint64, len(networks))
+	for i, network := range networks {
+		hosts[i] = 1 << (32 - network.Bits())
+		for j, earlier := range networks[:i] {
+			if earlier.Bits() <= network.Bits() && earlier.Contains(network.Addr()) {
+				hosts[i] = 0
+				break
+			}
+			if network.Contains(earlier.Addr()) {
+				hosts[i] -= hosts[j]
+			}
+		}
+	}
+	return hosts
+}
+
 // Hosts counts the addresses a scan of networks probes.
 func Hosts(networks []netip.Prefix) uint64 {
 	var n uint64
-	for _, network := range networks {
-		n += 1 << (32 - network.Bits())
+	for _, hosts := range NetworkHosts(networks) {
+		n += hosts
 	}
 	return n
 }
@@ -140,6 +166,10 @@ func (s *Scanner) Run(ctx context.Context, port string, probed *atomic.Uint64, f
 				s.next = network.Addr()
 			}
 			for network.Contains(s.next) {
+				if s.scanned(s.next) {
+					s.next = s.next.Next()
+					continue
+				}
 				if ctx.Err() != nil {
 					produced <- nil
 					return
@@ -179,4 +209,14 @@ func (s *Scanner) Run(ctx context.Context, port string, probed *atomic.Uint64, f
 		return stopErr
 	}
 	return ctx.Err()
+}
+
+// scanned reports whether a network before the current one holds address.
+func (s *Scanner) scanned(address netip.Addr) bool {
+	for _, network := range s.networks[:s.network] {
+		if network.Contains(address) {
+			return true
+		}
+	}
+	return false
 }

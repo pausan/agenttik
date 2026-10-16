@@ -19,8 +19,8 @@ added, renamed and removed on their own machine.
 
 ## Searching for machines
 
-Settings → Profiles → **Search for machines** scans the same private ranges
-as `--find-remotes`, using port 7717 by default. The port can be changed before
+Settings → Profiles → **Search for machines** scans the same ranges, in the
+same order, as `--find-remotes`, using port 7717 by default. The port can be changed before
 starting or restarting. Progress and matches appear as the scan runs. Results
 exclude this instance and servers without a machine ID, and list each ID once.
 Discovery does not save machines or fetch their profiles.
@@ -111,12 +111,16 @@ address, the dialog offers **Retry**, **Find on network** and
 **Use a local profile**. Switching from the picker shows the same dialog, with
 Cancel in place of the last.
 
-**Find on network** runs the `--find-remotes` scan on the server. It covers
-the private /8, /12 and /16 ranges of the active interfaces, on the port of
-the saved address, and stops at the first match on the machine ID. The
-address is then saved and the connection tried again. The dialog shows how
-many addresses were probed and has **Stop searching**. One scan runs at a
-time, and shutdown stops it. HTTPS addresses cannot be scanned.
+**Find on network** runs the `--find-remotes` scan on the server, on the port
+of the saved address, and stops at the first match on the machine ID. The
+address is then saved and the connection tried again. The scan goes from the
+most local range to the widest: every active interface's /24, then its /16,
+then its private /12 or /8 (192.168 stops at /16). A range skips addresses an
+earlier one covered, so nothing is probed twice. The status lists each range
+with the addresses it adds; the dialog derives the current range from the
+probe count and shows `Searching 192.168.x.x (132 of 65,280)` with a bar,
+`Range 2 of 3 · next 10.x.x.x`, the overall count and **Stop searching**. One
+scan runs at a time, and shutdown stops it. HTTPS addresses cannot be scanned.
 
 ## Storage and API
 
@@ -132,7 +136,7 @@ temporary root.
 | DELETE | `/api/remotes/:id` | Forget the machine |
 | POST | `/api/remotes/:id/connect` | `{status: ok\|signin\|unreachable\|moved, error, code_required, remote, busy}` |
 | POST | `/api/remotes/:id/login` | `{password, code}`; 401 with the remote's reason |
-| POST/GET/DELETE | `/api/remotes/:id/find` | Start, read `{running, probed, total, found, error}`, stop |
+| POST/GET/DELETE | `/api/remotes/:id/find` | Start, read `{running, probed, total, networks: [{network, hosts}], found, error}`, stop |
 
 Forwarded requests pass only `Accept`, `Cache-Control`, `Content-Type`, the
 conditional and range headers and `Last-Event-ID`. They never pass the

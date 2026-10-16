@@ -82,7 +82,24 @@ function close() {
 }
 onUnmounted(() => clearTimeout(poll));
 
-const percent = computed(() => scan.value?.total ? Math.min(100, Math.round(100 * scan.value.probed / scan.value.total)) : 0);
+// The server searches its ranges in order, from the most local to the widest,
+// so the probe count tells how far each range has gone.
+const ranges = computed(() => {
+  let before = 0;
+  return (scan.value?.networks || []).map(({ network, hosts }, index) => {
+    const probed = Math.min(hosts, Math.max(0, scan.value.probed - before));
+    before += hosts;
+    return { index, label: rangeLabel(network), hosts, probed };
+  });
+});
+const current = computed(() => ranges.value.find(r => r.probed < r.hosts));
+
+// 192.168.0.0/16 reads as 192.168.x.x; ranges off byte boundaries keep CIDR.
+function rangeLabel(network) {
+  const [address, bits] = network.split("/");
+  if (bits % 8) return network;
+  return address.split(".").map((part, i) => i < bits / 8 ? part : "x").join(".");
+}
 </script>
 
 <template>
@@ -116,8 +133,12 @@ const percent = computed(() => scan.value?.total ? Math.min(100, Math.round(100 
           </p>
           <p v-if="c.state.error" class="text-xs text-dimmed break-words">{{ c.state.error }}</p>
           <div v-if="scan?.running" class="space-y-2" role="status">
-            <UProgress :model-value="percent" />
-            <p class="text-xs text-muted">Searched {{ nf.format(scan.probed) }} of {{ nf.format(scan.total) }} addresses. A large network can take hours.</p>
+            <template v-if="current">
+              <p class="text-sm">Searching {{ current.label }} ({{ nf.format(current.probed) }} of {{ nf.format(current.hosts) }})</p>
+              <UProgress :model-value="Math.round(100 * current.probed / current.hosts)" />
+              <p class="text-xs text-muted">Range {{ current.index + 1 }} of {{ ranges.length }}<template v-if="ranges[current.index + 1]"> · next {{ ranges[current.index + 1].label }}</template></p>
+            </template>
+            <p class="text-xs text-muted">Searched {{ nf.format(scan.probed) }} of {{ nf.format(scan.total) }} addresses. Wider ranges can take hours.</p>
           </div>
           <p v-else-if="scan && !scan.found && !scan.error" class="text-sm text-muted">Not found on this computer's networks.</p>
         </template>

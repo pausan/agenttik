@@ -50,14 +50,15 @@ type remoteView struct {
 }
 
 type remoteScan struct {
-	done    chan struct{}
-	id      string
-	cancel  context.CancelFunc
-	probed  atomic.Uint64
-	total   uint64
-	running bool
-	found   string
-	err     string
+	done     chan struct{}
+	id       string
+	cancel   context.CancelFunc
+	probed   atomic.Uint64
+	total    uint64
+	networks []fiber.Map
+	running  bool
+	found    string
+	err      string
 }
 
 type remoteManager struct {
@@ -617,6 +618,11 @@ func (s *Server) findRemote(c *fiber.Ctx) error {
 	m.stopFindLocked()
 	ctx, cancel := context.WithCancel(context.Background())
 	scan := &remoteScan{done: make(chan struct{}), id: r.ID, cancel: cancel, total: remote.Hosts(networks), running: true}
+	for i, hosts := range remote.NetworkHosts(networks) {
+		if hosts > 0 {
+			scan.networks = append(scan.networks, fiber.Map{"network": networks[i].String(), "hosts": hosts})
+		}
+	}
 	m.mu.Lock()
 	m.scan = scan
 	m.mu.Unlock()
@@ -654,7 +660,7 @@ func (m *remoteManager) scanState(id string) fiber.Map {
 	if scan == nil || scan.id != id {
 		return fiber.Map{"running": false}
 	}
-	return fiber.Map{"running": scan.running, "probed": scan.probed.Load(), "total": scan.total, "found": scan.found, "error": scan.err}
+	return fiber.Map{"running": scan.running, "probed": scan.probed.Load(), "total": scan.total, "networks": scan.networks, "found": scan.found, "error": scan.err}
 }
 
 func (s *Server) findRemoteStatus(c *fiber.Ctx) error {

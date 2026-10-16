@@ -2,6 +2,7 @@ package server
 
 import (
 	"bufio"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -157,12 +158,15 @@ func TestRemoteMovedAndFoundAgain(t *testing.T) {
 	_, port, _ := net.SplitHostPort(address)
 	local.remotes.update(id, func(r *savedRemote) { r.Address = "http://192.0.2.1:" + port })
 	local.remotes.networks = func() ([]netip.Prefix, error) {
-		return []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")}, nil
+		return []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32"), netip.MustParsePrefix("127.0.0.0/31")}, nil
 	}
 	resp := do(t, local, "POST", "/api/remotes/"+id+"/find", nil)
-	resp.Body.Close()
 	if resp.StatusCode != 202 {
 		t.Fatalf("find: %d", resp.StatusCode)
+	}
+	started := decode[map[string]any](t, resp)
+	if networks := fmt.Sprint(started["networks"]); networks != "[map[hosts:1 network:127.0.0.1/32] map[hosts:1 network:127.0.0.0/31]]" {
+		t.Fatalf("networks: %s", networks)
 	}
 	deadline := time.Now().Add(5 * time.Second)
 	for {

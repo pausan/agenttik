@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -184,6 +185,20 @@ func TestRemoteMovedAndFoundAgain(t *testing.T) {
 	}
 	if state := decode[remoteState](t, do(t, local, "POST", "/api/remotes/"+id+"/connect", nil)); state.Status != "ok" {
 		t.Fatalf("%+v", state)
+	}
+}
+
+func TestFindPort(t *testing.T) {
+	for address, want := range map[string]string{
+		"http://192.168.4.61:8080":                   "8080",
+		"http://passport-postage.trycloudflare.com":  "7717",
+		"https://passport-postage.trycloudflare.com": "7717",
+		"https://proxy.example:8443":                 "7717",
+	} {
+		u, _ := url.Parse(address)
+		if got := findPort(u); got != want {
+			t.Errorf("%s: %s, want %s", address, got, want)
+		}
 	}
 }
 

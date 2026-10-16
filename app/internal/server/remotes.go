@@ -598,13 +598,7 @@ func (s *Server) findRemote(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	if u.Scheme != "http" {
-		return badRequest("only HTTP servers can be found on the network")
-	}
-	port := u.Port()
-	if port == "" {
-		port = "80"
-	}
+	port := findPort(u)
 	networks, err := m.networks()
 	if err != nil {
 		return err
@@ -651,6 +645,17 @@ func (s *Server) findRemote(c *fiber.Ctx) error {
 		cancel()
 	}()
 	return c.Status(202).JSON(m.scanState(r.ID))
+}
+
+// findPort is the port a moved machine is searched on: the saved address's
+// own port when it was a direct HTTP address, else agenttik's default. A
+// tunnel or proxy address (https, or no port) says nothing about the port the
+// machine listens on in its network.
+func findPort(u *url.URL) string {
+	if u.Scheme == "http" && u.Port() != "" {
+		return u.Port()
+	}
+	return "7717"
 }
 
 func (m *remoteManager) scanState(id string) fiber.Map {

@@ -76,10 +76,24 @@ type TurnRequest struct {
 	ForkFrom string
 
 	Permission Permission
-	// Manual asks the user before tools run, where the provider can ask,
-	// instead of letting Permission settle ordinary work. Plan is unchanged.
-	// See 082-tool-approvals.md.
-	Manual bool
+	// RunMode is how much the user is asked before tools run, where the
+	// provider can ask: RunAuto lets Permission settle ordinary work,
+	// RunGuarded asks before changes, RunManual before every command. Plan is
+	// unchanged by it. Empty is RunAuto. See 082-tool-approvals.md.
+	RunMode string
+}
+
+// How much a turn asks before tools run. The values are the project's
+// run_mode as stored.
+const (
+	RunAuto    = "auto"
+	RunGuarded = "guarded"
+	RunManual  = "manual"
+)
+
+// Asks reports whether the turn asks the user before changes at least.
+func (r TurnRequest) Asks() bool {
+	return r.RunMode == RunGuarded || r.RunMode == RunManual
 }
 
 // Forker is a provider that can start a conversation as a copy of another,
@@ -252,6 +266,9 @@ type Approval struct {
 	// Remember lists how long the provider can keep an allow, so the same
 	// call is not asked again: RememberTurn, RememberAlways.
 	Remember []string `json:"remember,omitempty"`
+	// Prefix is the start of the shell command in Input that an allow for
+	// the task can cover, as CommandPrefix finds it. Empty offers none.
+	Prefix string `json:"prefix,omitempty"`
 	// Allowed is set on approval_resolved when it was answered.
 	Allowed *bool `json:"allowed,omitempty"`
 	// Auto is set on approval_resolved when agenttik answered it, because
@@ -301,18 +318,21 @@ type Reply struct {
 
 // How long an allow lasts. A turn is one provider process; always is saved
 // in the provider's own config. The task choices are agenttik's own and never
-// reach the provider: the runner allows later requests of the same tool, or
-// any tool, in the same task without asking. Every tool approval offers them.
+// reach the provider: the runner allows later requests of the same command
+// prefix, the same tool, or any tool, in the same task without asking. Every
+// tool approval offers the last two; the first needs a Prefix.
 const (
-	RememberTurn    = "turn"
-	RememberAlways  = "always"
-	RememberTask    = "task"
-	RememberTaskAll = "task_all"
+	RememberTurn        = "turn"
+	RememberAlways      = "always"
+	RememberTaskCommand = "task_command"
+	RememberTask        = "task"
+	RememberTaskAll     = "task_all"
 )
 
 // NewApproval builds a request the provider answers through answer.
 func NewApproval(id, tool, description, input string, answer func(Reply) error) *Approval {
-	return &Approval{ID: id, Tool: tool, Description: description, Input: input, answer: answer}
+	return &Approval{ID: id, Tool: tool, Description: description, Input: input,
+		Prefix: CommandPrefix(input), answer: answer}
 }
 
 // Answer tells the provider the user's decision. It is called at most once.
@@ -352,8 +372,8 @@ func (a *Approval) AutoReply() Reply {
 // offered or, where typing is allowed, any text, and remembers only as
 // offered. A denial needs no answers.
 func (a *Approval) CheckReply(r Reply) error {
-	if r.Remember == RememberTask || r.Remember == RememberTaskAll {
-		if !r.Allow || len(a.Questions) > 0 {
+	if r.Remember == RememberTask || r.Remember == RememberTaskAll || r.Remember == RememberTaskCommand {
+		if !r.Allow || len(a.Questions) > 0 || (r.Remember == RememberTaskCommand && a.Prefix == "") {
 			return fmt.Errorf("cannot remember %q", r.Remember)
 		}
 	} else if r.Remember != "" && (!r.Allow || !slices.Contains(a.Remember, r.Remember)) {

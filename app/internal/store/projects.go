@@ -105,10 +105,10 @@ func (s *Store) SetProjectPrompt(id int64, prompt string) error {
 }
 
 // SetProjectRunMode sets whether the project's agents run tools on their own
-// (RunAuto) or ask first (RunManual). The next turn picks it up. See
-// 082-tool-approvals.md.
+// (RunAuto), ask before changes (RunGuarded) or ask before every command
+// (RunManual). The next turn picks it up. See 082-tool-approvals.md.
 func (s *Store) SetProjectRunMode(id int64, mode string) error {
-	if mode != RunAuto && mode != RunManual {
+	if !ValidRunMode(mode) {
 		return fmt.Errorf("unknown run mode %q", mode)
 	}
 	res, err := s.db.Exec(`UPDATE projects SET run_mode = ? WHERE id = ?`, mode, id)
@@ -119,6 +119,11 @@ func (s *Store) SetProjectRunMode(id int64, mode string) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+// ValidRunMode reports whether mode is one of the run modes.
+func ValidRunMode(mode string) bool {
+	return mode == RunAuto || mode == RunGuarded || mode == RunManual
 }
 
 // SetProjectArchived puts a project away, or brings it back. Nothing under it

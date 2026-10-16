@@ -87,8 +87,8 @@ Cancelling the context kills the process group, which is how "stop" works.
 Chosen per task; default `workspace`. The posture is set before the turn
 starts. What it leaves open, Claude Code and Codex ask the user about mid-turn
 ([082](082-tool-approvals.md)); the other providers refuse it. The table is an
-automatic project; a manual project makes Claude Code and Codex ask before
-tools run ([082](082-tool-approvals.md#automatic-and-manual-projects)).
+automatic project; the asking run modes make Claude Code and Codex ask before
+changes or every command ([082](082-tool-approvals.md#run-modes)).
 
 | agenttik | claude | Codex app-server sandbox | Codex approval policy |
 |----------|--------|--------------------------|-----------------------|

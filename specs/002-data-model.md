@@ -27,9 +27,9 @@ All timestamps are **unix milliseconds**, so turn timings need no second table.
   at that row after the visible projects have been reordered. Hidden projects
   remain active and their schedules keep running. `prompt` is the standing instructions every
   conversation started in the project opens with, empty for none; see
-  [047](047-project-prompt.md). `run_mode` is `auto` (default) or `manual`,
-  whether agents ask before running tools; see
-  [082](082-tool-approvals.md#automatic-and-manual-projects).
+  [047](047-project-prompt.md). `run_mode` is `auto` (default), `guarded` or
+  `manual`: whether agents ask before changes or before every command; see
+  [082](082-tool-approvals.md#run-modes).
 - **orchestrator_config** — singleton `id=1, name, path, prompt`. Holds the
   orchestrator's options after project deletion; its live project row remains
   authoritative while present. `projects.kind='orchestrator'` is unique and

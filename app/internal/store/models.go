@@ -1,9 +1,11 @@
 package store
 
-// How a project's agents run tools.
+// How a project's agents run tools: on their own, asking before changes, or
+// asking before every command.
 const (
-	RunAuto   = "auto"
-	RunManual = "manual"
+	RunAuto    = "auto"
+	RunGuarded = "guarded"
+	RunManual  = "manual"
 )
 
 type Project struct {
@@ -39,8 +41,8 @@ type Project struct {
 	Prompt string `json:"prompt"`
 
 	// RunMode is RunAuto, where the agent runs what its permission mode
-	// allows, or RunManual, where it asks before running tools. See
-	// 082-tool-approvals.md.
+	// allows, RunGuarded, where it asks before changes, or RunManual, where
+	// it asks before every command. See 082-tool-approvals.md.
 	RunMode string `json:"run_mode"`
 
 	// Filled by ListProjects: titles of the project's open sessions. Always

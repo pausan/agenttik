@@ -268,7 +268,7 @@ func (r *appServerRun) handle(message appRPCMessage) (bool, error) {
 func threadRequest(req agent.TurnRequest) (string, map[string]any) {
 	params := map[string]any{
 		"cwd":            req.WorkDir,
-		"approvalPolicy": approvalPolicy(req.Permission, req.Manual),
+		"approvalPolicy": approvalPolicy(req.Permission, req.Asks()),
 		"sandbox":        sandboxFlag(req.Permission),
 	}
 	if req.Model != "" {
@@ -290,7 +290,7 @@ func turnRequest(req agent.TurnRequest, threadID string) map[string]any {
 			"type": "text", "text": req.Prompt, "text_elements": []any{},
 		}},
 		"cwd":            req.WorkDir,
-		"approvalPolicy": approvalPolicy(req.Permission, req.Manual),
+		"approvalPolicy": approvalPolicy(req.Permission, req.Asks()),
 	}
 	if params["approvalPolicy"] != "never" {
 		// The user's own config may hand approvals to a reviewing model
@@ -310,10 +310,11 @@ func turnRequest(req agent.TurnRequest, threadID string) map[string]any {
 // approvalPolicy says whether Codex may ask. Workspace tasks run unsandboxed
 // (see sandboxFlag), so ordinary commands never need asking; what Codex still
 // escalates — MCP tool calls, rule matches — goes to the user. Plan stays
-// read-only without asking, and full has no guardrails at all. A manual
-// project asks before anything but Codex's known-safe reads, in either.
-func approvalPolicy(p agent.Permission, manual bool) string {
-	if manual && p.Valid() != agent.PermissionPlan {
+// read-only without asking, and full has no guardrails at all. Guarded and
+// manual projects both ask before anything but Codex's known-safe reads:
+// Codex cannot be made to ask about those.
+func approvalPolicy(p agent.Permission, asks bool) string {
+	if asks && p.Valid() != agent.PermissionPlan {
 		return "untrusted"
 	}
 	if p.Valid() == agent.PermissionWorkspace {

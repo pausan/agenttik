@@ -76,11 +76,8 @@ func (r *Runner) Answer(sessionID, approvalID string, reply agent.Reply) error {
 	// The task choices are agenttik's to keep; the provider sees a plain allow.
 	var alsoAllowed []*PendingApproval
 	switch reply.Remember {
-	case agent.RememberTask:
-		alsoAllowed = r.allow(sessionID, p.Approval.Tool)
-		reply.Remember = ""
-	case agent.RememberTaskAll:
-		alsoAllowed = r.allow(sessionID, "")
+	case agent.RememberTaskCommand, agent.RememberTask, agent.RememberTaskAll:
+		alsoAllowed = r.allow(sessionID, p.Approval, reply.Remember)
 		reply.Remember = ""
 	}
 	r.mu.Unlock()
@@ -126,18 +123,52 @@ func (r *Runner) Hold(sessionID, approvalID string) error {
 	return nil
 }
 
-// allow lets tool run for the rest of the session's task without asking; an
-// empty tool lets every tool run. It takes the session's other pending tool
-// calls that the allow now covers and returns them for the caller to answer.
-// The caller holds the lock.
-func (r *Runner) allow(sessionID, tool string) []*PendingApproval {
-	if r.allowed[sessionID] == nil {
-		r.allowed[sessionID] = make(map[string]bool)
+// allowance is what the user allowed for the rest of one task: every tool,
+// some tools, or shell commands that start a certain way, by tool.
+type allowance struct {
+	all      bool
+	tools    map[string]bool
+	commands map[string][]string // tool -> command prefixes
+}
+
+// covers reports whether a tool call is allowed already. Questions are
+// always asked.
+func (w *allowance) covers(a *agent.Approval) bool {
+	if w == nil || len(a.Questions) > 0 {
+		return false
 	}
-	r.allowed[sessionID][tool] = true
+	if w.all || w.tools[a.Tool] {
+		return true
+	}
+	for _, prefix := range w.commands[a.Tool] {
+		if agent.CommandHasPrefix(a.Input, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// allow records an allow for the rest of the session's task, as remember
+// says: a's command prefix, a's tool, or every tool. It takes the session's
+// other pending tool calls that the allow now covers and returns them for the
+// caller to answer. The caller holds the lock.
+func (r *Runner) allow(sessionID string, a *agent.Approval, remember string) []*PendingApproval {
+	w := r.allowed[sessionID]
+	if w == nil {
+		w = &allowance{tools: map[string]bool{}, commands: map[string][]string{}}
+		r.allowed[sessionID] = w
+	}
+	switch remember {
+	case agent.RememberTaskAll:
+		w.all = true
+	case agent.RememberTask:
+		w.tools[a.Tool] = true
+	case agent.RememberTaskCommand:
+		w.commands[a.Tool] = append(w.commands[a.Tool], a.Prefix)
+	}
 	var covered []*PendingApproval
 	for id, p := range r.approvals {
-		if p.SessionID == sessionID && len(p.Approval.Questions) == 0 && (tool == "" || p.Approval.Tool == tool) {
+		if p.SessionID == sessionID && w.covers(p.Approval) {
 			covered = append(covered, p)
 			r.take(id)
 		}
@@ -146,21 +177,21 @@ func (r *Runner) allow(sessionID, tool string) []*PendingApproval {
 }
 
 // isAllowed reports whether the user already allowed this tool call for the
-// rest of its task. Questions are always asked.
+// rest of its task.
 func (r *Runner) isAllowed(sessionID string, a *agent.Approval) bool {
-	if len(a.Questions) > 0 {
-		return false
-	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.allowed[sessionID][""] || r.allowed[sessionID][a.Tool]
+	return r.allowed[sessionID].covers(a)
 }
 
-// manual reports whether the project asks before its agents run tools. A
-// store that cannot be read keeps the default, automatic.
-func (r *Runner) manual(projectID int64) bool {
+// runMode is how much the project asks before its agents run tools. A store
+// that cannot be read keeps the default, automatic.
+func (r *Runner) runMode(projectID int64) string {
 	p, err := r.store.GetProject(projectID)
-	return err == nil && p.RunMode == store.RunManual
+	if err != nil {
+		return store.RunAuto
+	}
+	return p.RunMode
 }
 
 // approvalPolicy is what the settings say to do with a request nobody
@@ -190,9 +221,9 @@ func (r *Runner) askUser(sess *store.Session, turn *store.Turn, a *agent.Approva
 		return true
 	}
 	mode, wait := r.approvalPolicy()
-	// A manual project asked to be asked: nobody allows a tool call for the
-	// user. Questions still follow the settings.
-	if len(a.Questions) == 0 && r.manual(sess.ProjectID) {
+	// A guarded or manual project asked to be asked: nobody allows a tool
+	// call for the user. Questions still follow the settings.
+	if len(a.Questions) == 0 && r.runMode(sess.ProjectID) != store.RunAuto {
 		mode = store.ApprovalWait
 	}
 	if mode == store.ApprovalImmediate {

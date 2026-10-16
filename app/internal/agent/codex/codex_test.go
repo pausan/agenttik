@@ -138,16 +138,18 @@ func TestApprovalPolicyAsksOnlyForWorkspace(t *testing.T) {
 	}
 }
 
-func TestManualProjectsAskBeforeUntrustedCommands(t *testing.T) {
-	for perm, want := range map[agent.Permission]string{
-		agent.PermissionPlan: "never", agent.PermissionWorkspace: "untrusted", agent.PermissionFull: "untrusted",
-	} {
-		turn := turnRequest(agent.TurnRequest{Permission: perm, Manual: true}, "t")
-		if turn["approvalPolicy"] != want {
-			t.Errorf("%s: policy %v, want %s", perm, turn["approvalPolicy"], want)
-		}
-		if reviewer, set := turn["approvalsReviewer"]; (want != "never") != set || (set && reviewer != "user") {
-			t.Errorf("%s: reviewer %v", perm, turn["approvalsReviewer"])
+func TestAskingProjectsAskBeforeUntrustedCommands(t *testing.T) {
+	for _, mode := range []string{agent.RunGuarded, agent.RunManual} {
+		for perm, want := range map[agent.Permission]string{
+			agent.PermissionPlan: "never", agent.PermissionWorkspace: "untrusted", agent.PermissionFull: "untrusted",
+		} {
+			turn := turnRequest(agent.TurnRequest{Permission: perm, RunMode: mode}, "t")
+			if turn["approvalPolicy"] != want {
+				t.Errorf("%s %s: policy %v, want %s", mode, perm, turn["approvalPolicy"], want)
+			}
+			if reviewer, set := turn["approvalsReviewer"]; (want != "never") != set || (set && reviewer != "user") {
+				t.Errorf("%s %s: reviewer %v", mode, perm, turn["approvalsReviewer"])
+			}
 		}
 	}
 }

@@ -12,28 +12,42 @@ conversation and in threads.
 Claude Code and Codex ask. Copilot, OpenCode and the direct API runtime still
 refuse whatever their mode does not allow and cannot ask questions.
 
-## Automatic and manual projects
+## Run modes
 
 Each project has a run mode, `projects.run_mode`, set under **Running tools**
 in its Project Options pane. `auto` is the default, for new projects and for
-projects that existed before the column. `manual` asks before tools run:
+projects that existed before the column.
 
-| Provider | Automatic | Manual (unless the task is `plan`) |
-|----------|-----------|------------------------------------|
-| Claude Code | per [003](003-providers.md#permission-modes) | `--permission-mode default` and `--settings '{"permissions":{"ask":["Bash"]}}'`: asks before every command and edit; Read, Grep and Glob run |
-| Codex | per [003](003-providers.md#permission-modes) | approval policy `untrusted`: asks before commands and edits, except commands Codex knows are safe reads (`ls`, `cat`, `grep`, …), which it runs without asking |
-| Copilot, OpenCode, direct API | per 003 | unchanged; they cannot ask |
+| Mode | Label | Claude Code | Codex |
+|------|-------|-------------|-------|
+| `auto` | Automatic | per [003](003-providers.md#permission-modes) | per [003](003-providers.md#permission-modes) |
+| `guarded` | Ask before changes | `--permission-mode default`: asks before edits and before commands it does not know are read-only | approval policy `untrusted` |
+| `manual` | Ask for every command | `default` plus `--settings '{"permissions":{"ask":["Bash"]}}'`: asks before every command and edit | approval policy `untrusted` |
 
-A `full` task in a manual project asks too. The runner reads the mode when a
-turn starts (`TurnRequest.Manual`), so a change reaches each task's next turn.
-In a manual project a tool call always waits for the user: the timeout and
-immediate settings below do not answer it. Questions still follow them.
+In every mode Claude's Read, Grep and Glob run without asking. Codex has no
+stricter policy than `untrusted`, which runs its known-safe reads (`ls`,
+`cat`, `grep`, plain `find`, …) without asking, so its two asking modes are
+the same. Copilot, OpenCode and the direct API runtime cannot ask, and every
+mode leaves them as 003 says.
+
+Neither CLI reads what a command does. Each has a fixed list of read-only
+commands, and everything else is a change: under `guarded`, `git status`
+runs, but `kubectl get pods` asks just as `kubectl delete` does, and so does
+a chain with any part off the list (`ls && rm x`) or `find -delete`. Under
+`auto`, Claude asks a model whether the call is risky, so `kubectl get`
+usually runs and `kubectl delete` usually asks, with no guarantee.
+
+A plan task stays plan in every mode; a `full` task in an asking mode asks
+too. The runner reads the mode when a turn starts (`TurnRequest.RunMode`), so
+a change reaches each task's next turn. In an asking mode a tool call always
+waits for the user: the timeout and immediate settings below do not answer
+it. Questions still follow them.
 
 Measured against Claude Code 2.1.300: `--permission-mode default` alone runs
-commands it classes as read-only, such as `ls` and `find`, without asking, and
-sends `can_use_tool` only for the rest. The `ask` rule for `Bash` makes it send
-one for every command. `--settings` adds to the user's own settings rather
-than replacing them.
+`ls`, `find` and `git status` without asking and sends `can_use_tool` for
+`kubectl get pods` and `touch`. The `ask` rule for `Bash` makes it send one
+for every command. `--settings` adds to the user's own settings rather than
+replacing them.
 
 ## Claude Code
 
@@ -140,14 +154,14 @@ maps a question id to the picked labels or typed text, and `remember` is one
 of the offered choices.
 
 `remember` may also be `task` or `task_all` on any tool approval, offered or
-not. Those are agenttik's own and never reach the provider; see
-[Allowing for the task](#allowing-for-the-task).
+not, and `task_command` on one with a `prefix`. Those are agenttik's own and
+never reach the provider; see [Allowing for the task](#allowing-for-the-task).
 
 `CheckReply` refuses an allowing reply that leaves a question unanswered,
 gives a single-choice question two answers, gives a blank answer, or picks an
 option that was not offered where typing is not allowed. It also refuses a
-`remember` that was not offered or that comes with a denial, and `task` or
-`task_all` on questions.
+`remember` that was not offered or that comes with a denial, the task
+choices on questions, and `task_command` without a `prefix`.
 
 ## Runner
 
@@ -167,13 +181,26 @@ way.
 
 ## Allowing for the task
 
-**Allow *tool* for this task** (`remember: task`) and **Allow all for this
-task** (`task_all`) answer the request with a plain allow and record the tool
-name, or every tool, for the session. Later tool calls in the same task that
+**Allow *prefix* for this task** (`remember: task_command`), **Allow *tool*
+for this task** (`task`) and **Allow all for this task** (`task_all`) answer
+the request with a plain allow and record, for the session, the command
+prefix, the tool name, or every tool. Later tool calls in the same task that
 match are allowed in the consume loop before anything is published, as under
 `immediate`; other pending calls in the task that now match are allowed at
 once. Other tasks are still asked, and questions are always asked. The record
 lives in the runner's memory, so a restart asks again.
+
+The prefix (`agent.CommandPrefix`, set by `NewApproval` as `prefix`) comes
+from the input's `command` field: the program, plus the second word when it
+looks like a subcommand (lowercase letters, digits and dashes) — `kubectl
+get`, `npm run`, `git status`, but `cat` for `cat notes.txt`. A `bash -lc
+'...'` wrapper, as Codex may report, is looked through. A command that is not
+one plain command — operators, pipes, redirections, `$`, backticks, braces,
+an assignment in front, an unclosed quote — has no prefix and is always
+asked, both when offering and when matching, so `kubectl get pods && rm x`
+never rides on an allow for `kubectl get`. Arguments are not checked: an
+allow for `rm build` also covers `rm build /other`, which the button's label
+makes visible.
 
 ## Answering for the user
 
@@ -219,8 +246,9 @@ every reopen after a tab change, and every reconnect — so a request published
 while it was not listening is still drawn. Events keep it current after that.
 
 - An approval card shows the tool, its description, the input (a shell
-  command as itself, other JSON indented), then Allow, **Allow *tool* for
-  this task**, **Allow all for this task**, and Deny. When the approval
+  command as itself, other JSON indented), then Allow, **Allow *prefix* for
+  this task** when the approval has a prefix, **Allow *tool* for this task**,
+  **Allow all for this task**, and Deny. When the approval
   offers them, **Allow for this turn** and **Always allow** sit before Deny.
 - A question card shows each question with its header, options as radio or
   checkbox rows with their descriptions, and a text field where typing is
@@ -256,12 +284,13 @@ from agenttik's history.
 Tests: `agent` (reply checking), `claudecode` and `codex`
 (`appserver_requests_test.go`) for the protocols, `runner/approvals_test.go`
 (fan-out, first answer wins, stop withdraws, incomplete answers, the three
-modes and holding, manual projects, allowing for the task),
+modes and holding, asking run modes, allowing for the task and a command
+prefix), `agent/command_test.go` (prefixes),
 `server/api_approvals_test.go` (routes), `web/src/questions.test.js`, and
 `e2e/tests/approvals.spec.js` (two windows, reload, stop, questions, the
 setting, a timeout, holding from another window, answering at once). The fake
 provider's `@approve <tool> <input>` asks for approval and replies `allowed`
 or `denied`; `@approve-remember` also offers both remember choices and
 replies `allowed remember=<choice>` when one is picked; `@runmode` replies
-`run_mode=manual` or `run_mode=auto`; `@ask <question> | <a>, <b>` asks a question and replies
+`run_mode=<auto|guarded|manual>`; `@ask <question> | <a>, <b>` asks a question and replies
 `answer=<picks>` or `declined`.

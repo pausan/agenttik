@@ -61,13 +61,18 @@ func (p *Provider) Available() error {
 // their Auto setting: it approves ordinary work and asks only about the
 // genuinely destructive things, as approval events (082-tool-approvals.md).
 //
-// A manual project uses `default`, which asks before edits and before any
-// command the CLI does not class as read-only. The `ask` rule extends that to
-// every command, `ls` and `find` included; Read, Grep and Glob still run
-// without asking.
-func permissionFlag(p agent.Permission, manual bool) []string {
-	if manual && p.Valid() != agent.PermissionPlan {
-		return manualFlags
+// A guarded project uses `default`, which asks before edits and before any
+// command the CLI does not class as read-only. A manual one adds an `ask`
+// rule that extends that to every command, `ls` and `find` included. In both,
+// Read, Grep and Glob run without asking.
+func permissionFlag(p agent.Permission, runMode string) []string {
+	if p.Valid() != agent.PermissionPlan {
+		switch runMode {
+		case agent.RunGuarded:
+			return []string{"--permission-mode", "default"}
+		case agent.RunManual:
+			return []string{"--permission-mode", "default", "--settings", `{"permissions":{"ask":["Bash"]}}`}
+		}
 	}
 	switch p.Valid() {
 	case agent.PermissionPlan:
@@ -78,8 +83,6 @@ func permissionFlag(p agent.Permission, manual bool) []string {
 		return []string{"--permission-mode", "auto"}
 	}
 }
-
-var manualFlags = []string{"--permission-mode", "default", "--settings", `{"permissions":{"ask":["Bash"]}}`}
 
 // buildArgs is separated from Run so the flag mapping can be unit tested.
 func buildArgs(req agent.TurnRequest) []string {
@@ -109,7 +112,7 @@ func buildArgs(req agent.TurnRequest) []string {
 	if req.Effort != "" {
 		args = append(args, "--effort", req.Effort)
 	}
-	args = append(args, permissionFlag(req.Permission, req.Manual)...)
+	args = append(args, permissionFlag(req.Permission, req.RunMode)...)
 	if req.ProviderSessionID != "" {
 		args = append(args, "--resume", req.ProviderSessionID)
 	} else if req.ForkFrom != "" {

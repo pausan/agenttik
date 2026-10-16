@@ -141,6 +141,15 @@ function submit() {
         @click="answerApproval(sessionId, approval.id, true)"
       />
       <UButton
+        v-if="approval.prefix"
+        size="sm"
+        variant="soft"
+        :label="`Allow ${approval.prefix} for this task`"
+        :title="`Don't ask again for commands starting with “${approval.prefix}” until agenttik restarts, in this task only. Chained or piped commands still ask.`"
+        :disabled="approval.answering"
+        @click="answerApproval(sessionId, approval.id, true, undefined, 'task_command')"
+      />
+      <UButton
         size="sm"
         variant="soft"
         :label="`Allow ${approval.tool || 'this tool'} for this task`"

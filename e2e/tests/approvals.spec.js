@@ -60,12 +60,12 @@ test("an allow can be remembered when the agent offers it", async ({ page }) => 
   await expect(page.getByText("allowed remember=turn", { exact: true })).toBeVisible();
 });
 
-test("a manual project asks without a countdown, and an allow can cover the rest of the task", async ({ page }) => {
+test("an asking project waits without a countdown, and an allow can cover the rest of the task", async ({ page }) => {
   await addProject(page);
   await openProject(page);
   await inspector(page).getByRole("combobox", { name: "Running tools" }).click();
-  await page.getByRole("option", { name: "Manual", exact: true }).click();
-  await expect(inspector(page).getByText("Agents ask before each command or edit")).toBeVisible();
+  await page.getByRole("option", { name: "Ask for every command", exact: true }).click();
+  await expect(inspector(page).getByText("Agents ask before every command and edit")).toBeVisible();
   await newTask(page);
   await pickModel(page);
   await sendPrompt(page, "@runmode");
@@ -74,7 +74,7 @@ test("a manual project asks without a countdown, and an allow can cover the rest
   await sendPrompt(page, "@approve Bash echo first");
   const card = page.getByRole("group", { name: "Tool approval" });
   await expect(card).toContainText("echo first");
-  // The default setting answers after 30 s; a manual project waits instead.
+  // The default setting answers after 30 s; an asking project waits instead.
   await expect(card).not.toContainText("Allowing in");
   await card.getByRole("button", { name: "Allow Bash for this task", exact: true }).click();
   await expect(card).toHaveCount(0);
@@ -82,6 +82,27 @@ test("a manual project asks without a countdown, and an allow can cover the rest
   await sendPrompt(page, "@approve Bash echo second");
   await expect(page.getByText("allowed", { exact: true })).toHaveCount(2);
   await expect(card).toHaveCount(0);
+});
+
+test("a command prefix can be allowed for the task", async ({ page }) => {
+  await addProject(page);
+  await openProject(page);
+  await inspector(page).getByRole("combobox", { name: "Running tools" }).click();
+  await page.getByRole("option", { name: "Ask before changes", exact: true }).click();
+  await newTask(page);
+  await pickModel(page);
+  await sendPrompt(page, '@approve Bash {"command":"kubectl get pods"}');
+  const card = page.getByRole("group", { name: "Tool approval" });
+  await card.getByRole("button", { name: "Allow kubectl get for this task", exact: true }).click();
+  await expect(card).toHaveCount(0);
+
+  await sendPrompt(page, '@approve Bash {"command":"kubectl get nodes"}');
+  await expect(page.getByText("allowed", { exact: true })).toHaveCount(2);
+  await sendPrompt(page, '@approve Bash {"command":"kubectl delete pod web"}');
+  await expect(card).toContainText("kubectl delete pod web");
+  await expect(card.getByRole("button", { name: "Allow kubectl delete for this task", exact: true })).toBeVisible();
+  await card.getByRole("button", { name: "Deny", exact: true }).click();
+  await expect(page.getByText("denied", { exact: true })).toBeVisible();
 });
 
 test("stopping the task withdraws its request", async ({ page }) => {

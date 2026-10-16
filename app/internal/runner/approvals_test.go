@@ -317,55 +317,62 @@ func TestWaitModeAndHoldKeepTheRequest(t *testing.T) {
 	r.Stop(other.ID)
 }
 
-func TestManualProjectAsksAndNeverAnswersForTheUser(t *testing.T) {
-	r, st, sess := setup(t, fake.New())
-	if _, err := r.Send(sess.ID, "@runmode"); err != nil {
-		t.Fatal(err)
-	}
-	if got := lastReply(t, r, st, sess.ID); got != "run_mode=auto" {
-		t.Fatalf("new project: reply = %q", got)
-	}
-	if err := st.SetProjectRunMode(sess.ProjectID, store.RunManual); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := r.Send(sess.ID, "@runmode"); err != nil {
-		t.Fatal(err)
-	}
-	if got := lastReply(t, r, st, sess.ID); got != "run_mode=manual" {
-		t.Fatalf("manual project: reply = %q", got)
-	}
+func TestAskingProjectsAskAndNeverAnswerForTheUser(t *testing.T) {
+	for _, mode := range []string{store.RunGuarded, store.RunManual} {
+		t.Run(mode, func(t *testing.T) {
+			r, st, sess := setup(t, fake.New())
+			if _, err := r.Send(sess.ID, "@runmode"); err != nil {
+				t.Fatal(err)
+			}
+			if got := lastReply(t, r, st, sess.ID); got != "run_mode=auto" {
+				t.Fatalf("new project: reply = %q", got)
+			}
+			if err := st.SetProjectRunMode(sess.ProjectID, mode); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := r.Send(sess.ID, "@runmode"); err != nil {
+				t.Fatal(err)
+			}
+			if got := lastReply(t, r, st, sess.ID); got != "run_mode="+mode {
+				t.Fatalf("reply = %q", got)
+			}
 
-	// Even with the settings answering at once, a tool call waits.
-	setApprovalMode(t, st, store.ApprovalImmediate, 30)
-	tab, unsubscribe := r.Hub().Subscribe(sess.ID)
-	defer unsubscribe()
-	if _, err := r.Send(sess.ID, "@approve Bash ls"); err != nil {
-		t.Fatal(err)
-	}
-	asked := nextOfType(t, tab, agent.EventApproval).Event.Approval
-	if asked.ExpiresIn != 0 {
-		t.Fatalf("manual approval counts down: %d", asked.ExpiresIn)
-	}
-	if err := r.Answer(sess.ID, asked.ID, agent.Reply{}); err != nil {
-		t.Fatal(err)
-	}
-	if got := lastReply(t, r, st, sess.ID); got != "denied" {
-		t.Fatalf("reply = %q", got)
-	}
+			// Even with the settings answering at once, a tool call waits.
+			setApprovalMode(t, st, store.ApprovalImmediate, 30)
+			tab, unsubscribe := r.Hub().Subscribe(sess.ID)
+			defer unsubscribe()
+			if _, err := r.Send(sess.ID, "@approve Bash ls"); err != nil {
+				t.Fatal(err)
+			}
+			asked := nextOfType(t, tab, agent.EventApproval).Event.Approval
+			if asked.ExpiresIn != 0 {
+				t.Fatalf("approval counts down: %d", asked.ExpiresIn)
+			}
+			if err := r.Answer(sess.ID, asked.ID, agent.Reply{}); err != nil {
+				t.Fatal(err)
+			}
+			if got := lastReply(t, r, st, sess.ID); got != "denied" {
+				t.Fatalf("reply = %q", got)
+			}
 
-	// Questions still follow the settings.
-	if _, err := r.Send(sess.ID, "@ask Which? | A, B"); err != nil {
-		t.Fatal(err)
-	}
-	if got := lastReply(t, r, st, sess.ID); got != "answer=A" {
-		t.Fatalf("question reply = %q", got)
+			// Questions still follow the settings.
+			if _, err := r.Send(sess.ID, "@ask Which? | A, B"); err != nil {
+				t.Fatal(err)
+			}
+			if got := lastReply(t, r, st, sess.ID); got != "answer=A" {
+				t.Fatalf("question reply = %q", got)
+			}
+		})
 	}
 }
 
 // approveAndAnswer runs one "@approve" turn and answers it with reply.
 func approveAndAnswer(t *testing.T, r *Runner, st *store.Store, tab <-chan Event, sessionID, tool string, reply agent.Reply) string {
 	t.Helper()
-	if _, err := r.Send(sessionID, "@approve "+tool+" x"); err != nil {
+	if !strings.Contains(tool, " ") {
+		tool += " x"
+	}
+	if _, err := r.Send(sessionID, "@approve "+tool); err != nil {
 		t.Fatal(err)
 	}
 	asked := nextOfType(t, tab, agent.EventApproval).Event.Approval
@@ -438,4 +445,47 @@ func TestAllowForTheTaskAnswersWhatAlreadyWaits(t *testing.T) {
 	if err := r.Answer("s1", "c", agent.Reply{Allow: false, Remember: agent.RememberTask}); !errors.Is(err, ErrBadReply) {
 		t.Fatalf("denying for the task = %v, want ErrBadReply", err)
 	}
+}
+
+func TestAllowACommandPrefixForTheTask(t *testing.T) {
+	r, st, sess := setup(t, fake.New())
+	setApprovalMode(t, st, store.ApprovalWait, 30)
+	tab, unsubscribe := r.Hub().Subscribe(sess.ID)
+	defer unsubscribe()
+
+	if _, err := r.Send(sess.ID, `@approve Bash {"command":"kubectl get pods"}`); err != nil {
+		t.Fatal(err)
+	}
+	asked := nextOfType(t, tab, agent.EventApproval).Event.Approval
+	if asked.Prefix != "kubectl get" {
+		t.Fatalf("prefix = %q", asked.Prefix)
+	}
+	if err := r.Answer(sess.ID, asked.ID, agent.Reply{Allow: true, Remember: agent.RememberTaskCommand}); err != nil {
+		t.Fatal(err)
+	}
+	if got := lastReply(t, r, st, sess.ID); got != "allowed" {
+		t.Fatalf("reply = %q", got)
+	}
+
+	if _, err := r.Send(sess.ID, `@approve Bash {"command":"kubectl get deployments -A"}`); err != nil {
+		t.Fatal(err)
+	}
+	if got := lastReply(t, r, st, sess.ID); got != "allowed" {
+		t.Fatalf("same prefix: reply = %q", got)
+	}
+	for _, command := range []string{"kubectl delete pod x", "kubectl get pods && rm -rf x"} {
+		if got := approveAndAnswer(t, r, st, tab, sess.ID, `Bash {"command":"`+command+`"}`, agent.Reply{}); got != "denied" {
+			t.Fatalf("%q: reply = %q", command, got)
+		}
+	}
+
+	// A command that is not one plain command offers no prefix to allow.
+	if _, err := r.Send(sess.ID, `@approve Bash {"command":"ls | wc -l"}`); err != nil {
+		t.Fatal(err)
+	}
+	piped := nextOfType(t, tab, agent.EventApproval).Event.Approval
+	if err := r.Answer(sess.ID, piped.ID, agent.Reply{Allow: true, Remember: agent.RememberTaskCommand}); !errors.Is(err, ErrBadReply) {
+		t.Fatalf("allowing a prefix that was not offered = %v", err)
+	}
+	r.Stop(sess.ID)
 }

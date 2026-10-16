@@ -80,21 +80,22 @@ func TestPermissionMapping(t *testing.T) {
 		agent.Permission("junk"):  "--permission-mode auto",
 	}
 	for perm, want := range cases {
-		got := strings.Join(permissionFlag(perm, false), " ")
+		got := strings.Join(permissionFlag(perm, agent.RunAuto), " ")
 		if got != want {
 			t.Errorf("permission %q -> %q, want %q", perm, got, want)
 		}
 	}
-	// A manual project asks before commands and edits; plan stays plan.
-	manual := map[agent.Permission]string{
-		agent.PermissionPlan:      "--permission-mode plan",
-		agent.PermissionWorkspace: `--permission-mode default --settings {"permissions":{"ask":["Bash"]}}`,
-		agent.PermissionFull:      `--permission-mode default --settings {"permissions":{"ask":["Bash"]}}`,
-	}
-	for perm, want := range manual {
-		got := strings.Join(permissionFlag(perm, true), " ")
-		if got != want {
-			t.Errorf("manual %q -> %q, want %q", perm, got, want)
+	// Guarded asks before changes, manual before every command; plan stays plan.
+	for mode, asking := range map[string]string{
+		agent.RunGuarded: "--permission-mode default",
+		agent.RunManual:  `--permission-mode default --settings {"permissions":{"ask":["Bash"]}}`,
+	} {
+		for perm, want := range map[agent.Permission]string{
+			agent.PermissionPlan: "--permission-mode plan", agent.PermissionWorkspace: asking, agent.PermissionFull: asking,
+		} {
+			if got := strings.Join(permissionFlag(perm, mode), " "); got != want {
+				t.Errorf("%s %q -> %q, want %q", mode, perm, got, want)
+			}
 		}
 	}
 }

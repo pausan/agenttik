@@ -43,9 +43,24 @@ async function move() {
 }
 
 const runModes = [
-  { label: "Automatic", value: "auto" },
-  { label: "Manual", value: "manual" },
+  {
+    label: "Automatic",
+    value: "auto",
+    help: "Agents run commands and edit files on their own, and ask only about risky actions.",
+  },
+  {
+    label: "Ask before changes",
+    value: "guarded",
+    help: "Agents ask before edits and before any command not known to be read-only. Unknown tools like kubectl always ask. Claude Code and Codex only.",
+  },
+  {
+    label: "Ask for every command",
+    value: "manual",
+    help: "Agents ask before every command and edit; reading files does not ask. Codex still runs a few known-safe reads such as ls. Claude Code and Codex only.",
+  },
 ];
+const runModeHelp = computed(() =>
+  (runModes.find((m) => m.value === S.project?.project.run_mode) || runModes[0]).help);
 
 const name = ref("");
 const path = ref("");
@@ -143,11 +158,7 @@ const busy = computed(() => {
         class="mt-1 w-full font-normal"
         @update:model-value="setProjectRunMode(S.project.project, $event)"
       />
-      <p class="mt-1.5 font-normal text-dimmed">
-        {{ S.project.project.run_mode === 'manual'
-          ? 'Agents ask before each command or edit, and wait for your answer. Claude Code and Codex only.'
-          : 'Agents run commands and edit files on their own, and ask only about risky actions.' }}
-      </p>
+      <p class="mt-1.5 font-normal text-dimmed">{{ runModeHelp }}</p>
     </div>
 
     <UButton block label="New task" @click="startTask(S.project.project)" />

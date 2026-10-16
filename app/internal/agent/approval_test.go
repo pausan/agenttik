@@ -40,10 +40,22 @@ func TestCheckReply(t *testing.T) {
 		{Reply{Allow: true, Remember: RememberTask}, true},
 		{Reply{Allow: true, Remember: RememberTaskAll}, true},
 		{Reply{Remember: RememberTaskAll}, false},
+		// A command prefix needs one to allow.
+		{Reply{Allow: true, Remember: RememberTaskCommand}, false},
 	} {
 		if err := offered.CheckReply(tc.reply); (err == nil) != tc.ok {
 			t.Errorf("remember %+v: err = %v, want ok=%v", tc.reply, err, tc.ok)
 		}
+	}
+}
+
+func TestCommandPrefixCanBeAllowedForTheTask(t *testing.T) {
+	a := NewApproval("1", "Bash", "", `{"command":"kubectl get pods"}`, nil)
+	if a.Prefix != "kubectl get" {
+		t.Fatalf("prefix = %q", a.Prefix)
+	}
+	if err := a.CheckReply(Reply{Allow: true, Remember: RememberTaskCommand}); err != nil {
+		t.Error(err)
 	}
 }
 

@@ -133,8 +133,8 @@ func (s *Server) updateProject(c *fiber.Ctx) error {
 	if name == "" && path == "" && body.Prompt == nil && body.RunMode == "" && body.Archived == nil && body.Hidden == nil {
 		return badRequest("name, path, prompt, run_mode, archived or hidden is required")
 	}
-	if body.RunMode != "" && body.RunMode != store.RunAuto && body.RunMode != store.RunManual {
-		return badRequest("run_mode must be %q or %q", store.RunAuto, store.RunManual)
+	if body.RunMode != "" && !store.ValidRunMode(body.RunMode) {
+		return badRequest("run_mode must be %q, %q or %q", store.RunAuto, store.RunGuarded, store.RunManual)
 	}
 	if body.Archived != nil && *body.Archived {
 		if err := s.canArchiveProject(id); err != nil {

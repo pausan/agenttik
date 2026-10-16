@@ -154,8 +154,8 @@ func nextSessionID() string {
 //	@account                  reply with the login directory this turn was
 //	                          given, which is the only way a browser test can
 //	                          see which subscription actually ran it
-//	@runmode                  reply "run_mode=manual" or "run_mode=auto",
-//	                          as the turn was asked to run tools
+//	@runmode                  reply "run_mode=<auto|guarded|manual>", as
+//	                          the turn was asked to run tools
 //	@approve <name> <input...> ask the user to approve a tool call and wait
 //	                          for the answer; the reply gains "allowed" or
 //	                          "denied"
@@ -228,9 +228,9 @@ func runScript(ctx context.Context, req agent.TurnRequest, events chan<- agent.E
 			}
 			reply = append(reply, "account="+home)
 		case "runmode":
-			mode := "auto"
-			if req.Manual {
-				mode = "manual"
+			mode := req.RunMode
+			if mode == "" {
+				mode = agent.RunAuto
 			}
 			reply = append(reply, "run_mode="+mode)
 		case "approve", "approve-remember":

@@ -144,6 +144,7 @@ function submit() {
         v-if="approval.prefix"
         size="sm"
         variant="soft"
+        icon="i-lucide-terminal"
         :label="`Allow ${approval.prefix} for this task`"
         :title="`Don't ask again for commands starting with “${approval.prefix}” until agenttik restarts, in this task only. Chained or piped commands still ask.`"
         :disabled="approval.answering"
@@ -152,6 +153,7 @@ function submit() {
       <UButton
         size="sm"
         variant="soft"
+        icon="i-lucide-wrench"
         :label="`Allow ${approval.tool || 'this tool'} for this task`"
         title="Don't ask again for this tool until agenttik restarts, in this task only"
         :disabled="approval.answering"
@@ -160,6 +162,7 @@ function submit() {
       <UButton
         size="sm"
         variant="soft"
+        icon="i-lucide-check-check"
         label="Allow all for this task"
         title="Don't ask again about any tool until agenttik restarts, in this task only"
         :disabled="approval.answering"

@@ -65,7 +65,7 @@ test("an asking project waits without a countdown, and an allow can cover the re
   await openProject(page);
   await inspector(page).getByRole("combobox", { name: "Running tools" }).click();
   await page.getByRole("option", { name: "Ask for every command", exact: true }).click();
-  await expect(inspector(page).getByText("Agents ask before every command and edit")).toBeVisible();
+  await expect(inspector(page).getByText("Asks before every command and edit.")).toBeVisible();
   await newTask(page);
   await pickModel(page);
   await sendPrompt(page, "@runmode");

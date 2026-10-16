@@ -15,7 +15,8 @@ refuse whatever their mode does not allow and cannot ask questions.
 ## Run modes
 
 Each project has a run mode, `projects.run_mode`, set under **Running tools**
-in its Project Options pane. `auto` is the default, for new projects and for
+in its Project Options pane, with a one-line hint below it and the full
+description on hover. `auto` is the default, for new projects and for
 projects that existed before the column.
 
 | Mode | Label | Claude Code | Codex |
@@ -248,7 +249,8 @@ while it was not listening is still drawn. Events keep it current after that.
 - An approval card shows the tool, its description, the input (a shell
   command as itself, other JSON indented), then Allow, **Allow *prefix* for
   this task** when the approval has a prefix, **Allow *tool* for this task**,
-  **Allow all for this task**, and Deny. When the approval
+  **Allow all for this task** (terminal, wrench and double-check icons), and
+  Deny. When the approval
   offers them, **Allow for this turn** and **Always allow** sit before Deny.
 - A question card shows each question with its header, options as radio or
   checkbox rows with their descriptions, and a text field where typing is

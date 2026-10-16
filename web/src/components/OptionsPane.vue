@@ -46,21 +46,24 @@ const runModes = [
   {
     label: "Automatic",
     value: "auto",
+    hint: "Runs on its own; asks only about risky actions.",
     help: "Agents run commands and edit files on their own, and ask only about risky actions.",
   },
   {
     label: "Ask before changes",
     value: "guarded",
+    hint: "Asks before edits and non-read-only commands.",
     help: "Agents ask before edits and before any command not known to be read-only. Unknown tools like kubectl always ask. Claude Code and Codex only.",
   },
   {
     label: "Ask for every command",
     value: "manual",
+    hint: "Asks before every command and edit.",
     help: "Agents ask before every command and edit; reading files does not ask. Codex still runs a few known-safe reads such as ls. Claude Code and Codex only.",
   },
 ];
-const runModeHelp = computed(() =>
-  (runModes.find((m) => m.value === S.project?.project.run_mode) || runModes[0]).help);
+const runMode = computed(() =>
+  runModes.find((m) => m.value === S.project?.project.run_mode) || runModes[0]);
 
 const name = ref("");
 const path = ref("");
@@ -158,7 +161,12 @@ const busy = computed(() => {
         class="mt-1 w-full font-normal"
         @update:model-value="setProjectRunMode(S.project.project, $event)"
       />
-      <p class="mt-1.5 font-normal text-dimmed">{{ runModeHelp }}</p>
+      <UTooltip :text="runMode.help" :ui="{ content: 'max-w-xs h-auto', text: 'whitespace-normal' }">
+        <p class="mt-1 flex items-center gap-1 font-normal text-dimmed">
+          {{ runMode.hint }}
+          <UIcon name="i-lucide-info" class="size-3 shrink-0" aria-hidden="true" />
+        </p>
+      </UTooltip>
     </div>
 
     <UButton block label="New task" @click="startTask(S.project.project)" />

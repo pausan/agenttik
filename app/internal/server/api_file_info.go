@@ -67,6 +67,11 @@ func (s *Server) projectFileInfo(c *fiber.Ctx) error {
 			if found := locateFileRef(root, abs, c.Query("target"), hints, touched); found != "" {
 				abs = found
 				rel = found
+				// Tool calls may name the project through a symlink, as
+				// /var for /private/var on macOS, while root is resolved.
+				if dir, e := filepath.EvalSymlinks(filepath.Dir(found)); e == nil {
+					found = filepath.Join(dir, filepath.Base(found))
+				}
 				if local, e := filepath.Rel(root, found); e == nil && local != ".." && !strings.HasPrefix(local, ".."+string(os.PathSeparator)) {
 					rel = filepath.ToSlash(local)
 				}

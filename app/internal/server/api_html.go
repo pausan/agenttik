@@ -69,7 +69,12 @@ func (s *Server) previewRoot(c *fiber.Ctx, scope string) (string, error) {
 	if err != nil || !filepath.IsAbs(string(decoded)) {
 		return "", badRequest("invalid preview root")
 	}
-	return filepath.Clean(string(decoded)), nil
+	// Resolve like projectRoot, so resolveInRoot compares resolved paths.
+	root, err := filepath.EvalSymlinks(string(decoded))
+	if err != nil {
+		return "", badRequest("preview folder unavailable: %v", err)
+	}
+	return root, nil
 }
 
 // getPreviewToken answers the app itself. It sends no CORS header, so a

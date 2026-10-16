@@ -2,6 +2,7 @@
 package remote
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -54,29 +55,39 @@ func Parse(address string) (*url.URL, error) {
 	return u, nil
 }
 
-// Discovery probes connect directly, regardless of HTTP proxy environment
-// settings. The transport keeps dialing after a request is canceled, so the
-// dialer has its own deadline; otherwise each silent address holds a socket
-// until the OS gives up, minutes later.
-var directDiscoveryClient = &http.Client{
-	Timeout: 5 * time.Second,
-	Transport: &http.Transport{
-		DisableKeepAlives: true,
-		DialContext:       (&net.Dialer{Timeout: probeTimeout}).DialContext,
-	},
-	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-}
-
+// CheckDirect probes a discovery address, given as host:port, over one plain
+// connection. It bypasses HTTP proxies and does not follow redirects. A silent
+// address costs only the pending dial, not an HTTP transport.
 func CheckDirect(ctx context.Context, address string) (*url.URL, Info, error) {
-	return check(ctx, address, directDiscoveryClient)
+	u := &url.URL{Scheme: "http", Host: address}
+	var dialer net.Dialer
+	conn, err := dialer.DialContext(ctx, "tcp", address)
+	if err != nil {
+		return nil, Info{}, fmt.Errorf("could not reach server: %w", err)
+	}
+	defer conn.Close()
+	if deadline, ok := ctx.Deadline(); ok {
+		conn.SetDeadline(deadline)
+	}
+	defer context.AfterFunc(ctx, func() { conn.SetDeadline(time.Now()) })()
+	req, err := http.NewRequest(http.MethodGet, u.String()+VersionPath, nil)
+	if err != nil {
+		return nil, Info{}, err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Close = true
+	if err := req.Write(conn); err != nil {
+		return nil, Info{}, fmt.Errorf("could not reach server: %w", err)
+	}
+	res, err := http.ReadResponse(bufio.NewReader(conn), req)
+	if err != nil {
+		return nil, Info{}, fmt.Errorf("could not reach server: %w", err)
+	}
+	defer res.Body.Close()
+	return identify(u, res)
 }
 
 func Check(ctx context.Context, address string) (*url.URL, Info, error) {
-	client := &http.Client{Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	return check(ctx, address, client)
-}
-
-func check(ctx context.Context, address string, client *http.Client) (*url.URL, Info, error) {
 	u, err := Parse(address)
 	if err != nil {
 		return nil, Info{}, err
@@ -86,11 +97,17 @@ func check(ctx context.Context, address string, client *http.Client) (*url.URL, 
 		return nil, Info{}, err
 	}
 	req.Header.Set("Accept", "application/json")
+	client := &http.Client{Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	res, err := client.Do(req)
 	if err != nil {
 		return nil, Info{}, fmt.Errorf("could not reach server: %w", err)
 	}
 	defer res.Body.Close()
+	return identify(u, res)
+}
+
+// identify accepts only the agenttik signature at /api/version.
+func identify(u *url.URL, res *http.Response) (*url.URL, Info, error) {
 	var info Info
 	body, err := io.ReadAll(io.LimitReader(res.Body, 4097))
 	if err != nil || len(body) > 4096 || res.StatusCode != http.StatusOK || json.Unmarshal(body, &info) != nil || info.Application != "agenttik" || strings.TrimSpace(info.Version) == "" {

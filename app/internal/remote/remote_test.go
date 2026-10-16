@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParse(t *testing.T) {
@@ -53,14 +55,46 @@ func TestCheck(t *testing.T) {
 				io.WriteString(w, tc.body)
 			}))
 			defer srv.Close()
-			_, info, err := Check(context.Background(), srv.URL)
-			if (err == nil) != tc.valid {
-				t.Fatalf("info=%+v err=%v", info, err)
-			}
-			if calls != 1 {
-				t.Fatalf("followed redirect: %d requests", calls)
+			for _, check := range []func() (*url.URL, Info, error){
+				func() (*url.URL, Info, error) { return Check(context.Background(), srv.URL) },
+				func() (*url.URL, Info, error) { return CheckDirect(context.Background(), srv.Listener.Addr().String()) },
+			} {
+				calls = 0
+				_, info, err := check()
+				if (err == nil) != tc.valid {
+					t.Fatalf("info=%+v err=%v", info, err)
+				}
+				if calls != 1 {
+					t.Fatalf("followed redirect: %d requests", calls)
+				}
 			}
 		})
+	}
+}
+
+func TestCheckDirectStopsAtDeadline(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			defer conn.Close()
+		}
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	if _, _, err := CheckDirect(ctx, ln.Addr().String()); err == nil {
+		t.Fatal("silent server identified")
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("took %s", elapsed)
 	}
 }
 

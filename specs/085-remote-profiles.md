@@ -37,7 +37,7 @@ Closing Settings pauses it; reopening Settings, including after switching to
 a remote profile, restores progress and results. Search state lasts until
 this instance shuts down. One search is shared by this instance's windows.
 
-The scan uses 128 workers with 500 ms probe deadlines and keeps only its
+The scan uses 2048 workers with 500 ms probe deadlines and keeps only its
 network cursor, interrupted addresses and matches in memory. A paused scan
 has no active workers. The UI polls progress only while scanning; shutdown
 cancels the scan. General discovery and finding a saved machine share the

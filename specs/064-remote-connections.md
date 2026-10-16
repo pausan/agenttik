@@ -42,10 +42,10 @@ interfaces is an error. Ctrl+C cancels the scan and exits nonzero, preserving
 matches already printed. The flag cannot be combined with other action modes
 or positional arguments. `--data-dir` is unused.
 
-The scan uses 128 workers, a 500 ms deadline per address, dial included, and
-bounded memory. A silent /8 can take about 18 hours; slow servers may be
-missed. Probes bypass HTTP proxies, do not follow redirects, and validate the
-same public
+The scan uses 2048 workers, a 500 ms deadline per address, dial included, and
+bounded memory, about 100 MB at peak. A silent /16 takes about 16 seconds and
+a silent /8 about 70 minutes; slow servers may be missed. Probes bypass HTTP
+proxies, do not follow redirects, and validate the same public
 `/api/version` signature used by remote connections. Password-protected
 instances are discoverable. Only the chosen HTTP port is scanned; arbitrary
 ports, HTTPS listeners, and loopback-only desktop backends are not discovered.

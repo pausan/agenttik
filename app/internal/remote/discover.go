@@ -136,7 +136,7 @@ func (s *Scanner) Run(ctx context.Context, port string, probed *atomic.Uint64, f
 	s.retry = nil
 	produced := make(chan []netip.Addr, 1)
 	var workers sync.WaitGroup
-	for range 128 {
+	for range 2048 {
 		workers.Go(func() {
 			for address := range jobs {
 				probeCtx, stop := context.WithTimeout(ctx, probeTimeout)

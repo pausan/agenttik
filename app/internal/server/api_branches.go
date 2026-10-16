@@ -25,6 +25,7 @@ func (s *Server) branchAction(c *fiber.Ctx) error {
 		Branch      string         `json:"branch"`
 		Target      string         `json:"target"`
 		Hash        string         `json:"hash"`
+		Name        string         `json:"name"`
 		Remote      string         `json:"remote"`
 		SetUpstream bool           `json:"setUpstream"`
 		Force       string         `json:"force"`
@@ -34,6 +35,14 @@ func (s *Server) branchAction(c *fiber.Ctx) error {
 		return badRequest("branch is required")
 	}
 	action := c.Params("action")
+	switch action {
+	case "tag":
+		return tagCommit(c, root, body.Hash, body.Name)
+	case "push-tag":
+		return pushRef(c, root, "refs/tags/"+body.Name)
+	case "push-branch":
+		return pushRef(c, root, "refs/heads/"+body.Name)
+	}
 	if action == "merge" || action == "rebase" || action == "continue" || action == "abort" {
 		return s.integrateBranches(c, root, action, body.Branch, body.Target)
 	}
@@ -116,6 +125,49 @@ func (s *Server) branchAction(c *fiber.Ctx) error {
 	default:
 		return badRequest("unknown branch action")
 	}
+	if _, err := runGitWithTimeout(root, 2*time.Minute, args...); err != nil {
+		return badRequest("%s", err)
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// tagCommit adds a lightweight tag. Unlike the actions above it does not touch
+// the checkout, so it works on any commit and from a detached HEAD.
+func tagCommit(c *fiber.Ctx, root, hash, name string) error {
+	if !commitHash.MatchString(hash) {
+		return badRequest("invalid commit hash")
+	}
+	if _, err := runGit(root, "check-ref-format", "refs/tags/"+name); err != nil || name == "" || strings.HasPrefix(name, "-") {
+		return badRequest("invalid tag name")
+	}
+	if _, err := runGit(root, "tag", "--", name, hash); err != nil {
+		return badRequest("%s", err)
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// pushRef sends one existing local branch or tag to origin under the same
+// name. A branch without an upstream gets origin's, as the push button would.
+// Rejections, such as a remote branch that moved on, are reported rather than
+// forced.
+func pushRef(c *fiber.Ctx, root, ref string) error {
+	name := strings.TrimPrefix(strings.TrimPrefix(ref, "refs/heads/"), "refs/tags/")
+	if name == "" || strings.HasPrefix(name, "-") {
+		return badRequest("invalid name")
+	}
+	if _, err := runGit(root, "show-ref", "--verify", "--quiet", ref); err != nil {
+		return badRequest("%s does not exist", name)
+	}
+	if _, err := runGit(root, "remote", "get-url", "origin"); err != nil {
+		return badRequest("origin is not configured")
+	}
+	args := []string{"push"}
+	if branch, ok := strings.CutPrefix(ref, "refs/heads/"); ok {
+		if _, err := runGit(root, "config", "--get", "branch."+branch+".remote"); err != nil {
+			args = append(args, "--set-upstream")
+		}
+	}
+	args = append(args, "--", "origin", ref+":"+ref)
 	if _, err := runGitWithTimeout(root, 2*time.Minute, args...); err != nil {
 		return badRequest("%s", err)
 	}

@@ -21,6 +21,7 @@ const operation = ref("merge");
 const remoteCleanup = ref(null);
 const pushConfirmation = ref(null);
 const forceConfirmation = ref(null);
+const tagging = ref(null);
 const target = ref("");
 const targets = computed(() => (S.log.branches || []).filter((name) => name !== S.log.branch));
 const blocked = computed(() => !!busy.value || !!S.log.operation);
@@ -36,6 +37,7 @@ watch(() => [currentProjectID(), S.repository], () => {
   remoteCleanup.value = null;
   pushConfirmation.value = null;
   forceConfirmation.value = null;
+  tagging.value = null;
   branchSearch.value = "";
   target.value = "";
   error.value = "";
@@ -48,7 +50,7 @@ const actions = [
   { action: "clean", icon: "i-lucide-brush-cleaning", label: "Clean branches merged into main or master" },
 ];
 async function act(action, branch = S.log.branch, remotes = [], hash = "", options = {}) {
-  if (busy.value || (!branch && !["continue", "abort", "checkout", "fetch"].includes(action))) return;
+  if (busy.value || (!branch && !["continue", "abort", "checkout", "fetch", "tag", "push-tag", "push-branch"].includes(action))) return;
   const id = currentProjectID();
   const repo = S.repository;
   const stillHere = () => id === currentProjectID() && repo === S.repository;
@@ -64,6 +66,8 @@ async function act(action, branch = S.log.branch, remotes = [], hash = "", optio
         forceConfirmation.value = result?.confirmForce ? { branch, ...result, setUpstream: !!options.setUpstream } : null;
       }
       if (result?.message) notice.value = result.message;
+      const done = { tag: `Added tag ${options.name}.`, "push-tag": `Pushed tag ${options.name} to origin.`, "push-branch": `Pushed ${options.name} to origin.` }[action];
+      if (done) notice.value = done;
       if (action === "clean-remote") {
         remoteCleanup.value = null;
         notice.value = `Removed remote branches: ${result.deleted.join(", ") || "none"}`;
@@ -93,6 +97,13 @@ async function act(action, branch = S.log.branch, remotes = [], hash = "", optio
 function declineForce() {
   error.value = forceConfirmation.value?.error || "";
   forceConfirmation.value = null;
+}
+function addTag() {
+  const name = tagging.value?.name.trim();
+  if (!name) return;
+  const { hash } = tagging.value;
+  tagging.value = null;
+  act("tag", S.log.branch, [], "", { hash, name });
 }
 
 /* Each commit is matched once against one string. Building it per keystroke
@@ -145,7 +156,9 @@ function aim(e) {
   };
 }
 
-const menu = computed(() => [
+// Only local branches can be pushed: remote ones are already there.
+const aimedCommit = computed(() => aimed.value.hash ? S.log.commits.find(commit => commit.hash === aimed.value.hash) : null);
+const menu = computed(() => [[
   {
     label: "Copy hash",
     icon: "i-lucide-copy",
@@ -159,12 +172,32 @@ const menu = computed(() => [
     onSelect: () => act("checkout", S.log.branch, [], aimed.value.hash),
   },
   {
+    label: "Add tag…",
+    icon: "i-lucide-tag",
+    disabled: !aimed.value.hash || !!busy.value,
+    onSelect: () => { tagging.value = { hash: aimed.value.hash, name: "" }; },
+  },
+], [
+  ...(aimedCommit.value?.branches || []).filter(name => S.log.branches?.includes(name)).map(name => ({
+    label: `Push branch ${name} to origin`,
+    icon: "i-lucide-arrow-up",
+    disabled: !!busy.value,
+    onSelect: () => act("push-branch", S.log.branch, [], "", { name }),
+  })),
+  ...(aimedCommit.value?.tags || []).map(name => ({
+    label: `Push tag ${name} to origin`,
+    icon: "i-lucide-arrow-up",
+    disabled: !!busy.value,
+    onSelect: () => act("push-tag", S.log.branch, [], "", { name }),
+  })),
+], [
+  {
     label: "Show in tree",
     icon: "i-lucide-folder-tree",
     disabled: !aimed.value.path,
     onSelect: () => emit("show-in-tree", aimed.value.path),
   },
-]);
+]].filter(group => group.length));
 </script>
 
 <template>
@@ -214,6 +247,18 @@ const menu = computed(() => [
       <template #footer>
         <UButton color="neutral" variant="ghost" label="Cancel" :disabled="!!busy" @click="declineForce" />
         <UButton color="error" label="Force push" :loading="busy === 'push'" :disabled="!!busy" @click="act('push', forceConfirmation.branch, [], '', { setUpstream: forceConfirmation.setUpstream, force: forceConfirmation.tip })" />
+      </template>
+    </UModal>
+    <UModal :open="!!tagging" title="Add tag" @update:open="(open) => { if (!open) tagging = null; }">
+      <template #body>
+        <form @submit.prevent="addTag">
+          <UInput v-if="tagging" v-model="tagging.name" autofocus placeholder="Tag name" aria-label="Tag name" class="w-full" :ui="{ base: 'font-mono' }" />
+          <p class="mt-2 text-xs text-dimmed">Adds a lightweight tag to commit <span class="font-mono">{{ tagging?.hash }}</span>.</p>
+        </form>
+      </template>
+      <template #footer>
+        <UButton color="neutral" variant="ghost" label="Cancel" @click="tagging = null" />
+        <UButton label="Add tag" icon="i-lucide-tag" :disabled="!tagging?.name.trim()" @click="addTag" />
       </template>
     </UModal>
     <UModal :open="!!remoteCleanup" title="Delete merged remote branches?" @update:open="(open) => { if (!open) remoteCleanup = null; }">
@@ -333,9 +378,9 @@ const menu = computed(() => [
             <span class="block font-mono text-[11px] leading-snug text-dimmed tabular-nums">
               {{ commit.hash }} · {{ commit.author }} · {{ commit.date }}
             </span>
-            <span v-if="commit.branches?.length || (S.logGraph && commit.tags?.length)" class="mt-1 flex flex-wrap gap-1">
+            <span v-if="commit.branches?.length || commit.tags?.length" class="mt-1 flex flex-wrap gap-1">
               <UBadge v-for="branch in commit.branches" :key="`branch:${branch}`" color="primary" variant="subtle" size="xs" icon="i-lucide-git-branch">{{ branch }}</UBadge>
-              <UBadge v-for="tag in (S.logGraph ? commit.tags : [])" :key="`tag:${tag}`" color="secondary" variant="subtle" size="xs" icon="i-lucide-tag">{{ tag }}</UBadge>
+              <UBadge v-for="tag in commit.tags" :key="`tag:${tag}`" color="secondary" variant="subtle" size="xs" icon="i-lucide-tag">{{ tag }}</UBadge>
             </span>
           </button>
 

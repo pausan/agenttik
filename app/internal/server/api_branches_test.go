@@ -424,3 +424,61 @@ func TestRemoteCleanupUsesEachRemotesBases(t *testing.T) {
 		t.Fatal("accepted different push destination")
 	}
 }
+
+func TestTagAndPushRefs(t *testing.T) {
+	s, st := newTestServer(t)
+	root, remote := t.TempDir(), t.TempDir()
+	git := func(dir string, args ...string) string {
+		t.Helper()
+		out, err := runGit(dir, args...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return strings.TrimSpace(out)
+	}
+	git(remote, "init", "--bare")
+	git(root, "init", "-b", "main")
+	git(root, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-m", "first")
+	first := git(root, "rev-parse", "--short=8", "HEAD")
+	git(root, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-m", "second")
+	git(root, "branch", "feature/old", first)
+	p, err := st.CreateProject("tags", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := "/api/projects/" + itoa(p.ID) + "/branches/"
+	request := func(action string, body map[string]string, status int) {
+		t.Helper()
+		r := do(t, s, "POST", base+action, body)
+		r.Body.Close()
+		if r.StatusCode != status {
+			t.Fatalf("%s %v: %d", action, body, r.StatusCode)
+		}
+	}
+	request("tag", map[string]string{"hash": first, "name": "v1.0"}, 204)
+	if git(root, "rev-parse", "--short=8", "v1.0^{commit}") != first {
+		t.Fatal("tag not on the chosen commit")
+	}
+	request("tag", map[string]string{"hash": first, "name": "v1.0"}, 400)
+	request("tag", map[string]string{"hash": first, "name": "-f"}, 400)
+	request("tag", map[string]string{"hash": first, "name": "bad..name"}, 400)
+	request("tag", map[string]string{"hash": "--all", "name": "v2"}, 400)
+
+	request("push-tag", map[string]string{"name": "v1.0"}, 400) // no origin yet
+	git(root, "remote", "add", "origin", remote)
+	request("push-tag", map[string]string{"name": "v1.0"}, 204)
+	if git(remote, "rev-parse", "--short=8", "v1.0") != first {
+		t.Fatal("tag not pushed")
+	}
+	request("push-tag", map[string]string{"name": "missing"}, 400)
+
+	// A branch other than the current one, which gains an upstream.
+	request("push-branch", map[string]string{"name": "feature/old"}, 204)
+	if git(remote, "for-each-ref", "--format=%(refname:short)", "refs/heads/") != "feature/old" {
+		t.Fatal("pushed the wrong branches")
+	}
+	if git(root, "rev-parse", "--abbrev-ref", "feature/old@{upstream}") != "origin/feature/old" {
+		t.Fatal("upstream not set")
+	}
+	request("push-branch", map[string]string{"name": "--all"}, 400)
+}

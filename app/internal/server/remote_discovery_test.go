@@ -40,7 +40,18 @@ func waitDiscovery(t *testing.T, s *Server, ready func(discoveryResponse) bool) 
 	return discoveryResponse{}
 }
 
+// needLoopbackRange skips a test that needs every 127.0.0.x to answer, as on
+// Linux. macOS only has 127.0.0.1 unless lo0 gets aliases.
+func needLoopbackRange(t *testing.T) {
+	listener, err := net.Listen("tcp4", "127.0.0.2:0")
+	if err != nil {
+		t.Skip("127.0.0.2 is not local; this test needs all of 127.0.0.0/24")
+	}
+	listener.Close()
+}
+
 func TestMachineDiscoveryPauseConnectResumeAndRestart(t *testing.T) {
+	needLoopbackRange(t)
 	local, st := newTestServer(t)
 	self := machineID(t, st)
 	local.remotes.networks = func() ([]netip.Prefix, error) {

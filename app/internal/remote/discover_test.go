@@ -78,7 +78,18 @@ func TestScannerSkipsScannedRanges(t *testing.T) {
 	}
 }
 
+// needLoopbackRange skips a test that needs every 127.0.0.x to answer, as on
+// Linux. macOS only has 127.0.0.1 unless lo0 gets aliases.
+func needLoopbackRange(t *testing.T) {
+	listener, err := net.Listen("tcp4", "127.0.0.2:0")
+	if err != nil {
+		t.Skip("127.0.0.2 is not local; this test needs all of 127.0.0.0/24")
+	}
+	listener.Close()
+}
+
 func TestScannerResumesUnfinishedAddresses(t *testing.T) {
+	needLoopbackRange(t)
 	for name, run := range scanRuns {
 		for _, beforeStart := range []bool{false, true} {
 			t.Run(fmt.Sprint(name, "/cancelBeforeStart=", beforeStart), func(t *testing.T) {

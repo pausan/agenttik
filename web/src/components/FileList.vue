@@ -2,6 +2,8 @@
 import { computed, ref } from "vue";
 
 import TreeActionModal from "./TreeActionModal.vue";
+import { useBatches } from "../batches";
+import { ROW_BUTTON } from "../ui";
 import { S, currentProjectID, openFile } from "../store";
 
 const emit = defineEmits(["show-in-tree"]);
@@ -12,6 +14,12 @@ const props = defineProps({
   disabled: { type: Boolean, default: false },
   compactEmpty: { type: Boolean, default: false },
   empty: { type: String, required: true },
+});
+
+// A build can change thousands of files; rows past the first batch wait for a click.
+const { visible, more, showMore } = useBatches(() => props.files, {
+  whole: 250,
+  reset: () => `${currentProjectID()}\0${S.repository}`,
 });
 
 const action = ref(null);
@@ -46,7 +54,7 @@ const menu = computed(() => [
     <p v-if="!files.length" class="px-3 text-center text-dimmed" :class="compactEmpty ? 'py-3' : 'py-5'">{{ empty }}</p>
     <UContextMenu v-else :items="menu" :ui="{ content: 'w-56' }">
       <div @contextmenu="aim">
-        <div v-for="f in files" :key="f.path" :data-path="f.path" class="flex items-center">
+        <div v-for="f in visible" :key="f.path" :data-path="f.path" class="flex items-center">
           <button
             type="button"
             class="flex min-w-0 flex-1 select-none items-center gap-1.5 rounded-[var(--ui-radius)] px-1.5 py-0.5 text-left font-mono text-xs hover:bg-elevated hover:text-highlighted"
@@ -57,9 +65,17 @@ const menu = computed(() => [
             <span v-if="f.status" class="w-5 shrink-0 text-primary">{{ f.status }}</span>
             <span class="path-clip truncate"><span>{{ f.path }}</span></span>
           </button>
-          <UButton v-if="allowRevert" icon="i-lucide-undo-2" :aria-label="`Revert changes to ${f.path}`" :title="`Revert changes to ${f.path}`" size="xs" variant="ghost" color="neutral" :disabled="disabled" @click="revert(f.path)" />
+          <button v-if="allowRevert" type="button" :class="ROW_BUTTON" :aria-label="`Revert changes to ${f.path}`" :title="`Revert changes to ${f.path}`" :disabled="disabled" @click="revert(f.path)">
+            <UIcon name="i-lucide-undo-2" class="size-4 shrink-0" />
+          </button>
           <slot name="actions" :file="f" />
         </div>
+        <button
+          v-if="more"
+          type="button"
+          class="w-full rounded-[var(--ui-radius)] px-1.5 py-1 text-left text-xs text-primary hover:bg-elevated"
+          @click="showMore"
+        >… See {{ more }} more …</button>
       </div>
     </UContextMenu>
     <TreeActionModal v-model:action="action" />

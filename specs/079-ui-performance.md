@@ -23,6 +23,15 @@ and mount message bodies near the viewport. The progress clock updates outside
 the row list, so ticking does not scan historical rows. Saved reading positions
 use cached heights; live output follows only while reading at the bottom.
 
+The Changed list and the commit log are stored raw, without a reactive proxy
+per row. A re-read equal to what is shown re-renders nothing, and only one
+Changed read is out at a time (a request meanwhile makes one re-read after it).
+Changed renders 250 rows per list until more are asked for (see
+[063](063-staging.md)). Its per-row stage, unstage and revert controls are plain
+buttons styled as extra-small ghost buttons (`ROW_BUTTON` in `ui.js`): a
+`UButton` per row cost about 200 ms for 500 rows. The log keeps the server's
+500-commit cap.
+
 Settings mounts panes on first visit, retaining them until the dialog closes.
 Searching mounts all panes so result counts cover every section. Modal and
 slideover transitions and menu entrance/exit animations are disabled. Profile
@@ -60,6 +69,31 @@ For an older binary, set `AGENTTIK_E2E_BIN` and `PERF_BASELINE=1`, and select
 new budgets. All three interrupt checks and the terminal browser regressions
 passed. Native throughput was not measured; the native input check timed out
 under Xvfb on this host.
+
+Changed and Commits use a repository with 16,000 untracked files and 500
+commits. Timings are taken in the page, so Playwright's queries over a large
+DOM are not counted; long tasks are the time the window could not answer:
+
+```
+cd e2e
+npx playwright test tests/changes-performance.spec.js --workers=1
+```
+
+Against baseline commit `fbbf69b` on the development Linux host (three changed
+runs agreed within 25 ms; the table shows a typical one):
+
+| Interaction | Baseline | Changed |
+| --- | ---: | ---: |
+| Open project, Changed visible | 12,242 ms (10,262 ms longest task) | 148 ms (none over 50 ms) |
+| Re-read after one file change | 4,559 ms (3,228 ms longest task) | 324 ms (none) |
+| DOM nodes with Changed open | 208,225 | 3,463 |
+| Switch to Commits | 976 ms (876 ms longest task) | 86 ms (none) |
+
+The re-read includes the watcher's 250 ms quiet period. During a build the
+baseline froze for each burst, so the window never caught up. Switching to
+Commits was slow because it unmounted 16,000 Changed rows. `PERF_BASELINE=1`
+skips the budgets and the row checks; `PERF_PROFILE` writes a CPU profile of
+the opening.
 
 Build the UI and web binary, then run:
 

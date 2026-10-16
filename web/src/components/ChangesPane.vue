@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { api } from "../api";
 import { S, currentProjectID, refreshChanged, refreshLog } from "../store";
 import FileList from "./FileList.vue";
+import { ROW_BUTTON } from "../ui";
 
 const emit = defineEmits(["show-in-tree"]);
 const staged = computed(() => S.changed.filter((f) => f.staged));
@@ -92,7 +93,9 @@ async function act(action, path) {
       </div>
       <FileList allow-revert :disabled="busy" v-if="expanded" :files="staged" compact-empty empty="No staged files." @show-in-tree="emit('show-in-tree', $event)">
         <template #actions="{ file }">
-          <UButton icon="i-lucide-minus" :aria-label="`Unstage ${file.path}`" :title="`Unstage ${file.path}`" size="xs" variant="ghost" color="neutral" :disabled="busy" @click="act('unstage', file.path)" />
+          <button type="button" :class="ROW_BUTTON" :aria-label="`Unstage ${file.path}`" :title="`Unstage ${file.path}`" :disabled="busy" @click="act('unstage', file.path)">
+            <UIcon name="i-lucide-minus" class="size-4 shrink-0" />
+          </button>
         </template>
       </FileList>
     </section>
@@ -103,7 +106,9 @@ async function act(action, path) {
       </div>
       <FileList allow-revert :disabled="busy" :files="unstaged" empty="No edited files." @show-in-tree="emit('show-in-tree', $event)">
         <template #actions="{ file }">
-          <UButton icon="i-lucide-plus" :aria-label="`Stage ${file.path}`" :title="`Stage ${file.path}`" size="xs" variant="ghost" color="neutral" :disabled="busy" @click="act('stage', file.path)" />
+          <button type="button" :class="ROW_BUTTON" :aria-label="`Stage ${file.path}`" :title="`Stage ${file.path}`" :disabled="busy" @click="act('stage', file.path)">
+            <UIcon name="i-lucide-plus" class="size-4 shrink-0" />
+          </button>
         </template>
       </FileList>
     </section>

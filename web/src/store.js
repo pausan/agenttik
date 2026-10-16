@@ -11,7 +11,7 @@
    S.activeProjectID — so switching project switches the whole centre to that
    project's work. */
 
-import { nextTick, reactive, ref, watch } from "vue";
+import { markRaw, nextTick, reactive, ref, watch } from "vue";
 import { DEFAULT_SCHEDULE, scheduleRecurrence } from "./schedules.js";
 import { createTaskSounds, TASK_SOUNDS_KEY } from "./task-sounds.js";
 import { trackTaskAttention, reconcileTaskCompletions } from "./task-attention.js";
@@ -2712,7 +2712,26 @@ export function selectRepository(repo) {
   Promise.all([refreshChanged(), refreshLog()]).catch(fail);
 }
 
-export async function refreshChanged() {
+/* A build can leave tens of thousands of files changed, and the watcher
+   re-reads them after every burst. Like the Tree, one read is out at a time:
+   asking meanwhile makes a single re-read after it. */
+let changedLoad = null;
+let changedStale = false;
+export function refreshChanged() {
+  if (changedLoad) {
+    changedStale = true;
+    return changedLoad;
+  }
+  changedLoad = (async () => {
+    do {
+      changedStale = false;
+      await loadChanged();
+    } while (changedStale);
+  })().finally(() => (changedLoad = null));
+  return changedLoad;
+}
+
+async function loadChanged() {
   const id = currentProjectID();
   const repo = S.repository;
   if (!id) return (S.changed = []);
@@ -2720,10 +2739,16 @@ export async function refreshChanged() {
     const changed = await api("GET", `/api/projects/${id}/changes?repo=${encodeURIComponent(repo)}`);
     // The watcher can fire this often, so a slow answer for the project we
     // just left must not replace the list of the one now in front.
-    if (currentProjectID() === id && S.repository === repo) S.changed = changed;
+    if (currentProjectID() === id && S.repository === repo) setUnlessSame("changed", changed);
   } catch {
     if (currentProjectID() === id && S.repository === repo) S.changed = [];
   }
+}
+
+/* Lists from Git are replaced, never edited, so they stay raw: no proxy per
+   row, and an answer equal to what is shown re-renders nothing. */
+function setUnlessSame(key, value) {
+  if (JSON.stringify(S[key]) !== JSON.stringify(value)) S[key] = markRaw(value);
 }
 
 /* refreshLog reads the history of the branch the project is on. A folder that
@@ -2738,7 +2763,7 @@ export async function refreshLog() {
     const log = await api("GET", `/api/projects/${id}/log?repo=${encodeURIComponent(repo)}&graph=${graph}`);
     // A slow request for the project we just left must not replace the log of
     // the one now in front.
-    if (currentProjectID() === id && S.repository === repo && S.logGraph === graph) S.log = log;
+    if (currentProjectID() === id && S.repository === repo && S.logGraph === graph) setUnlessSame("log", log);
   } catch {
     if (currentProjectID() === id && S.repository === repo && S.logGraph === graph) S.log = EMPTY_LOG();
   }

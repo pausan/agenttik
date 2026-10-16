@@ -1,13 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { effectScope, shallowRef } from "vue";
-import { useCommitFiles } from "./commitFiles.js";
+import { useBatches } from "./batches.js";
 
 function setup(t, count) {
   const source = shallowRef(makeFiles(count));
   const scope = effectScope();
   t.after(() => scope.stop());
-  return { source, ...scope.run(() => useCommitFiles(() => source.value)) };
+  return { source, ...scope.run(() => useBatches(() => source.value)) };
 }
 
 const makeFiles = (count) => Array.from({ length: count }, (_, i) => ({ path: `file-${i}` }));
@@ -60,4 +60,29 @@ test("switching commits and reopening cached files reset the visible batch", (t)
   source.value = cached;
   assert.equal(visible.value.length, 250);
   assert.equal(more.value, 250);
+});
+
+test("a lower whole threshold batches shorter lists", (t) => {
+  const source = shallowRef(makeFiles(251));
+  const scope = effectScope();
+  t.after(() => scope.stop());
+  const { visible, more } = scope.run(() => useBatches(() => source.value, { whole: 250 }));
+  assert.equal(visible.value.length, 250);
+  assert.equal(more.value, 1);
+  source.value = makeFiles(250);
+  assert.equal(visible.value.length, 250);
+  assert.equal(more.value, 0);
+});
+
+test("a separate reset key keeps revealed rows across refreshed lists", (t) => {
+  const source = shallowRef(makeFiles(2000));
+  const key = shallowRef("project-1");
+  const scope = effectScope();
+  t.after(() => scope.stop());
+  const { visible, showMore } = scope.run(() => useBatches(() => source.value, { whole: 250, reset: () => key.value }));
+  showMore();
+  source.value = makeFiles(2001);
+  assert.equal(visible.value.length, 500);
+  key.value = "project-2";
+  assert.equal(visible.value.length, 250);
 });

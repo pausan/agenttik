@@ -6,7 +6,7 @@ import { S, copyText, openCommitFile, toggleCommit, currentProjectID, refreshLog
 import { api } from "../api";
 import { fuzzy, segments } from "../fuzzy";
 import { commitGraph, graphColor, graphX, graphPath } from "../commitGraph";
-import { useCommitFiles } from "../commitFiles";
+import { useBatches } from "../batches";
 import { branchOptions } from "../branches";
 
 watch(() => S.logGraph, () => refreshLog());
@@ -127,7 +127,7 @@ function subjectParts(commit) {
 }
 
 const filesOf = (hash) => S.logFiles[hash] || null;
-const { visible: visibleFiles, more: moreFiles, showMore } = useCommitFiles(
+const { visible: visibleFiles, more: moreFiles, showMore } = useBatches(
   () => S.logOpen ? filesOf(S.logOpen) : null,
 );
 

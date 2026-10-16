@@ -4,7 +4,11 @@ The task's Changed pane has an inline commit composer above an open, collapsible
 **Staged** section. Its empty state uses compact vertical padding.
 Staged and unstaged files have separate counts; partially staged files appear
 in both lists. File rows still open the file and offer Show in tree.
-Both lists reflect Git status independently of rendered diffs. Whitespace-only
+Both lists reflect Git status independently of rendered diffs.
+A list over 250 files renders its first 250 rows. **See N more** below them
+doubles what is shown, at most 1,000 more per click. Revealed rows stay across
+refreshes and reset when the project or repository changes. Section counts
+and the all-files buttons always cover the whole list. Whitespace-only
 and line-ending-only changes remain listed, as do staged changes whose working
 copy matches HEAD again (the file then appears in both lists).
 

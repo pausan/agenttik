@@ -66,6 +66,11 @@ func CheckDirect(ctx context.Context, address string) (*url.URL, Info, error) {
 		return nil, Info{}, fmt.Errorf("could not reach server: %w", err)
 	}
 	defer conn.Close()
+	return checkConn(ctx, conn, u)
+}
+
+// checkConn sends the version request over a connected socket.
+func checkConn(ctx context.Context, conn net.Conn, u *url.URL) (*url.URL, Info, error) {
 	if deadline, ok := ctx.Deadline(); ok {
 		conn.SetDeadline(deadline)
 	}

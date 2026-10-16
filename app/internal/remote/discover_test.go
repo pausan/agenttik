@@ -48,78 +48,90 @@ func TestHosts(t *testing.T) {
 	}
 }
 
+type scanRun func(*Scanner, context.Context, string, *atomic.Uint64, func(*url.URL, Info) error) error
+
+// scanRuns lists the platform's Run and the dial fallback, which is Run where
+// no poller exists.
+var scanRuns = map[string]scanRun{"Run": (*Scanner).Run, "dial": (*Scanner).runDial}
+
 // A wider range skips the addresses of the narrower one scanned before it.
 func TestScannerSkipsScannedRanges(t *testing.T) {
-	listener, err := net.Listen("tcp4", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, port, _ := net.SplitHostPort(listener.Addr().String())
-	listener.Close()
-	var probed atomic.Uint64
-	networks := []netip.Prefix{netip.MustParsePrefix("127.0.0.128/25"), netip.MustParsePrefix("127.0.0.0/24")}
-	ctx, stop := context.WithTimeout(context.Background(), 5*time.Second)
-	defer stop()
-	if err := Scan(ctx, networks, port, &probed, func(*url.URL, Info) error { return nil }); err != nil {
-		t.Fatal(err)
-	}
-	if got := probed.Load(); got != 256 || got != Hosts(networks) {
-		t.Fatalf("probed %d addresses", got)
+	for name, run := range scanRuns {
+		t.Run(name, func(t *testing.T) {
+			listener, err := net.Listen("tcp4", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, port, _ := net.SplitHostPort(listener.Addr().String())
+			listener.Close()
+			var probed atomic.Uint64
+			networks := []netip.Prefix{netip.MustParsePrefix("127.0.0.128/25"), netip.MustParsePrefix("127.0.0.0/24")}
+			ctx, stop := context.WithTimeout(context.Background(), 5*time.Second)
+			defer stop()
+			if err := run(NewScanner(networks), ctx, port, &probed, func(*url.URL, Info) error { return nil }); err != nil {
+				t.Fatal(err)
+			}
+			if got := probed.Load(); got != 256 || got != Hosts(networks) {
+				t.Fatalf("probed %d addresses", got)
+			}
+		})
 	}
 }
 
 func TestScannerResumesUnfinishedAddresses(t *testing.T) {
-	for _, beforeStart := range []bool{false, true} {
-		t.Run(fmt.Sprint("cancelBeforeStart=", beforeStart), func(t *testing.T) {
-			var resume atomic.Bool
-			var answered atomic.Bool
-			listener, err := net.Listen("tcp4", "0.0.0.0:0")
-			if err != nil {
-				t.Fatal(err)
-			}
-			srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if !resume.Load() && !answered.CompareAndSwap(false, true) {
-					<-r.Context().Done()
-					return
+	for name, run := range scanRuns {
+		for _, beforeStart := range []bool{false, true} {
+			t.Run(fmt.Sprint(name, "/cancelBeforeStart=", beforeStart), func(t *testing.T) {
+				var resume atomic.Bool
+				var answered atomic.Bool
+				listener, err := net.Listen("tcp4", "0.0.0.0:0")
+				if err != nil {
+					t.Fatal(err)
 				}
-				fmt.Fprint(w, `{"application":"agenttik","version":"1","id":"office"}`)
-			}))
-			srv.Listener = listener
-			srv.Start()
-			defer srv.Close()
-			_, port, _ := net.SplitHostPort(listener.Addr().String())
-			scanner := NewScanner([]netip.Prefix{netip.MustParsePrefix("127.0.0.0/24")})
-			var probed atomic.Uint64
-			matches := make(map[string]bool)
-			ctx, cancel := context.WithCancel(context.Background())
-			if beforeStart {
-				cancel()
-			}
-			err = scanner.Run(ctx, port, &probed, func(target *url.URL, info Info) error {
-				matches[target.Hostname()] = true
-				cancel()
-				return nil
-			})
-			if !errors.Is(err, context.Canceled) {
-				t.Fatalf("pause: %v", err)
-			}
-			paused := probed.Load()
-			if paused >= 256 || (beforeStart && paused != 0) {
-				t.Fatalf("paused progress: %d", paused)
-			}
-			resume.Store(true)
-			ctx, stop := context.WithTimeout(context.Background(), 5*time.Second)
-			defer stop()
-			err = scanner.Run(ctx, port, &probed, func(target *url.URL, info Info) error {
-				if matches[target.Hostname()] {
-					t.Errorf("repeated completed address: %s", target)
+				srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if !resume.Load() && !answered.CompareAndSwap(false, true) {
+						<-r.Context().Done()
+						return
+					}
+					fmt.Fprint(w, `{"application":"agenttik","version":"1","id":"office"}`)
+				}))
+				srv.Listener = listener
+				srv.Start()
+				defer srv.Close()
+				_, port, _ := net.SplitHostPort(listener.Addr().String())
+				scanner := NewScanner([]netip.Prefix{netip.MustParsePrefix("127.0.0.0/24")})
+				var probed atomic.Uint64
+				matches := make(map[string]bool)
+				ctx, cancel := context.WithCancel(context.Background())
+				if beforeStart {
+					cancel()
 				}
-				matches[target.Hostname()] = true
-				return nil
+				err = run(scanner, ctx, port, &probed, func(target *url.URL, info Info) error {
+					matches[target.Hostname()] = true
+					cancel()
+					return nil
+				})
+				if !errors.Is(err, context.Canceled) {
+					t.Fatalf("pause: %v", err)
+				}
+				paused := probed.Load()
+				if paused >= 256 || (beforeStart && paused != 0) {
+					t.Fatalf("paused progress: %d", paused)
+				}
+				resume.Store(true)
+				ctx, stop := context.WithTimeout(context.Background(), 5*time.Second)
+				defer stop()
+				err = run(scanner, ctx, port, &probed, func(target *url.URL, info Info) error {
+					if matches[target.Hostname()] {
+						t.Errorf("repeated completed address: %s", target)
+					}
+					matches[target.Hostname()] = true
+					return nil
+				})
+				if err != nil || probed.Load() != 256 || len(matches) != 256 {
+					t.Fatalf("resume: err=%v probed=%d matches=%d", err, probed.Load(), len(matches))
+				}
 			})
-			if err != nil || probed.Load() != 256 || len(matches) != 256 {
-				t.Fatalf("resume: err=%v probed=%d matches=%d", err, probed.Load(), len(matches))
-			}
-		})
+		}
 	}
 }

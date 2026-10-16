@@ -99,6 +99,9 @@ func Hosts(networks []netip.Prefix) uint64 {
 // probeTimeout bounds each address of a scan, including its dial.
 const probeTimeout = 500 * time.Millisecond
 
+// probesInFlight bounds the addresses a scan probes at once.
+const probesInFlight = 2048
+
 // Scanner keeps the next address and a bounded list of unfinished probes.
 // Run calls must be sequential. Cancellation leaves unfinished probes for the
 // next Run, while completed probes and matches are retained by the caller.
@@ -113,14 +116,16 @@ func NewScanner(networks []netip.Prefix) *Scanner {
 	return &Scanner{networks: networks}
 }
 
-// Scan streams addresses through a fixed worker pool. found runs on the
+// Scan probes up to probesInFlight addresses at once. found runs on the
 // caller's goroutine; an error from it stops the scan. probed counts completed
 // probes, including addresses that do not answer.
 func Scan(ctx context.Context, networks []netip.Prefix, port string, probed *atomic.Uint64, found func(*url.URL, Info) error) error {
 	return NewScanner(networks).Run(ctx, port, probed, found)
 }
 
-func (s *Scanner) Run(ctx context.Context, port string, probed *atomic.Uint64, found func(*url.URL, Info) error) error {
+// runDial gives each probe in flight its own goroutine and dial. It works on
+// every platform; Run uses it where no poller is available.
+func (s *Scanner) runDial(ctx context.Context, port string, probed *atomic.Uint64, found func(*url.URL, Info) error) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	type result struct {
@@ -136,7 +141,7 @@ func (s *Scanner) Run(ctx context.Context, port string, probed *atomic.Uint64, f
 	s.retry = nil
 	produced := make(chan []netip.Addr, 1)
 	var workers sync.WaitGroup
-	for range 2048 {
+	for range probesInFlight {
 		workers.Go(func() {
 			for address := range jobs {
 				probeCtx, stop := context.WithTimeout(ctx, probeTimeout)
@@ -163,30 +168,21 @@ func (s *Scanner) Run(ctx context.Context, port string, probed *atomic.Uint64, f
 				return
 			}
 		}
-		for s.network < len(s.networks) {
-			network := s.networks[s.network]
-			if !s.next.IsValid() {
-				s.next = network.Addr()
+		for {
+			address, ok := s.nextAddress()
+			if !ok {
+				break
 			}
-			for network.Contains(s.next) {
-				if s.scanned(s.next) {
-					s.next = s.next.Next()
-					continue
-				}
-				if ctx.Err() != nil {
-					produced <- nil
-					return
-				}
-				select {
-				case jobs <- s.next:
-					s.next = s.next.Next()
-				case <-ctx.Done():
-					produced <- nil
-					return
-				}
+			if ctx.Err() != nil {
+				produced <- []netip.Addr{address}
+				return
 			}
-			s.network++
-			s.next = netip.Addr{}
+			select {
+			case jobs <- address:
+			case <-ctx.Done():
+				produced <- []netip.Addr{address}
+				return
+			}
 		}
 		produced <- nil
 	}()
@@ -212,6 +208,27 @@ func (s *Scanner) Run(ctx context.Context, port string, probed *atomic.Uint64, f
 		return stopErr
 	}
 	return ctx.Err()
+}
+
+// nextAddress advances the network cursor past addresses an earlier network
+// covered. Addresses it returns are the caller's to probe or retry.
+func (s *Scanner) nextAddress() (netip.Addr, bool) {
+	for s.network < len(s.networks) {
+		network := s.networks[s.network]
+		if !s.next.IsValid() {
+			s.next = network.Addr()
+		}
+		for network.Contains(s.next) {
+			address := s.next
+			s.next = s.next.Next()
+			if !s.scanned(address) {
+				return address, true
+			}
+		}
+		s.network++
+		s.next = netip.Addr{}
+	}
+	return netip.Addr{}, false
 }
 
 // scanned reports whether a network before the current one holds address.

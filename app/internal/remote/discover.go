@@ -96,6 +96,9 @@ func Hosts(networks []netip.Prefix) uint64 {
 	return n
 }
 
+// probeTimeout bounds each address of a scan, including its dial.
+const probeTimeout = 500 * time.Millisecond
+
 // Scanner keeps the next address and a bounded list of unfinished probes.
 // Run calls must be sequential. Cancellation leaves unfinished probes for the
 // next Run, while completed probes and matches are retained by the caller.
@@ -136,7 +139,7 @@ func (s *Scanner) Run(ctx context.Context, port string, probed *atomic.Uint64, f
 	for range 128 {
 		workers.Go(func() {
 			for address := range jobs {
-				probeCtx, stop := context.WithTimeout(ctx, 500*time.Millisecond)
+				probeCtx, stop := context.WithTimeout(ctx, probeTimeout)
 				target, info, err := CheckDirect(probeCtx, net.JoinHostPort(address.String(), port))
 				interrupted := err != nil && probeCtx.Err() == context.Canceled
 				stop()

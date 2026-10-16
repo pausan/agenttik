@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -53,10 +54,16 @@ func Parse(address string) (*url.URL, error) {
 	return u, nil
 }
 
-// Discovery probes connect directly, regardless of HTTP proxy environment settings.
+// Discovery probes connect directly, regardless of HTTP proxy environment
+// settings. The transport keeps dialing after a request is canceled, so the
+// dialer has its own deadline; otherwise each silent address holds a socket
+// until the OS gives up, minutes later.
 var directDiscoveryClient = &http.Client{
-	Timeout:       5 * time.Second,
-	Transport:     &http.Transport{DisableKeepAlives: true},
+	Timeout: 5 * time.Second,
+	Transport: &http.Transport{
+		DisableKeepAlives: true,
+		DialContext:       (&net.Dialer{Timeout: probeTimeout}).DialContext,
+	},
 	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 }
 

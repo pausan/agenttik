@@ -12,6 +12,27 @@ conversation and in threads.
 Claude Code and Codex ask. Copilot, OpenCode and the direct API runtime still
 refuse whatever their mode does not allow and cannot ask questions.
 
+## Automatic and manual projects
+
+Each project has a run mode, `projects.run_mode`, set under **Running tools**
+in its Project Options pane. `auto` is the default, for new projects and for
+projects that existed before the column. `manual` asks before tools run:
+
+| Provider | Automatic | Manual (unless the task is `plan`) |
+|----------|-----------|------------------------------------|
+| Claude Code | per [003](003-providers.md#permission-modes) | `--permission-mode default`: asks before every command and edit; reads run |
+| Codex | per [003](003-providers.md#permission-modes) | approval policy `untrusted`: asks before anything but Codex's known-safe reads |
+| Copilot, OpenCode, direct API | per 003 | unchanged; they cannot ask |
+
+A `full` task in a manual project asks too. The runner reads the mode when a
+turn starts (`TurnRequest.Manual`), so a change reaches each task's next turn.
+In a manual project a tool call always waits for the user: the timeout and
+immediate settings below do not answer it. Questions still follow them.
+
+Measured against Claude Code 2.1.300: `--permission-mode default` with
+`--permission-prompt-tool stdio` sends `can_use_tool` for Bash and does not run
+it until answered.
+
 ## Claude Code
 
 Task turns run with `--input-format stream-json --permission-prompt-tool
@@ -74,7 +95,8 @@ enum, titled `oneOf`/`anyOf` or boolean gives options (titles shown, values
 sent; booleans as Yes / No), an array of those allows several picks, and a
 string or number field takes typed text, sent as a number when it parses.
 
-An allow can be remembered, so Codex does not ask again. A Codex session is
+An allow can be remembered, so Codex does not ask again. Agenttik's own
+task-level choices, below, work the same for Codex as for Claude Code. A Codex session is
 one app-server process, which agenttik starts per turn, so `session` means
 this turn; `always` is saved in the account's Codex `config.toml` (for an MCP
 tool, `[mcp_servers.<server>.tools.<tool>] approval_mode = "approve"`).
@@ -115,10 +137,15 @@ resumes the turn, where `Reply` is `{allow, answers, remember}`, `answers`
 maps a question id to the picked labels or typed text, and `remember` is one
 of the offered choices.
 
+`remember` may also be `task` or `task_all` on any tool approval, offered or
+not. Those are agenttik's own and never reach the provider; see
+[Allowing for the task](#allowing-for-the-task).
+
 `CheckReply` refuses an allowing reply that leaves a question unanswered,
 gives a single-choice question two answers, gives a blank answer, or picks an
 option that was not offered where typing is not allowed. It also refuses a
-`remember` that was not offered or that comes with a denial.
+`remember` that was not offered or that comes with a denial, and `task` or
+`task_all` on questions.
 
 ## Runner
 
@@ -135,6 +162,16 @@ get `ErrApprovalGone` (409). Every settlement publishes `approval_resolved` to
 both topics, with `allowed` set when the user answered. When a turn ends —
 finished, failed or stopped — whatever it left pending is withdrawn the same
 way.
+
+## Allowing for the task
+
+**Allow *tool* for this task** (`remember: task`) and **Allow all for this
+task** (`task_all`) answer the request with a plain allow and record the tool
+name, or every tool, for the session. Later tool calls in the same task that
+match are allowed in the consume loop before anything is published, as under
+`immediate`; other pending calls in the task that now match are allowed at
+once. Other tasks are still asked, and questions are always asked. The record
+lives in the runner's memory, so a restart asks again.
 
 ## Answering for the user
 
@@ -180,9 +217,9 @@ every reopen after a tab change, and every reconnect — so a request published
 while it was not listening is still drawn. Events keep it current after that.
 
 - An approval card shows the tool, its description, the input (a shell
-  command as itself, other JSON indented) and Allow / Deny. When the
-  approval offers them, **Allow for this turn** and **Always allow** sit
-  between the two.
+  command as itself, other JSON indented), then Allow, **Allow *tool* for
+  this task**, **Allow all for this task**, and Deny. When the approval
+  offers them, **Allow for this turn** and **Always allow** sit before Deny.
 - A question card shows each question with its header, options as radio or
   checkbox rows with their descriptions, and a text field where typing is
   allowed (a password field for secrets). In a single-choice question typing
@@ -217,11 +254,12 @@ from agenttik's history.
 Tests: `agent` (reply checking), `claudecode` and `codex`
 (`appserver_requests_test.go`) for the protocols, `runner/approvals_test.go`
 (fan-out, first answer wins, stop withdraws, incomplete answers, the three
-modes and holding),
+modes and holding, manual projects, allowing for the task),
 `server/api_approvals_test.go` (routes), `web/src/questions.test.js`, and
 `e2e/tests/approvals.spec.js` (two windows, reload, stop, questions, the
 setting, a timeout, holding from another window, answering at once). The fake
 provider's `@approve <tool> <input>` asks for approval and replies `allowed`
 or `denied`; `@approve-remember` also offers both remember choices and
-replies `allowed remember=<choice>` when one is picked; `@ask <question> | <a>, <b>` asks a question and replies
+replies `allowed remember=<choice>` when one is picked; `@runmode` replies
+`run_mode=manual` or `run_mode=auto`; `@ask <question> | <a>, <b>` asks a question and replies
 `answer=<picks>` or `declined`.

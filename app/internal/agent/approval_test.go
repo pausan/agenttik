@@ -36,10 +36,21 @@ func TestCheckReply(t *testing.T) {
 		{Reply{Allow: true, Remember: RememberTurn}, true},
 		{Reply{Allow: true, Remember: RememberAlways}, false},
 		{Reply{Remember: RememberTurn}, false},
+		// The task choices are agenttik's, offered on every tool call.
+		{Reply{Allow: true, Remember: RememberTask}, true},
+		{Reply{Allow: true, Remember: RememberTaskAll}, true},
+		{Reply{Remember: RememberTaskAll}, false},
 	} {
 		if err := offered.CheckReply(tc.reply); (err == nil) != tc.ok {
 			t.Errorf("remember %+v: err = %v, want ok=%v", tc.reply, err, tc.ok)
 		}
+	}
+}
+
+func TestQuestionsCannotBeAllowedForTheTask(t *testing.T) {
+	a := &Approval{Questions: []Question{{ID: "q", Other: true}}}
+	if err := a.CheckReply(Reply{Allow: true, Answers: map[string][]string{"q": {"x"}}, Remember: RememberTask}); err == nil {
+		t.Error("a question was remembered for the task")
 	}
 }
 

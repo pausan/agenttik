@@ -60,13 +60,22 @@ func (p *Provider) Available() error {
 // build and test to the user. `auto` is the mode the IDE extensions use for
 // their Auto setting: it approves ordinary work and asks only about the
 // genuinely destructive things, as approval events (082-tool-approvals.md).
-func permissionFlag(p agent.Permission) []string {
+//
+// A manual project uses `default`, which asks before every command and edit;
+// reads still run without asking.
+func permissionFlag(p agent.Permission, manual bool) []string {
 	switch p.Valid() {
 	case agent.PermissionPlan:
 		return []string{"--permission-mode", "plan"}
 	case agent.PermissionFull:
+		if manual {
+			return []string{"--permission-mode", "default"}
+		}
 		return []string{"--dangerously-skip-permissions"}
 	default:
+		if manual {
+			return []string{"--permission-mode", "default"}
+		}
 		return []string{"--permission-mode", "auto"}
 	}
 }
@@ -99,7 +108,7 @@ func buildArgs(req agent.TurnRequest) []string {
 	if req.Effort != "" {
 		args = append(args, "--effort", req.Effort)
 	}
-	args = append(args, permissionFlag(req.Permission)...)
+	args = append(args, permissionFlag(req.Permission, req.Manual)...)
 	if req.ProviderSessionID != "" {
 		args = append(args, "--resume", req.ProviderSessionID)
 	} else if req.ForkFrom != "" {

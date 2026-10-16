@@ -15,7 +15,7 @@ All timestamps are **unix milliseconds**, so turn timings need no second table.
 ## Tables
 
 - **projects** — `id, name, path (unique), created_at, position, archived_at,
-  hidden_at, hidden_position, prompt, kind`. A project is a name and a folder. Nothing is copied; the folder is
+  hidden_at, hidden_position, prompt, kind, run_mode`. A project is a name and a folder. Nothing is copied; the folder is
   used as the agent's working directory. `position` is the order the Projects
   sidebar was dragged into; 0 means a newly added project, which sorts above a
   manually ordered list. `archived_at` is 0 while the project is active and the
@@ -27,7 +27,9 @@ All timestamps are **unix milliseconds**, so turn timings need no second table.
   at that row after the visible projects have been reordered. Hidden projects
   remain active and their schedules keep running. `prompt` is the standing instructions every
   conversation started in the project opens with, empty for none; see
-  [047](047-project-prompt.md).
+  [047](047-project-prompt.md). `run_mode` is `auto` (default) or `manual`,
+  whether agents ask before running tools; see
+  [082](082-tool-approvals.md#automatic-and-manual-projects).
 - **orchestrator_config** — singleton `id=1, name, path, prompt`. Holds the
   orchestrator's options after project deletion; its live project row remains
   authoritative while present. `projects.kind='orchestrator'` is unique and

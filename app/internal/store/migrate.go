@@ -404,6 +404,9 @@ CREATE INDEX idx_sessions_parent ON sessions(parent_id) WHERE parent_id != '';`,
     added_at     INTEGER NOT NULL,
     last_seen_at INTEGER NOT NULL
 );`,
+	// Whether a project's agents run tools on their own or ask first. See
+	// specs/082-tool-approvals.md.
+	`ALTER TABLE projects ADD COLUMN run_mode TEXT NOT NULL DEFAULT 'auto';`,
 }
 
 // migrate reports whether it created the schema in an empty database.

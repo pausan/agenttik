@@ -141,6 +141,22 @@ function submit() {
         @click="answerApproval(sessionId, approval.id, true)"
       />
       <UButton
+        size="sm"
+        variant="soft"
+        :label="`Allow ${approval.tool || 'this tool'} for this task`"
+        title="Don't ask again for this tool until agenttik restarts, in this task only"
+        :disabled="approval.answering"
+        @click="answerApproval(sessionId, approval.id, true, undefined, 'task')"
+      />
+      <UButton
+        size="sm"
+        variant="soft"
+        label="Allow all for this task"
+        title="Don't ask again about any tool until agenttik restarts, in this task only"
+        :disabled="approval.answering"
+        @click="answerApproval(sessionId, approval.id, true, undefined, 'task_all')"
+      />
+      <UButton
         v-if="approval.remember?.includes('turn')"
         size="sm"
         variant="soft"

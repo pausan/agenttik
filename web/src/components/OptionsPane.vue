@@ -8,6 +8,7 @@ import {
   removeProject,
   renameProject,
   setProjectArchived,
+  setProjectRunMode,
   startTask,
   updateProjectPath,
 } from "../store";
@@ -40,6 +41,11 @@ async function move() {
     moving.value = false;
   }
 }
+
+const runModes = [
+  { label: "Automatic", value: "auto" },
+  { label: "Manual", value: "manual" },
+];
 
 const name = ref("");
 const path = ref("");
@@ -125,6 +131,23 @@ const busy = computed(() => {
           @click="browsing = true"
         />
       </div>
+    </div>
+
+    <div class="mb-3 text-xs font-medium text-muted">
+      <label for="project-run-mode">Running tools</label>
+      <USelect
+        id="project-run-mode"
+        :model-value="S.project.project.run_mode || 'auto'"
+        :items="runModes"
+        aria-label="Running tools"
+        class="mt-1 w-full font-normal"
+        @update:model-value="setProjectRunMode(S.project.project, $event)"
+      />
+      <p class="mt-1.5 font-normal text-dimmed">
+        {{ S.project.project.run_mode === 'manual'
+          ? 'Agents ask before each command or edit, and wait for your answer. Claude Code and Codex only.'
+          : 'Agents run commands and edit files on their own, and ask only about risky actions.' }}
+      </p>
     </div>
 
     <UButton block label="New task" @click="startTask(S.project.project)" />

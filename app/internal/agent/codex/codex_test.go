@@ -138,6 +138,20 @@ func TestApprovalPolicyAsksOnlyForWorkspace(t *testing.T) {
 	}
 }
 
+func TestManualProjectsAskBeforeUntrustedCommands(t *testing.T) {
+	for perm, want := range map[agent.Permission]string{
+		agent.PermissionPlan: "never", agent.PermissionWorkspace: "untrusted", agent.PermissionFull: "untrusted",
+	} {
+		turn := turnRequest(agent.TurnRequest{Permission: perm, Manual: true}, "t")
+		if turn["approvalPolicy"] != want {
+			t.Errorf("%s: policy %v, want %s", perm, turn["approvalPolicy"], want)
+		}
+		if reviewer, set := turn["approvalsReviewer"]; (want != "never") != set || (set && reviewer != "user") {
+			t.Errorf("%s: reviewer %v", perm, turn["approvalsReviewer"])
+		}
+	}
+}
+
 func TestAppServerNotificationsKeepChildOutOfRootContext(t *testing.T) {
 	out := make(chan agent.Event, 8)
 	run := appServerRun{

@@ -83,6 +83,10 @@ type Runner struct {
 	sched          map[int64]*sync.Mutex       // project id -> serializes queue dispatch
 	forced         map[string]forcedPrompt     // session id -> queued message to run next
 	approvals      map[string]*PendingApproval // approval id -> tool call waiting on the user
+	// allowed is what the user allowed for the rest of a task, by session id:
+	// tool names, or "" for every tool. Kept in memory, so a restart asks
+	// again. See 082-tool-approvals.md.
+	allowed map[string]map[string]bool
 	// backgroundTasks are what each running turn has left working behind it,
 	// by session id, then task id. Their latest states also live in transcript
 	// messages, which survive the turn. See 083-background-tasks.md.
@@ -106,6 +110,7 @@ func New(s *store.Store, reg *agent.Registry, hub *Hub) *Runner {
 		active: make(map[string]activeTurn), sched: make(map[int64]*sync.Mutex),
 		forced: make(map[string]forcedPrompt), forcedScheduleRuns: make(map[string]bool),
 		approvals:       make(map[string]*PendingApproval),
+		allowed:         make(map[string]map[string]bool),
 		backgroundTasks: make(map[string]map[string]agent.BackgroundTask)}
 }
 
@@ -416,6 +421,7 @@ func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage) (*store.Turn
 		ProviderSessionID: sess.ProviderSessionID,
 		ForkFrom:          forkFrom,
 		Permission:        agent.Permission(sess.Permission),
+		Manual:            r.manual(sess.ProjectID),
 	})
 	if err != nil {
 		// Nothing was produced, so an outage leaves no trace but the waiting

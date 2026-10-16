@@ -1,4 +1,4 @@
-import { addProject, expect, newTask, openProject, openSettings, pickModel, sendPrompt, sidebar, test } from "../fixtures.js";
+import { addProject, expect, inspector, newTask, openProject, openSettings, pickModel, sendPrompt, sidebar, test } from "../fixtures.js";
 
 /* A tool approval is server state: every window connected to the server
    shows it, any of them can answer, and the first answer settles it for all.
@@ -29,7 +29,7 @@ test("a second window sees the request, answers it, and the first window follows
   const otherCard = other.getByRole("group", { name: "Tool approval" });
   await expect(otherCard).toContainText("echo from-window-one");
 
-  await otherCard.getByRole("button", { name: "Allow" }).click();
+  await otherCard.getByRole("button", { name: "Allow", exact: true }).click();
   await expect(otherCard).toHaveCount(0);
   await expect(card).toHaveCount(0);
   await expect(page.getByText("allowed", { exact: true })).toBeVisible();
@@ -58,6 +58,30 @@ test("an allow can be remembered when the agent offers it", async ({ page }) => 
   await card.getByRole("button", { name: "Allow for this turn" }).click();
   await expect(card).toHaveCount(0);
   await expect(page.getByText("allowed remember=turn", { exact: true })).toBeVisible();
+});
+
+test("a manual project asks without a countdown, and an allow can cover the rest of the task", async ({ page }) => {
+  await addProject(page);
+  await openProject(page);
+  await inspector(page).getByRole("combobox", { name: "Running tools" }).click();
+  await page.getByRole("option", { name: "Manual", exact: true }).click();
+  await expect(inspector(page).getByText("Agents ask before each command or edit")).toBeVisible();
+  await newTask(page);
+  await pickModel(page);
+  await sendPrompt(page, "@runmode");
+  await expect(page.getByText("run_mode=manual", { exact: true })).toBeVisible();
+
+  await sendPrompt(page, "@approve Bash echo first");
+  const card = page.getByRole("group", { name: "Tool approval" });
+  await expect(card).toContainText("echo first");
+  // The default setting answers after 30 s; a manual project waits instead.
+  await expect(card).not.toContainText("Allowing in");
+  await card.getByRole("button", { name: "Allow Bash for this task", exact: true }).click();
+  await expect(card).toHaveCount(0);
+
+  await sendPrompt(page, "@approve Bash echo second");
+  await expect(page.getByText("allowed", { exact: true })).toHaveCount(2);
+  await expect(card).toHaveCount(0);
 });
 
 test("stopping the task withdraws its request", async ({ page }) => {

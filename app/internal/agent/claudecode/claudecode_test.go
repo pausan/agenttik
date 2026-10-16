@@ -80,9 +80,21 @@ func TestPermissionMapping(t *testing.T) {
 		agent.Permission("junk"):  "--permission-mode auto",
 	}
 	for perm, want := range cases {
-		got := strings.Join(permissionFlag(perm), " ")
+		got := strings.Join(permissionFlag(perm, false), " ")
 		if got != want {
 			t.Errorf("permission %q -> %q, want %q", perm, got, want)
+		}
+	}
+	// A manual project asks before commands and edits; plan stays plan.
+	manual := map[agent.Permission]string{
+		agent.PermissionPlan:      "--permission-mode plan",
+		agent.PermissionWorkspace: "--permission-mode default",
+		agent.PermissionFull:      "--permission-mode default",
+	}
+	for perm, want := range manual {
+		got := strings.Join(permissionFlag(perm, true), " ")
+		if got != want {
+			t.Errorf("manual %q -> %q, want %q", perm, got, want)
 		}
 	}
 }

@@ -76,6 +76,10 @@ type TurnRequest struct {
 	ForkFrom string
 
 	Permission Permission
+	// Manual asks the user before tools run, where the provider can ask,
+	// instead of letting Permission settle ordinary work. Plan is unchanged.
+	// See 082-tool-approvals.md.
+	Manual bool
 }
 
 // Forker is a provider that can start a conversation as a copy of another,
@@ -296,10 +300,14 @@ type Reply struct {
 }
 
 // How long an allow lasts. A turn is one provider process; always is saved
-// in the provider's own config.
+// in the provider's own config. The task choices are agenttik's own and never
+// reach the provider: the runner allows later requests of the same tool, or
+// any tool, in the same task without asking. Every tool approval offers them.
 const (
-	RememberTurn   = "turn"
-	RememberAlways = "always"
+	RememberTurn    = "turn"
+	RememberAlways  = "always"
+	RememberTask    = "task"
+	RememberTaskAll = "task_all"
 )
 
 // NewApproval builds a request the provider answers through answer.
@@ -344,7 +352,11 @@ func (a *Approval) AutoReply() Reply {
 // offered or, where typing is allowed, any text, and remembers only as
 // offered. A denial needs no answers.
 func (a *Approval) CheckReply(r Reply) error {
-	if r.Remember != "" && (!r.Allow || !slices.Contains(a.Remember, r.Remember)) {
+	if r.Remember == RememberTask || r.Remember == RememberTaskAll {
+		if !r.Allow || len(a.Questions) > 0 {
+			return fmt.Errorf("cannot remember %q", r.Remember)
+		}
+	} else if r.Remember != "" && (!r.Allow || !slices.Contains(a.Remember, r.Remember)) {
 		return fmt.Errorf("cannot remember %q", r.Remember)
 	}
 	if !r.Allow {

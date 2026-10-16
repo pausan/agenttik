@@ -481,6 +481,27 @@ func TestProjectStatsAndRename(t *testing.T) {
 	}
 }
 
+func TestProjectRunMode(t *testing.T) {
+	s, st := newTestServer(t)
+	p, _ := st.CreateProject("alpha", t.TempDir())
+	if p.RunMode != store.RunAuto {
+		t.Errorf("new project run mode = %q, want auto", p.RunMode)
+	}
+	resp := do(t, s, "PATCH", "/api/projects/"+itoa(p.ID), map[string]string{"run_mode": "manual"})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if got := decode[store.Project](t, resp); got.RunMode != store.RunManual {
+		t.Errorf("run mode = %q, want manual", got.RunMode)
+	}
+	if listed, _ := st.ListProjects(); listed[0].RunMode != store.RunManual {
+		t.Errorf("listed run mode = %q, want manual", listed[0].RunMode)
+	}
+	if resp := do(t, s, "PATCH", "/api/projects/"+itoa(p.ID), map[string]string{"run_mode": "sometimes"}); resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("unknown run mode status = %d, want 400", resp.StatusCode)
+	}
+}
+
 // A project topic carries the end of every turn run in it, so a project view
 // keeps its totals current while several of its sessions run at once.
 func TestProjectStreamDeliversTurnEvents(t *testing.T) {

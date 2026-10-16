@@ -316,3 +316,126 @@ func TestWaitModeAndHoldKeepTheRequest(t *testing.T) {
 	r.Stop(sess.ID)
 	r.Stop(other.ID)
 }
+
+func TestManualProjectAsksAndNeverAnswersForTheUser(t *testing.T) {
+	r, st, sess := setup(t, fake.New())
+	if _, err := r.Send(sess.ID, "@runmode"); err != nil {
+		t.Fatal(err)
+	}
+	if got := lastReply(t, r, st, sess.ID); got != "run_mode=auto" {
+		t.Fatalf("new project: reply = %q", got)
+	}
+	if err := st.SetProjectRunMode(sess.ProjectID, store.RunManual); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Send(sess.ID, "@runmode"); err != nil {
+		t.Fatal(err)
+	}
+	if got := lastReply(t, r, st, sess.ID); got != "run_mode=manual" {
+		t.Fatalf("manual project: reply = %q", got)
+	}
+
+	// Even with the settings answering at once, a tool call waits.
+	setApprovalMode(t, st, store.ApprovalImmediate, 30)
+	tab, unsubscribe := r.Hub().Subscribe(sess.ID)
+	defer unsubscribe()
+	if _, err := r.Send(sess.ID, "@approve Bash ls"); err != nil {
+		t.Fatal(err)
+	}
+	asked := nextOfType(t, tab, agent.EventApproval).Event.Approval
+	if asked.ExpiresIn != 0 {
+		t.Fatalf("manual approval counts down: %d", asked.ExpiresIn)
+	}
+	if err := r.Answer(sess.ID, asked.ID, agent.Reply{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := lastReply(t, r, st, sess.ID); got != "denied" {
+		t.Fatalf("reply = %q", got)
+	}
+
+	// Questions still follow the settings.
+	if _, err := r.Send(sess.ID, "@ask Which? | A, B"); err != nil {
+		t.Fatal(err)
+	}
+	if got := lastReply(t, r, st, sess.ID); got != "answer=A" {
+		t.Fatalf("question reply = %q", got)
+	}
+}
+
+// approveAndAnswer runs one "@approve" turn and answers it with reply.
+func approveAndAnswer(t *testing.T, r *Runner, st *store.Store, tab <-chan Event, sessionID, tool string, reply agent.Reply) string {
+	t.Helper()
+	if _, err := r.Send(sessionID, "@approve "+tool+" x"); err != nil {
+		t.Fatal(err)
+	}
+	asked := nextOfType(t, tab, agent.EventApproval).Event.Approval
+	if err := r.Answer(sessionID, asked.ID, reply); err != nil {
+		t.Fatal(err)
+	}
+	return lastReply(t, r, st, sessionID)
+}
+
+func TestAllowForTheTask(t *testing.T) {
+	r, st, sess := setup(t, fake.New())
+	setApprovalMode(t, st, store.ApprovalWait, 30)
+	tab, unsubscribe := r.Hub().Subscribe(sess.ID)
+	defer unsubscribe()
+
+	// The provider sees a plain allow; agenttik keeps the choice.
+	if got := approveAndAnswer(t, r, st, tab, sess.ID, "Bash",
+		agent.Reply{Allow: true, Remember: agent.RememberTask}); got != "allowed" {
+		t.Fatalf("reply = %q", got)
+	}
+	if _, err := r.Send(sess.ID, "@approve Bash y"); err != nil {
+		t.Fatal(err)
+	}
+	if got := lastReply(t, r, st, sess.ID); got != "allowed" {
+		t.Fatalf("same tool: reply = %q", got)
+	}
+	if n := len(r.Approvals()); n != 0 {
+		t.Fatalf("%d pending; an allowed tool should not be asked", n)
+	}
+
+	// Another tool, in this task, is still asked; so is the same tool in another.
+	if got := approveAndAnswer(t, r, st, tab, sess.ID, "Edit",
+		agent.Reply{Allow: true, Remember: agent.RememberTaskAll}); got != "allowed" {
+		t.Fatalf("reply = %q", got)
+	}
+	if _, err := r.Send(sess.ID, "@approve Write z"); err != nil {
+		t.Fatal(err)
+	}
+	if got := lastReply(t, r, st, sess.ID); got != "allowed" {
+		t.Fatalf("after allow all: reply = %q", got)
+	}
+	other := &store.Session{ID: "sess-2", ProjectID: sess.ProjectID, Provider: "fake", Model: "m1", Permission: "workspace"}
+	if err := st.CreateSession(other); err != nil {
+		t.Fatal(err)
+	}
+	otherTab, unsubscribeOther := r.Hub().Subscribe(other.ID)
+	defer unsubscribeOther()
+	if got := approveAndAnswer(t, r, st, otherTab, other.ID, "Bash", agent.Reply{}); got != "denied" {
+		t.Fatalf("other task: reply = %q", got)
+	}
+}
+
+func TestAllowForTheTaskAnswersWhatAlreadyWaits(t *testing.T) {
+	r, _, _ := setup(t, fake.New())
+	answered := map[string]bool{}
+	pending := func(id, session, tool string) {
+		a := agent.NewApproval(id, tool, "", "", func(rep agent.Reply) error { answered[id] = rep.Allow; return nil })
+		r.approvals[id] = &PendingApproval{SessionID: session, Approval: a}
+	}
+	pending("a", "s1", "Bash")
+	pending("b", "s1", "Bash")
+	pending("c", "s1", "Edit")
+	pending("d", "s2", "Bash")
+	if err := r.Answer("s1", "a", agent.Reply{Allow: true, Remember: agent.RememberTask}); err != nil {
+		t.Fatal(err)
+	}
+	if !answered["a"] || !answered["b"] || len(answered) != 2 {
+		t.Fatalf("answered = %v; want a and b allowed only", answered)
+	}
+	if err := r.Answer("s1", "c", agent.Reply{Allow: false, Remember: agent.RememberTask}); !errors.Is(err, ErrBadReply) {
+		t.Fatalf("denying for the task = %v, want ErrBadReply", err)
+	}
+}

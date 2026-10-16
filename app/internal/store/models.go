@@ -1,5 +1,11 @@
 package store
 
+// How a project's agents run tools.
+const (
+	RunAuto   = "auto"
+	RunManual = "manual"
+)
+
 type Project struct {
 	ID        int64  `json:"id"`
 	Name      string `json:"name"`
@@ -31,6 +37,11 @@ type Project struct {
 	// before the first thing it is asked. Empty injects nothing. See
 	// 047-project-prompt.md.
 	Prompt string `json:"prompt"`
+
+	// RunMode is RunAuto, where the agent runs what its permission mode
+	// allows, or RunManual, where it asks before running tools. See
+	// 082-tool-approvals.md.
+	RunMode string `json:"run_mode"`
 
 	// Filled by ListProjects: titles of the project's open sessions. Always
 	// encoded, empty included, so the UI can iterate it without a guard.

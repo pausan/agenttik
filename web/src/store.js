@@ -1441,6 +1441,20 @@ export async function setProjectPrompt(p, prompt) {
   }
 }
 
+/* setProjectRunMode chooses whether the project's agents run tools on their
+   own ("auto") or ask first ("manual"). The next turn picks it up. */
+export async function setProjectRunMode(p, runMode) {
+  if (runMode === (p.run_mode || "auto")) return;
+  try {
+    const updated = await api("PATCH", "/api/projects/" + p.id, { run_mode: runMode });
+    const tab = S.tabs.find((t) => t.kind === "project" && t.projectID === p.id);
+    if (tab) tab.data.project = updated;
+    await refreshProjects();
+  } catch (e) {
+    fail(e);
+  }
+}
+
 /* openProjectPrompt is where the transcript's injected-prompt chip goes: the
    project page, open on the prompt that was injected rather than on its task
    list. The pane is set on the tab because one ProjectView serves every

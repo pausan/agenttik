@@ -154,6 +154,8 @@ func nextSessionID() string {
 //	@account                  reply with the login directory this turn was
 //	                          given, which is the only way a browser test can
 //	                          see which subscription actually ran it
+//	@runmode                  reply "run_mode=manual" or "run_mode=auto",
+//	                          as the turn was asked to run tools
 //	@approve <name> <input...> ask the user to approve a tool call and wait
 //	                          for the answer; the reply gains "allowed" or
 //	                          "denied"
@@ -225,6 +227,12 @@ func runScript(ctx context.Context, req agent.TurnRequest, events chan<- agent.E
 				home = "system"
 			}
 			reply = append(reply, "account="+home)
+		case "runmode":
+			mode := "auto"
+			if req.Manual {
+				mode = "manual"
+			}
+			reply = append(reply, "run_mode="+mode)
 		case "approve", "approve-remember":
 			// Unique across turns, as a real provider's request id is.
 			id := fmt.Sprintf("approval-%d", atomic.AddInt64(&approvalCounter, 1))
@@ -305,7 +313,7 @@ func cutDirective(line string) (name, rest string, ok bool) {
 	}
 	name, rest, _ = strings.Cut(trimmed[1:], " ")
 	switch name {
-	case "wait", "tool", "error", "account", "approve", "approve-remember", "ask", "background":
+	case "wait", "tool", "error", "account", "runmode", "approve", "approve-remember", "ask", "background":
 		return name, rest, true
 	default:
 		return "", "", false

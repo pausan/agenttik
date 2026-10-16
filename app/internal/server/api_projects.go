@@ -121,6 +121,7 @@ func (s *Server) updateProject(c *fiber.Ctx) error {
 		Name     string  `json:"name"`
 		Path     string  `json:"path"`
 		Prompt   *string `json:"prompt"`
+		RunMode  string  `json:"run_mode"`
 		Archived *bool   `json:"archived"`
 		Hidden   *bool   `json:"hidden"`
 	}
@@ -129,8 +130,11 @@ func (s *Server) updateProject(c *fiber.Ctx) error {
 	}
 	name := strings.TrimSpace(body.Name)
 	path := strings.TrimSpace(body.Path)
-	if name == "" && path == "" && body.Prompt == nil && body.Archived == nil && body.Hidden == nil {
-		return badRequest("name, path, prompt, archived or hidden is required")
+	if name == "" && path == "" && body.Prompt == nil && body.RunMode == "" && body.Archived == nil && body.Hidden == nil {
+		return badRequest("name, path, prompt, run_mode, archived or hidden is required")
+	}
+	if body.RunMode != "" && body.RunMode != store.RunAuto && body.RunMode != store.RunManual {
+		return badRequest("run_mode must be %q or %q", store.RunAuto, store.RunManual)
 	}
 	if body.Archived != nil && *body.Archived {
 		if err := s.canArchiveProject(id); err != nil {
@@ -153,6 +157,11 @@ func (s *Server) updateProject(c *fiber.Ctx) error {
 	}
 	if body.Prompt != nil {
 		if err := s.store.SetProjectPrompt(id, strings.TrimSpace(*body.Prompt)); err != nil {
+			return err
+		}
+	}
+	if body.RunMode != "" {
+		if err := s.store.SetProjectRunMode(id, body.RunMode); err != nil {
 			return err
 		}
 	}

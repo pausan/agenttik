@@ -1,14 +1,14 @@
 <script setup>
 /* Project folders start collapsed. Explicit expansion survives project changes
    and restarts; filtering temporarily reveals matching non-ignored paths. */
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 import { S, copyDropped, copyText, currentProjectID, fail, focusPrompt, openFile, openInSystem, selectTab, startCurrentTask } from "../store";
 import { storage } from "../api";
 import { buildTree, countFiles, filterTree } from "../tree";
 import { segments } from "../fuzzy";
 import { promptImages, promptText, withImages } from "../prompt-images";
-import { existing, join, readDrop } from "../upload";
+import { carriesFiles, existing, join, readDesktopDrop, readDrop } from "../upload";
 import TreeActionModal from "./TreeActionModal.vue";
 
 /* The flat listing only changes when the project does, so the tree is built
@@ -253,10 +253,16 @@ const percent = computed(() => {
   return c && c.total ? Math.floor((c.sent / c.total) * 100) : 0;
 });
 
-const fromDesktop = (e) => !!e.dataTransfer?.types?.includes("Files");
+const pane = ref(null);
+
+function dropTarget(el) {
+  const row = el.closest("[data-path]");
+  const path = row?.dataset.path || "";
+  return !row || row.dataset.dir === "true" ? path : path.split("/").slice(0, -1).join("/");
+}
 
 function dragOver(e) {
-  if (!fromDesktop(e)) return;
+  if (!carriesFiles(e)) return;
   // Taken even when refused: a file let go of where nothing takes it is
   // opened by the window in place of the app.
   e.preventDefault();
@@ -266,25 +272,40 @@ function dragOver(e) {
     return;
   }
   e.dataTransfer.dropEffect = "copy";
-  const row = e.target.closest("[data-path]");
-  const path = row?.dataset.path || "";
-  dropAt.value = !row || row.dataset.dir === "true" ? path : path.split("/").slice(0, -1).join("/");
+  dropAt.value = dropTarget(e.target);
 }
 
 function dragLeave(e) {
   if (!e.currentTarget.contains(e.relatedTarget)) dropAt.value = null;
 }
 
-async function drop(e) {
-  if (!fromDesktop(e)) return;
+/* On Linux the page may take a desktop drop but gets nothing to read from
+   it, so this finds no files there and the native drop below copies them. */
+function drop(e) {
+  if (!carriesFiles(e)) return;
   e.preventDefault();
   const parent = dropAt.value;
-  const projectID = currentProjectID();
   dropAt.value = null;
-  if (parent === null || !projectID) return;
+  if (parent !== null) accept(parent, () => readDrop(e.dataTransfer));
+}
+
+function nativeDrop(x, y) {
+  const el = document.elementFromPoint(x, y);
+  if (el && pane.value?.contains(el)) accept(dropTarget(el), readDesktopDrop);
+}
+
+let offNativeDrop;
+onMounted(() => (offNativeDrop = window.runtime?.EventsOn?.("agenttik:file-drop", nativeDrop)));
+onBeforeUnmount(() => offNativeDrop?.());
+
+// read is called before anything is awaited: a drop's items can only be
+// read while its event runs.
+async function accept(parent, read) {
+  const projectID = currentProjectID();
+  if (!projectID || copying.value) return;
   let dropped;
   try {
-    dropped = await readDrop(e.dataTransfer);
+    dropped = await read();
   } catch (err) {
     return fail(err);
   }
@@ -381,6 +402,7 @@ const rows = computed(() => {
          empty states are inside it for the same reason. -->
     <UContextMenu :items="menu" :ui="{ content: 'w-56' }" :content="{ onCloseAutoFocus: releaseFocus }">
       <div
+        ref="pane"
         class="min-h-0 flex-1 rounded-[var(--ui-radius)]"
         :class="dropAt === '' ? 'ring-1 ring-primary ring-inset bg-primary/5' : ''"
         @contextmenu="aim"

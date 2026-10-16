@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CHUNK, existing, readDrop, uploadDrop } from "./upload.js";
+import { CHUNK, carriesFiles, existing, readDesktopDrop, readDrop, uploadDrop } from "./upload.js";
 
 const fileEntry = (name, file = { name }) => ({ name, isFile: true, file: (ok) => ok(file) });
 const dirEntry = (name, children) => ({
@@ -77,4 +77,32 @@ test("a failed piece stops the copy and removes the partial file", async (t) => 
   });
   await assert.rejects(uploadDrop(1, "", { files: [{ path: "a.txt", file: blob(3) }], dirs: [] }), /already exists/);
   assert.match(calls.at(-1), /^DELETE \/api\/projects\/1\/upload\?path=a\.txt&upload=[0-9a-f]{32}$/);
+});
+
+test("desktop drags are told apart from the app's own", () => {
+  const drag = (...types) => ({ dataTransfer: { types } });
+  assert.equal(carriesFiles(drag("Files")), true);
+  // WebKitGTK shows a desktop file only as a URI list.
+  assert.equal(carriesFiles(drag("text/uri-list", "text/html")), true);
+  assert.equal(carriesFiles(drag("text/plain")), false);
+  assert.equal(carriesFiles({}), false);
+});
+
+test("a native desktop drop is read back from this machine piece by piece", async (t) => {
+  const urls = [];
+  t.mock.method(globalThis, "fetch", async (url) => {
+    urls.push(url);
+    if (url === "/api/desktop/drop") {
+      const body = JSON.stringify({ files: [{ path: "dir/a b.bin", size: CHUNK + 1 }], dirs: ["dir/empty"] });
+      return new Response(body, { headers: { "content-type": "application/json" } });
+    }
+    return new Response(new Uint8Array(Number(new URL(url, "http://x").searchParams.get("length"))));
+  });
+  const drop = await readDesktopDrop();
+  assert.deepEqual(drop.dirs, ["dir/empty"]);
+  const [{ path, file }] = drop.files;
+  assert.equal(path, "dir/a b.bin");
+  assert.equal(file.size, CHUNK + 1);
+  assert.equal((await file.slice(CHUNK, 2 * CHUNK).arrayBuffer()).byteLength, 1);
+  assert.equal(urls.at(-1), `/api/desktop/drop/file?path=dir%2Fa%20b.bin&offset=${CHUNK}&length=1`);
 });

@@ -1,4 +1,4 @@
-import { apiURL } from "./api.js";
+import { api, apiURL } from "./api.js";
 
 /* Files dropped on the Tree from the desktop are sent to the server as bytes,
    a piece at a time, rather than as paths for it to copy: the window may be
@@ -10,6 +10,13 @@ export const CHUNK = 2 << 20;
 // Files sent at once. A folder of many small files is mostly round trips, and
 // a remote one is two of them per piece.
 const PARALLEL = 4;
+
+/* carriesFiles says a drag holds files from the desktop. WebKitGTK shows
+   them only as a URI list. */
+export function carriesFiles(event) {
+  const types = event.dataTransfer?.types || [];
+  return types.includes("Files") || types.includes("text/uri-list");
+}
 
 /* readDrop lists what was dropped, folders walked, as paths relative to the
    drop. The items have to be read while the drop event is still running, so
@@ -37,6 +44,25 @@ export async function readDrop(transfer) {
   };
   for (const entry of entries) await walk(entry, entry.name);
   return out;
+}
+
+/* readDesktopDrop lists what was last dropped on the Linux desktop window,
+   which the page cannot read itself, in readDrop's shape. Each piece is read
+   back from this machine as it is sent on; see api_drop.go. */
+export async function readDesktopDrop() {
+  const { files, dirs } = await api("GET", "/api/desktop/drop");
+  const piece = async (path, offset, length) => {
+    const res = await fetch(apiURL(`/api/desktop/drop/file?path=${encodeURIComponent(path)}&offset=${offset}&length=${length}`));
+    if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || res.statusText);
+    return res.arrayBuffer();
+  };
+  return {
+    dirs,
+    files: files.map(({ path, size }) => ({
+      path,
+      file: { size, slice: (from, to) => ({ arrayBuffer: () => piece(path, from, Math.max(0, Math.min(to, size) - from)) }) },
+    })),
+  };
 }
 
 // A reader hands out a folder's entries in batches until one comes back empty.

@@ -51,11 +51,40 @@ first piece can be sent again. Every piece refuses an existing target unless
 `replace=1`, and always refuses an existing folder. Paths go through
 `resolveEntry`, so they cannot leave the project or touch `.git`.
 
+## The Linux desktop window
+
+WebKitGTK shows the page a desktop file drag only as `text/uri-list`, with
+no `Files` type, no File objects and an empty URI. A page that does not take
+such a drag lets WebKit open the file in place of the app. So:
+
+- Any drag carrying `Files` or `text/uri-list` counts as a desktop drag
+  (`carriesFiles`). The Tree takes it, and a window-level listener in
+  `main.js` refuses it everywhere else, so no drop navigates the window.
+- On Linux, `configureDesktop` sets Wails' `EnableFileDrop`. The shell passes
+  the native drop's paths to `Server.DropFiles` and emits
+  `agenttik:file-drop` with the pointer position. The Tree aims at the
+  element there, as it does on `dragover`, and `readDesktopDrop` reads the
+  files back to feed the same upload.
+- `GET /api/desktop/drop` lists the dropped files (`{files: [{path, size}],
+  dirs}`). `GET /api/desktop/drop/file?path=&offset=&length=` returns one
+  piece. Both stay on this machine (`/api/desktop`). They answer only
+  requests with the `X-Agenttik-Window-Token` the window's proxy adds, and
+  only paths inside what was last dropped.
+
+macOS and Windows webviews give the page real File objects, so they use the
+browser path. `--remote` desktop windows have no local server to read the
+paths, so a native drop there is refused like any other.
+
 ## Validation
 
 Go tests cover pieces in order, an out-of-order piece, empty files, folders,
 replace rules, bad input, cancel, and a copy forwarded to a second real
-instance. `upload.test.js` covers folder walking, the fallback, conflict
-names, piece requests and cleanup after a failure. `tree-file-drop.spec.js`
+instance. They also cover the drop endpoints' token, listing, pieces and
+path checks. `upload.test.js` covers desktop-drag detection, reading a
+native drop, folder walking, the fallback, conflict names, piece requests
+and cleanup after a failure. `tree-file-drop.spec.js`
 drops onto a folder, beside a top-level file, and over an existing file
-(cancel, then replace), and drops onto a remote machine's Tree.
+(cancel, then replace), and drops onto a remote machine's Tree. The Linux
+native path was checked by hand: the desktop app under Xvfb, with a GTK drag
+source driven by xdotool. A file and a folder were copied, and a drop outside
+the Tree left the app in place.

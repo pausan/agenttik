@@ -78,12 +78,14 @@ func runDesktop(srv *server.Server, lock *single.Lock, defaultAddr string) error
 	if err != nil {
 		return err
 	}
+	dropToken := srv.EnableFileDrops()
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.FlushInterval = -1 // flush immediately, so SSE streams
 	director := proxy.Director
 	proxy.Director = func(r *http.Request) {
 		director(r)
 		r.Header.Set("X-Agenttik-Update-Token", updateToken)
+		r.Header.Set("X-Agenttik-Window-Token", dropToken)
 	}
 
 	stop := make(chan os.Signal, 1)
@@ -109,6 +111,12 @@ func runDesktop(srv *server.Server, lock *single.Lock, defaultAddr string) error
 		OnStartup: func(ctx context.Context) {
 			win.opened(ctx)
 			startNative(win)
+			// Only reported where configureDesktop enables native drops; the
+			// page reads the files back from /api/desktop/drop.
+			runtime.OnFileDrop(ctx, func(x, y int, paths []string) {
+				srv.DropFiles(paths)
+				runtime.EventsEmit(ctx, "agenttik:file-drop", x, y)
+			})
 			go func() {
 				select {
 				case <-stop:

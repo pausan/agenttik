@@ -10,6 +10,7 @@ import { checkRemote, loadProfiles } from "./profiles";
 import { needsCSSScrollbars } from "./platform";
 import App from "./App.vue";
 import { loadColors } from "./store";
+import { carriesFiles } from "./upload";
 import "./assets/main.css";
 
 // Every icon agenttik uses is bundled at build time (vite.config.js's
@@ -34,6 +35,15 @@ const router = createRouter({
 // The saved colours are applied before mounting, so the app is never painted
 // in the default palette first and repainted in the chosen one.
 document.documentElement.classList.toggle("desktop-linux", needsCSSScrollbars());
+// A desktop file let go of where nothing takes it would be opened by the
+// window in place of the app. The Tree takes its own drops before this runs.
+for (const type of ["dragover", "drop"]) {
+  window.addEventListener(type, (event) => {
+    if (event.defaultPrevented || !carriesFiles(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "none";
+  });
+}
 window.addEventListener("error", event => recordError(event.error, { source: "runtime" }, diagnosticStorage));
 window.addEventListener("unhandledrejection", event => recordError(event.reason, { source: "promise" }, diagnosticStorage));
 // A window on a remote profile checks that machine first. If it does not

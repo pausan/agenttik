@@ -34,6 +34,9 @@ func configureDesktop(app *options.App) {
 		// the webview goes blank on some drivers with acceleration on.
 		WebviewGpuPolicy: linux.WebviewGpuPolicyNever,
 	}
+	// WebKitGTK shows the page a desktop file drag only as a URI list, with
+	// no File objects to read, so Wails reports the dropped paths natively.
+	app.DragAndDrop = &options.DragAndDrop{EnableFileDrop: true}
 }
 
 // quietBrowserOpener keeps a link opened from the window from tying the

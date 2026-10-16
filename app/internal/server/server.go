@@ -74,6 +74,7 @@ type Server struct {
 	// raise. Set by the desktop shell before serving starts; nil in web mode.
 	foreground    func() bool
 	desktopStatus func() string
+	drop          desktopDrop
 
 	// network is the desktop shell's optional exposed-server manager, and the
 	// host and port it falls back to when nothing has been saved yet. Set by
@@ -250,6 +251,8 @@ func (s *Server) routes() {
 	api.Post("/foreground", s.raiseWindow)
 	api.Get("/desktop", s.getDesktopConfig)
 	api.Put("/desktop", s.putDesktopConfig)
+	api.Get("/desktop/drop", s.listDrop)
+	api.Get("/desktop/drop/file", s.readDrop)
 	api.Get("/action-models", s.getActionModels)
 	api.Put("/action-models/:action", s.putActionModel)
 	api.Get("/general", s.getGeneralConfig)

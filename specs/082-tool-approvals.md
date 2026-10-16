@@ -20,8 +20,8 @@ projects that existed before the column. `manual` asks before tools run:
 
 | Provider | Automatic | Manual (unless the task is `plan`) |
 |----------|-----------|------------------------------------|
-| Claude Code | per [003](003-providers.md#permission-modes) | `--permission-mode default`: asks before every command and edit; reads run |
-| Codex | per [003](003-providers.md#permission-modes) | approval policy `untrusted`: asks before anything but Codex's known-safe reads |
+| Claude Code | per [003](003-providers.md#permission-modes) | `--permission-mode default` and `--settings '{"permissions":{"ask":["Bash"]}}'`: asks before every command and edit; Read, Grep and Glob run |
+| Codex | per [003](003-providers.md#permission-modes) | approval policy `untrusted`: asks before commands and edits, except commands Codex knows are safe reads (`ls`, `cat`, `grep`, …), which it runs without asking |
 | Copilot, OpenCode, direct API | per 003 | unchanged; they cannot ask |
 
 A `full` task in a manual project asks too. The runner reads the mode when a
@@ -29,9 +29,11 @@ turn starts (`TurnRequest.Manual`), so a change reaches each task's next turn.
 In a manual project a tool call always waits for the user: the timeout and
 immediate settings below do not answer it. Questions still follow them.
 
-Measured against Claude Code 2.1.300: `--permission-mode default` with
-`--permission-prompt-tool stdio` sends `can_use_tool` for Bash and does not run
-it until answered.
+Measured against Claude Code 2.1.300: `--permission-mode default` alone runs
+commands it classes as read-only, such as `ls` and `find`, without asking, and
+sends `can_use_tool` only for the rest. The `ask` rule for `Bash` makes it send
+one for every command. `--settings` adds to the user's own settings rather
+than replacing them.
 
 ## Claude Code
 

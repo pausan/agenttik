@@ -61,24 +61,25 @@ func (p *Provider) Available() error {
 // their Auto setting: it approves ordinary work and asks only about the
 // genuinely destructive things, as approval events (082-tool-approvals.md).
 //
-// A manual project uses `default`, which asks before every command and edit;
-// reads still run without asking.
+// A manual project uses `default`, which asks before edits and before any
+// command the CLI does not class as read-only. The `ask` rule extends that to
+// every command, `ls` and `find` included; Read, Grep and Glob still run
+// without asking.
 func permissionFlag(p agent.Permission, manual bool) []string {
+	if manual && p.Valid() != agent.PermissionPlan {
+		return manualFlags
+	}
 	switch p.Valid() {
 	case agent.PermissionPlan:
 		return []string{"--permission-mode", "plan"}
 	case agent.PermissionFull:
-		if manual {
-			return []string{"--permission-mode", "default"}
-		}
 		return []string{"--dangerously-skip-permissions"}
 	default:
-		if manual {
-			return []string{"--permission-mode", "default"}
-		}
 		return []string{"--permission-mode", "auto"}
 	}
 }
+
+var manualFlags = []string{"--permission-mode", "default", "--settings", `{"permissions":{"ask":["Bash"]}}`}
 
 // buildArgs is separated from Run so the flag mapping can be unit tested.
 func buildArgs(req agent.TurnRequest) []string {

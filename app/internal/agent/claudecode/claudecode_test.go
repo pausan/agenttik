@@ -88,8 +88,8 @@ func TestPermissionMapping(t *testing.T) {
 	// A manual project asks before commands and edits; plan stays plan.
 	manual := map[agent.Permission]string{
 		agent.PermissionPlan:      "--permission-mode plan",
-		agent.PermissionWorkspace: "--permission-mode default",
-		agent.PermissionFull:      "--permission-mode default",
+		agent.PermissionWorkspace: `--permission-mode default --settings {"permissions":{"ask":["Bash"]}}`,
+		agent.PermissionFull:      `--permission-mode default --settings {"permissions":{"ask":["Bash"]}}`,
 	}
 	for perm, want := range manual {
 		got := strings.Join(permissionFlag(perm, true), " ")

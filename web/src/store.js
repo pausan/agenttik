@@ -2834,8 +2834,10 @@ async function loadTree() {
     // The two lists arrive apart to identify ignored files;
     // the pane wants one listing, and `tree` being empty is what "No files."
     // is read from.
-    S.tree = ignored.length ? files.concat(ignored) : files;
-    S.treeIgnored = ignored;
+    // Raw: a listing can hold 200,000 paths, and the Tree and Go to file
+    // read every one. Each read through a reactive proxy costs a lookup.
+    S.tree = markRaw(ignored.length ? files.concat(ignored) : files);
+    S.treeIgnored = markRaw(ignored);
     S.treeDirs = dirs;
     S.treeTruncated = truncated;
   } catch {

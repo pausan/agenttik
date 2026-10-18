@@ -358,6 +358,7 @@ async function doDelete() {
             :job="row.task.schedule_id"
             :active="S.detail?.session.id === row.task.id"
             :archived="row.archived"
+            :project-id="tab.projectID"
             :stoppable="row.task.status === 'running' || row.task.queue_count > 0"
             :archive="row.archived || (row.task.status !== 'running' && row.task.queue_count === 0)"
             deletable

@@ -118,20 +118,21 @@ func (s *Server) updateProject(c *fiber.Ctx) error {
 		return err
 	}
 	var body struct {
-		Name     string  `json:"name"`
-		Path     string  `json:"path"`
-		Prompt   *string `json:"prompt"`
-		RunMode  string  `json:"run_mode"`
-		Archived *bool   `json:"archived"`
-		Hidden   *bool   `json:"hidden"`
+		Name        string  `json:"name"`
+		Path        string  `json:"path"`
+		Prompt      *string `json:"prompt"`
+		RunMode     string  `json:"run_mode"`
+		Archived    *bool   `json:"archived"`
+		Hidden      *bool   `json:"hidden"`
+		QueuePaused *bool   `json:"queue_paused"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return badRequest("invalid body: %v", err)
 	}
 	name := strings.TrimSpace(body.Name)
 	path := strings.TrimSpace(body.Path)
-	if name == "" && path == "" && body.Prompt == nil && body.RunMode == "" && body.Archived == nil && body.Hidden == nil {
-		return badRequest("name, path, prompt, run_mode, archived or hidden is required")
+	if name == "" && path == "" && body.Prompt == nil && body.RunMode == "" && body.Archived == nil && body.Hidden == nil && body.QueuePaused == nil {
+		return badRequest("name, path, prompt, run_mode, archived, hidden or queue_paused is required")
 	}
 	if body.RunMode != "" && !store.ValidRunMode(body.RunMode) {
 		return badRequest("run_mode must be %q, %q or %q", store.RunAuto, store.RunGuarded, store.RunManual)
@@ -172,6 +173,11 @@ func (s *Server) updateProject(c *fiber.Ctx) error {
 	}
 	if body.Hidden != nil {
 		if err := s.store.SetProjectHidden(id, *body.Hidden); err != nil {
+			return err
+		}
+	}
+	if body.QueuePaused != nil {
+		if err := s.runner.SetProjectQueuePaused(id, *body.QueuePaused); err != nil {
 			return err
 		}
 	}

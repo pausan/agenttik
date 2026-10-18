@@ -48,10 +48,10 @@ func (s *Store) GetProject(id int64) (*Project, error) {
 	// Both lists are always arrays, never null, so the UI iterates without a guard.
 	p.RecentSessions, p.Schedules = []SessionRef{}, []Schedule{}
 	err := s.db.QueryRow(
-		`SELECT id, name, path, created_at, position, archived_at, hidden_at, hidden_position, prompt, kind, run_mode
+		`SELECT id, name, path, created_at, position, archived_at, hidden_at, hidden_position, prompt, kind, run_mode, queue_paused
 		 FROM projects WHERE id = ?`, id).
 		Scan(&p.ID, &p.Name, &p.Path, &p.CreatedAt, &p.Position, &p.ArchivedAt,
-			&p.HiddenAt, &p.HiddenPosition, &p.Prompt, &p.Kind, &p.RunMode)
+			&p.HiddenAt, &p.HiddenPosition, &p.Prompt, &p.Kind, &p.RunMode, &p.QueuePaused)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -310,7 +310,7 @@ func (s *Store) DeleteProject(id int64) error {
 // titles attached. Archived and hidden ones have separate list methods.
 func (s *Store) ListProjects() ([]Project, error) {
 	rows, err := s.db.Query(
-		`SELECT id, name, path, created_at, position, prompt, kind, run_mode FROM projects
+		`SELECT id, name, path, created_at, position, prompt, kind, run_mode, queue_paused FROM projects
 		 WHERE archived_at = 0 AND hidden_at = 0
 		 ORDER BY (kind = 'orchestrator') DESC, position, name`)
 	if err != nil {
@@ -321,7 +321,7 @@ func (s *Store) ListProjects() ([]Project, error) {
 	projects := []Project{}
 	for rows.Next() {
 		var p Project
-		if err := rows.Scan(&p.ID, &p.Name, &p.Path, &p.CreatedAt, &p.Position, &p.Prompt, &p.Kind, &p.RunMode); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Path, &p.CreatedAt, &p.Position, &p.Prompt, &p.Kind, &p.RunMode, &p.QueuePaused); err != nil {
 			return nil, fmt.Errorf("list projects: %w", err)
 		}
 		projects = append(projects, p)
@@ -448,6 +448,19 @@ func (s *Store) ReorderProjects(ids []int64) error {
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("reorder projects: %w", err)
+	}
+	return nil
+}
+
+// SetProjectQueuePaused persists the queue gate. The runner holds the project's
+// dispatch lock so pausing cannot race the next automatic launch.
+func (s *Store) SetProjectQueuePaused(id int64, paused bool) error {
+	res, err := s.db.Exec(`UPDATE projects SET queue_paused = ? WHERE id = ?`, paused, id)
+	if err != nil {
+		return fmt.Errorf("pause project %d queue: %w", id, err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
 	}
 	return nil
 }

@@ -20,6 +20,8 @@ import {
   setTaskArchived,
   toggleTaskUnread,
   setProjectHidden,
+  setProjectQueuePaused,
+  projectQueueActions,
   stopTask,
   toggleProjectTasks,
 } from "../store";
@@ -304,6 +306,18 @@ function onTaskDrop(e, projectID, overID) {
                 <span class="block truncate pl-4 text-xs text-dimmed">{{ p.path }}</span>
               </button>
               <UButton
+                v-if="projectQueueActions.get(p.id)"
+                type="button"
+                size="xs"
+                color="neutral"
+                variant="ghost"
+                :icon="projectQueueActions.get(p.id).icon"
+                class="mt-0.5 shrink-0"
+                :title="projectQueueActions.get(p.id).hint"
+                :aria-label="projectQueueActions.get(p.id).label"
+                @click.stop="setProjectQueuePaused(p, projectQueueActions.get(p.id).paused)"
+              />
+              <UButton
                 type="button"
                 size="xs"
                 color="neutral"
@@ -350,6 +364,7 @@ function onTaskDrop(e, projectID, overID) {
               :active="S.detail?.session.id === s.id"
               :number="taskNumber(p, s)"
               :job="s.schedule_id"
+              :project-id="p.id"
               :stoppable="s.status === 'running' || s.queue_count > 0"
               :archive="s.status !== 'running' && s.queue_count === 0"
               @stop="stopTask(s.id)"

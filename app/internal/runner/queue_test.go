@@ -136,3 +136,80 @@ func TestForceQueuedReportsAFailedStart(t *testing.T) {
 		t.Fatalf("queue count = %d, want the prompt kept", n)
 	}
 }
+
+func TestProjectPauseKeepsCurrentTurnAndBlocksAllQueuedTasks(t *testing.T) {
+	gate := make(chan struct{})
+	r, st, sess := setup(t, &fakeProvider{gate: gate})
+	t.Cleanup(r.Shutdown)
+	other := *sess
+	other.ID = "other-task"
+	if err := st.CreateSession(&other); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Send(sess.ID, "running"); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{sess.ID, other.ID} {
+		if _, err := r.Enqueue(id, "waiting"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := r.SetProjectQueuePaused(sess.ProjectID, true); err != nil {
+		t.Fatal(err)
+	}
+	if !r.Running(sess.ID) {
+		t.Fatal("pause cancelled the running turn")
+	}
+	close(gate)
+	waitFor(t, func() bool { return !r.Running(sess.ID) }, "active turn to finish")
+	// Exercise both the completion path's preference and a later scheduler tick.
+	r.schedule(sess.ProjectID, sess.ID)
+	r.schedule(sess.ProjectID, "")
+	for _, id := range []string{sess.ID, other.ID} {
+		if n, err := st.QueueCount(id); err != nil || n != 1 {
+			t.Fatalf("queue %s = %d, %v", id, n, err)
+		}
+	}
+	// Prompts accepted while paused must wait too.
+	if q, err := r.Enqueue(other.ID, "also waiting"); err != nil || len(q) != 2 {
+		t.Fatalf("enqueue while paused = %+v, %v", q, err)
+	}
+	if err := r.SetProjectQueuePaused(sess.ProjectID, false); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool {
+		a, _ := st.QueueCount(sess.ID)
+		b, _ := st.QueueCount(other.ID)
+		return a == 0 && b == 0 && !r.Busy()
+	}, "both task queues to drain after resume")
+}
+
+func TestProjectPauseDoesNotBlockOtherProjects(t *testing.T) {
+	r, st, sess := setup(t, &fakeProvider{})
+	t.Cleanup(r.Shutdown)
+	if err := r.SetProjectQueuePaused(sess.ProjectID, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Enqueue(sess.ID, "paused"); err != nil {
+		t.Fatal(err)
+	}
+	p, err := st.CreateProject("other", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := *sess
+	other.ID, other.ProjectID = "other-project-task", p.ID
+	if err := st.CreateSession(&other); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Enqueue(other.ID, "run elsewhere"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool {
+		messages, _ := st.ListMessages(other.ID)
+		return len(messages) > 0 && !r.Running(other.ID)
+	}, "other project to finish")
+	if n, _ := st.QueueCount(sess.ID); n != 1 {
+		t.Fatalf("paused queue = %d", n)
+	}
+}

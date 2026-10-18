@@ -10,6 +10,7 @@
    to tell two tasks apart, so hovering the row shows its opening prompt. */
 import { computed, nextTick, ref } from "vue";
 
+import { S, projectQueueActions, setProjectQueuePaused } from "../store";
 import { taskDot } from "../task-attention.js";
 import StatusDot from "./StatusDot.vue";
 
@@ -43,15 +44,24 @@ const props = defineProps({
   // The running turn waits on the user to allow a tool call or answer.
   approval: Boolean,
   stoppable: Boolean,
+  projectId: { type: Number, default: 0 },
 });
 
 const emit = defineEmits(["select", "stop", "toggle-archive", "delete", "rename", "editing", "open-job", "toggle-unread"]);
+
+const project = computed(() => S.projects.find((p) => p.id === props.projectId));
+const queueAction = computed(() => projectQueueActions.value.get(props.projectId));
 
 const menu = computed(() => [
   { label: "Open task", icon: "i-lucide-message-square", onSelect: () => emit("select") },
   { label: props.unread ? "Mark read" : "Mark unread", icon: props.unread ? "i-lucide-mail-open" : "i-lucide-mail", onSelect: () => emit("toggle-unread") },
   { label: "Rename task", icon: "i-lucide-pencil", onSelect: edit },
   ...(props.job ? [{ label: "Open scheduled job", icon: "i-lucide-calendar", onSelect: () => emit("open-job") }] : []),
+  ...(queueAction.value ? [{
+    label: queueAction.value.label,
+    icon: queueAction.value.icon,
+    onSelect: () => setProjectQueuePaused(project.value, queueAction.value.paused),
+  }] : []),
   ...(props.stoppable ? [{ label: "Stop task", icon: "i-lucide-square", onSelect: () => emit("stop") }] : []),
   ...(props.archive ? [{ label: props.archived ? "Unarchive task" : "Archive task", icon: props.archived ? "i-lucide-archive-restore" : "i-lucide-archive", onSelect: () => emit("toggle-archive") }] : []),
   ...(props.deletable ? [{ label: "Delete task", icon: "i-lucide-trash-2", color: "error", onSelect: () => emit("delete") }] : []),

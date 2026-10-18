@@ -11,7 +11,8 @@
    S.activeProjectID — so switching project switches the whole centre to that
    project's work. */
 
-import { markRaw, nextTick, reactive, ref, watch } from "vue";
+import { computed, markRaw, nextTick, reactive, ref, watch } from "vue";
+import { projectQueueAction } from "./project-queue.js";
 import { DEFAULT_SCHEDULE, scheduleRecurrence } from "./schedules.js";
 import { createTaskSounds, TASK_SOUNDS_KEY } from "./task-sounds.js";
 import { trackTaskAttention, reconcileTaskCompletions } from "./task-attention.js";
@@ -1337,6 +1338,20 @@ export async function loadArchivedProjects() {
 export async function loadHiddenProjects() {
   S.hiddenProjects = await api("GET", "/api/projects?hidden=true");
   S.hiddenProjectsLoaded = true;
+}
+
+// Share one scan per project across its button and all task menus.
+export const projectQueueActions = computed(() => new Map(
+  S.projects.map((project) => [project.id, projectQueueAction(project)]),
+));
+
+export async function setProjectQueuePaused(project, queue_paused) {
+  try {
+    await api("PATCH", "/api/projects/" + project.id, { queue_paused });
+    await refreshProjects();
+  } catch (e) {
+    fail(e);
+  }
 }
 
 /* setProjectHidden changes visibility without touching the project's tasks,

@@ -121,3 +121,21 @@ model or effort change within the current provider keeps it.
 
 A prompt whose turn failed because the provider was away goes back in this same
 queue with a clock on it; see [045](045-provider-outage-retry.md).
+
+## Pausing a project queue
+
+The project row has a Pause button immediately left of visibility while tasks
+are running. Once paused, it offers Resume while tasks are running or prompts
+are waiting. Empty, idle projects show neither action. Task context menus in
+the sidebar and project page offer the same project-wide action.
+
+Pause lets every active turn finish but prevents automatic dispatch, including
+follow-up prompts in the task that just finished and prompts in other tasks.
+New queued prompts and provider retries also wait. Resume restarts normal
+project ordering once active turns finish. Other projects keep running.
+Explicit Send, Send now and Force send still start work on request.
+
+`PATCH /api/projects/:id` accepts `queue_paused`. The flag is persisted across
+restarts and included in project detail and list responses. The runner changes
+it under the project's dispatch lock, which also guards the check before
+claiming the next queued turn. Project-change events refresh other windows.

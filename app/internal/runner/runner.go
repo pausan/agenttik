@@ -680,8 +680,26 @@ func (r *Runner) schedule(projectID int64, preferredSessionID string) {
 	r.dispatch(projectID, preferredSessionID)
 }
 
+// SetProjectQueuePaused lets active turns finish and gates automatic dispatch.
+func (r *Runner) SetProjectQueuePaused(projectID int64, paused bool) error {
+	lock := r.dispatchLock(projectID)
+	lock.Lock()
+	defer lock.Unlock()
+	if err := r.store.SetProjectQueuePaused(projectID, paused); err != nil {
+		return err
+	}
+	if !paused {
+		r.dispatch(projectID, "")
+	}
+	return nil
+}
+
 // dispatch is schedule's body, with the project's dispatch lock already held.
 func (r *Runner) dispatch(projectID int64, preferredSessionID string) {
+	project, err := r.store.GetProject(projectID)
+	if err != nil || project.QueuePaused {
+		return
+	}
 	if r.projectBusy(projectID) {
 		return
 	}

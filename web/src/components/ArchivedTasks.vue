@@ -59,6 +59,7 @@ watch([query, window, page, size, () => props.tab.data.revision, retry], (values
     <p v-else-if="!rows.length" class="text-sm text-dimmed">No archived tasks match.</p>
     <TaskRow
       v-for="task in visible" :key="task.id"
+      :project-id="tab.projectID"
       :title="task.title" :prompt="task.prompt" :status="task.status"
       :sub="`${task.model} · ${ago(task.last_active_at)}`" :outcome="task.summary"
       :job="task.schedule_id" :unread="!!S.unreadTasks[task.id]"

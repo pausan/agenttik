@@ -20,6 +20,9 @@ type Project struct {
 	Position   int64 `json:"position"`
 	QueueCount int64 `json:"queue_count"`
 
+	// QueuePaused gates automatic dispatch without interrupting active turns.
+	QueuePaused bool `json:"queue_paused"`
+
 	// ArchivedAt is 0 while the project is active and the time it was put
 	// away otherwise. An archived project leaves every list but Settings;
 	// nothing under it is touched. See 041-project-archiving.md.

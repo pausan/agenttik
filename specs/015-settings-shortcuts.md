@@ -100,12 +100,19 @@ and actions. It includes `Switch to profile: <name>` for each other local profil
 refreshing the profile list on open. Selecting one reloads the window in that
 profile; see [067](067-local-profiles.md). `Ctrl+P` opens **Go to file**, searching full relative paths in
 only the current project's live file listing, including ignored files.
-Matching is case-insensitive and accepts letters in order. Every match is
-listed best first (lower score, then shorter path, then listing order) with
-matching letters highlighted, and the list scrolls through all of them. Arrow
-keys and Page Up/Down select a result, Enter or a click opens it, and Escape
-dismisses the dialog. See [079](079-ui-performance.md) for how it stays fast
-over 200,000 paths.
+Matching is case-insensitive and accepts letters in order. Ranking follows
+fzf: each letter scores more at the start of a folder or file name, a word
+(after `-`, `_`, `.` or a space) or a camelCase hump, and inside the file's
+own name; a run of adjacent letters keeps its first letter's bonus, and gaps
+cost. Of the leftmost and rightmost placements, each pulled tight, the better
+counts, so `modal` finds `components/Modal.vue` over `models/legal.ts` and
+`gtfm` finds `GoToFileModal.vue`. Files git ignores lose one letter's worth,
+so project files lead close calls. Ties go to the shorter path, then listing
+order. Every match is listed with its letters highlighted, and the list
+scrolls through all of them. Arrow keys and Page Up/Down select a result,
+Enter or a click opens it, and Escape dismisses the dialog. Enter pressed
+before the newest query's answer arrives opens that answer's first row. See
+[079](079-ui-performance.md) for how it stays fast over 200,000 paths.
 Text opens in Edit; images and fonts open in Preview. This also applies to
 existing tabs and uses the same editor-first default as Tree selections.
 File search uses the usual temporary file tab and preserves unsaved edits.

@@ -33,14 +33,20 @@ buttons styled as extra-small ghost buttons (`ROW_BUTTON` in `ui.js`): a
 500-commit cap.
 
 Go to file (`Ctrl+P`) searches the tree listing, up to 200,000 paths, stored
-raw like Changed. `file-search.js` lowercases a listing once and keeps the
-answers for the prefixes of the current query: a longer query rescans only
-what the shorter one matched, and a deleted key reuses its kept answer. Scores
-are `fuzzy()`'s, computed without allocating per path, and matches sort as
-packed numbers in a `Float64Array`. Highlights are computed only for drawn
-rows. The dialog draws only the fixed-height rows in view, so every match can
-be scrolled to; Nuxt's command palette drew 100 rows of about ten components
-each on every key.
+raw like Changed. The search runs in a module worker (`file-search-worker.js`),
+so typing never waits on it: a short query can match most of a large listing,
+and scoring that many paths takes 10 to 30 ms. Opening the dialog posts the
+listing once per listing, joined by NULs: one string crosses in 19 ms in
+WebKit, 200,000 strings in up to 84 ms. The worker lowercases it and keeps
+the answers for the prefixes of the current query: a longer query rescans
+only what the shorter one matched, in listing order, and a deleted key reuses
+its kept answer. Only the newest query waiting is answered. Answers pack
+score, length and place into `Float64Array` keys; a heap picks the best 100,
+and the rest are sorted when a scroll or key reaches past them. Ranked places
+come back as a transferred `Int32Array`; the window reads paths from its own
+listing and highlights only the drawn rows. The dialog draws only the
+fixed-height rows in view; Nuxt's command palette drew 100 rows of about ten
+components each on every key.
 
 Settings mounts panes on first visit, retaining them until the dialog closes.
 Searching mounts all panes so result counts cover every section. Modal and
@@ -105,30 +111,42 @@ Commits was slow because it unmounted 16,000 Changed rows. `PERF_BASELINE=1`
 skips the budgets and the row checks; `PERF_PROFILE` writes a CPU profile of
 the opening.
 
-Go to file uses 157,500 paths: 52,500 project files and a git-ignored
-`node_modules` with long paths. Key latency is keydown to the frame after the
-list answered, painted:
+Go to file uses 157,550 paths: 52,550 project files and 105,000 git-ignored
+ones under `node_modules`, named from 20 recurring words so a short query
+matches most of them, as in real projects. Key latency is keydown to the next
+painted frame; results latency is the last key to the frame showing the
+expected top row, `packages/pkg-0/src/index.ts` for `index`:
 
 ```
 cd e2e
 npx playwright test tests/file-search-performance.spec.js --workers=1
 ```
 
-Against baseline commit `14d2d9b` on the development Linux host, three runs
-each (typical run shown). These are Chromium timings; the desktop WebKit view
-was not measured:
+Against commit `18a97cc` (search on the window's thread, `fuzzy()` scores) on
+the development Linux host, three runs each, Chromium:
 
 | Interaction | Baseline | Changed |
 | --- | ---: | ---: |
-| Open, list painted | 76–108 ms | 25–30 ms |
-| Typing a 14-letter query, p50 / p95 | 42 / 81 ms | 7 / 16 ms |
-| Erasing it, p50 / p95 | 42 / 70 ms | 7 / 28 ms |
-| Long tasks while typing | 76–187 ms | none |
+| Open, list painted | 62–165 ms | 24–41 ms |
+| Typing `index`, key p50 / p95 | 46 / 105 ms | 5–7 / 19–21 ms |
+| Long tasks while typing | 82–149 ms | none |
+| Last key to the right top row | 34–49 ms, ranked worse | 23–34 ms |
 
-In Node, the first key scans and sorts all 157,500 paths in about 10 ms; each
-later key costs under 4 ms and a deleted key under 0.1 ms. The listing's first
-search also lowercases it, about 10 to 15 ms. A counting sort in place of the
-`Float64Array` sort was tried and was no faster, since the scan dominates.
+`PERF_BASELINE=1` waits for any row holding `index`, since the old ranking put
+`node_modules` first. The worker's own time per key, over 200,000 real paths
+from local repositories (75 characters on average) in the desktop's WebKit,
+with the median of five runs:
+
+| Query | Per key typed, ms | Pasted, ms |
+| --- | --- | ---: |
+| `index` | 12 20 23 23 15 | 17 |
+| `readme` | 12 21 26 25 20 18 | 23 |
+| `gotofile` | 11 16 19 20 11 6 4 3 | 12 |
+
+V8 in Node matches within a few milliseconds. Keys two to four cost most: they
+still match about half the listing, and each match is scored. Scoring every
+placement (fzf's v2) cost twice as much, and skipping paths that could not
+reach the best 100 cost more in checks than it saved.
 
 Build the UI and web binary, then run:
 

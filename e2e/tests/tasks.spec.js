@@ -230,6 +230,7 @@ test("a provider outage queues the prompt instead of losing it", async ({ page }
 
   await expect(page.getByText("waiting", { exact: true })).toBeVisible();
   await expect(page.getByText("Waiting for Fake")).toBeVisible();
+  await expect(sidebar(page).locator(".task-row").first().getByRole("button", { name: "Mark unread", exact: true })).toBeDisabled();
 
   // Scoped to the queued bubble itself: the task is also titled from this
   // same raw prompt, and that sidebar/tab label matches the text too.
@@ -533,4 +534,50 @@ test("task context menus rename and persist unread without opening the task", as
   await archivedRow.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Unarchive task", exact: true }).click();
   await expect(row).toBeVisible();
+});
+
+
+test("task dots toggle read without selecting and preserve automatic reading", async ({ page }) => {
+  await addProject(page);
+  await openProject(page);
+  await newTask(page);
+  const row = sidebar(page).locator(".task-row").first();
+  const title = row.locator(".task-title");
+
+  // A manual unread mark on the current transcript lasts for this visit.
+  await row.getByRole("button", { name: "Mark unread", exact: true }).click();
+  await expect(title).toHaveClass(/font-bold/);
+  await page.waitForTimeout(3200);
+  await expect(title).toHaveClass(/font-bold/);
+  await row.getByRole("button", { name: "Mark read", exact: true }).click();
+  await expect(title).not.toHaveClass(/font-bold/);
+
+  await openProject(page);
+  await row.getByRole("button", { name: "Mark unread", exact: true }).click();
+  await expect(title).toHaveClass(/font-bold/);
+  await expect(page.getByPlaceholder("Ask the agent…")).toBeHidden();
+  const projectRow = page.locator(".task-row").last();
+  await projectRow.getByRole("button", { name: "Mark read", exact: true }).click();
+  await expect(title).not.toHaveClass(/font-bold/);
+  await projectRow.getByRole("button", { name: "Mark unread", exact: true }).click();
+  await expect(page.getByPlaceholder("Ask the agent…")).toBeHidden();
+
+  await row.locator(".task-select").click();
+  await expect(page.getByPlaceholder("Ask the agent…")).toBeVisible();
+  await expect(title).toHaveClass(/font-bold/);
+  await expect(title).not.toHaveClass(/font-bold/, { timeout: 5000 });
+});
+
+test("running task dots cannot toggle read until work finishes", async ({ page }) => {
+  await addProject(page);
+  await openProject(page);
+  await newTask(page);
+  await pickModel(page);
+  await sendPrompt(page, "@wait 60000");
+  const row = sidebar(page).locator(".task-row").first();
+  await expect(page.getByText("running", { exact: true })).toBeVisible();
+  await expect(row.getByRole("button", { name: "Mark unread", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await expect(page.getByText("idle", { exact: true })).toBeVisible();
+  await expect(row.getByRole("button", { name: /^Mark (unread|read)$/ })).toBeEnabled();
 });

@@ -114,41 +114,51 @@ defineExpose({ edit });
         :content="{ side: 'right', align: 'start' }"
         :ui="{ content: 'block h-auto max-w-[600px] py-1.5 text-left' }"
       >
-        <button
-          type="button"
-          class="task-select min-w-0 flex-1 px-2 py-1 text-left"
-          @click="$emit('select')"
-        >
-          <!-- Grey says archived: on a list holding both, the colour is what
-               separates a task still in play from one that is history. -->
+        <div class="flex min-w-0 flex-1 items-center gap-2 px-2">
           <span
-            class="flex items-center gap-2 overflow-hidden"
-            :class="active ? 'text-primary' : archived ? 'text-muted' : 'text-highlighted'"
+            v-if="number !== null"
+            class="w-3 shrink-0 font-mono text-[10px] text-dimmed tabular-nums"
+            aria-hidden="true"
+          >{{ number || "" }}</span>
+          <button
+            type="button"
+            class="-m-1 shrink-0 rounded p-1 enabled:cursor-pointer enabled:hover:bg-elevated focus-visible:outline-primary"
+            :disabled="status === 'running' || queued > 0"
+            :aria-label="unread ? 'Mark read' : 'Mark unread'"
+            :title="unread ? 'Mark read' : 'Mark unread'"
+            @click.stop="$emit('toggle-unread')"
           >
+            <StatusDot class="block" :status="taskDot(status, unread)" />
+          </button>
+          <button
+            type="button"
+            class="task-select min-w-0 flex-1 py-1 text-left"
+            @click="$emit('select')"
+          >
+            <!-- Grey says archived: on a list holding both, the colour is what
+                 separates a task still in play from one that is history. -->
             <span
-              v-if="number !== null"
-              class="w-3 shrink-0 font-mono text-[10px] text-dimmed tabular-nums"
-              aria-hidden="true"
-              >{{ number || "" }}</span
+              class="flex items-center gap-2 overflow-hidden"
+              :class="active ? 'text-primary' : archived ? 'text-muted' : 'text-highlighted'"
             >
-            <StatusDot :status="taskDot(status, unread)" />
-            <UIcon
-              v-if="approval"
-              name="i-lucide-shield-alert"
-              class="size-3.5 shrink-0 text-warning"
-              title="Waiting for you"
-              aria-label="Waiting for you"
-            />
-            <span v-if="queued" class="shrink-0" title="Queued prompt">🕒</span>
-            <span class="task-title truncate" :class="{ 'font-bold': unread }">{{ title || "Untitled task" }}</span>
-          </span>
-          <!-- The outcome reads in the same lighter voice the transcript
-               gives thinking: it is the row's own note on itself, not part of
-               the list's structure. Two lines at most — a summary is written
-               to a sentence, and a row is not a paragraph. -->
-          <span v-if="outcome" class="mt-0.5 block line-clamp-2 text-xs text-dimmed italic">{{ outcome }}</span>
-          <span v-if="sub" class="block truncate text-xs text-dimmed">{{ sub }}</span>
-        </button>
+              <UIcon
+                v-if="approval"
+                name="i-lucide-shield-alert"
+                class="size-3.5 shrink-0 text-warning"
+                title="Waiting for you"
+                aria-label="Waiting for you"
+              />
+              <span v-if="queued" class="shrink-0" title="Queued prompt">🕒</span>
+              <span class="task-title truncate" :class="{ 'font-bold': unread }">{{ title || "Untitled task" }}</span>
+            </span>
+            <!-- The outcome reads in the same lighter voice the transcript
+                 gives thinking: it is the row's own note on itself, not part of
+                 the list's structure. Two lines at most — a summary is written
+                 to a sentence, and a row is not a paragraph. -->
+            <span v-if="outcome" class="mt-0.5 block line-clamp-2 text-xs text-dimmed italic">{{ outcome }}</span>
+            <span v-if="sub" class="block truncate text-xs text-dimmed">{{ sub }}</span>
+          </button>
+        </div>
         <!-- Five lines is as much as is worth reading in a hover; the clamp
              puts the ellipsis on the last one it kept. -->
         <template #content>

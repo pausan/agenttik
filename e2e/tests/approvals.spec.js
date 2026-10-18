@@ -55,6 +55,7 @@ test("an allow can be remembered when the agent offers it", async ({ page }) => 
   await sendPrompt(page, "@approve-remember Bash ls");
   const card = page.getByRole("group", { name: "Tool approval" });
   await expect(card.getByRole("button", { name: "Always allow" })).toBeVisible();
+  await expect(card.getByRole("button", { name: "Allow all for this task" })).toBeVisible();
   await card.getByRole("button", { name: "Allow for this turn" }).click();
   await expect(card).toHaveCount(0);
   await expect(page.getByText("allowed remember=turn", { exact: true })).toBeVisible();

@@ -319,8 +319,8 @@ type Reply struct {
 // How long an allow lasts. A turn is one provider process; always is saved
 // in the provider's own config. The task choices are agenttik's own and never
 // reach the provider: the runner allows later requests of the same command
-// prefix, the same tool, or any tool, in the same task without asking. Every
-// tool approval offers the last two; the first needs a Prefix.
+// prefix, the same tool, or any tool, in the same task without asking. The
+// runner offers them with OfferTaskChoices.
 const (
 	RememberTurn        = "turn"
 	RememberAlways      = "always"
@@ -368,15 +368,26 @@ func (a *Approval) AutoReply() Reply {
 	return Reply{Allow: true, Answers: answers}
 }
 
+// OfferTaskChoices adds agenttik's own choices to a tool call's Remember:
+// allowing its command prefix, when it has one, its tool, or every tool for
+// the rest of the task. They are offered whatever the provider supports,
+// since the runner keeps them; questions never get them.
+func (a *Approval) OfferTaskChoices() {
+	if len(a.Questions) > 0 {
+		return
+	}
+	var choices []string
+	if a.Prefix != "" {
+		choices = append(choices, RememberTaskCommand)
+	}
+	a.Remember = append(append(choices, RememberTask, RememberTaskAll), a.Remember...)
+}
+
 // CheckReply reports whether r answers every question, with an option
 // offered or, where typing is allowed, any text, and remembers only as
 // offered. A denial needs no answers.
 func (a *Approval) CheckReply(r Reply) error {
-	if r.Remember == RememberTask || r.Remember == RememberTaskAll || r.Remember == RememberTaskCommand {
-		if !r.Allow || len(a.Questions) > 0 || (r.Remember == RememberTaskCommand && a.Prefix == "") {
-			return fmt.Errorf("cannot remember %q", r.Remember)
-		}
-	} else if r.Remember != "" && (!r.Allow || !slices.Contains(a.Remember, r.Remember)) {
+	if r.Remember != "" && (!r.Allow || !slices.Contains(a.Remember, r.Remember)) {
 		return fmt.Errorf("cannot remember %q", r.Remember)
 	}
 	if !r.Allow {

@@ -154,15 +154,16 @@ resumes the turn, where `Reply` is `{allow, answers, remember}`, `answers`
 maps a question id to the picked labels or typed text, and `remember` is one
 of the offered choices.
 
-`remember` may also be `task` or `task_all` on any tool approval, offered or
-not, and `task_command` on one with a `prefix`. Those are agenttik's own and
-never reach the provider; see [Allowing for the task](#allowing-for-the-task).
+The runner adds agenttik's own choices to every tool approval's `remember`
+(`OfferTaskChoices`) before anyone sees it: `task` and `task_all`, plus
+`task_command` when it has a `prefix`. Questions get none. These never reach
+the provider, so they work the same for Claude Code, Codex and any provider
+that asks; see [Allowing for the task](#allowing-for-the-task).
 
 `CheckReply` refuses an allowing reply that leaves a question unanswered,
 gives a single-choice question two answers, gives a blank answer, or picks an
 option that was not offered where typing is not allowed. It also refuses a
-`remember` that was not offered or that comes with a denial, the task
-choices on questions, and `task_command` without a `prefix`.
+`remember` that was not offered or that comes with a denial.
 
 ## Runner
 
@@ -248,10 +249,11 @@ while it was not listening is still drawn. Events keep it current after that.
 
 - An approval card shows the tool, its description, the input (a shell
   command as itself, other JSON indented), then Allow, **Allow *prefix* for
-  this task** when the approval has a prefix, **Allow *tool* for this task**,
-  **Allow all for this task** (terminal, wrench and double-check icons), and
-  Deny. When the approval
-  offers them, **Allow for this turn** and **Always allow** sit before Deny.
+  this task**, **Allow *tool* for this task**, **Allow all for this task**
+  (terminal, wrench and double-check icons), **Allow for this turn**,
+  **Always allow**, and Deny. Each choice between Allow and Deny shows only
+  when the approval's `remember` offers it, so a newer window on an older
+  remote server never shows a button that server would refuse.
 - A question card shows each question with its header, options as radio or
   checkbox rows with their descriptions, and a text field where typing is
   allowed (a password field for secrets). In a single-choice question typing

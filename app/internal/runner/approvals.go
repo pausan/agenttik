@@ -209,6 +209,7 @@ func (r *Runner) approvalPolicy() (string, time.Duration) {
 // Otherwise it is pending, counting down when the settings say so; the caller
 // publishes it.
 func (r *Runner) askUser(sess *store.Session, turn *store.Turn, a *agent.Approval) bool {
+	a.OfferTaskChoices()
 	p := &PendingApproval{SessionID: sess.ID, ProjectID: sess.ProjectID,
 		TurnID: turn.ID, CreatedAt: time.Now().UnixMilli(), Approval: a}
 	if r.isAllowed(sess.ID, a) {

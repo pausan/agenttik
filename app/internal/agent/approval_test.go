@@ -1,6 +1,9 @@
 package agent
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestCheckReply(t *testing.T) {
 	a := &Approval{Questions: []Question{
@@ -29,6 +32,7 @@ func TestCheckReply(t *testing.T) {
 		t.Errorf("plain approval: %v", err)
 	}
 	offered := &Approval{Remember: []string{RememberTurn}}
+	offered.OfferTaskChoices()
 	for _, tc := range []struct {
 		reply Reply
 		ok    bool
@@ -54,13 +58,38 @@ func TestCommandPrefixCanBeAllowedForTheTask(t *testing.T) {
 	if a.Prefix != "kubectl get" {
 		t.Fatalf("prefix = %q", a.Prefix)
 	}
+	a.OfferTaskChoices()
 	if err := a.CheckReply(Reply{Allow: true, Remember: RememberTaskCommand}); err != nil {
 		t.Error(err)
 	}
 }
 
+// A server before the task choices offered none, so a window must not show
+// them; one that is offered them can use them.
+func TestTaskChoicesAreOffered(t *testing.T) {
+	plain := &Approval{Tool: "Bash"}
+	if err := plain.CheckReply(Reply{Allow: true, Remember: RememberTaskAll}); err == nil {
+		t.Error("a choice not offered was accepted")
+	}
+	plain.OfferTaskChoices()
+	if !slices.Equal(plain.Remember, []string{RememberTask, RememberTaskAll}) {
+		t.Errorf("no prefix: remember = %v", plain.Remember)
+	}
+	mcp := &Approval{Tool: "cua MCP tool", Remember: []string{RememberTurn, RememberAlways}}
+	mcp.OfferTaskChoices()
+	if err := mcp.CheckReply(Reply{Allow: true, Remember: RememberTaskAll}); err != nil {
+		t.Error(err)
+	}
+	cmd := NewApproval("1", "Bash", "", `{"command":"git status"}`, nil)
+	cmd.OfferTaskChoices()
+	if !slices.Equal(cmd.Remember, []string{RememberTaskCommand, RememberTask, RememberTaskAll}) {
+		t.Errorf("prefix: remember = %v", cmd.Remember)
+	}
+}
+
 func TestQuestionsCannotBeAllowedForTheTask(t *testing.T) {
 	a := &Approval{Questions: []Question{{ID: "q", Other: true}}}
+	a.OfferTaskChoices()
 	if err := a.CheckReply(Reply{Allow: true, Answers: map[string][]string{"q": {"x"}}, Remember: RememberTask}); err == nil {
 		t.Error("a question was remembered for the task")
 	}

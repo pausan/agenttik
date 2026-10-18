@@ -430,6 +430,7 @@ func TestAllowForTheTaskAnswersWhatAlreadyWaits(t *testing.T) {
 	answered := map[string]bool{}
 	pending := func(id, session, tool string) {
 		a := agent.NewApproval(id, tool, "", "", func(rep agent.Reply) error { answered[id] = rep.Allow; return nil })
+		a.OfferTaskChoices()
 		r.approvals[id] = &PendingApproval{SessionID: session, Approval: a}
 	}
 	pending("a", "s1", "Bash")

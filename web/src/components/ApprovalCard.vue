@@ -140,8 +140,10 @@ function submit() {
         :disabled="approval.answering"
         @click="answerApproval(sessionId, approval.id, true)"
       />
+      <!-- The task choices show only when the server offers them: an older
+           server, reached as a remote, would refuse them. -->
       <UButton
-        v-if="approval.prefix"
+        v-if="approval.remember?.includes('task_command')"
         size="sm"
         variant="soft"
         icon="i-lucide-terminal"
@@ -151,6 +153,7 @@ function submit() {
         @click="answerApproval(sessionId, approval.id, true, undefined, 'task_command')"
       />
       <UButton
+        v-if="approval.remember?.includes('task')"
         size="sm"
         variant="soft"
         icon="i-lucide-wrench"
@@ -160,6 +163,7 @@ function submit() {
         @click="answerApproval(sessionId, approval.id, true, undefined, 'task')"
       />
       <UButton
+        v-if="approval.remember?.includes('task_all')"
         size="sm"
         variant="soft"
         icon="i-lucide-check-check"

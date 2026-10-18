@@ -5,8 +5,20 @@ A prompt can be queued with the Send menu or Enter (rebindable — see
 a clock in the task lists.
 
 Each project runs queued prompts only after its active turns finish. The
-scheduler keeps draining the task that just ran while it has queued prompts;
-otherwise it scans the project's open tasks from top to bottom.
+current task keeps priority while it has ready queued prompts, even when tasks
+above it have waiting prompts or the user reorders the list. Prompts added to
+that task while it runs keep the same priority. Within a task, prompts run in
+acceptance order. Once its queue drains, the scheduler picks the next task
+with ready prompts from the project's open tasks, top to bottom in the sidebar.
+
+The runner remembers the task that most recently finished a turn for every
+project. All automatic dispatch uses that preference, including new enqueues,
+schedule and retry ticks, and Resume after a pause. Competing dispatch calls
+cannot lose it between turns. A deleted task or one without ready prompts is
+skipped; a provider retry delay does not block other ready work
+([045](045-provider-outage-retry.md)).
+The preference lives in memory: after an app restart, selection starts at the
+top of the project list.
 
 A queued prompt is visible where it will run: the transcript draws one dashed
 bubble per waiting prompt under the working indicator, each with a timer of how
@@ -131,8 +143,9 @@ the sidebar and project page offer the same project-wide action.
 
 Pause lets every active turn finish but prevents automatic dispatch, including
 follow-up prompts in the task that just finished and prompts in other tasks.
-New queued prompts and provider retries also wait. Resume restarts normal
-project ordering once active turns finish. Other projects keep running.
+New queued prompts and provider retries also wait. Resume keeps the current
+task's priority and restarts dispatch once active turns finish. Other projects
+keep running.
 Explicit Send, Send now and Force send still start work on request.
 
 `PATCH /api/projects/:id` accepts `queue_paused`. The flag is persisted across

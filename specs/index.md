@@ -62,7 +62,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [009](009-model-picker.md) | Cross-provider model and favourite selection |
 | [010](010-working-indicator.md) | Live turn progress and the finished-turn summary line |
 | [011](011-prompt-bar-usage.md) | Fuzzy models, context ring, every subscription window |
-| [012](012-task-queue.md) | Queued prompts, editing, deletion and project scheduling, project Pause/Resume |
+| [012](012-task-queue.md) | Queued prompts, current task priority, project order, editing, deletion and Pause/Resume |
 | [082](082-tool-approvals.md) | Tool approvals, run modes, allowing a command, tool or all for the task, async questions, and saved answers |
 | [083](083-background-tasks.md) | Background shells and subagents kept in conversation order with status and running time |
 | [020](020-task-titles.md) | Instant first-line title, refined by an isolated small model |

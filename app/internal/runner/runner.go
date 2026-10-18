@@ -81,6 +81,7 @@ type Runner struct {
 	mu             sync.Mutex
 	active         map[string]activeTurn       // session id -> turn in flight
 	sched          map[int64]*sync.Mutex       // project id -> serializes queue dispatch
+	preferred      map[int64]string            // project id -> last task to release, guarded by mu
 	forced         map[string]forcedPrompt     // session id -> queued message to run next
 	approvals      map[string]*PendingApproval // approval id -> tool call waiting on the user
 	// allowed is what the user allowed for the rest of a task, by session id.
@@ -107,7 +108,8 @@ func New(s *store.Store, reg *agent.Registry, hub *Hub) *Runner {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Runner{store: s, registry: reg, hub: hub, lifetime: ctx, cancelLifetime: cancel,
 		active: make(map[string]activeTurn), sched: make(map[int64]*sync.Mutex),
-		forced: make(map[string]forcedPrompt), forcedScheduleRuns: make(map[string]bool),
+		preferred: make(map[int64]string),
+		forced:    make(map[string]forcedPrompt), forcedScheduleRuns: make(map[string]bool),
 		approvals:       make(map[string]*PendingApproval),
 		allowed:         make(map[string]*allowance),
 		backgroundTasks: make(map[string]map[string]agent.BackgroundTask)}
@@ -366,6 +368,9 @@ func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage) (*store.Turn
 		defer r.turns.Done()
 		r.mu.Lock()
 		delete(r.active, sessionID)
+		// Every dispatch must see this preference, including one that wins
+		// the dispatch lock before the completion's scheduler call.
+		r.preferred[sess.ProjectID] = sessionID
 		// A forced prompt waits on the session it belongs to, not on the
 		// project: only this session's own turn could ever be in its way.
 		next, forced := r.forced[sessionID]
@@ -383,7 +388,7 @@ func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage) (*store.Turn
 		if forced {
 			go r.runForced(sess.ProjectID, next.id, next.done)
 		} else {
-			go r.schedule(sess.ProjectID, sessionID)
+			go r.schedule(sess.ProjectID)
 		}
 	}
 	turn, err := r.store.StartTurn(sessionID, sess.Model, sess.Effort)
@@ -459,7 +464,7 @@ func (r *Runner) Enqueue(sessionID, prompt string) ([]store.QueuedMessage, error
 	if err != nil {
 		return nil, err
 	}
-	r.schedule(sess.ProjectID, "")
+	r.schedule(sess.ProjectID)
 	return r.store.ListQueuedMessages(sessionID)
 }
 
@@ -631,7 +636,7 @@ func (r *Runner) runForced(projectID int64, queuedID int64, done chan<- error) {
 		}
 	}
 	done <- err
-	r.dispatch(projectID, "")
+	r.dispatch(projectID)
 }
 
 // sendQueued makes a queued prompt's saved choice the session's choice just
@@ -673,11 +678,11 @@ func (r *Runner) dispatchLock(projectID int64) *sync.Mutex {
 // A caller that arrives mid-dispatch waits for it instead of giving up. The
 // turn the other dispatch started can already have ended by then, and the
 // queue would sit there with nobody left to drain it.
-func (r *Runner) schedule(projectID int64, preferredSessionID string) {
+func (r *Runner) schedule(projectID int64) {
 	lock := r.dispatchLock(projectID)
 	lock.Lock()
 	defer lock.Unlock()
-	r.dispatch(projectID, preferredSessionID)
+	r.dispatch(projectID)
 }
 
 // SetProjectQueuePaused lets active turns finish and gates automatic dispatch.
@@ -689,13 +694,13 @@ func (r *Runner) SetProjectQueuePaused(projectID int64, paused bool) error {
 		return err
 	}
 	if !paused {
-		r.dispatch(projectID, "")
+		r.dispatch(projectID)
 	}
 	return nil
 }
 
 // dispatch is schedule's body, with the project's dispatch lock already held.
-func (r *Runner) dispatch(projectID int64, preferredSessionID string) {
+func (r *Runner) dispatch(projectID int64) {
 	project, err := r.store.GetProject(projectID)
 	if err != nil || project.QueuePaused {
 		return
@@ -704,8 +709,18 @@ func (r *Runner) dispatch(projectID int64, preferredSessionID string) {
 		return
 	}
 
+	r.mu.Lock()
+	preferredSessionID := r.preferred[projectID]
+	r.mu.Unlock()
 	sess, queued, err := r.store.NextQueuedRun(projectID, preferredSessionID, time.Now().UnixMilli())
 	if err != nil || queued == nil {
+		if err == nil {
+			r.mu.Lock()
+			if r.preferred[projectID] == preferredSessionID {
+				delete(r.preferred, projectID)
+			}
+			r.mu.Unlock()
+		}
 		return
 	}
 	// A prompt the provider was away for is already back in the queue under a

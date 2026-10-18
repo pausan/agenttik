@@ -103,7 +103,7 @@ func (r *Runner) RunQueueRetries(ctx context.Context) {
 			// project is free, behind nothing and ahead of nothing. Waiting on
 			// a provider was never a reason to jump the queue.
 			for _, projectID := range projects {
-				go r.schedule(projectID, "")
+				go r.schedule(projectID)
 			}
 		}
 	}

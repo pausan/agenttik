@@ -8,6 +8,89 @@ import (
 	"github.com/pausan/agenttik/app/internal/store"
 )
 
+func TestProjectQueueDrainsCurrentTaskBeforeTaskOrder(t *testing.T) {
+	for _, trigger := range []string{"completion", "scheduler", "resume"} {
+		t.Run(trigger, func(t *testing.T) {
+			gate := make(chan struct{})
+			r, st, current := setup(t, &fakeProvider{gate: gate})
+			t.Cleanup(r.Shutdown)
+			for _, id := range []string{"top", "middle"} {
+				sess := *current
+				sess.ID = id
+				if err := st.CreateSession(&sess); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := st.ReorderSessions(current.ProjectID, []string{"top", "middle", current.ID}); err != nil {
+				t.Fatal(err)
+			}
+			events, unsubscribe := r.Hub().Subscribe(ProjectTopic(current.ProjectID))
+			defer unsubscribe()
+			if _, err := r.Send(current.ID, "initial"); err != nil {
+				t.Fatal(err)
+			}
+			// Queue in a different order from the sidebar, with more work for
+			// the current task even though it is last in the project.
+			for _, item := range []struct{ id, prompt string }{
+				{"middle", "middle first"}, {"top", "top first"},
+				{current.ID, "continue first"}, {current.ID, "continue second"},
+			} {
+				if _, err := r.Enqueue(item.id, item.prompt); err != nil {
+					t.Fatal(err)
+				}
+			}
+			nextStarted := func(want string) {
+				t.Helper()
+				for {
+					select {
+					case ev := <-events:
+						if ev.Event.Type == "started" {
+							if ev.Prompt != want {
+								t.Fatalf("started %q in %s, want %q", ev.Prompt, ev.SessionID, want)
+							}
+							return
+						}
+					case <-time.After(2 * time.Second):
+						t.Fatalf("timed out waiting for %q", want)
+					}
+				}
+			}
+			nextStarted("initial")
+			if trigger == "scheduler" {
+				// Let a different dispatch win the lock after completion.
+				lock := r.dispatchLock(current.ProjectID)
+				lock.Lock()
+				gate <- struct{}{}
+				waitFor(t, func() bool { return !r.Running(current.ID) }, "initial turn to release")
+				r.dispatch(current.ProjectID)
+				lock.Unlock()
+			} else if trigger == "resume" {
+				if err := r.SetProjectQueuePaused(current.ProjectID, true); err != nil {
+					t.Fatal(err)
+				}
+				gate <- struct{}{}
+				waitFor(t, func() bool { return !r.Running(current.ID) }, "paused turn to release")
+				if err := r.SetProjectQueuePaused(current.ProjectID, false); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				gate <- struct{}{}
+			}
+			nextStarted("continue first")
+			// Work accepted while the queue drains retains the same priority.
+			if _, err := r.Enqueue(current.ID, "continue third"); err != nil {
+				t.Fatal(err)
+			}
+			for _, want := range []string{"continue second", "continue third", "top first", "middle first"} {
+				gate <- struct{}{}
+				nextStarted(want)
+			}
+			gate <- struct{}{}
+			waitFor(t, func() bool { return !r.Busy() }, "project queue to finish")
+		})
+	}
+}
+
 func TestDeleteQueuedKeepsRunningTurnAndOtherPrompts(t *testing.T) {
 	r, st, sess := setup(t, &fakeProvider{gate: make(chan struct{})})
 	t.Cleanup(r.Shutdown)
@@ -162,9 +245,8 @@ func TestProjectPauseKeepsCurrentTurnAndBlocksAllQueuedTasks(t *testing.T) {
 	}
 	close(gate)
 	waitFor(t, func() bool { return !r.Running(sess.ID) }, "active turn to finish")
-	// Exercise both the completion path's preference and a later scheduler tick.
-	r.schedule(sess.ProjectID, sess.ID)
-	r.schedule(sess.ProjectID, "")
+	// Exercise a later scheduler tick as well as turn completion.
+	r.schedule(sess.ProjectID)
 	for _, id := range []string{sess.ID, other.ID} {
 		if n, err := st.QueueCount(id); err != nil || n != 1 {
 			t.Fatalf("queue %s = %d, %v", id, n, err)

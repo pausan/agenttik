@@ -521,10 +521,10 @@ func (s *Store) NextQueuedRun(projectID int64, preferredSessionID string, now in
 
 	if preferredSessionID != "" {
 		sess, err := s.GetSession(preferredSessionID)
-		if err != nil {
+		if err != nil && !errors.Is(err, ErrNotFound) {
 			return nil, nil, err
 		}
-		if sess.ProjectID == projectID {
+		if sess != nil && sess.ProjectID == projectID {
 			if sess, queued, err := ready(sess); err != nil || queued != nil {
 				return sess, queued, err
 			}

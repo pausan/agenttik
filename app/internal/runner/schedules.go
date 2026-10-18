@@ -31,7 +31,7 @@ const defaultInterval = 15 * time.Minute
 func (r *Runner) RunSchedules(ctx context.Context) {
 	if projects, err := r.store.QueuedScheduleProjects(time.Now().UnixMilli()); err == nil {
 		for _, projectID := range projects {
-			r.schedule(projectID, "")
+			r.schedule(projectID)
 		}
 	}
 	ticker := time.NewTicker(scheduleTick)
@@ -63,7 +63,7 @@ func (r *Runner) tickSchedules(now time.Time) {
 	for _, s := range due {
 		if !projects[s.ProjectID] {
 			projects[s.ProjectID] = true
-			r.schedule(s.ProjectID, "")
+			r.schedule(s.ProjectID)
 		}
 	}
 }

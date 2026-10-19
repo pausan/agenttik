@@ -111,3 +111,54 @@ func TestWatcherReleasesDescriptors(t *testing.T) {
 		t.Errorf("after 5 watcher cycles: %d descriptors, baseline %d", got, baseline)
 	}
 }
+
+// A large project used to be watched depth first until a directory cap, which
+// on macOS spent more descriptors than the process may hold. The budget is
+// spent level by level, and a directory too big for what is left is skipped
+// along with everything under it.
+func TestTreeWatchBudget(t *testing.T) {
+	root := t.TempDir()
+	files := map[string]int{"a": 3, "a/deep": 1, "b": 2, "big": 20}
+	for dir, n := range files {
+		if err := os.MkdirAll(filepath.Join(root, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		for f := range n {
+			if err := os.WriteFile(filepath.Join(root, dir, fmt.Sprintf("f%d", f)), nil, 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	noSkip := func(string) bool { return false }
+
+	for _, tc := range []struct {
+		name    string
+		left    int
+		perFile bool
+	}{
+		// root 1+3, a 1+4, b 1+2 fit in 13; big (21) and a/deep (2) do not.
+		{"descriptors", 13, true},
+		// One per directory: root, a, b — the level below waits its turn.
+		{"directories", 3, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fsw, err := fsnotify.NewWatcher()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer fsw.Close()
+			tree := &treeWatch{fsw: fsw, skip: noSkip, left: tc.left, perFile: tc.perFile}
+			tree.add(root)
+
+			got := map[string]bool{}
+			for _, path := range fsw.WatchList() {
+				rel, _ := filepath.Rel(root, path)
+				got[rel] = true
+			}
+			want := map[string]bool{".": true, "a": true, "b": true}
+			if fmt.Sprint(got) != fmt.Sprint(want) {
+				t.Errorf("watched %v, want %v", got, want)
+			}
+		})
+	}
+}

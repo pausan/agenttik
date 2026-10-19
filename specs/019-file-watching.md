@@ -49,13 +49,22 @@ a build that writes for a minute still reports every two seconds.
 --directory` names the subtrees to leave alone, on top of the `skipDirs` the
 listing already skips. A `target/` or `dist/` can hold more files than the
 project and none of them ever reach either pane, so watching one would spend
-descriptors to wake the UI for nothing. Watches are capped at 4096 directories:
-the allowance is shared with the user's editor. The cap bounds the walk rather
-than the descriptors on macOS, where kqueue opens one per file in every watched
-directory rather than one for the lot as inotify does — fsnotify must be v1.10.1
-or newer, which is the first release whose `Close` hands those back.
-The descriptor-release regression test runs on macOS, where kqueue allocates
-per-file descriptors; the event-filter tests run on every platform.
+descriptors to wake the UI for nothing.
+
+**Watches are budgeted, nearest levels first.** inotify spends one watch per
+directory, from an allowance shared with the user's editor: the cap there is
+4096 directories. kqueue (macOS) opens a descriptor for every file in a watched
+directory as well as for the directory, so there the cap is 8192 descriptors.
+Capping directories alone was not enough: two real projects needed about 53k
+and 66k descriptors, past the process's 61440, and from then on every socket
+the app opened failed — the HTTP server stopped accepting for good. The walk
+goes level by level, so a large project loses its deepest folders rather than
+whole branches near the root; a directory larger than what is left is skipped
+with everything under it. Measured on those two projects, starting the watcher
+went from 2–3 s to about 250 ms. Changes in folders left out do not refresh
+the panes. fsnotify must be v1.10.1 or newer, the first release whose `Close`
+hands kqueue's descriptors back. The descriptor-release regression test runs on
+macOS; the budget and event-filter tests run on every platform.
 
 **`.git` is watched one level deep.** Staging, committing and switching
 branches move `index` or `HEAD` without touching the working tree. It is not

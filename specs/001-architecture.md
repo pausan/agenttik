@@ -66,6 +66,12 @@ calls up front; Claude Code and Codex keep their stdin open for the turn and
 ask about the rest, and put questions, mid-flight, which any connected window
 can answer ([082](082-tool-approvals.md)).
 
+Fiber runs on fasthttp, which stops serving for good on any accept error other
+than a timeout, leaving the port open with nobody accepting. `Server.Listener`
+therefore wraps the listener in `retryAccept`: running out of descriptors
+(`EMFILE`, `ENFILE`) is waited out with a backoff of 5 ms up to 1 s, as net/http
+does, and logged.
+
 ## Packages
 
 Three top-level directories hold code: `app/` is the Go application, `web/` the

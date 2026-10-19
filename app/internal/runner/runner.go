@@ -549,6 +549,7 @@ func (r *Runner) DeleteQueued(sessionID string, queuedID int64) error {
 			r.publishSchedule(sess.ProjectID)
 		}
 	}
+	go r.schedule(sess.ProjectID)
 	return nil
 }
 
@@ -791,6 +792,7 @@ func (r *Runner) Stop(sessionID string) error {
 			r.publishSchedule(sess.ProjectID)
 		}
 	}
+	go r.schedule(sess.ProjectID)
 	return nil
 }
 

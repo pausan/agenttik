@@ -16,6 +16,8 @@ the section says so and points at the Options pane.
 **Remove project from agenttik** asks for confirmation in a dialog with the
 same title and a **Remove** button. It deletes the project's tasks and history
 from agenttik. The folder on disk is untouched by either action.
+Deletion pauses the project queue before stopping tasks, so removing a held
+provider retry cannot start another task during cleanup.
 
 Archive is refused while the project is busy — any task running or with a
 queued prompt, or a schedule mid-run. The button is disabled and says why.

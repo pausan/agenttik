@@ -44,10 +44,17 @@ func TestNextQueuedRunPrefersCurrentTaskThenProjectOrder(t *testing.T) {
 		must(t, st.RemoveQueuedMessage(q.ID))
 	}
 	check("current", "top")
-	// A provider retry delay still lets ready work in other tasks run.
-	_, err = st.RequeueMessage(QueuedMessage{SessionID: "current", Prompt: "retry", Provider: "fake", Model: "m1"},
+	// A provider retry holds all other queued tasks until it can continue.
+	retry, err := st.RequeueMessage(QueuedMessage{SessionID: "current", Prompt: "retry", Provider: "fake", Model: "m1"},
 		now+time.Hour.Milliseconds(), "rate limit")
 	must(t, err)
+	for _, preferred := range []string{"current", "top", ""} {
+		sess, q, err := st.NextQueuedRun(p.ID, preferred, now)
+		if err != nil || sess != nil || q != nil {
+			t.Fatalf("waiting retry allowed dispatch: %+v, %+v, %v", sess, q, err)
+		}
+	}
+	must(t, st.RemoveQueuedMessage(retry.ID))
 	q := check("current", "top")
 	must(t, st.RemoveQueuedMessage(q.ID))
 	check("current", "middle")
@@ -76,8 +83,8 @@ func TestRetryBlocksLaterPromptsInItsTask(t *testing.T) {
 		t.Fatalf("waiting task offered %+v, %v", q, err)
 	}
 	sess, q, err := st.NextQueuedRun(p.ID, "waiting", now)
-	if err != nil || sess == nil || sess.ID != "ready" || q == nil || q.Prompt != "other task" {
-		t.Fatalf("ready task = %+v, %+v, %v", sess, q, err)
+	if err != nil || sess != nil || q != nil {
+		t.Fatalf("waiting retry allowed other task: %+v, %+v, %v", sess, q, err)
 	}
 	projects, err := st.RetryProjects(retry.RetryAt - 1)
 	if err != nil || len(projects) != 0 {
@@ -87,14 +94,45 @@ func TestRetryBlocksLaterPromptsInItsTask(t *testing.T) {
 	if err != nil || len(projects) != 1 || projects[0] != p.ID {
 		t.Fatalf("due retry projects = %v, %v", projects, err)
 	}
-	q, err = st.NextQueuedMessage("waiting", retry.RetryAt)
-	if err != nil || q == nil || q.ID != retry.ID {
-		t.Fatalf("due prompt = %+v, %v", q, err)
+	for _, preferred := range []string{"waiting", "ready", ""} {
+		sess, q, err := st.NextQueuedRun(p.ID, preferred, retry.RetryAt)
+		if err != nil || sess == nil || sess.ID != "waiting" || q == nil || q.ID != retry.ID {
+			t.Fatalf("due retry lost priority: %+v, %+v, %v", sess, q, err)
+		}
 	}
 	must(t, st.RemoveQueuedMessage(retry.ID))
 	q, err = st.NextQueuedMessage("waiting", retry.RetryAt)
 	if err != nil || q == nil || q.ID != later.ID {
 		t.Fatalf("follow-up = %+v, %v", q, err)
+	}
+}
+
+func TestRetryPrioritySurvivesReopen(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "retry.db")
+	st, err := Open(path)
+	must(t, err)
+	t.Cleanup(func() { st.Close() })
+	p, err := st.CreateProject("queue", t.TempDir())
+	must(t, err)
+	for _, id := range []string{"current", "other"} {
+		must(t, st.CreateSession(&Session{ID: id, ProjectID: p.ID, Provider: "fake", Model: "m1"}))
+	}
+	_, err = st.EnqueueMessage("other", "other model", "fake", 0, "m2", "")
+	must(t, err)
+	now := time.Now().UnixMilli()
+	retry, err := st.RequeueMessage(QueuedMessage{SessionID: "current", Prompt: "retry",
+		Provider: "fake", Model: "m1", CreatedAt: now}, now+time.Minute.Milliseconds(), "model is at capacity")
+	must(t, err)
+	must(t, st.Close())
+	st, err = Open(path)
+	must(t, err)
+	sess, q, err := st.NextQueuedRun(p.ID, "", now)
+	if err != nil || sess != nil || q != nil {
+		t.Fatalf("restart released capacity wait: %+v, %+v, %v", sess, q, err)
+	}
+	sess, q, err = st.NextQueuedRun(p.ID, "", retry.RetryAt)
+	if err != nil || sess == nil || sess.ID != "current" || q == nil || q.ID != retry.ID {
+		t.Fatalf("restart lost retry priority: %+v, %+v, %v", sess, q, err)
 	}
 }
 

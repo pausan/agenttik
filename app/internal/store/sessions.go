@@ -506,9 +506,9 @@ func (s *Store) QueueCount(sessionID string) (int64, error) {
 // own queue drains before the scheduler returns to the projects top-to-bottom
 // scan.
 //
-// Session and prompt are chosen together because a session can hold prompts
-// and still have nothing to run: one waiting out a provider outage is passed
-// over so the ready work below it is not starved for the length of the wait.
+// A provider retry keeps priority over every other queued task, including
+// while its deadline is in the future. Reading that priority from the queue
+// preserves it across restarts and completions of explicitly parallel turns.
 func (s *Store) NextQueuedRun(projectID int64, preferredSessionID string, now int64) (*Session, *QueuedMessage, error) {
 	ready := func(sess *Session) (*Session, *QueuedMessage, error) {
 		if sess.QueueCount == 0 {
@@ -519,6 +519,22 @@ func (s *Store) NextQueuedRun(projectID int64, preferredSessionID string, now in
 			return nil, nil, err
 		}
 		return sess, queued, nil
+	}
+
+	var retrySessionID string
+	err := s.db.QueryRow(`SELECT q.session_id FROM queued_messages q
+		JOIN sessions s ON s.id = q.session_id
+		WHERE s.project_id = ? AND s.done_at = 0 AND q.retry_count > 0
+		ORDER BY q.created_at, q.id LIMIT 1`, projectID).Scan(&retrySessionID)
+	if err == nil {
+		sess, err := s.GetSession(retrySessionID)
+		if err != nil {
+			return nil, nil, err
+		}
+		return ready(sess)
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return nil, nil, fmt.Errorf("next queued retry: %w", err)
 	}
 
 	if preferredSessionID != "" {

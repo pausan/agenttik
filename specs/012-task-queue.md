@@ -5,7 +5,7 @@ A prompt can be queued with the Send menu or Enter (rebindable — see
 a clock in the task lists.
 
 Each project runs queued prompts only after its active turns finish. The
-current task keeps priority while it has ready queued prompts, even when tasks
+current task keeps priority while it has queued prompts, even when tasks
 above it have waiting prompts or the user reorders the list. Prompts added to
 that task while it runs keep the same priority. Within a task, prompts run in
 acceptance order. Once its queue drains, the scheduler picks the next task
@@ -14,11 +14,14 @@ with ready prompts from the project's open tasks, top to bottom in the sidebar.
 The runner remembers the task that most recently finished a turn for every
 project. All automatic dispatch uses that preference, including new enqueues,
 schedule and retry ticks, and Resume after a pause. Competing dispatch calls
-cannot lose it between turns. A deleted task or one without ready prompts is
-skipped; a provider retry delay holds later prompts in that task while other
-tasks can run ([045](045-provider-outage-retry.md)).
-The preference lives in memory: after an app restart, selection starts at the
-top of the project list.
+cannot lose it between turns. A deleted task or one without queued prompts is
+skipped. A provider retry holds the entire project's automatic queue, even
+for other models, until the current task can continue
+([045](045-provider-outage-retry.md)). Running and explicitly forced turns
+remain allowed; other projects keep running.
+The ordinary preference lives in memory: after an app restart, selection starts
+at the top of the project list. A saved provider retry keeps its priority across
+restarts and parallel task completions.
 
 A queued prompt is visible where it will run: the transcript draws one dashed
 bubble per waiting prompt under the working indicator, each with a timer of how
@@ -81,6 +84,8 @@ already claimed by a turn returns 404. Queue counts and other windows refresh
 through the usual session-change event. Removing the last provider retry
 returns a waiting task to idle; removing the last prompt from an unstarted
 scheduled run closes that run as interrupted without spending its counter.
+Deleting a held retry also reschedules the project so other queued work can
+continue if no retry remains.
 
 ## Reconciling the queue
 

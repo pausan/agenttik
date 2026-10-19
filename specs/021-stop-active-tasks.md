@@ -7,6 +7,7 @@ Stop cancels the running turn and removes every queued prompt for that task, so
 the project scheduler cannot start it again later. It is also what returns a
 task waiting out a provider outage to idle
 ([045](045-provider-outage-retry.md)).
+Stopping that waiting task releases the project's queue for other tasks.
 
 Queued prompts move into the saved transcript as user messages, in queue
 order, in the same database transaction that removes them from the queue.

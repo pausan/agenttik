@@ -57,16 +57,22 @@ click: **Send now** on the bubble tries immediately, **Stop** drops the prompt
 and returns the task to idle.
 
 A clock ticks every fifteen seconds, asks which projects hold a prompt whose
-wait is over, and hands each to the ordinary scheduler. Waiting on a provider
-was never a reason to jump a queue, so a released prompt runs when its project
-is free, behind nothing and ahead of nothing.
+wait is over, and hands each to the ordinary scheduler. The held task gets
+the next automatic turn once its project has no active turns.
 
-## Not starving the ready work
+## Keeping the current task first
 
 The oldest prompt must be ready before its task can run. A held retry blocks
-later queued prompts in that task until it can continue. The scheduler passes
-over that task so fresh work in other tasks in the same project can run.
-Explicit Send now and Force send still bypass the queue on request.
+all automatic queue dispatch in its project, including tasks using other
+models, providers or subscriptions. The saved retry keeps priority across
+restarts and after another task finishes a parallel turn. If several tasks
+hold retries, the oldest accepted retry goes first. After recovery, the task
+drains its own queue before the scheduler moves to another task.
+
+Already running turns finish normally. Explicit Send, Send now and Force send
+still start work on request; finishing that work does not release the hold.
+Other projects keep running. Stopping the held task or deleting its retry
+releases the project queue immediately.
 
 ## What the transcript keeps
 

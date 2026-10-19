@@ -243,7 +243,7 @@ test("a provider outage queues the prompt instead of losing it", async ({ page }
   await expect(page.getByText("You", { exact: true })).toHaveCount(0);
 });
 
-test("a model capacity wait counts down and clears after automatic recovery", async ({ page }) => {
+test("a model capacity wait holds the project queue until automatic recovery", async ({ page, agenttik }) => {
   test.setTimeout(65_000);
   await addProject(page);
   await openProject(page);
@@ -259,6 +259,17 @@ test("a model capacity wait counts down and clears after automatic recovery", as
   await expect(queued).toContainText(/retrying in 0:[0-3]\d/);
   await expect(page.getByText("You", { exact: true })).toHaveCount(0);
 
+  const [current] = await (await page.request.get(`${agenttik.url}/api/sessions`)).json();
+  const other = await (await page.request.post(`${agenttik.url}/api/sessions`, {
+    data: { project_id: current.project_id, provider: "fake", model: "fake-careful", title: "Another model" },
+  })).json();
+  const waiting = await (await page.request.post(`${agenttik.url}/api/sessions/${other.id}/queue`, {
+    data: { prompt: "another model's queued task" },
+  })).json();
+  expect(waiting.queue_count).toBe(1);
+  const otherDetail = await (await page.request.get(`${agenttik.url}/api/sessions/${other.id}`)).json();
+  expect(otherDetail.turns).toHaveLength(0);
+
   // Give the fake provider a successful reply for the next attempt. Editing
   // keeps the retry deadline; the real backend clock must start it unaided.
   await queued.getByRole("button", { name: "Edit queued prompt" }).click();
@@ -270,6 +281,10 @@ test("a model capacity wait counts down and clears after automatic recovery", as
   await expect(page.getByText("You", { exact: true })).toBeVisible();
   await expect(page.getByText(failure, { exact: true })).toHaveCount(0);
   await expect(page.getByText("Waiting for Fake")).toHaveCount(0);
+  await expect.poll(async () => {
+    const detail = await (await page.request.get(`${agenttik.url}/api/sessions/${other.id}`)).json();
+    return detail.queued.length === 0 && detail.turns.length === 1 && !detail.running;
+  }).toBe(true);
 });
 
 test("a second prompt queues behind a running turn and runs in order", async ({ page }) => {
@@ -277,7 +292,7 @@ test("a second prompt queues behind a running turn and runs in order", async ({ 
   await openProject(page);
   await newTask(page);
   await pickModel(page);
-  await sendPrompt(page, "@wait 1000");
+  await sendPrompt(page, "@wait 5000");
   await expect(page.getByText("running", { exact: true })).toBeVisible();
 
   await page.getByPlaceholder("Ask the agent…").fill("second prompt");

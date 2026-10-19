@@ -98,9 +98,8 @@ func (r *Runner) RunQueueRetries(ctx context.Context) {
 			if err != nil {
 				continue
 			}
-			// The ordinary scheduler: the prompt is ready, so it runs when the
-			// project is free, behind nothing and ahead of nothing. Waiting on
-			// a provider was never a reason to jump the queue.
+			// The ordinary scheduler keeps the held task first, starting its
+			// retry once the project's active turns have finished.
 			for _, projectID := range projects {
 				go r.schedule(projectID)
 			}

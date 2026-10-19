@@ -203,6 +203,11 @@ func (s *Server) deleteProject(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
+	// Removing a held retry normally releases the queue. Keep it paused while
+	// stopping this project's tasks so deletion cannot start another one.
+	if err := s.runner.SetProjectQueuePaused(id, true); err != nil {
+		return err
+	}
 	for _, session := range sessions {
 		s.runner.Stop(session.ID)
 	}

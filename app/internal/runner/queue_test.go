@@ -266,6 +266,148 @@ func TestProjectPauseKeepsCurrentTurnAndBlocksAllQueuedTasks(t *testing.T) {
 	}, "both task queues to drain after resume")
 }
 
+func TestCapacityWaitHoldsProjectQueue(t *testing.T) {
+	gate := make(chan struct{})
+	r, st, current := setup(t, &fakeProvider{gate: gate})
+	t.Cleanup(r.Shutdown)
+	for _, id := range []string{"active", "other"} {
+		sess := *current
+		sess.ID, sess.Model = id, "m2"
+		if err := st.CreateSession(&sess); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := r.Send("active", "already running"); err != nil {
+		t.Fatal(err)
+	}
+	retry, err := st.RequeueMessage(store.QueuedMessage{SessionID: current.ID, Prompt: "retry",
+		Provider: current.Provider, Model: current.Model, CreatedAt: time.Now().UnixMilli()},
+		time.Now().Add(time.Hour).UnixMilli(), capacityFailure)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetSessionStatus(current.ID, store.StatusWaiting); err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range []struct{ id, prompt string }{
+		{"active", "after active"}, {"other", "forced"}, {current.ID, "follow-up"},
+	} {
+		if _, err := r.Enqueue(item.id, item.prompt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !r.Running("active") {
+		t.Fatal("capacity wait stopped an already running task")
+	}
+	gate <- struct{}{}
+	waitFor(t, func() bool { return !r.Running("active") }, "already running task to finish")
+	r.schedule(current.ProjectID)
+	if r.Busy() {
+		t.Fatal("another queued task started during capacity wait")
+	}
+
+	otherQueue, err := st.ListQueuedMessages("other")
+	if err != nil || len(otherQueue) != 1 {
+		t.Fatalf("other model's queue = %+v, %v", otherQueue, err)
+	}
+	if err := r.ForceQueued("other", otherQueue[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if !r.Running("other") {
+		t.Fatal("explicitly forced task did not run")
+	}
+	if _, err := r.Enqueue("other", "after forced"); err != nil {
+		t.Fatal(err)
+	}
+	gate <- struct{}{}
+	waitFor(t, func() bool { return !r.Running("other") }, "forced task to finish")
+	r.schedule(current.ProjectID)
+	if r.Busy() {
+		t.Fatal("forced task completion released the capacity hold")
+	}
+
+	p, err := st.CreateProject("independent", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	elsewhere := *current
+	elsewhere.ID, elsewhere.ProjectID = "elsewhere", p.ID
+	if err := st.CreateSession(&elsewhere); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Enqueue(elsewhere.ID, "other project"); err != nil {
+		t.Fatal(err)
+	}
+	if !r.Running(elsewhere.ID) {
+		t.Fatal("capacity wait blocked another project")
+	}
+	gate <- struct{}{}
+	waitFor(t, func() bool { return !r.Running(elsewhere.ID) }, "other project to finish")
+
+	// Expire the retry. The held task must regain the project ahead of the
+	// parallel task that most recently finished, then drain its own queue.
+	if err := st.RemoveQueuedMessage(retry.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.RequeueMessage(*retry, time.Now().Add(-time.Second).UnixMilli(), capacityFailure); err != nil {
+		t.Fatal(err)
+	}
+	r.schedule(current.ProjectID)
+	if !r.Running(current.ID) || r.Running("active") || r.Running("other") {
+		t.Fatal("recovery did not start the held task first")
+	}
+	gate <- struct{}{}
+	waitFor(t, func() bool {
+		messages, _ := st.ListMessages(current.ID)
+		return len(messages) == 2 && messages[1].Content == "follow-up"
+	}, "held task's follow-up to start")
+	for _, id := range []string{"active", "other"} {
+		if n, err := st.QueueCount(id); err != nil || n != 1 {
+			t.Fatalf("%s queue = %d, %v; wanted held task to keep priority", id, n, err)
+		}
+	}
+	close(gate)
+	waitFor(t, func() bool {
+		a, _ := st.QueueCount("active")
+		b, _ := st.QueueCount("other")
+		return a == 0 && b == 0 && !r.Busy()
+	}, "project queue to drain after recovery")
+}
+
+func TestRemovingRetryReleasesProjectQueue(t *testing.T) {
+	for _, action := range []string{"stop", "delete"} {
+		t.Run(action, func(t *testing.T) {
+			r, st, current := setup(t, &fakeProvider{})
+			t.Cleanup(r.Shutdown)
+			other := *current
+			other.ID = "other"
+			if err := st.CreateSession(&other); err != nil {
+				t.Fatal(err)
+			}
+			retry, err := st.RequeueMessage(store.QueuedMessage{SessionID: current.ID, Prompt: "retry",
+				Provider: current.Provider, Model: current.Model}, time.Now().Add(time.Hour).UnixMilli(), capacityFailure)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := r.Enqueue(other.ID, "next task"); err != nil {
+				t.Fatal(err)
+			}
+			if action == "stop" {
+				err = r.Stop(current.ID)
+			} else {
+				err = r.DeleteQueued(current.ID, retry.ID)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			waitFor(t, func() bool {
+				messages, _ := st.ListMessages(other.ID)
+				return len(messages) == 1 && !r.Running(other.ID)
+			}, "queue to resume after removing capacity hold")
+		})
+	}
+}
+
 func TestProjectPauseDoesNotBlockOtherProjects(t *testing.T) {
 	r, st, sess := setup(t, &fakeProvider{})
 	t.Cleanup(r.Shutdown)

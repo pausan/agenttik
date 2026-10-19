@@ -53,6 +53,51 @@ func TestNextQueuedRunPrefersCurrentTaskThenProjectOrder(t *testing.T) {
 	check("current", "middle")
 }
 
+func TestRetryBlocksLaterPromptsInItsTask(t *testing.T) {
+	st := testStore(t)
+	p, err := st.CreateProject("queue", t.TempDir())
+	must(t, err)
+	for _, id := range []string{"waiting", "ready"} {
+		must(t, st.CreateSession(&Session{ID: id, ProjectID: p.ID, Provider: "fake", Model: "m1"}))
+	}
+	later, err := st.EnqueueMessage("waiting", "later", "fake", 0, "m1", "")
+	must(t, err)
+	// Even in the same acceptance millisecond, the reinserted retry must
+	// keep its place ahead of a follow-up that now has a smaller row id.
+	retry, err := st.RequeueMessage(QueuedMessage{SessionID: "waiting", Prompt: "retry",
+		Provider: "fake", Model: "m1", CreatedAt: later.CreatedAt},
+		later.CreatedAt+time.Minute.Milliseconds(), "model is at capacity")
+	must(t, err)
+	_, err = st.EnqueueMessage("ready", "other task", "fake", 0, "m1", "")
+	must(t, err)
+	now := later.CreatedAt
+	q, err := st.NextQueuedMessage("waiting", now)
+	if err != nil || q != nil {
+		t.Fatalf("waiting task offered %+v, %v", q, err)
+	}
+	sess, q, err := st.NextQueuedRun(p.ID, "waiting", now)
+	if err != nil || sess == nil || sess.ID != "ready" || q == nil || q.Prompt != "other task" {
+		t.Fatalf("ready task = %+v, %+v, %v", sess, q, err)
+	}
+	projects, err := st.RetryProjects(retry.RetryAt - 1)
+	if err != nil || len(projects) != 0 {
+		t.Fatalf("early retry projects = %v, %v", projects, err)
+	}
+	projects, err = st.RetryProjects(retry.RetryAt)
+	if err != nil || len(projects) != 1 || projects[0] != p.ID {
+		t.Fatalf("due retry projects = %v, %v", projects, err)
+	}
+	q, err = st.NextQueuedMessage("waiting", retry.RetryAt)
+	if err != nil || q == nil || q.ID != retry.ID {
+		t.Fatalf("due prompt = %+v, %v", q, err)
+	}
+	must(t, st.RemoveQueuedMessage(retry.ID))
+	q, err = st.NextQueuedMessage("waiting", retry.RetryAt)
+	if err != nil || q == nil || q.ID != later.ID {
+		t.Fatalf("follow-up = %+v, %v", q, err)
+	}
+}
+
 func TestProjectQueuePauseSurvivesReopen(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "paused.db")
 	st, err := Open(path)

@@ -310,10 +310,11 @@ const queuedCols = `id, session_id, prompt, provider, account_id, model, effort,
 	retry_at, retry_count, retry_error`
 
 // queuedOrder is the order a session's queue runs in: when each prompt was
-// accepted, id breaking a tie inside one millisecond. Acceptance time rather
-// than id, because a prompt put back after an outage keeps the time it was
-// accepted with and so returns to the place it left. See RequeueMessage.
-const queuedOrder = ` ORDER BY created_at, id`
+// accepted, id breaking a tie inside one millisecond. A retried prompt wins
+// that tie so later prompts cannot pass it when it is reinserted with a new id.
+// Acceptance time rather than id keeps a requeued prompt in its original
+// place. See RequeueMessage.
+const queuedOrder = ` ORDER BY created_at, (retry_count > 0) DESC, id`
 
 func scanQueued(row interface{ Scan(...any) error }) (*QueuedMessage, error) {
 	v := &QueuedMessage{}
@@ -358,18 +359,19 @@ func (s *Store) RequeueMessage(v QueuedMessage, retryAt int64, failure string) (
 	return &v, nil
 }
 
-// NextQueuedMessage returns the oldest prompt in one session that is ready to
-// run at now. A prompt held back for a retry is still queued — it is drawn,
-// counted and can be forced — but it is not offered to the scheduler until
-// its wait is over.
+// NextQueuedMessage returns the oldest prompt only when it is ready to run.
+// A retry holds later prompts in the same task until its wait is over.
 func (s *Store) NextQueuedMessage(sessionID string, now int64) (*QueuedMessage, error) {
 	v, err := scanQueued(s.db.QueryRow(`SELECT `+queuedCols+` FROM queued_messages
-		WHERE session_id = ? AND retry_at <= ?`+queuedOrder+` LIMIT 1`, sessionID, now))
+		WHERE session_id = ?`+queuedOrder+` LIMIT 1`, sessionID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("next queued message: %w", err)
+	}
+	if v.RetryAt > now {
+		return nil, nil
 	}
 	return v, nil
 }

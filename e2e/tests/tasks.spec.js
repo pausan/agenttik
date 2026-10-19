@@ -243,6 +243,35 @@ test("a provider outage queues the prompt instead of losing it", async ({ page }
   await expect(page.getByText("You", { exact: true })).toHaveCount(0);
 });
 
+test("a model capacity wait counts down and clears after automatic recovery", async ({ page }) => {
+  test.setTimeout(65_000);
+  await addProject(page);
+  await openProject(page);
+  await newTask(page);
+  await pickModel(page);
+  const failure = "Selected model is at capacity. Please try a different model.";
+  await sendPrompt(page, `@error ${failure}`);
+
+  await expect(page.getByText("waiting", { exact: true })).toBeVisible();
+  const queued = page.getByLabel("Queued prompt", { exact: true });
+  await expect(queued).toContainText("Waiting for Fake");
+  await expect(queued).toContainText(failure);
+  await expect(queued).toContainText(/retrying in 0:[0-3]\d/);
+  await expect(page.getByText("You", { exact: true })).toHaveCount(0);
+
+  // Give the fake provider a successful reply for the next attempt. Editing
+  // keeps the retry deadline; the real backend clock must start it unaided.
+  await queued.getByRole("button", { name: "Edit queued prompt" }).click();
+  await queued.getByRole("textbox").fill("capacity recovered");
+  await queued.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(queued).toContainText(/retrying in/);
+  await expect(page.getByLabel("Queued prompt", { exact: true })).toHaveCount(0, { timeout: 50_000 });
+  await expect(page.getByText("idle", { exact: true })).toBeVisible();
+  await expect(page.getByText("You", { exact: true })).toBeVisible();
+  await expect(page.getByText(failure, { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Waiting for Fake")).toHaveCount(0);
+});
+
 test("a second prompt queues behind a running turn and runs in order", async ({ page }) => {
   await addProject(page);
   await openProject(page);

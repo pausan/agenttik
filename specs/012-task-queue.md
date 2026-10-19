@@ -15,8 +15,8 @@ The runner remembers the task that most recently finished a turn for every
 project. All automatic dispatch uses that preference, including new enqueues,
 schedule and retry ticks, and Resume after a pause. Competing dispatch calls
 cannot lose it between turns. A deleted task or one without ready prompts is
-skipped; a provider retry delay does not block other ready work
-([045](045-provider-outage-retry.md)).
+skipped; a provider retry delay holds later prompts in that task while other
+tasks can run ([045](045-provider-outage-retry.md)).
 The preference lives in memory: after an app restart, selection starts at the
 top of the project list.
 

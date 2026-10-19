@@ -69,7 +69,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [024](024-instant-prompt-echo.md) | Drawing sent and queued prompts on the keypress |
 | [028](028-scheduled-jobs.md) | Interval and calendar schedules, queued runs, and duplicate guards |
 | [033](033-prompt-model-picker.md) | Model picker groups, search and favourites settings shortcut |
-| [045](045-provider-outage-retry.md) | A prompt whose provider was away waits, and starts itself when it answers |
+| [045](045-provider-outage-retry.md) | Provider outages and model capacity waits with automatic retries |
 | [047](047-project-prompt.md) | The standing prompt a project puts in front of every conversation's first |
 
 ## Reading the transcript and the files

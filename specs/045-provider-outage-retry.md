@@ -28,7 +28,8 @@ first tick.
 
 Requeueing keeps the prompt's original acceptance time, which is what returns
 it to the place in the queue it left rather than behind whatever was queued
-while it ran. Queue order is `created_at` for the same reason. The waiting
+while it ran. Queue order is `created_at`, with retries first within the same
+millisecond so reinsertion cannot move one behind a follow-up. The waiting
 timer keeps counting from that moment too: the wait the user is being told
 about started when they sent the prompt, not when the retry was booked.
 
@@ -38,9 +39,15 @@ The request is the probe. A failed one comes back immediately and costs no
 tokens, so re-running the real prompt is both cheaper and more truthful than a
 separate health check that could disagree with the thing it stands for.
 
-The first retry is a minute out, and each failure after it doubles the wait to
-a fifteen-minute ceiling — a provider down for an afternoon is tried a couple
-of dozen times rather than three hundred. A reset the provider names beats the
+Capacity refusals, including Codex's "Selected model is at capacity. Please
+try a different model.", retry after thirty seconds on every failure. The
+fifteen-second queue clock makes the usual interval thirty to forty-five
+seconds when the project is free. The same prompt, model, subscription and
+effort are kept; the app does not choose another model.
+
+For other outages the first retry is a minute out, and each failure doubles the
+wait to a fifteen-minute ceiling — a provider down for an afternoon is tried a
+couple of dozen times rather than three hundred. A reset the provider names beats the
 backoff: Claude Code appends the instant its allowance returns to the message
 (`…usage limit reached|<unix>`), and honouring it turns a five-hour wait into
 one attempt instead of three hundred against a wall.
@@ -56,10 +63,10 @@ is free, behind nothing and ahead of nothing.
 
 ## Not starving the ready work
 
-A session holding only held prompts has nothing to run, and the scheduler is
-told the difference: it picks the session and the prompt together, and passes
-over a session that is waiting out an outage. Fresh work elsewhere in the same
-project runs at once rather than queueing behind a wait that may last hours.
+The oldest prompt must be ready before its task can run. A held retry blocks
+later queued prompts in that task until it can continue. The scheduler passes
+over that task so fresh work in other tasks in the same project can run.
+Explicit Send now and Force send still bypass the queue on request.
 
 ## What the transcript keeps
 
@@ -79,6 +86,9 @@ retry then reads as the second try it is.
 - The dashed bubble's heading names the provider it is waiting for, and a line
   under it gives the failure and a countdown to the next attempt — the whole
   answer to "is this stuck?".
+- The waiting bubble disappears when its prompt starts again. Empty failed
+  attempts leave no permanent error message; attempts that produced work keep
+  their transcript as described above.
 - A schedule whose run hit an outage keeps its run open, so it reads as busy
   and passes over its next slot instead of piling up a run an hour for the
   length of the outage. The retry closes it. See

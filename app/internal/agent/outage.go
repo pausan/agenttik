@@ -36,10 +36,19 @@ var outageSigns = []string{
 	"quota", "credit balance", "out of credits",
 }
 
+// AtCapacity identifies a temporary capacity refusal, including Codex's
+// "Selected model is at capacity. Please try a different model."
+func AtCapacity(failure string) bool {
+	return strings.Contains(strings.ToLower(failure), "at capacity")
+}
+
 // Outage reports whether a failure is the service being away, and when the
 // provider said it would be back. A zero time means it did not say, and the
 // caller picks its own delay.
 func Outage(failure string) (bool, time.Time) {
+	if AtCapacity(failure) {
+		return true, resetAt(failure)
+	}
 	text := strings.ToLower(failure)
 	for _, sign := range outageSigns {
 		if strings.Contains(text, sign) {

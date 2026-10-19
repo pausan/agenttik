@@ -14,15 +14,12 @@ import (
 // every quarter minute is a minute to the eye.
 const retryTick = 15 * time.Second
 
-// The wait between attempts. The first is a minute away — the request itself
-// is the only honest test of whether a provider is back, and a failed one
-// returns at once and costs no tokens — and each failure after it doubles the
-// wait to a quarter-hour ceiling. A provider down for an afternoon is then
-// tried a couple of dozen times rather than three hundred, and one that
-// volunteers when its allowance resets is tried once, then.
+// Other outages back off from a minute to a quarter hour. Capacity refusals
+// keep a short delay because model availability can recover at any moment.
 const (
-	retryFirst = time.Minute
-	retryMax   = 15 * time.Minute
+	retryFirst    = time.Minute
+	retryMax      = 15 * time.Minute
+	retryCapacity = 30 * time.Second
 )
 
 // retryAt is when a prompt that has just failed should be tried again. retries
@@ -30,9 +27,9 @@ const (
 //
 // A reset the provider named beats the backoff: it knows when its allowance
 // comes back and guessing shorter only burns attempts against a wall. It is
-// still not honoured below the first delay, since a reset already upon us
+// still not honoured below the minimum delay, since a reset already upon us
 // would otherwise retry straight into the same failure.
-func retryAt(now, resetAt time.Time, retries int64) time.Time {
+func retryAt(now, resetAt time.Time, retries int64, atCapacity bool) time.Time {
 	delay := retryFirst
 	for i := int64(0); i < retries && delay < retryMax; i++ {
 		delay *= 2
@@ -40,10 +37,12 @@ func retryAt(now, resetAt time.Time, retries int64) time.Time {
 	if delay > retryMax {
 		delay = retryMax
 	}
-	soonest := now.Add(retryFirst)
-	if at := now.Add(delay); at.After(soonest) {
-		soonest = at
+	// Capacity can return quickly. Keep probing every 30–45 seconds (the
+	// delay plus the queue tick), even after repeated refusals.
+	if atCapacity {
+		delay = retryCapacity
 	}
+	soonest := now.Add(delay)
 	if resetAt.After(soonest) {
 		return resetAt
 	}
@@ -66,7 +65,7 @@ func (r *Runner) holdForOutage(sess *store.Session, queued store.QueuedMessage, 
 	if !away {
 		return false
 	}
-	at := retryAt(time.Now(), resetAt, queued.RetryCount)
+	at := retryAt(time.Now(), resetAt, queued.RetryCount, agent.AtCapacity(failure))
 	if _, err := r.store.RequeueMessage(queued, at.UnixMilli(), failure); err != nil {
 		// The prompt could not be put anywhere safe, so it is reported as the
 		// failure it is rather than quietly dropped.

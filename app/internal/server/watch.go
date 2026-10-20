@@ -1,10 +1,10 @@
 package server
 
 import (
-	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -23,14 +23,20 @@ const (
 	// fsMaxWait bounds that settling: a build that keeps writing must still
 	// reach the UI instead of being pushed back for as long as it runs.
 	fsMaxWait = 2 * time.Second
-	// maxWatchDirs caps the directories one project may watch. inotify spends
-	// one descriptor on the lot, but kqueue spends one per file in every
-	// watched directory, so on macOS this bounds the walk rather than the
-	// descriptors — a large project still costs tens of thousands of them.
-	// Either allowance is shared with the user's editor and is not ours to
-	// exhaust.
+	// maxWatchDirs caps the directories one project may watch under inotify,
+	// which spends one watch per directory from an allowance shared with the
+	// user's editor.
 	maxWatchDirs = 4096
+	// maxWatchFDs caps the descriptors one project may spend under kqueue,
+	// which opens one for every file in a watched directory as well as for the
+	// directory. Uncapped, a large project took more than the process may
+	// hold, and every socket and file opened after that failed.
+	maxWatchFDs = 8192
 )
+
+// kqueue says whether fsnotify watches with kqueue here, paying per file
+// rather than per directory.
+var kqueue = runtime.GOOS == "darwin" || strings.HasSuffix(runtime.GOOS, "bsd")
 
 // watchers keeps one filesystem watcher per project, shared by every stream
 // looking at that project and stopped when the last one goes.
@@ -92,7 +98,7 @@ func (w *watchers) run(projectID int64, root string, stop <-chan struct{}) {
 	}
 	defer fsw.Close()
 
-	tree := &treeWatch{fsw: fsw, skip: skipper(root)}
+	tree := newTreeWatch(fsw, skipper(root))
 	tree.add(root)
 	// Git's own directory is watched one level deep. Staging, committing and
 	// switching branches move the index or HEAD, which changes what the
@@ -178,39 +184,62 @@ func watchFilter(root string, skip func(path string) bool) func(ev fsnotify.Even
 	}
 }
 
-// treeWatch adds directories to a watcher, up to the cap.
+// treeWatch adds directories to a watcher until its budget is spent.
 type treeWatch struct {
 	fsw  *fsnotify.Watcher
 	skip func(path string) bool
-	dirs int
+	// left is what may still be spent: watches under inotify, descriptors
+	// under kqueue, where perFile makes each entry of a directory cost one.
+	left    int
+	perFile bool
 }
 
-// add walks dir and watches every directory under it that the project's
-// listing would show. Errors are not fatal: a folder that cannot be walked is
-// simply one whose changes we will not hear about.
+func newTreeWatch(fsw *fsnotify.Watcher, skip func(path string) bool) *treeWatch {
+	if kqueue {
+		return &treeWatch{fsw: fsw, skip: skip, left: maxWatchFDs, perFile: true}
+	}
+	return &treeWatch{fsw: fsw, skip: skip, left: maxWatchDirs}
+}
+
+// add watches dir and every directory under it that the project's listing
+// would show, nearest levels first, while the budget lasts. Going level by
+// level means a large project loses its deepest folders rather than whole
+// branches near the root. A directory that does not fit is left out with
+// everything under it, and smaller ones after it still get their turn. Errors
+// are not fatal: a folder that cannot be read is simply one whose changes we
+// will not hear about.
 func (t *treeWatch) add(dir string) {
-	if t.dirs >= maxWatchDirs {
+	if info, err := os.Lstat(dir); err != nil || !info.IsDir() {
 		return
 	}
-	filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+	queue := []string{dir}
+	for len(queue) > 0 && t.left > 0 {
+		dir := queue[0]
+		queue = queue[1:]
+		if t.skip(dir) {
+			continue
+		}
+		entries, err := os.ReadDir(dir)
 		if err != nil {
-			return nil
+			continue
 		}
-		if !d.IsDir() {
-			return nil
+		cost := 1
+		if t.perFile {
+			cost += len(entries)
 		}
-		if t.skip(path) {
-			return filepath.SkipDir
+		if cost > t.left {
+			continue
 		}
-		if t.dirs >= maxWatchDirs {
-			return fs.SkipAll
+		if err := t.fsw.Add(dir); err != nil {
+			continue
 		}
-		if err := t.fsw.Add(path); err != nil {
-			return filepath.SkipDir
+		t.left -= cost
+		for _, e := range entries {
+			if e.IsDir() {
+				queue = append(queue, filepath.Join(dir, e.Name()))
+			}
 		}
-		t.dirs++
-		return nil
-	})
+	}
 }
 
 // skipper decides what is not worth watching: what the listing leaves out

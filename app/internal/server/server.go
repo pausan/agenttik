@@ -362,7 +362,7 @@ func (s *Server) Listen(addr string) error { return s.app.Listen(addr) }
 
 // Listener serves on an already-open listener, which desktop mode uses so it
 // can learn the port before the window opens.
-func (s *Server) Listener(ln net.Listener) error { return s.app.Listener(ln) }
+func (s *Server) Listener(ln net.Listener) error { return s.app.Listener(retryAccept{ln}) }
 
 // Shutdown releases the live streams first, then waits briefly for the
 // remaining connections. The timeout is a backstop: a stuck client must never

@@ -15,7 +15,7 @@ import {
   updateQueuedPrompt,
 } from "../store";
 import { turnSummaries } from "../api";
-import { runningTaskCount } from "../background-tasks";
+import { runningTaskCount, waitingLabel } from "../background-tasks";
 import { tabScroll, vTabScroll } from "../tab-scroll";
 import ApprovalCard from "./ApprovalCard.vue";
 import ModelSelection from "./ModelSelection.vue";
@@ -43,15 +43,12 @@ const elapsedLabel = computed(() => `${elapsed.value} ${elapsed.value === 1 ? "s
 const clockFace = computed(() => CLOCK_FACES[Math.floor(now.value / 250) % CLOCK_FACES.length]);
 /* Between replies of a turn that waits on background tasks, the agent is not
    working and the prompt bar sends into the turn (specs/083). */
-const runningTasks = computed(() => (S.detail?.waiting ? runningTaskCount(S.detail.messages) : 0));
+const runningTasks = computed(() => (S.detail?.accepts_prompts ? runningTaskCount(S.detail.messages) : 0));
 const workingLabel = computed(() => {
   if (approvals.value.length) {
     return approvals.value.some((a) => a.questions?.length) ? "Waiting for your answer" : "Waiting for approval";
   }
-  if (S.detail?.waiting) {
-    const tasks = runningTasks.value === 1 ? "1 background task" : `${runningTasks.value} background tasks`;
-    return `Waiting for ${runningTasks.value ? tasks : "background tasks"} · you can keep writing`;
-  }
+  if (S.detail?.accepts_prompts) return waitingLabel(S.detail.waiting, runningTasks.value);
   return "Working";
 });
 

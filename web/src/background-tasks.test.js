@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { durationLabel, runningTaskCount, takeFollowUp, taskSeconds, upsertBackgroundMessage } from "./background-tasks.js";
+import { durationLabel, runningTaskCount, takeFollowUp, taskSeconds, upsertBackgroundMessage, waitingLabel, wakesAgent } from "./background-tasks.js";
 
 test("a task starts after current prose and updates without moving or splitting later prose", () => {
   const before = { role: "assistant", content: "Starting tests", streaming: true };
@@ -67,4 +67,18 @@ test("a follow-up moves from its send-time bubble to after the reply it waited b
   takeFollowUp(messages, stored);
   assert.deepEqual(messages.map((m) => m.id ?? m.content), ["status?", 1, "Game A built", 9]);
   assert.equal(reply.streaming, false);
+});
+
+test("a background subagent's tool calls do not wake the main agent", () => {
+  assert.equal(wakesAgent({ type: "tool_use", tool: { name: "Bash", subagent: true } }), false);
+  assert.equal(wakesAgent({ type: "tool_use", tool: { name: "Bash" } }), true);
+  assert.equal(wakesAgent({ type: "text", text: "Game A built" }), true);
+  assert.equal(wakesAgent({ type: "follow_up" }), true);
+  assert.equal(wakesAgent({ type: "background" }), false);
+});
+
+test("a turn that takes prompts names its background tasks, working or waiting", () => {
+  assert.equal(waitingLabel(true, 1), "Waiting for 1 background task · you can keep writing");
+  assert.equal(waitingLabel(false, 2), "Working · 2 background tasks · you can keep writing");
+  assert.equal(waitingLabel(true, 0), "Waiting for background tasks · you can keep writing");
 });

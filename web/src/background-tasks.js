@@ -54,3 +54,17 @@ export function takeFollowUp(messages, message) {
   if (last?.streaming) last.streaming = false;
   messages.push(message);
 }
+
+/* wakesAgent says an event shows the main agent at work again, between
+   replies of a turn that waits on background tasks. A background subagent's
+   tool calls do not: it works while the main agent waits. */
+export function wakesAgent(ev) {
+  if (ev.type === "tool_use") return !ev.tool?.subagent;
+  return ["text", "thinking", "follow_up"].includes(ev.type);
+}
+
+/* waitingLabel is the progress line of a turn that takes prompts. */
+export function waitingLabel(waiting, tasks) {
+  const count = tasks === 1 ? "1 background task" : tasks ? `${tasks} background tasks` : "background tasks";
+  return waiting ? `Waiting for ${count} · you can keep writing` : `Working · ${count} · you can keep writing`;
+}

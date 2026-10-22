@@ -16,7 +16,7 @@ import { projectQueueAction } from "./project-queue.js";
 import { DEFAULT_SCHEDULE, scheduleRecurrence } from "./schedules.js";
 import { createTaskSounds, TASK_SOUNDS_KEY } from "./task-sounds.js";
 import { trackTaskAttention, reconcileTaskCompletions } from "./task-attention.js";
-import { takeFollowUp, upsertBackgroundMessage } from "./background-tasks.js";
+import { takeFollowUp, upsertBackgroundMessage, wakesAgent } from "./background-tasks.js";
 import { recordError } from "./diagnostics.js";
 import { api, apiURL, storage, clientStorage, diagnosticStorage } from "./api";
 import { debounce } from "./debounce";
@@ -3234,7 +3234,7 @@ function onSessionEvent(tab, msg) {
   const ev = msg.event;
   // Between replies of a turn that waits on background tasks, until the agent
   // starts on something again.
-  if (["text", "thinking", "tool_use", "follow_up"].includes(ev.type)) tab.detail.waiting = false;
+  if (wakesAgent(ev)) tab.detail.waiting = false;
   switch (ev.type) {
     case "started":
       startLocal(tab, msg.prompt, msg.turn);

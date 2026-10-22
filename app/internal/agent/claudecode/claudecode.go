@@ -373,7 +373,7 @@ func (p *streamParser) handleLine(line []byte, out chan<- agent.Event) {
 		for _, b := range env.Message.Content {
 			if b.Type == "tool_use" {
 				out <- agent.Event{Type: agent.EventToolUse, Tool: &agent.ToolEvent{
-					ID: b.ID, Name: b.Name, Input: string(b.Input)}}
+					ID: b.ID, Name: b.Name, Input: string(b.Input), Subagent: env.ParentToolUseID != ""}}
 			}
 		}
 	case "user":

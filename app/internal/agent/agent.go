@@ -441,6 +441,9 @@ type ToolEvent struct {
 	Input   string `json:"input,omitempty"`
 	Output  string `json:"output,omitempty"`
 	IsError bool   `json:"is_error,omitempty"`
+	// Subagent says a subagent made the call, not the main agent. A
+	// background subagent keeps calling tools after the main agent's reply.
+	Subagent bool `json:"subagent,omitempty"`
 }
 
 // Provider runs turns for one backend.

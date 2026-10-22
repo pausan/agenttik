@@ -408,6 +408,13 @@ func TestParseTakesFollowUpsWhileTasksRun(t *testing.T) {
 		return events[len(events)-1]
 	}
 
+	// A background subagent keeps calling tools after the main reply.
+	if got := feed(`{"type":"assistant","parent_tool_use_id":"agent-1","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{}}]}}`); len(got) != 1 || !got[0].Tool.Subagent {
+		t.Fatalf("subagent tool call = %+v", got)
+	}
+	if got := feed(`{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t2","name":"Bash","input":{}}]}}`); len(got) != 1 || got[0].Tool.Subagent {
+		t.Fatalf("main agent tool call = %+v", got)
+	}
 	// The first prompt's echo is not a follow-up.
 	if got := feed(`{"type":"user","message":{"role":"user","content":"build it"},"isReplay":true}`); len(got) != 0 {
 		t.Fatalf("first echo = %+v", got)

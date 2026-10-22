@@ -38,9 +38,11 @@ A reply that ends with background tasks still running leaves the turn open
   on send to that place.
 - A prompt that reaches the turn just as it stops taking prompts waits for it
   to end, up to 30 seconds, and starts the next turn.
-- The prompt bar's Send stays enabled, and between replies the progress line
-  says how many tasks the turn waits on. Stop still kills the CLI and its
-  tasks.
+- The prompt bar's Send stays enabled, and the progress line says how many
+  tasks are running, and whether the agent is replying or waiting. A
+  background subagent keeps calling tools while the agent waits; those calls
+  are marked `subagent` and do not count as the agent replying. Stop still
+  kills the CLI and its tasks.
 
 The task prompt tells the agent the user can write meanwhile, so it ends its
 reply instead of waiting idly. Only the turn's first prompt is requeued if the

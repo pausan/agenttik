@@ -82,6 +82,13 @@ type SessionRef struct {
 	// Prompt is what the session was opened with, capped; the sidebar shows it
 	// when a row is hovered. See firstPromptCol.
 	Prompt string `json:"prompt,omitempty"`
+
+	// BackgroundTasks and AcceptsPrompts describe the running turn: how many
+	// of its background tasks still run, and whether it takes prompts
+	// meanwhile. The server fills them from the runner; they are not stored.
+	// See specs/083-background-tasks.md.
+	BackgroundTasks int  `json:"background_tasks,omitempty"`
+	AcceptsPrompts  bool `json:"accepts_prompts,omitempty"`
 }
 
 type Session struct {

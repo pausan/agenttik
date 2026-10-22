@@ -3168,6 +3168,12 @@ function onEvent(msg) {
     reloadProjects();
     return;
   }
+  // A running turn's background tasks started or ended, or it began taking
+  // prompts: the sidebar row says so (specs/083-background-tasks.md).
+  if (msg.event?.type === "session_background") {
+    reloadProjects();
+    return;
+  }
   // A background request has written what an archived task came to. Only the
   // project's task list draws it, and only the archived half of it, so the
   // lists that hold open tasks are left alone. See specs/051-task-outcomes.md.

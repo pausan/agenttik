@@ -60,8 +60,10 @@ type Event struct {
 	Prompt  string         `json:"prompt,omitempty"`
 	Message *store.Message `json:"message,omitempty"`
 	// AcceptsPrompts is set on a reply's done event when the turn stays open
-	// and takes prompts.
+	// and takes prompts, and on session_background.
 	AcceptsPrompts bool `json:"accepts_prompts,omitempty"`
+	// BackgroundTasks is set on session_background: how many tasks still run.
+	BackgroundTasks int `json:"background_tasks,omitempty"`
 }
 
 // activeTurn is a turn in flight. It carries the project so scanning for
@@ -256,6 +258,22 @@ func (r *Runner) Running(sessionID string) bool {
 	_, ok := r.active[sessionID]
 	return ok
 }
+
+// BackgroundWork reports how many of the session's background tasks still run,
+// and whether its turn takes prompts meanwhile.
+func (r *Runner) BackgroundWork(sessionID string) (running int, acceptsPrompts bool) {
+	for _, t := range r.BackgroundTasks(sessionID) {
+		if t.Status == "running" {
+			running++
+		}
+	}
+	return running, r.AcceptsPrompts(sessionID)
+}
+
+// EventSessionBackground says a running turn's background work changed: tasks
+// started or ended, or it began or stopped taking prompts. It travels on the
+// project topic, for the sidebar's task rows.
+const EventSessionBackground agent.EventType = "session_background"
 
 // AcceptsPrompts reports whether the session's running turn takes prompts
 // now, because its reply ended with background tasks still running.
@@ -937,6 +955,10 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 	// A task gets one row where it is first reported. Later states update that
 	// row, leaving prose and tools in their original order.
 	backgroundMessages := make(map[string]store.Message)
+	// What the project's task rows were last told about this turn's
+	// background work.
+	var shownTasks int
+	var shownAccepts bool
 	saveBackground := func(task agent.BackgroundTask) *store.Message {
 		body, err := json.Marshal(task)
 		if err != nil {
@@ -1074,6 +1096,14 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 		out := Event{SessionID: sess.ID, ProjectID: sess.ProjectID, TurnID: turn.ID, Event: ev, Message: message,
 			AcceptsPrompts: ev.FollowUp != nil}
 		r.hub.Publish(sess.ID, out)
+		if ev.Type == agent.EventBackground || ev.Type == agent.EventDone {
+			if tasks, accepts := r.BackgroundWork(sess.ID); tasks != shownTasks || accepts != shownAccepts {
+				shownTasks, shownAccepts = tasks, accepts
+				r.hub.Publish(ProjectTopic(sess.ProjectID), Event{SessionID: sess.ID, ProjectID: sess.ProjectID,
+					TurnID: turn.ID, Event: agent.Event{Type: EventSessionBackground},
+					BackgroundTasks: tasks, AcceptsPrompts: accepts})
+			}
+		}
 		// The sidebar marks a task waiting on the user, open tab or not.
 		if ev.Type == agent.EventApproval || ev.Type == agent.EventApprovalResolved {
 			r.hub.Publish(ProjectTopic(sess.ProjectID), out)

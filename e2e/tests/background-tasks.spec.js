@@ -84,6 +84,9 @@ test("prompts join a turn that waits on background tasks without stopping them",
   const task = page.getByLabel("Background task", { exact: true });
   await expect(page.getByText("Build started.", { exact: true })).toBeVisible();
   await expect(working).toContainText("Waiting for 1 background task · you can keep writing");
+  // The sidebar row says so too, for a task that is not on screen.
+  const rowMarker = page.getByLabel("1 background task running · you can keep writing", { exact: true });
+  await expect(rowMarker).toBeVisible();
 
   await sendPrompt(page, ["@tool Read status", "Still building."].join("\n"));
   await expect(page.getByText("Still building.", { exact: true })).toBeVisible();
@@ -98,6 +101,7 @@ test("prompts join a turn that waits on background tasks without stopping them",
   await queued.getByRole("button", { name: "Send now" }).click();
   await expect(page.getByText("All done.", { exact: true })).toBeVisible();
   await expect(working).toHaveCount(0);
+  await expect(rowMarker).toHaveCount(0);
   await expect(task).toContainText("completed · built");
   await expect(queued).toHaveCount(0);
 

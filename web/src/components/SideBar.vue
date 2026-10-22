@@ -360,6 +360,8 @@ function onTaskDrop(e, projectID, overID) {
               :unread="!!S.unreadTasks[s.id]"
               @toggle-unread="toggleTaskUnread(s.id)"
               :queued="s.queue_count"
+              :background="s.background_tasks || 0"
+              :accepts-prompts="!!s.accepts_prompts"
               :approval="!!S.approvals[s.id]"
               :active="S.detail?.session.id === s.id"
               :number="taskNumber(p, s)"

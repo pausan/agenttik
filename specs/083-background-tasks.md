@@ -43,6 +43,12 @@ A reply that ends with background tasks still running leaves the turn open
   background subagent keeps calling tools while the agent waits; those calls
   are marked `subagent` and do not count as the agent replying. Stop still
   kills the CLI and its tasks.
+- The sidebar's task row shows a layers icon and the number of tasks still
+  running; its tooltip adds "you can keep writing" while the turn takes
+  prompts. The project listing carries `background_tasks` and
+  `accepts_prompts` for each running task, filled from the runner. When either
+  changes, the runner publishes `session_background` on the project topic and
+  the sidebar reads the listing again.
 
 The task prompt tells the agent the user can write meanwhile, so it ends its
 reply instead of waiting idly. Only the turn's first prompt is requeued if the

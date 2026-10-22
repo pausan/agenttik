@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/pausan/agenttik/app/internal/agent"
 	"github.com/pausan/agenttik/app/internal/store"
@@ -175,6 +176,51 @@ func TestForceQueuedJoinsAnOpenTurn(t *testing.T) {
 	}
 	if left, _ := st.ListQueuedMessages(sess.ID); len(left) != 0 {
 		t.Fatalf("still queued: %+v", left)
+	}
+	close(p.events)
+	waitFor(t, func() bool { return !r.Running(sess.ID) }, "the turn to end")
+}
+
+// The project's task rows hear when a turn's background work changes, and
+// only then.
+func TestProjectHearsBackgroundWork(t *testing.T) {
+	p := newOpenProvider()
+	r, _, sess := setup(t, p)
+	events, unsubscribe := r.Hub().Subscribe(ProjectTopic(sess.ProjectID))
+	defer unsubscribe()
+	if _, err := r.Send(sess.ID, "build"); err != nil {
+		t.Fatal(err)
+	}
+	next := func() Event {
+		t.Helper()
+		for {
+			select {
+			case ev := <-events:
+				if ev.Event.Type == EventSessionBackground {
+					return ev
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("no session_background event")
+			}
+		}
+	}
+	task := agent.BackgroundTask{ID: "b1", Kind: "shell", Status: "running"}
+	p.events <- agent.BackgroundEvent(task)
+	if ev := next(); ev.BackgroundTasks != 1 || ev.AcceptsPrompts {
+		t.Fatalf("task started: %+v", ev)
+	}
+	p.events <- agent.BackgroundEvent(task) // unchanged: not repeated
+	p.events <- agent.Event{Type: agent.EventDone, FollowUp: p.followUp()}
+	if ev := next(); ev.BackgroundTasks != 1 || !ev.AcceptsPrompts {
+		t.Fatalf("reply ended: %+v", ev)
+	}
+	if running, accepts := r.BackgroundWork(sess.ID); running != 1 || !accepts {
+		t.Fatalf("BackgroundWork = %d, %v", running, accepts)
+	}
+	task.Status = "completed"
+	p.events <- agent.BackgroundEvent(task)
+	if ev := next(); ev.BackgroundTasks != 0 || !ev.AcceptsPrompts {
+		t.Fatalf("task ended: %+v", ev)
 	}
 	close(p.events)
 	waitFor(t, func() bool { return !r.Running(sess.ID) }, "the turn to end")

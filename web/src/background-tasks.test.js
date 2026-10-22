@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { durationLabel, taskSeconds, upsertBackgroundMessage } from "./background-tasks.js";
+import { durationLabel, runningTaskCount, takeFollowUp, taskSeconds, upsertBackgroundMessage } from "./background-tasks.js";
 
 test("a task starts after current prose and updates without moving or splitting later prose", () => {
   const before = { role: "assistant", content: "Starting tests", streaming: true };
@@ -42,4 +42,29 @@ test("durations read like a stopwatch past a minute", () => {
   assert.equal(durationLabel(59), "59s");
   assert.equal(durationLabel(65), "1:05");
   assert.equal(durationLabel(3723), "1:02:03");
+});
+
+test("only running tasks count, and unreadable rows are skipped", () => {
+  const messages = [
+    { role: "background", content: '{"id":"a","status":"running"}' },
+    { role: "background", content: '{"id":"b","status":"completed"}' },
+    { role: "background", content: "not json" },
+    { role: "assistant", content: '{"status":"running"}' },
+  ];
+  assert.equal(runningTaskCount(messages), 1);
+});
+
+test("a follow-up moves from its send-time bubble to after the reply it waited behind", () => {
+  const reply = { role: "assistant", content: "Game A built", streaming: true };
+  const messages = [
+    { role: "user", content: "status?" },
+    { id: 1, role: "assistant", content: "Builds started" },
+    { role: "user", content: "status?" },
+    reply,
+  ];
+  const stored = { id: 9, role: "user", content: "status?" };
+  takeFollowUp(messages, stored);
+  takeFollowUp(messages, stored);
+  assert.deepEqual(messages.map((m) => m.id ?? m.content), ["status?", 1, "Game A built", 9]);
+  assert.equal(reply.streaming, false);
 });

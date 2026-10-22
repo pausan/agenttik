@@ -15,6 +15,7 @@ import {
   updateQueuedPrompt,
 } from "../store";
 import { turnSummaries } from "../api";
+import { runningTaskCount } from "../background-tasks";
 import { tabScroll, vTabScroll } from "../tab-scroll";
 import ApprovalCard from "./ApprovalCard.vue";
 import ModelSelection from "./ModelSelection.vue";
@@ -40,6 +41,19 @@ const elapsed = computed(() =>
 );
 const elapsedLabel = computed(() => `${elapsed.value} ${elapsed.value === 1 ? "second" : "seconds"}`);
 const clockFace = computed(() => CLOCK_FACES[Math.floor(now.value / 250) % CLOCK_FACES.length]);
+/* Between replies of a turn that waits on background tasks, the agent is not
+   working and the prompt bar sends into the turn (specs/083). */
+const runningTasks = computed(() => (S.detail?.waiting ? runningTaskCount(S.detail.messages) : 0));
+const workingLabel = computed(() => {
+  if (approvals.value.length) {
+    return approvals.value.some((a) => a.questions?.length) ? "Waiting for your answer" : "Waiting for approval";
+  }
+  if (S.detail?.waiting) {
+    const tasks = runningTasks.value === 1 ? "1 background task" : `${runningTasks.value} background tasks`;
+    return `Waiting for ${runningTasks.value ? tasks : "background tasks"} · you can keep writing`;
+  }
+  return "Working";
+});
 
 /* A run of consecutive tool calls is handed to one ToolGroup, which shows
    only its latest until asked for the rest. Grouping reads role and nothing
@@ -215,12 +229,16 @@ const saving = ref(false);
 /* A prompt waiting behind *another* session starts beside it and interrupts
    nothing, so it says "Send now". One waiting behind its own session's turn
    cannot: a provider takes one prompt at a time, that turn is cancelled to
-   make room, and the stronger word says so. */
-const sendNowLabel = computed(() => (S.detail?.running ? "Force send" : "Send now"));
+   make room, and the stronger word says so. A turn that only waits on
+   background tasks takes the prompt as it is, so that is "Send now" too. */
+const forceStops = computed(() => !!S.detail?.running && !S.detail?.accepts_prompts);
+const sendNowLabel = computed(() => (forceStops.value ? "Force send" : "Send now"));
 const sendNowHint = computed(() =>
-  S.detail?.running
+  forceStops.value
     ? "Stop this task's turn and send this queued prompt next"
-    : "Send this prompt now, beside whatever else the project is running",
+    : S.detail?.running
+      ? "Send this prompt into the running turn; its background tasks keep running"
+      : "Send this prompt now, beside whatever else the project is running",
 );
 
 function waitLabel(since) {
@@ -527,7 +545,7 @@ watch(
       <ApprovalCard v-for="a in approvals" :key="a.id" :session-id="S.detail.session.id" :approval="a" />
       <div v-if="S.detail.running" class="mb-3 flex items-center gap-2 text-xs text-dimmed" aria-label="Agent working">
         <span aria-hidden="true">{{ clockFace }}</span>
-        <span>{{ !approvals.length ? "Working" : approvals.some((a) => a.questions?.length) ? "Waiting for your answer" : "Waiting for approval" }} ({{ elapsedLabel }})</span>
+        <span>{{ workingLabel }} ({{ elapsedLabel }})</span>
       </div>
 
       <!-- A prompt that is only waiting is still shown where it will run, so

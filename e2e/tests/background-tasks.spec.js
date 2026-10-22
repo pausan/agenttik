@@ -70,3 +70,47 @@ test("background tasks stay between surrounding tools after updates and reloads"
   await expect(tasks).toHaveCount(3);
   await expect(tasks.last()).toContainText("completed · passed");
 });
+
+/* A turn that waits on background tasks takes prompts meanwhile: Send goes
+   into it, and a queued prompt's Send now joins it instead of stopping it. */
+test("prompts join a turn that waits on background tasks without stopping them", async ({ page }) => {
+  await addProject(page);
+  await openProject(page);
+  await newTask(page);
+  await pickModel(page);
+  await sendPrompt(page, ["@open", "@background start b1 build game A", "Build started."].join("\n"));
+
+  const working = page.getByLabel("Agent working");
+  const task = page.getByLabel("Background task", { exact: true });
+  await expect(page.getByText("Build started.", { exact: true })).toBeVisible();
+  await expect(working).toContainText("Waiting for 1 background task · you can keep writing");
+
+  await sendPrompt(page, ["@tool Read status", "Still building."].join("\n"));
+  await expect(page.getByText("Still building.", { exact: true })).toBeVisible();
+  await expect(working).toContainText("Waiting for 1 background task");
+  await expect(task).toContainText(/running \ds/);
+
+  const prompt = page.getByPlaceholder("Ask the agent…");
+  await prompt.fill(["@background end b1 completed built", "All done."].join("\n"));
+  await prompt.press("Enter");
+  const queued = page.getByLabel("Queued prompt", { exact: true });
+  await expect(queued).toHaveCount(1);
+  await queued.getByRole("button", { name: "Send now" }).click();
+  await expect(page.getByText("All done.", { exact: true })).toBeVisible();
+  await expect(working).toHaveCount(0);
+  await expect(task).toContainText("completed · built");
+  await expect(queued).toHaveCount(0);
+
+  // One turn holds all three prompts, in the order they were answered.
+  const order = async () => {
+    const texts = ["Build started.", "Still building.", "All done."].map((text) => page.getByText(text, { exact: true }));
+    for (const [left, right] of [[task, texts[0]], [texts[0], texts[1]], [texts[1], texts[2]]]) {
+      expect(await left.evaluate((node, next) => !!(node.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING),
+        await right.elementHandle())).toBe(true);
+    }
+  };
+  await order();
+  await page.reload();
+  await expect(page.getByText("All done.", { exact: true })).toBeVisible();
+  await order();
+});

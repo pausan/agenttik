@@ -16,7 +16,7 @@ import { projectQueueAction } from "./project-queue.js";
 import { DEFAULT_SCHEDULE, scheduleRecurrence } from "./schedules.js";
 import { createTaskSounds, TASK_SOUNDS_KEY } from "./task-sounds.js";
 import { trackTaskAttention, reconcileTaskCompletions } from "./task-attention.js";
-import { upsertBackgroundMessage } from "./background-tasks.js";
+import { takeFollowUp, upsertBackgroundMessage } from "./background-tasks.js";
 import { recordError } from "./diagnostics.js";
 import { api, apiURL, storage, clientStorage, diagnosticStorage } from "./api";
 import { debounce } from "./debounce";
@@ -1948,6 +1948,8 @@ async function loadTaskTab(id, silent = false) {
     if (!silent) fail(e);
     return null;
   }
+  // A turn that takes prompts was last seen between replies.
+  detail.waiting = detail.accepts_prompts;
   return () => {
     rememberUsed(detail.session);
     setContextTab({
@@ -3190,7 +3192,9 @@ function onEvent(msg) {
     }
     return;
   }
-  const turnMoved = ["started", "done"].includes(msg.event?.type);
+  // A turn that waits on background tasks ends one reply after another; only
+  // its last done, which carries the stats, moves the turn.
+  const turnMoved = msg.event?.type === "started" || (msg.event?.type === "done" && !!msg.stats);
   if (turnMoved) {
     const stage = msg.event.type === "done" && msg.stats ? "final" : "event";
     const seen = `${stage}:${msg.event.type}:${msg.session_id}:${msg.turn_id}`;
@@ -3228,11 +3232,18 @@ function onEvent(msg) {
 
 function onSessionEvent(tab, msg) {
   const ev = msg.event;
+  // Between replies of a turn that waits on background tasks, until the agent
+  // starts on something again.
+  if (["text", "thinking", "tool_use", "follow_up"].includes(ev.type)) tab.detail.waiting = false;
   switch (ev.type) {
     case "started":
       startLocal(tab, msg.prompt, msg.turn);
       if (msg.session) tab.detail.session = msg.session;
       takeQueued(tab, msg.prompt);
+      tab.detail.accepts_prompts = tab.detail.waiting = false;
+      break;
+    case "follow_up":
+      if (msg.message) takeFollowUp(tab.detail.messages, msg.message);
       break;
     case "text":
       appendLive(tab, "assistant", ev.text);
@@ -3275,6 +3286,8 @@ function onSessionEvent(tab, msg) {
       break;
     case "done":
       endLive(tab);
+      // A reply that leaves the turn open lets the prompt bar send into it.
+      tab.detail.accepts_prompts = tab.detail.waiting = !msg.stats && !!msg.accepts_prompts;
       if (msg.stats) {
         tab.detail.stats = msg.stats;
         tab.detail.liveUsage = null;
@@ -3373,6 +3386,9 @@ async function syncMessages(tab, preserveLive = false) {
     // it. See specs/045-provider-outage-retry.md.
     tab.detail.session.status = detail.session.status;
     tab.detail.running = detail.running;
+    if (tab.detail.accepts_prompts !== detail.accepts_prompts) {
+      tab.detail.accepts_prompts = tab.detail.waiting = detail.accepts_prompts;
+    }
     if (keepLive) return;
     tab.detail.messages = detail.messages;
     tab.detail.turns = detail.turns;

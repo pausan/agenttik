@@ -147,7 +147,29 @@ const (
 	// changed: a shell or a subagent the agent moved on from while it runs.
 	// Background carries the task's whole state, so the latest event wins.
 	EventBackground EventType = "background"
+	// EventFollowUp says the provider has started answering the next prompt
+	// handed over with FollowUp.Send, in the order they were sent.
+	EventFollowUp EventType = "follow_up"
 )
+
+// FollowUp takes more prompts into a turn that outlives its reply: the reply
+// has ended, but background tasks it started still run, and the provider waits
+// on them. A provider that can take prompts meanwhile sets it on that reply's
+// done event. See specs/083-background-tasks.md.
+type FollowUp struct {
+	send func(string) error
+}
+
+// NewFollowUp builds a FollowUp the provider answers through send.
+func NewFollowUp(send func(string) error) *FollowUp {
+	return &FollowUp{send: send}
+}
+
+// Send hands prompt to the open turn. It fails once the turn has stopped
+// taking prompts, and the prompt must then start a turn of its own.
+func (f *FollowUp) Send(prompt string) error {
+	return f.send(prompt)
+}
 
 // BackgroundTask is one shell or subagent running behind the agent's back.
 // Times are Unix milliseconds. See specs/083-background-tasks.md.
@@ -250,6 +272,9 @@ type Event struct {
 	Approval *Approval `json:"approval,omitempty"`
 	// Background is set on background events.
 	Background *BackgroundTask `json:"background,omitempty"`
+	// FollowUp is set on a done event when the turn stays open and takes
+	// more prompts.
+	FollowUp *FollowUp `json:"-"`
 }
 
 // Approval is one request a running turn waits on the user for: a tool call to

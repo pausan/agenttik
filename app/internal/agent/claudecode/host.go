@@ -15,22 +15,32 @@ import (
 // with the answers added to its input is how they reach the model.
 const askUserQuestion = "AskUserQuestion"
 
-// host is agenttik's end of the CLI's stdin during a task turn. The prompt and
+// host is agenttik's end of the CLI's stdin during a task turn. Prompts and
 // every approval answer are written through it, from different goroutines, so
 // writes are serialized and a write after close is an error, not a panic.
 type host struct {
 	mu     sync.Mutex
 	w      io.WriteCloser
 	closed bool
+	// prompts counts the prompts written; taken counts those the CLI has
+	// echoed back (--replay-user-messages), which it does as it starts on
+	// one. A prompt written but not yet taken keeps stdin open, so its reply
+	// can still leave background work running.
+	prompts, taken int
 }
 
 func (h *host) send(v any) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.write(v)
+}
+
+// write is send's body, with h.mu held.
+func (h *host) write(v any) error {
 	line, err := json.Marshal(v)
 	if err != nil {
 		return err
 	}
-	h.mu.Lock()
-	defer h.mu.Unlock()
 	if h.closed {
 		return errors.New("turn has ended")
 	}
@@ -43,15 +53,44 @@ func (h *host) send(v any) error {
 func (h *host) close() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	h.closeLocked()
+}
+
+func (h *host) closeLocked() {
 	if !h.closed {
 		h.closed = true
 		h.w.Close()
 	}
 }
 
+// closeIfTaken closes the input unless a prompt written to it has not been
+// taken yet, and reports whether it did. Checked under the same lock as
+// writes, so a prompt is either written before the close or refused.
+func (h *host) closeIfTaken() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.prompts > h.taken {
+		return false
+	}
+	h.closeLocked()
+	return true
+}
+
+// took records that the CLI echoed a prompt back, and reports whether it was
+// a follow-up rather than the turn's first.
+func (h *host) took() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.taken++
+	return h.taken > 1
+}
+
 // Sent with each task prompt, including resumes. CLI system-prompt snapshots
 // can otherwise keep new lifecycle guidance out of existing conversations.
-const backgroundTaskGuidance = `Agenttik keeps this turn open while background tasks are running.
+const backgroundTaskGuidance = `Agenttik keeps this turn open while background tasks are running,
+and the user can keep writing to you meanwhile. Do not wait idly for a
+background task: end your reply, and a task notification or the user's next
+message will wake you.
 Once the user's requested work is complete, stop disposable background helpers
 you started that are no longer needed, using TaskStop where available, before
 your final reply. Keep waiting for tests, builds, or agents whose results are
@@ -59,8 +98,18 @@ still needed. Do not stop work just to end the turn, or stop processes the user
 explicitly asked to keep running.`
 
 func (h *host) sendPrompt(prompt string) error {
-	return h.send(userInput{Type: "user", Message: userMessage{Role: "user",
-		Content: backgroundTaskGuidance + "\n\n" + prompt}})
+	return h.sendUser(backgroundTaskGuidance + "\n\n" + prompt)
+}
+
+// sendUser writes a prompt, counted until the CLI takes it.
+func (h *host) sendUser(prompt string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if err := h.write(userInput{Type: "user", Message: userMessage{Role: "user", Content: prompt}}); err != nil {
+		return err
+	}
+	h.prompts++
+	return nil
 }
 
 func (h *host) answerTool(requestID string, input json.RawMessage, allow bool, message string) error {

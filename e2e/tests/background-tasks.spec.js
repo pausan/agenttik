@@ -120,3 +120,16 @@ test("prompts join a turn that waits on background tasks without stopping them",
   await expect(page.getByText("All done.", { exact: true })).toBeVisible();
   await order();
 });
+
+/* The project page's task list follows a task's background work live, while
+   the task itself is not on screen. */
+test("the project page's task list shows background work as it changes", async ({ page }) => {
+  await addProject(page);
+  await openProject(page);
+  await newTask(page);
+  await pickModel(page);
+  await sendPrompt(page, ["@open", "@wait 1500", "@background start b1 build game A", "Build started."].join("\n"));
+  await openProject(page);
+  const marker = page.locator("main").getByLabel("1 background task running · you can keep writing", { exact: true });
+  await expect(marker).toBeVisible();
+});

@@ -54,6 +54,11 @@ func (s *Server) listSessions(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
+	for i := range sessions {
+		if sessions[i].Status == store.StatusRunning {
+			sessions[i].BackgroundTasks, sessions[i].AcceptsPrompts = s.runner.BackgroundWork(sessions[i].ID)
+		}
+	}
 	return c.JSON(sessions)
 }
 

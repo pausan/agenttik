@@ -1264,9 +1264,16 @@ const reloadLists = debounce(() => {
   refreshSessions().catch(() => {});
 }, 150);
 
-/* reloadSidebar re-reads only the sidebar's listing, for a change nothing
-   else draws: a running task's background work (specs/083). */
-const reloadSidebar = debounce(() => refreshProjects().catch(() => {}), 150);
+/* reloadBackgroundWork re-reads what draws a running task's background work
+   (specs/083): the sidebar's listing, and the task lists of the project tabs
+   it happened in. Changes are collected per project, so two projects do not
+   collapse into one reload. */
+const backgroundProjects = new Set();
+const reloadBackgroundWork = debounce(() => {
+  refreshProjects().catch(() => {});
+  for (const t of S.tabs) if (t.kind === "project" && backgroundProjects.has(t.projectID)) reloadProjectTab(t);
+  backgroundProjects.clear();
+}, 150);
 
 export async function addProject(path, name) {
   await api("POST", "/api/projects", { path, name });
@@ -3175,7 +3182,8 @@ function onEvent(msg) {
   // A running turn's background tasks started or ended, or it began taking
   // prompts: the sidebar row says so (specs/083-background-tasks.md).
   if (msg.event?.type === "session_background") {
-    reloadSidebar();
+    backgroundProjects.add(msg.project_id);
+    reloadBackgroundWork();
     return;
   }
   // A background request has written what an archived task came to. Only the

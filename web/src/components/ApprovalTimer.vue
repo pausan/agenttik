@@ -48,7 +48,7 @@ async function pause() {
     aria-label="Automatic answer"
   >
     <UIcon name="i-lucide-timer" class="size-3.5 shrink-0" aria-hidden="true" />
-    <span class="tabular-nums">{{ verb }} in {{ secondsLeft }}s</span>
+    <span class="tabular-nums" data-find-ignore>{{ verb }} in {{ secondsLeft }}s</span>
     <UButton
       size="xs"
       color="neutral"

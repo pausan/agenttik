@@ -11,8 +11,9 @@ the central pane, excluding the sidebar, workspace, tab strip and prompt box.
 Inline formatting does not interrupt a phrase. Hidden or collapsed content,
 form fields, unrendered terminal scrollback and sandboxed HTML iframe contents
 are not searched.
-Opening find in a long transcript mounts its full history until the bar closes,
-so matches include earlier messages. Collapsed tool calls and closed threads
+The bar paints and takes focus before anything else runs. Only then does a long
+transcript mount its full history, which it keeps until the bar closes, so
+matches include earlier messages. Collapsed tool calls and closed threads
 remain excluded. Closing find releases message bodies outside the viewport.
 
 The bar shows the active match and total, or “No matches”. In the search field,
@@ -26,8 +27,15 @@ mode closes the bar and clears its highlights.
 
 Search builds DOM ranges without rewriting Vue's rendered content. An observer
 exists only while the bar is open; content changes refresh results after a
-120 ms debounce. Results reset to the first match when text or query changes.
+120 ms debounce. A new query resets to the first match and scrolls to it. A
+content refresh keeps the current match number and does not scroll, so reading
+or stepping through matches is never pulled back. In a large text file it also
+leaves the caret alone. Ticking clocks (the working timer, queued-prompt waits,
+approval countdowns) carry `data-find-ignore`: they are not searched, and their
+updates trigger no refresh.
 
 Verified by web unit tests for literal and Unicode matching, and browser tests
 for file contents, unsaved edits, wrapping, scrolling, focus, view changes and
-phrases across Markdown formatting.
+phrases across Markdown formatting, plus a 2,000-message transcript that checks
+the bar appears within 250 ms and that content changes keep the current match
+and scroll position.

@@ -525,7 +525,7 @@ watch(
         @layout="schedulePinnedPrompt"
       />
       <ApprovalCard v-for="a in approvals" :key="a.id" :session-id="S.detail.session.id" :approval="a" />
-      <div v-if="S.detail.running" class="mb-3 flex items-center gap-2 text-xs text-dimmed" aria-label="Agent working">
+      <div v-if="S.detail.running" class="mb-3 flex items-center gap-2 text-xs text-dimmed" aria-label="Agent working" data-find-ignore>
         <span aria-hidden="true">{{ clockFace }}</span>
         <span>{{ !approvals.length ? "Working" : approvals.some((a) => a.questions?.length) ? "Waiting for your answer" : "Waiting for approval" }} ({{ elapsedLabel }})</span>
       </div>
@@ -540,7 +540,7 @@ watch(
             :class="q.retry_at ? 'text-warning' : 'text-dimmed'"
             >{{ q.pending ? "Sending…" : heldLabel(q) }}</span
           >
-          <span class="flex items-center gap-1 font-mono text-[11px] text-dimmed tabular-nums">
+          <span class="flex items-center gap-1 font-mono text-[11px] text-dimmed tabular-nums" data-find-ignore>
             <span aria-hidden="true">{{ clockFace }}</span>{{ waitLabel(q.created_at) }}
           </span>
         </div>

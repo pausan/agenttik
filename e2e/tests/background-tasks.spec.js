@@ -78,7 +78,9 @@ test("prompts join a turn that waits on background tasks without stopping them",
   await openProject(page);
   await newTask(page);
   await pickModel(page);
-  await sendPrompt(page, ["@open", "@background start b1 build game A", "Build started."].join("\n"));
+  // The task starts after the title is refined, whose refresh would
+  // otherwise redraw the sidebar on its own.
+  await sendPrompt(page, ["@open", "@wait 1500", "@background start b1 build game A", "Build started."].join("\n"));
 
   const working = page.getByLabel("Agent working");
   const task = page.getByLabel("Background task", { exact: true });

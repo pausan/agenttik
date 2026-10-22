@@ -1,6 +1,11 @@
 package fake
 
-import "testing"
+import (
+	"context"
+	"testing"
+
+	"github.com/pausan/agenttik/app/internal/agent"
+)
 
 func TestCutDirective(t *testing.T) {
 	cases := []struct {
@@ -55,5 +60,39 @@ func TestEnabledReadsEnvVar(t *testing.T) {
 	t.Setenv("AGENTTIK_FAKE_PROVIDER", "1")
 	if !Enabled() {
 		t.Error("Enabled() with AGENTTIK_FAKE_PROVIDER=1, want true")
+	}
+}
+
+// @open keeps the turn open while a background task runs and takes prompts
+// meanwhile; the reply that ends the last task ends the turn.
+func TestOpenTurnTakesPromptsUntilTasksEnd(t *testing.T) {
+	events, err := New().Run(context.Background(), agent.TurnRequest{
+		Prompt: "@open\n@background start b1 build\nStarted"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := func(want agent.EventType) agent.Event {
+		t.Helper()
+		for ev := range events {
+			if ev.Type == want {
+				return ev
+			}
+		}
+		t.Fatalf("no %s event", want)
+		return agent.Event{}
+	}
+	done := next(agent.EventDone)
+	if done.FollowUp == nil {
+		t.Fatal("a reply with a task running should leave the turn open")
+	}
+	if err := done.FollowUp.Send("@background end b1 completed built\nFinished"); err != nil {
+		t.Fatal(err)
+	}
+	next(agent.EventFollowUp)
+	if done = next(agent.EventDone); done.FollowUp != nil {
+		t.Fatal("the turn stayed open with no task running")
+	}
+	if _, open := <-events; open {
+		t.Fatal("events continued after the last reply")
 	}
 }

@@ -59,6 +59,9 @@ type Event struct {
 	Session *store.Session `json:"session,omitempty"`
 	Prompt  string         `json:"prompt,omitempty"`
 	Message *store.Message `json:"message,omitempty"`
+	// AcceptsPrompts is set on a reply's done event when the turn stays open
+	// and takes prompts.
+	AcceptsPrompts bool `json:"accepts_prompts,omitempty"`
 }
 
 // activeTurn is a turn in flight. It carries the project so scanning for
@@ -66,6 +69,22 @@ type Event struct {
 type activeTurn struct {
 	projectID int64
 	cancel    context.CancelFunc
+	open      *openTurn
+}
+
+// openTurn is how a turn that outlives its reply takes more prompts: the
+// reply ended while background tasks it started still run, and the provider
+// waits on them. See specs/083-background-tasks.md.
+type openTurn struct {
+	mu   sync.Mutex
+	turn store.Turn
+	// followUp is set while the turn takes prompts.
+	followUp *agent.FollowUp
+	// pending are prompts handed over and not yet taken, oldest first. Each
+	// is stored when the provider starts on it, so it lands after the reply
+	// it was waiting behind.
+	pending  []string
+	released chan struct{} // closed once the turn has ended
 }
 
 type Runner struct {
@@ -238,6 +257,51 @@ func (r *Runner) Running(sessionID string) bool {
 	return ok
 }
 
+// AcceptsPrompts reports whether the session's running turn takes prompts
+// now, because its reply ended with background tasks still running.
+func (r *Runner) AcceptsPrompts(sessionID string) bool {
+	r.mu.Lock()
+	active, ok := r.active[sessionID]
+	r.mu.Unlock()
+	if !ok {
+		return false
+	}
+	active.open.mu.Lock()
+	defer active.open.mu.Unlock()
+	return active.open.followUp != nil
+}
+
+// followUp hands prompt to the session's running turn when that turn takes
+// prompts, and reports whether it did. A turn that has just stopped taking
+// them is waited out, so the prompt can start the next turn instead.
+func (r *Runner) followUp(sessionID, prompt string) (*store.Turn, bool) {
+	r.mu.Lock()
+	active, ok := r.active[sessionID]
+	r.mu.Unlock()
+	if !ok {
+		return nil, false
+	}
+	open := active.open
+	open.mu.Lock()
+	if open.followUp == nil {
+		open.mu.Unlock()
+		return nil, false
+	}
+	if err := open.followUp.Send(attachments.Resolve(prompt, r.store.Dir())); err != nil {
+		open.followUp = nil
+		open.mu.Unlock()
+		select {
+		case <-open.released:
+		case <-time.After(forceWait):
+		}
+		return nil, false
+	}
+	open.pending = append(open.pending, prompt)
+	turn := open.turn
+	open.mu.Unlock()
+	return &turn, true
+}
+
 // BackgroundTasks lists what the session's running turn has left working,
 // oldest first, finished ones included until the turn ends.
 func (r *Runner) BackgroundTasks(sessionID string) []agent.BackgroundTask {
@@ -251,8 +315,9 @@ func (r *Runner) BackgroundTasks(sessionID string) []agent.BackgroundTask {
 	return out
 }
 
-// Send starts a turn. It returns as soon as the provider process is up; the
-// turn continues in the background and is observed over the hub.
+// Send starts a turn, or hands the prompt to the session's running turn when
+// that turn takes prompts. It returns as soon as the provider has it; the turn
+// continues in the background and is observed over the hub.
 func (r *Runner) Send(sessionID, prompt string) (*store.Turn, error) {
 	return r.send(store.QueuedMessage{SessionID: sessionID, Prompt: prompt,
 		CreatedAt: time.Now().UnixMilli()})
@@ -265,6 +330,9 @@ func (r *Runner) Send(sessionID, prompt string) (*store.Turn, error) {
 // prompt sent straight to a session has no row of its own yet; it is described
 // by one here, with the time it was accepted, for the same reason.
 func (r *Runner) send(queued store.QueuedMessage) (*store.Turn, error) {
+	if turn, ok := r.followUp(queued.SessionID, queued.Prompt); ok {
+		return turn, nil
+	}
 	r.transfer.RLock()
 	defer r.transfer.RUnlock()
 	return r.sendDuringTransferLock(queued)
@@ -360,7 +428,8 @@ func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage) (*store.Turn
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	r.turns.Add(1)
-	r.active[sessionID] = activeTurn{projectID: sess.ProjectID, cancel: cancel}
+	open := &openTurn{released: make(chan struct{})}
+	r.active[sessionID] = activeTurn{projectID: sess.ProjectID, cancel: cancel, open: open}
 	r.busyChanged()
 	r.mu.Unlock()
 
@@ -378,6 +447,7 @@ func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage) (*store.Turn
 		r.busyChanged()
 		stopping := r.stopping
 		r.mu.Unlock()
+		close(open.released)
 		cancel()
 		if stopping {
 			if forced {
@@ -446,12 +516,15 @@ func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage) (*store.Turn
 	// so everyone else gets a frozen copy: a subscriber serialising the event
 	// must not read fields while they are being updated.
 	snapshot := *turn
+	open.mu.Lock()
+	open.turn = snapshot
+	open.mu.Unlock()
 	started := Event{SessionID: sess.ID, ProjectID: sess.ProjectID, TurnID: turn.ID,
 		Event: agent.Event{Type: "started"}, Turn: &snapshot, Session: sess, Prompt: prompt}
 	r.hub.Publish(sess.ID, started)
 	r.hub.Publish(ProjectTopic(sess.ProjectID), started)
 
-	go r.consume(sess, turn, queued, events, release)
+	go r.consume(sess, turn, queued, open, events, release)
 	return &snapshot, nil
 }
 
@@ -559,8 +632,9 @@ func (r *Runner) DeleteQueued(sessionID string, queuedID int64) error {
 // only waiting on an ordering rule, not on a process it has to share. The one
 // turn that genuinely is in the way is the session's own — a provider cannot
 // take a second prompt in place — so that one is cancelled and the prompt
-// starts as it exits. The message stays in the queue until Send has accepted
-// it, so a failed launch cannot lose it.
+// starts as it exits. A turn that takes prompts while background tasks run is
+// not in the way, and the prompt joins it. The message stays in the queue
+// until Send has accepted it, so a failed launch cannot lose it.
 //
 // It returns once the prompt has started, or with why it could not, so the
 // window that asked keeps showing the request until then. A turn slower than
@@ -576,6 +650,10 @@ func (r *Runner) ForceQueued(sessionID string, queuedID int64) error {
 	sess, err := r.store.GetSession(sessionID)
 	if err != nil {
 		return err
+	}
+	// A turn that takes prompts is not in the way: the prompt joins it.
+	if _, ok := r.followUp(sessionID, queued.Prompt); ok {
+		return r.store.RemoveQueuedMessage(queuedID)
 	}
 
 	r.mu.Lock()
@@ -832,7 +910,7 @@ func (r *Runner) background(work func()) {
 	go func() { defer r.turns.Done(); work() }()
 }
 
-func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.QueuedMessage, events <-chan agent.Event, release func()) {
+func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.QueuedMessage, open *openTurn, events <-chan agent.Event, release func()) {
 	defer release()
 
 	var text strings.Builder
@@ -922,8 +1000,12 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 			}
 		case agent.EventDone:
 			// A turn can hold several replies, one per background task the
-			// agent waited on. Each is its own message.
+			// agent waited on and per prompt it took meanwhile. Each is its
+			// own message.
 			flushText()
+			open.mu.Lock()
+			open.followUp = ev.FollowUp
+			open.mu.Unlock()
 			if ev.Usage != nil {
 				turn.InputTokens = ev.Usage.InputTokens
 				turn.OutputTokens = ev.Usage.OutputTokens
@@ -966,6 +1048,17 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 			if ev.Approval == nil || !r.withdrawApproval(ev.Approval.ID) {
 				continue
 			}
+		case agent.EventFollowUp:
+			open.mu.Lock()
+			if len(open.pending) == 0 {
+				open.mu.Unlock()
+				continue
+			}
+			prompt := open.pending[0]
+			open.pending = open.pending[1:]
+			open.mu.Unlock()
+			flushText()
+			message, _ = r.store.AddMessage(sess.ID, turn.ID, store.RoleUser, prompt)
 		case agent.EventBackground:
 			if ev.Background == nil {
 				continue
@@ -978,7 +1071,8 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 			r.backgroundTasks[sess.ID][ev.Background.ID] = *ev.Background
 			r.mu.Unlock()
 		}
-		out := Event{SessionID: sess.ID, ProjectID: sess.ProjectID, TurnID: turn.ID, Event: ev, Message: message}
+		out := Event{SessionID: sess.ID, ProjectID: sess.ProjectID, TurnID: turn.ID, Event: ev, Message: message,
+			AcceptsPrompts: ev.FollowUp != nil}
 		r.hub.Publish(sess.ID, out)
 		// The sidebar marks a task waiting on the user, open tab or not.
 		if ev.Type == agent.EventApproval || ev.Type == agent.EventApprovalResolved {

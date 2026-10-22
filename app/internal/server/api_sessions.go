@@ -121,6 +121,9 @@ type sessionDetail struct {
 	Turns    []store.Turn    `json:"turns"`
 	Stats    *store.Stats    `json:"stats"`
 	Running  bool            `json:"running"`
+	// AcceptsPrompts says the running turn takes prompts now: its reply
+	// ended with background tasks still running.
+	AcceptsPrompts bool `json:"accepts_prompts"`
 
 	// Queued are the prompts waiting their turn, oldest first. The transcript
 	// draws them under the messages so a queued prompt is visible.
@@ -165,7 +168,8 @@ func (s *Server) getSession(c *fiber.Ctx) error {
 		return err
 	}
 	return c.JSON(sessionDetail{Session: sess, Messages: messages,
-		Turns: turns, Stats: stats, Running: s.runner.Running(id), Queued: queued,
+		Turns: turns, Stats: stats, Running: s.runner.Running(id),
+		AcceptsPrompts: s.runner.AcceptsPrompts(id), Queued: queued,
 		Background: s.runner.BackgroundTasks(id),
 		Outputs:    turnOutputs(sess.ProjectPath, turns, messages),
 		Threads:    threads, Origin: s.origin(sess)})

@@ -20,6 +20,32 @@ ends and after reloads. Tasks belong to the turn and die with its process;
 any still running when it exits become `stopped · turn ended`. A restart
 marks tasks left running by an interrupted turn `stopped · turn interrupted`.
 
+## Talking while tasks run
+
+A reply that ends with background tasks still running leaves the turn open
+(Claude Code only; see [003](003-providers.md)). The turn then takes prompts:
+
+- Its done event carries an `agent.FollowUp`. The runner keeps it until the
+  turn ends, and `GET /api/sessions/:id` reports `accepts_prompts`; so does
+  the stream on that done event.
+- Send hands the prompt to the turn instead of refusing it, and answers with
+  the running turn. Send now on a queued prompt does the same instead of
+  cancelling the turn (Force send). Enqueue still waits for the turn to end,
+  and the project's queue still waits for it too.
+- The provider sends `follow_up` as it starts on each prompt, in order. The
+  runner stores the prompt then, as a user message of the same turn, so it
+  lands after any reply it waited behind. The browser moves the bubble drawn
+  on send to that place.
+- A prompt that reaches the turn just as it stops taking prompts waits for it
+  to end, up to 30 seconds, and starts the next turn.
+- The prompt bar's Send stays enabled, and between replies the progress line
+  says how many tasks the turn waits on. Stop still kills the CLI and its
+  tasks.
+
+The task prompt tells the agent the user can write meanwhile, so it ends its
+reply instead of waiting idly. Only the turn's first prompt is requeued if the
+provider turns out to be away ([045](045-provider-outage-retry.md)).
+
 ## Event
 
 Providers send `agent.EventBackground` with an `agent.BackgroundTask`: id,
@@ -82,7 +108,10 @@ anyway.
 The fake provider's `@background start <id> <description>` and
 `@background end <id> <status> <summary>` directives drive
 `e2e/tests/background-tasks.spec.js`, covering placement between tools,
-updates, reloads, finished rows, reused task ids and turn summaries. Runner
+updates, reloads, finished rows, reused task ids and turn summaries. Its
+`@open` directive keeps the turn open while a task runs, for the test of
+prompts sent and queued meanwhile. Runner tests cover follow-up order, a prompt
+missing a closing turn, and Send now joining an open turn. Runner
 tests cover prose boundaries, saved state and stream message identity;
 store tests cover interrupted tasks on restart. Browser unit tests cover
 updates during streaming and duplicate events. Each provider's parser has

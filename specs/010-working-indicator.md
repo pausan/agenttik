@@ -4,12 +4,16 @@ While the current task has a running turn, the transcript ends with a
 clock-face progress line and elapsed seconds. It uses the server turn's start
 time when available, with a local timestamp only for the short gap after send.
 The clock refreshes at 4 FPS, while the elapsed label remains rounded down to
-whole seconds. The line is tied to the current session and disappears as soon
+whole seconds. The line says "Working", or what the turn waits on: an approval,
+an answer, or, between replies of a turn that takes prompts, its background
+tasks ("Waiting for 2 background tasks · you can keep writing", see
+[083](083-background-tasks.md)). The line is tied to the current session and disappears as soon
 as its turn is done or stopped.
 
 The provider's completion event and the persisted completion event are both
-received. They are deduplicated independently, so the persisted event carrying
-the final stats always clears the progress line.
+received. Only the persisted one, which carries the final stats, is
+deduplicated and clears the progress line; a turn that waits on background
+tasks sends a provider completion event for each of its replies.
 
 Project, task, and profile activity dots pulse in opacity and size together over
 two seconds: full opacity at their existing size, fading to half opacity at 60%

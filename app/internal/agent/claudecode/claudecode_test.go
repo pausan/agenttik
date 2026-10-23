@@ -3,6 +3,7 @@ package claudecode
 import (
 	"bytes"
 	"encoding/json"
+	"log"
 	"os"
 	"slices"
 	"strings"
@@ -699,8 +700,16 @@ func TestOnlyAWrittenFollowUpsEchoIsTaken(t *testing.T) {
 	if err := done[0].FollowUp.Send("status?\n"); err != nil {
 		t.Fatal(err)
 	}
+	var logged bytes.Buffer
+	log.SetOutput(&logged)
+	defer log.SetOutput(os.Stderr)
 	if got := feed(`{"type":"user","message":{"role":"user","content":"something else"},"isReplay":true}`); len(got) != 0 {
 		t.Fatalf("unknown echo = %+v", got)
+	}
+	// Said in the log, without the prompt's text, for a CLI that changed
+	// how it echoes.
+	if line := logged.String(); !strings.Contains(line, "an echo of 14 bytes is not the oldest follow-up waiting (8 bytes, 1 waiting)") {
+		t.Fatalf("log = %q", line)
 	}
 	feed(`{"type":"system","subtype":"background_tasks_changed","tasks":[]}`)
 	if done := feed(`{"type":"result","subtype":"success","usage":{}}`); len(done) != 1 || done[0].FollowUp == nil || stdin.closed {

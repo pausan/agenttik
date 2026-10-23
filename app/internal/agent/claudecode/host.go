@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"strings"
 	"sync"
 
@@ -83,7 +84,15 @@ func (h *host) closeIfTaken() bool {
 func (h *host) took(echo string) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if len(h.waiting) == 0 || strings.TrimSpace(h.waiting[0]) != strings.TrimSpace(echo) {
+	if len(h.waiting) == 0 {
+		return false
+	}
+	if strings.TrimSpace(h.waiting[0]) != strings.TrimSpace(echo) {
+		// Logged because a CLI that changed how it echoes prompts would leave
+		// every follow-up untaken, and its turn open until Stop. Sizes only:
+		// prompts are the user's.
+		log.Printf("claudecode: an echo of %d bytes is not the oldest follow-up waiting (%d bytes, %d waiting)",
+			len(echo), len(h.waiting[0]), len(h.waiting))
 		return false
 	}
 	h.waiting = h.waiting[1:]

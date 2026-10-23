@@ -3,6 +3,7 @@ package fake
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/pausan/agenttik/app/internal/agent"
 )
@@ -94,5 +95,41 @@ func TestOpenTurnTakesPromptsUntilTasksEnd(t *testing.T) {
 	}
 	if _, open := <-events; open {
 		t.Fatal("events continued after the last reply")
+	}
+}
+
+// A turn holding as many prompts as it queues refuses the next rather than
+// blocking its sender, which would hold the lock the turn needs to go on.
+func TestOpenTurnRefusesPromptsBeyondItsQueue(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	events, err := New().Run(ctx, agent.TurnRequest{Prompt: "@open\n@background start b1 build\nStarted"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var done agent.Event
+	for ev := range events {
+		if ev.Type == agent.EventDone {
+			done = ev
+			break
+		}
+	}
+	refused := make(chan int, 1)
+	go func() {
+		for i := 1; i <= 12; i++ {
+			if done.FollowUp.Send("@wait 1000\nMore") != nil {
+				refused <- i
+				return
+			}
+		}
+		refused <- 0
+	}()
+	select {
+	case n := <-refused:
+		if n == 0 || n > 10 {
+			t.Fatalf("first refused prompt = %d, want one past the eight the turn holds", n)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("a prompt beyond the turn's queue blocked its sender")
 	}
 }

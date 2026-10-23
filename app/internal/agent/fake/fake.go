@@ -191,8 +191,14 @@ func runScript(ctx context.Context, req agent.TurnRequest, events chan<- agent.E
 		if closed {
 			return errors.New("turn has ended")
 		}
-		prompts <- prompt
-		return nil
+		// Refused when full rather than waited on: the turn needs mu to go
+		// on, and would never get it from a sender blocked here.
+		select {
+		case prompts <- prompt:
+			return nil
+		default:
+			return errors.New("too many prompts waiting")
+		}
 	})
 	defer func() {
 		mu.Lock()

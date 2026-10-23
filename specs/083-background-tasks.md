@@ -173,7 +173,9 @@ The fake provider's `@background start <id> <description>` and
 updates, reloads, finished rows, reused task ids and turn summaries. Its
 `@open` directive keeps the turn open while a task runs, for the test of
 prompts sent and queued meanwhile, for unprocessed prompts sent and queued
-again, and for the dialog of a prompt meant for another model. Runner tests
+again, and for the dialog of a prompt meant for another model. It holds up to
+eight prompts at a time and refuses the next, as a turn that is ending does.
+Runner tests
 cover follow-up order, a prompt missing a closing turn, Send now joining an
 open turn, sending or queueing an unprocessed prompt into each state of a
 task, and joining only on the turn's choice unless told what to do. Runner

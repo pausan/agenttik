@@ -15,7 +15,7 @@ import {
   updateQueuedPrompt,
 } from "../store";
 import { turnSummaries } from "../api";
-import { runningTaskCount, waitingLabel } from "../background-tasks";
+import { otherChoice, runningTaskCount, waitingLabel } from "../background-tasks";
 import { tabScroll, vTabScroll } from "../tab-scroll";
 import ApprovalCard from "./ApprovalCard.vue";
 import ModelSelection from "./ModelSelection.vue";
@@ -237,6 +237,14 @@ const sendNowHint = computed(() =>
       ? "Send this prompt into the running turn; its background tasks keep running"
       : "Send this prompt now, beside whatever else the project is running",
 );
+/* A turn that takes prompts on another model than a queued prompt's asks
+   before taking it (specs/083-background-tasks.md), and the row says so
+   before the button is pressed. */
+const sendNowText = (q) => (otherChoice(S.detail, q) ? `${sendNowLabel.value}…` : sendNowLabel.value);
+const sendNowTitle = (q) =>
+  otherChoice(S.detail, q)
+    ? "The running turn uses another model than this prompt's: asks whether to send it on that one, or stop the turn to run it on its own"
+    : sendNowHint.value;
 
 function waitLabel(since) {
   const secs = Math.max(0, Math.floor((now.value - Number(since || 0)) / 1000));
@@ -618,10 +626,10 @@ watch(
               color="warning"
               variant="ghost"
               size="xs"
-              :label="forcing === q.id ? forcingLabel : sendNowLabel"
+              :label="forcing === q.id ? forcingLabel : sendNowText(q)"
               :loading="forcing === q.id"
               :disabled="q.pending || forcing !== 0 || changing !== 0 || deleting !== 0 || editing !== 0"
-              :title="sendNowHint"
+              :title="sendNowTitle(q)"
               @click="force(q)"
             />
             <UButton

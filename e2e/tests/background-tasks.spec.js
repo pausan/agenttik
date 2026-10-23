@@ -299,7 +299,9 @@ test("a prompt for another model asks before going into the running turn", async
   await prompt.press("Enter");
   const queued = page.getByLabel("Queued prompt", { exact: true });
   await expect(queued).toHaveCount(1);
-  await queued.getByRole("button", { name: "Send now" }).click();
+  const sendNow = queued.getByRole("button", { name: "Send now…" });
+  await expect(sendNow).toHaveAttribute("title", /another model/);
+  await sendNow.click();
   await expect(dialog.getByLabel("Prompt's model")).toContainText("Fake Careful");
   await dialog.getByRole("button", { name: "Force send with Fake Careful" }).click();
   await expect(queued).toHaveCount(0);

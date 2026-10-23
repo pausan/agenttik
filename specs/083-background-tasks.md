@@ -50,7 +50,8 @@ A reply that ends with background tasks still running leaves the turn open
   from the started event's session, so it asks before sending: the dialog
   shows both choices and offers "Send with ‹model›" or Cancel, with how to
   run the prompt on its own model: enqueue it, or Force send it from the
-  queue. A queued prompt's Send now also offers "Force send with ‹model›". The
+  queue. A queued prompt's Send now also offers "Force send with ‹model›",
+  and its row reads "Send now…" with a hint saying why beforehand. The
   buttons name the model and effort, and the subscription and provider too
   when those are what differ, so the two never read the same. A 409 the
   browser did not see coming asks the same.

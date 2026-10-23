@@ -30,8 +30,11 @@ A reply that ends with background tasks still running leaves the turn open
   the stream on that done event.
 - Send hands the prompt to the turn instead of refusing it, and answers with
   the running turn. Send now on a queued prompt does the same instead of
-  cancelling the turn (Force send). Enqueue still waits for the turn to end,
-  and the project's queue still waits for it too.
+  cancelling the turn (Force send), and answers `joined` with the remaining
+  queue. The browser then updates only the queue: reading the transcript back
+  would land after rows streamed meanwhile and replace them, the prompt
+  included. Enqueue still waits for the turn to end, and the project's queue
+  still waits for it too.
 - The provider sends `follow_up` as it starts on each prompt, in order. The
   runner stores the prompt then, as a user message of the same turn, so it
   lands after any reply it waited behind. The browser moves the bubble drawn

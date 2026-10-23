@@ -536,8 +536,19 @@ func (s *Server) forceQueuedMessage(c *fiber.Ctx) error {
 	if body.QueuedID <= 0 {
 		return badRequest("queued_id is required")
 	}
-	if err := s.runner.ForceQueued(c.Params("id"), body.QueuedID); err != nil {
+	joined, err := s.runner.ForceQueued(c.Params("id"), body.QueuedID)
+	if err != nil {
 		return err
+	}
+	if joined {
+		// The prompt went into the running turn, which goes on streaming.
+		// Only the queue changed, so that is all the window re-reads: a
+		// whole transcript read here would land after newer streamed rows.
+		queued, err := s.store.ListQueuedMessages(c.Params("id"))
+		if err != nil {
+			return err
+		}
+		return c.JSON(fiber.Map{"joined": true, "queued": queued, "queue_count": len(queued)})
 	}
 	return c.SendStatus(fiber.StatusAccepted)
 }

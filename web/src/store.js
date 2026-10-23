@@ -3675,8 +3675,17 @@ export async function forceQueued(queuedID) {
   const tab = S.owner;
   if (tab?.kind !== "session" || !queuedID) return;
   try {
-    await api("POST", `/api/sessions/${tab.sessionID}/queue/force`, { queued_id: queuedID });
-    if (tab.detail) await syncMessages(tab);
+    const result = await api("POST", `/api/sessions/${tab.sessionID}/queue/force`, { queued_id: queuedID });
+    if (!tab.detail) return;
+    // A prompt that joined the running turn changes only the queue. Reading
+    // the whole transcript back would replace rows streamed meanwhile,
+    // including this prompt itself (specs/083-background-tasks.md).
+    if (result?.joined) {
+      tab.detail.queued = result.queued;
+      tab.detail.session.queue_count = result.queue_count + (tab.detail.pendingQueued?.length || 0);
+      return;
+    }
+    await syncMessages(tab);
   } catch (e) {
     fail(e);
     throw e;

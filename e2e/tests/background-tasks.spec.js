@@ -95,10 +95,33 @@ test("prompts join a turn that waits on background tasks without stopping them",
   await expect(working).toContainText("Waiting for 1 background task");
   await expect(task).toContainText(/running \ds/);
 
+  // Send now on a queued prompt joins the turn too. A transcript read is
+  // slow on a long task, so it lands after the rows streamed meanwhile; held
+  // back here, one that replaced the transcript would wipe this prompt's
+  // reply. Only the queue may be read back.
   const prompt = page.getByPlaceholder("Ask the agent…");
+  const queued = page.getByLabel("Queued prompt", { exact: true });
+  await prompt.fill(["@wait 1000", "Any news on the build?"].join("\n"));
+  await prompt.press("Enter");
+  await expect(queued).toHaveCount(1);
+  const transcript = /\/api\/sessions\/[^/?]+$/;
+  await page.route(transcript, async (route) => {
+    if (route.request().method() !== "GET") return route.continue();
+    const response = await route.fetch();
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await route.fulfill({ response });
+  });
+  await queued.getByRole("button", { name: "Send now" }).click();
+  await expect(queued).toHaveCount(0);
+  await page.waitForTimeout(3000);
+  // The reply is stored only once it ends, well after a read taken on click.
+  await expect(page.locator("main").getByText("Any news on the build?", { exact: true })).toBeVisible();
+  await expect(page.locator("main").getByText(/@wait 1000\s+Any news on the build\?/)).toBeVisible();
+  await expect(working).toContainText("Waiting for 1 background task");
+  await page.unroute(transcript);
+
   await prompt.fill(["@background end b1 completed built", "All done."].join("\n"));
   await prompt.press("Enter");
-  const queued = page.getByLabel("Queued prompt", { exact: true });
   await expect(queued).toHaveCount(1);
   await queued.getByRole("button", { name: "Send now" }).click();
   await expect(page.getByText("All done.", { exact: true })).toBeVisible();

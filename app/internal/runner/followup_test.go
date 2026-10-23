@@ -165,8 +165,8 @@ func TestForceQueuedJoinsAnOpenTurn(t *testing.T) {
 	if err != nil || len(queued) != 1 {
 		t.Fatalf("queued %+v, err %v", queued, err)
 	}
-	if err := r.ForceQueued(sess.ID, queued[0].ID); err != nil {
-		t.Fatal(err)
+	if joined, err := r.ForceQueued(sess.ID, queued[0].ID); err != nil || !joined {
+		t.Fatalf("joined %v, err %v", joined, err)
 	}
 	if got := <-p.prompts; got != "deploy when ready" {
 		t.Fatalf("provider was handed %q", got)

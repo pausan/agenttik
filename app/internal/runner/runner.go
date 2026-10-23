@@ -657,27 +657,28 @@ func (r *Runner) DeleteQueued(sessionID string, queuedID int64) error {
 // It returns once the prompt has started, or with why it could not, so the
 // window that asked keeps showing the request until then. A turn slower than
 // forceWait to stop is answered as accepted and the prompt starts on its own.
-func (r *Runner) ForceQueued(sessionID string, queuedID int64) error {
+// joined says the prompt went into the running turn rather than a new one.
+func (r *Runner) ForceQueued(sessionID string, queuedID int64) (joined bool, err error) {
 	queued, err := r.store.GetQueuedMessage(queuedID)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if queued.SessionID != sessionID {
-		return store.ErrNotFound
+		return false, store.ErrNotFound
 	}
 	sess, err := r.store.GetSession(sessionID)
 	if err != nil {
-		return err
+		return false, err
 	}
 	// A turn that takes prompts is not in the way: the prompt joins it.
 	if _, ok := r.followUp(sessionID, queued.Prompt); ok {
-		return r.store.RemoveQueuedMessage(queuedID)
+		return true, r.store.RemoveQueuedMessage(queuedID)
 	}
 
 	r.mu.Lock()
 	if _, pending := r.forced[sessionID]; pending {
 		r.mu.Unlock()
-		return ErrForcePending
+		return false, ErrForcePending
 	}
 	done := make(chan error, 1)
 	turn, running := r.active[sessionID]
@@ -695,9 +696,9 @@ func (r *Runner) ForceQueued(sessionID string, queuedID int64) error {
 	}
 	select {
 	case err := <-done:
-		return err
+		return false, err
 	case <-time.After(forceWait):
-		return nil
+		return false, nil
 	}
 }
 

@@ -453,10 +453,12 @@ button[draggable="true"]:active { cursor: grabbing; }
   font-size: 0.95em;
 }
 .markdown th, .markdown td {
+  min-width: 8rem;
   padding: 0.25em 0.6em;
   border: 1px solid var(--ui-border);
   text-align: left;
 }
+.markdown th:first-child, .markdown td:first-child { min-width: 10rem; }
 .markdown th { background: var(--ui-bg-muted); font-weight: 600; }
 
 /* A picture needs something behind it, or a transparent PNG reads as a solid

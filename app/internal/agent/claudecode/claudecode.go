@@ -378,7 +378,7 @@ func (p *streamParser) handleLine(line []byte, out chan<- agent.Event) {
 		}
 	case "user":
 		if env.IsReplay {
-			if p.host != nil && p.host.took() {
+			if p.host != nil && p.host.took(env.Message.Content.text()) {
 				out <- agent.Event{Type: agent.EventFollowUp}
 			}
 			return

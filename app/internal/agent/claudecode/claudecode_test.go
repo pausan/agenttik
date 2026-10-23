@@ -655,3 +655,61 @@ func TestParseReportsBackgroundTasks(t *testing.T) {
 		t.Errorf("finished = %+v", last)
 	}
 }
+
+// A plain reply ends the turn whether or not the CLI echoed the first prompt:
+// the reply is proof enough it was taken.
+func TestPlainReplyClosesWithoutAnEcho(t *testing.T) {
+	stdin := &pipe{}
+	h := &host{w: stdin}
+	if err := h.sendPrompt("hi"); err != nil {
+		t.Fatal(err)
+	}
+	p := streamParser{host: h, subagents: map[string]struct{}{}}
+	out := make(chan agent.Event, 4)
+	p.handleLine([]byte(`{"type":"result","subtype":"success","usage":{}}`), out)
+	if done := <-out; !stdin.closed || done.FollowUp != nil {
+		t.Fatalf("a plain reply with no echo: closed=%v followUp=%v", stdin.closed, done.FollowUp != nil)
+	}
+}
+
+// Only the echo of the oldest follow-up written is that follow-up being
+// taken. Another echo neither becomes follow_up nor lets stdin close under
+// a follow-up still waiting.
+func TestOnlyAWrittenFollowUpsEchoIsTaken(t *testing.T) {
+	stdin := &pipe{}
+	h := &host{w: stdin}
+	if err := h.sendPrompt("build it"); err != nil {
+		t.Fatal(err)
+	}
+	p := streamParser{host: h, subagents: map[string]struct{}{}}
+	out := make(chan agent.Event, 16)
+	feed := func(line string) []agent.Event {
+		p.handleLine([]byte(line), out)
+		var got []agent.Event
+		for len(out) > 0 {
+			got = append(got, <-out)
+		}
+		return got
+	}
+	feed(`{"type":"system","subtype":"background_tasks_changed","tasks":[{"task_id":"b1"}]}`)
+	done := feed(`{"type":"result","subtype":"success","usage":{}}`)
+	if len(done) != 1 || done[0].FollowUp == nil {
+		t.Fatalf("reply with a task running = %+v", done)
+	}
+	if err := done[0].FollowUp.Send("status?\n"); err != nil {
+		t.Fatal(err)
+	}
+	if got := feed(`{"type":"user","message":{"role":"user","content":"something else"},"isReplay":true}`); len(got) != 0 {
+		t.Fatalf("unknown echo = %+v", got)
+	}
+	feed(`{"type":"system","subtype":"background_tasks_changed","tasks":[]}`)
+	if done := feed(`{"type":"result","subtype":"success","usage":{}}`); len(done) != 1 || done[0].FollowUp == nil || stdin.closed {
+		t.Fatalf("reply with a follow-up waiting = %+v closed=%v", done, stdin.closed)
+	}
+	if got := feed(`{"type":"user","message":{"role":"user","content":[{"type":"text","text":"status?"}]},"isReplay":true}`); len(got) != 1 || got[0].Type != agent.EventFollowUp {
+		t.Fatalf("follow-up echo = %+v", got)
+	}
+	if done := feed(`{"type":"result","subtype":"success","usage":{}}`); len(done) != 1 || done[0].FollowUp != nil || !stdin.closed {
+		t.Fatalf("last reply = %+v closed=%v", done, stdin.closed)
+	}
+}

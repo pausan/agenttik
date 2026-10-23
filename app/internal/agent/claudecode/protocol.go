@@ -219,15 +219,30 @@ type message struct {
 }
 
 // contentBlocks also accepts a plain string, which is how an echoed prompt
-// carries its text. Only blocks are read, so a string decodes to none.
+// carries its text: it decodes to one text block.
 type contentBlocks []contentBlock
 
 func (c *contentBlocks) UnmarshalJSON(data []byte) error {
 	if len(data) > 0 && data[0] == '"' {
-		*c = nil
+		var text string
+		if err := json.Unmarshal(data, &text); err != nil {
+			return err
+		}
+		*c = contentBlocks{{Type: "text", Text: text}}
 		return nil
 	}
 	return json.Unmarshal(data, (*[]contentBlock)(c))
+}
+
+// text is the blocks' text, which for an echoed prompt is the prompt.
+func (c contentBlocks) text() string {
+	var b strings.Builder
+	for _, block := range c {
+		if block.Type == "text" {
+			b.WriteString(block.Text)
+		}
+	}
+	return b.String()
 }
 
 type contentBlock struct {

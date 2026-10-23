@@ -155,7 +155,7 @@ Events consumed from stdout JSONL:
 | `...{"delta":{"type":"thinking_delta"}}` | `thinking` |
 | `{"type":"assistant","message":{"content":[{"type":"tool_use",...}]}}` | `tool_use` |
 | `{"type":"user","message":{"content":[{"type":"tool_result",...}]}}` | `tool_result` |
-| `{"type":"user","message":{"content":"..."},"isReplay":true}` | `follow_up` for every prompt after the first |
+| `{"type":"user","message":{"content":"..."},"isReplay":true}` | `follow_up` when its text is the oldest follow-up still waiting |
 | `{"type":"control_request","request":{"subtype":"can_use_tool",...}}` | `approval` |
 | `{"type":"control_cancel_request",...}` | `approval_resolved` |
 | `{"type":"system","subtype":"background_tasks_changed","tasks":[...]}` | `background` states for tasks that started or ended |
@@ -169,10 +169,15 @@ more background work. Meanwhile the turn takes the user's prompts: that done
 event carries a `FollowUp`, which writes each prompt to stdin as another user
 line. The CLI answers input in the order it arrives, queuing a prompt written
 while it replies, and each input gets its own `init` … `result`.
-`--replay-user-messages` echoes every prompt as the CLI starts on it; the echo
-of any prompt after the first becomes `follow_up`. Stdin closes at the first
-result with no background task running and every written prompt echoed, so a
-late prompt's reply can still start background work. The turn ends when the
+`--replay-user-messages` echoes every prompt as the CLI starts on it. The host
+keeps the follow-ups it wrote, oldest first, as written; an echo whose text is
+the oldest one becomes `follow_up` and takes it off the list. Any other echo
+changes nothing: the first prompt's, which carries agenttik's guidance in
+front, or one the CLI adds. Stdin closes at the first result with no
+background task running and no follow-up waiting, so a late prompt's reply
+can still start background work. The first prompt is not waited for: its
+result is proof it was taken, so a turn without follow-ups ends at its first
+plain reply even if the CLI echoes nothing. The turn ends when the
 CLI exits; Stop kills the CLI and its tasks. Closing stdin earlier makes the
 CLI kill the tasks and never wake the agent. A prompt written after the close
 is refused and starts the next turn.

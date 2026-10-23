@@ -22,11 +22,12 @@ type host struct {
 	mu     sync.Mutex
 	w      io.WriteCloser
 	closed bool
-	// prompts counts the prompts written; taken counts those the CLI has
-	// echoed back (--replay-user-messages), which it does as it starts on
-	// one. A prompt written but not yet taken keeps stdin open, so its reply
-	// can still leave background work running.
-	prompts, taken int
+	// waiting are the follow-ups written and not taken yet, oldest first, as
+	// written. The CLI echoes a prompt back (--replay-user-messages) as it
+	// starts on it. A follow-up not taken yet keeps stdin open, so its reply
+	// can still leave background work running. The first prompt is not
+	// among them: a reply to it is proof it was taken, echo or not.
+	waiting []string
 }
 
 func (h *host) send(v any) error {
@@ -63,26 +64,30 @@ func (h *host) closeLocked() {
 	}
 }
 
-// closeIfTaken closes the input unless a prompt written to it has not been
+// closeIfTaken closes the input unless a follow-up written to it has not been
 // taken yet, and reports whether it did. Checked under the same lock as
 // writes, so a prompt is either written before the close or refused.
 func (h *host) closeIfTaken() bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.prompts > h.taken {
+	if len(h.waiting) > 0 {
 		return false
 	}
 	h.closeLocked()
 	return true
 }
 
-// took records that the CLI echoed a prompt back, and reports whether it was
-// a follow-up rather than the turn's first.
-func (h *host) took() bool {
+// took matches a prompt the CLI echoed back against the oldest follow-up
+// waiting, and reports whether it was that one, which is then taken. Any
+// other echo changes nothing: the first prompt's, or one the CLI adds.
+func (h *host) took(echo string) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.taken++
-	return h.taken > 1
+	if len(h.waiting) == 0 || strings.TrimSpace(h.waiting[0]) != strings.TrimSpace(echo) {
+		return false
+	}
+	h.waiting = h.waiting[1:]
+	return true
 }
 
 // Sent with each task prompt, including resumes. CLI system-prompt snapshots
@@ -97,19 +102,24 @@ your final reply. Keep waiting for tests, builds, or agents whose results are
 still needed. Do not stop work just to end the turn, or stop processes the user
 explicitly asked to keep running.`
 
+// sendPrompt writes the turn's first prompt.
 func (h *host) sendPrompt(prompt string) error {
-	return h.sendUser(backgroundTaskGuidance + "\n\n" + prompt)
+	return h.send(userLine(backgroundTaskGuidance + "\n\n" + prompt))
 }
 
-// sendUser writes a prompt, counted until the CLI takes it.
+// sendUser writes a follow-up, which waits until the CLI takes it.
 func (h *host) sendUser(prompt string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if err := h.write(userInput{Type: "user", Message: userMessage{Role: "user", Content: prompt}}); err != nil {
+	if err := h.write(userLine(prompt)); err != nil {
 		return err
 	}
-	h.prompts++
+	h.waiting = append(h.waiting, prompt)
 	return nil
+}
+
+func userLine(prompt string) userInput {
+	return userInput{Type: "user", Message: userMessage{Role: "user", Content: prompt}}
 }
 
 func (h *host) answerTool(requestID string, input json.RawMessage, allow bool, message string) error {

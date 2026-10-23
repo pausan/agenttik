@@ -75,3 +75,65 @@ Tests run their own Xvfb. They check a grabbed window's pixels and the damage
 count, pointer moves and clicks reaching a window, Shift added for `Q`, `é`
 on a spare key, Ctrl+C with its modifier, and clipboard text both ways between
 two programs.
+
+## Viewers
+
+`screen.Manager` is the machine's one screen. The display opens on first use
+and a failure is remembered for five seconds. Each viewer (`Watch`) has its
+own goroutine, encoder and stream of messages:
+
+| Message | Carries |
+|---------|---------|
+| `hello` | viewer id, codec, screen size |
+| `frame` | sequence number, key flag, frame and screen size, base64 VP8/VP9 frame or JPEG bands |
+| `cursor` | pointer position, in screen pixels |
+| `shape` | pointer image as PNG, with its hot spot |
+| `clip` | text another program put on the clipboard |
+
+The loop runs 30 times a second. The pointer is drawn by the viewer, so moving
+it sends a `cursor` message, not a frame; shapes are sent when the XFIXES
+serial changes. A frame is grabbed only when the damage count moved (or a
+keyframe was asked for). It is not encoded when its pixels equal the last
+frame's. Two buffers swap, so a steady stream allocates nothing per frame.
+
+**Pacing.** A viewer acknowledges each frame it has drawn. While it has 6
+frames or 256 KB unacknowledged, no new frame is grabbed. This bounds latency
+by what is in flight, not by the buffers of every proxy in between (the
+desktop window, a remote profile, the quick tunnel). A slow link gets fewer
+frames, each still current. Acknowledgements missing for two seconds are
+assumed lost.
+
+**Keyframes** are sent first, after a size change (a new encoder) and when
+the viewer asks (`RequestKey`, after a decode error).
+
+**JPEG fallback.** With no VP8/VP9 library, or for a client without
+WebCodecs, frames are 64-row bands; only the bands that differ from the last
+frame are sent. Each is encoded on its own core at quality 75.
+
+Screens wider than 2560 or taller than 1600 are halved before VP8/VP9
+encoding.
+
+**Input.** A viewer's events are applied in order: `m` move, `b` button, `w`
+wheel steps, `k` key down/up by browser `key` and `code`, `c` text. Keys are
+remembered by `code`, so a key released after Shift changed what it types
+releases the key it pressed. Closing a viewer releases every key and button
+it still holds. Coordinates are clamped to the screen; wheel events are
+capped at 50 steps.
+
+## Agent API
+
+`Manager.Screenshot(width, format)` grabs once and scales down by area
+averaging, as PNG or JPEG. `Manager.Do` runs a list of actions shaped like
+the computer-use tool's: `mouse_move`, `left_click`, `right_click`,
+`middle_click`, `double_click`, `triple_click`, `left_mouse_down`,
+`left_mouse_up`, `left_click_drag`, `scroll`, `type`, `key`, `hold_key`,
+`wait`, `cursor_position`. Coordinates are `[x, y]` in the space of the
+request's `width` and `height` (the screenshot the agent saw), or screen
+pixels without them. Clicks and scrolls hold the modifiers named in `text`.
+Keys use xdotool names (`ctrl+shift+t`, `Return`, `super`). The first failing
+action stops the list, and the answer names it. Waits are capped at 30
+seconds. The answer is the pointer's position in the request's space.
+
+Tests use `screen.Fake`: frames only on change, changed bands only, keyframes
+on request, pacing by acknowledgement, input order and release on close,
+clipboard forwarding, screenshot scaling and action coordinates.

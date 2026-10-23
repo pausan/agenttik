@@ -91,6 +91,9 @@ type openTurn struct {
 	turn store.Turn
 	// followUp is set while the turn takes prompts.
 	followUp *agent.FollowUp
+	// closing is set once its last reply is out: the turn is ending by
+	// itself, so a prompt waits for it rather than being refused as busy.
+	closing bool
 	// pending are the stored messages of prompts handed over and not yet
 	// taken, oldest first. Each is stored when accepted, without a turn, and
 	// joins the turn when the provider starts on it, below the reply it was
@@ -301,8 +304,9 @@ func (r *Runner) AcceptsPrompts(sessionID string) bool {
 
 // followUp hands the prompt queued describes to the session's running turn
 // when that turn takes prompts. joined is the prompt as stored when it did. A
-// turn that has just stopped taking them is ending by itself: ending is then
-// closed once it has, so the prompt can start the next turn instead.
+// turn that has just stopped taking them, or whose last reply is out, is
+// ending by itself: ending is then closed once it has, so the prompt can start
+// the next turn instead. A turn still replying is busy, and gets neither.
 //
 // The turn runs on the choice its process was started on, and a prompt meant
 // for another one is refused with a ChoiceError rather than run on it behind
@@ -328,6 +332,9 @@ func (r *Runner) followUp(queued store.QueuedMessage, stored int64, anyChoice bo
 	open.mu.Lock()
 	defer open.mu.Unlock()
 	if open.followUp == nil {
+		if open.closing {
+			return nil, nil, open.released, nil
+		}
 		return nil, nil, nil, nil
 	}
 	if want := choiceOf(queued); !anyChoice && want != open.choice {
@@ -1184,7 +1191,7 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 			// own message.
 			flushText()
 			open.mu.Lock()
-			open.followUp = ev.FollowUp
+			open.followUp, open.closing = ev.FollowUp, ev.FollowUp == nil
 			open.mu.Unlock()
 			inFlight, inFlightMessage = nil, 0
 			if ev.Usage != nil {

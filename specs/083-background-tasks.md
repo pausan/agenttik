@@ -84,9 +84,11 @@ A reply that ends with background tasks still running leaves the turn open
   project's other tasks, as Send always does, and Enqueue waits for the
   project's queue. Both refuse, with 409, a prompt that ran, one the running
   turn holds, or one that is not yours.
-- A prompt that reaches the turn just as it stops taking prompts starts the
-  next turn: Send waits up to 30 seconds for the turn to end, and Send now
-  claims the turn's release, as Force send does, without cutting it short.
+- A prompt that reaches a turn as it ends — it has just stopped taking
+  prompts, or its last reply is out — starts the next turn: Send waits up to
+  30 seconds for the turn to end, and Send now claims the turn's release, as
+  Force send does, without cutting it short. This holds for any turn, with
+  background tasks or not. A turn still replying is busy, and refuses at once.
 - The prompt bar's Send stays enabled, and the progress line says how many
   tasks are running, and whether the agent is replying or waiting. A
   background subagent keeps calling tools while the agent waits; those calls

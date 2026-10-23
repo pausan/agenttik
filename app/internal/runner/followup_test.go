@@ -496,3 +496,31 @@ func TestSendNowTwiceHandsThePromptOverOnce(t *testing.T) {
 	close(p.events)
 	waitFor(t, func() bool { return !r.Running(sess.ID) }, "the turn to end")
 }
+
+// A prompt sent just after the turn's last reply, while the turn winds down,
+// waits for it to end and starts the next turn. One sent while the agent is
+// still replying is refused at once, as before.
+func TestSendJustAfterTheLastReplyStartsTheNext(t *testing.T) {
+	p := newOpenProvider()
+	r, _, sess := setup(t, p)
+	first, err := r.Send(sess.ID, "build")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Send(sess.ID, "now?"); !errors.Is(err, ErrBusy) {
+		t.Fatalf("sent while the agent replies: %v", err)
+	}
+	p.events <- agent.Event{Type: agent.EventDone, FollowUp: p.followUp()}
+	waitFor(t, func() bool { return r.AcceptsPrompts(sess.ID) }, "the turn to take prompts")
+	p.events <- agent.Event{Type: agent.EventDone}
+	waitFor(t, func() bool { return !r.AcceptsPrompts(sess.ID) }, "the turn to stop taking prompts")
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		close(p.events)
+	}()
+	next, err := r.Send(sess.ID, "late")
+	if err != nil || next.ID == first.ID {
+		t.Fatalf("late prompt: turn %+v, err %v", next, err)
+	}
+	waitFor(t, func() bool { return !r.Running(sess.ID) }, "the next turn to end")
+}

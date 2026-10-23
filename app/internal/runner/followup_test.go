@@ -612,3 +612,30 @@ func lastUser(t *testing.T, st *store.Store, sessionID, content string) store.Me
 	t.Fatalf("no prompt %q in %+v", content, messages)
 	return store.Message{}
 }
+
+// Send now hands over the queued prompt as it stands when the turn takes it,
+// read under the turn's lock, and stores what it handed over: an edit made in
+// another window after the request read the row is what goes, not the text
+// the request first saw.
+func TestSendNowHandsOverTheRowAsItStands(t *testing.T) {
+	p := newOpenProvider()
+	r, st, sess := setup(t, p)
+	openOn(t, p, r, sess.ID)
+	queued, err := r.Enqueue(sess.ID, "deploy game A")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := queued[0]
+	if err := st.SetQueuedMessage(seen.ID, "deploy game B", seen.Provider, seen.AccountID, seen.Model, seen.Effort); err != nil {
+		t.Fatal(err)
+	}
+	_, joined, _, err := r.followUp(seen, 0, false)
+	if err != nil || joined == nil || joined.Content != "deploy game B" {
+		t.Fatalf("joined %+v, err %v", joined, err)
+	}
+	if got := <-p.prompts; got != "deploy game B" {
+		t.Fatalf("provider was handed %q", got)
+	}
+	close(p.events)
+	waitFor(t, func() bool { return !r.Running(sess.ID) }, "the turn to end")
+}

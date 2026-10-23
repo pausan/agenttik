@@ -136,7 +136,7 @@ func TestQueuedToMessage(t *testing.T) {
 	must(t, s.CreateSession(&Session{ID: "task", ProjectID: project.ID, Provider: "fake", Model: "fake"}))
 	queued, err := s.EnqueueMessage("task", "deploy when ready", "fake", 0, "m2", "high")
 	must(t, err)
-	m, err := s.QueuedToMessage(queued.ID)
+	m, err := s.QueuedToMessage(queued.ID, "deploy when ready")
 	must(t, err)
 	if m.Role != RoleUser || m.Content != "deploy when ready" || m.TurnID != 0 || m.CreatedAt != queued.CreatedAt {
 		t.Fatalf("message = %+v", m)
@@ -147,7 +147,7 @@ func TestQueuedToMessage(t *testing.T) {
 	if messages, _ := s.ListMessages("task"); len(messages) != 1 || messages[0].ID != m.ID {
 		t.Fatalf("messages = %+v", messages)
 	}
-	if _, err := s.QueuedToMessage(queued.ID); err != ErrNotFound {
+	if _, err := s.QueuedToMessage(queued.ID, "deploy when ready"); err != ErrNotFound {
 		t.Fatalf("taking it twice: %v", err)
 	}
 }

@@ -338,6 +338,16 @@ func (r *Runner) followUp(queued store.QueuedMessage, stored int64, anyChoice bo
 		}
 		return nil, nil, nil, nil
 	}
+	if queued.ID != 0 {
+		// The row as it stands, read under this lock: of two Send nows for
+		// one row the second finds it gone instead of handing it over again,
+		// and an edit made meanwhile, to its text or its model, is what goes.
+		row, err := r.store.GetQueuedMessage(queued.ID)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		queued, prompt = *row, row.Prompt
+	}
 	if want := choiceOf(queued); !anyChoice && want != open.choice {
 		return nil, nil, nil, &ChoiceError{Running: open.choice, Wanted: want}
 	}
@@ -352,13 +362,7 @@ func (r *Runner) followUp(queued store.QueuedMessage, stored int64, anyChoice bo
 		if message.TurnID != 0 || slices.Contains(open.pending, stored) {
 			return nil, nil, nil, ErrNotUnprocessed
 		}
-	case queued.ID != 0:
-		// Looked for under this lock, so of two Send nows for one row the
-		// second finds it gone instead of handing it over again.
-		if _, err := r.store.GetQueuedMessage(queued.ID); err != nil {
-			return nil, nil, nil, err
-		}
-	default:
+	case queued.ID == 0:
 		if message, err = r.store.AddMessage(sessionID, 0, store.RoleUser, prompt); err != nil {
 			return nil, nil, nil, err
 		}
@@ -376,9 +380,9 @@ func (r *Runner) followUp(queued store.QueuedMessage, stored int64, anyChoice bo
 			message = moved
 		}
 	case queued.ID != 0:
-		// A row deleted from the queue meanwhile is stored all the same:
-		// the provider has the prompt.
-		if message, err = r.store.QueuedToMessage(queued.ID); err != nil {
+		// Stored as sent, whatever the row says by now. A row deleted from
+		// the queue meanwhile is stored all the same: the provider has it.
+		if message, err = r.store.QueuedToMessage(queued.ID, prompt); err != nil {
 			if message, err = r.store.AddMessage(sessionID, 0, store.RoleUser, prompt); err != nil {
 				return nil, nil, nil, err
 			}

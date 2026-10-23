@@ -119,17 +119,19 @@ func (s *Store) MessageToQueue(id int64, provider string, accountID int64, model
 
 // QueuedToMessage takes a waiting prompt out of its session's queue into the
 // transcript, as a user message without a turn, in one transaction: the
-// reverse of MessageToQueue, keeping the time it was accepted. It is never in
-// both, and of two callers after the same row, the second finds it gone.
-func (s *Store) QueuedToMessage(id int64) (*Message, error) {
+// reverse of MessageToQueue, keeping the time it was accepted. content is
+// the text the provider was handed, stored rather than whatever the row says
+// by now. It is never in both, and of two callers after the same row, the
+// second finds it gone.
+func (s *Store) QueuedToMessage(id int64, content string) (*Message, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return nil, fmt.Errorf("unqueue message %d: %w", id, err)
 	}
 	defer tx.Rollback()
-	m := Message{Role: RoleUser}
-	if err := tx.QueryRow(`SELECT session_id, prompt, created_at FROM queued_messages WHERE id = ?`, id).
-		Scan(&m.SessionID, &m.Content, &m.CreatedAt); err != nil {
+	m := Message{Role: RoleUser, Content: content}
+	if err := tx.QueryRow(`SELECT session_id, created_at FROM queued_messages WHERE id = ?`, id).
+		Scan(&m.SessionID, &m.CreatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}

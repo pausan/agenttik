@@ -187,3 +187,76 @@ test("a prompt the agent never got to stays, marked as not processed", async ({ 
   await page.reload();
   await expect(asked).toContainText("Not processed");
 });
+
+/* A prompt the agent never got to goes again as it is, without editing it,
+   which would cut the transcript below it. Send runs it as the prompt bar
+   would — now, or into a turn that takes prompts — and Enqueue queues it.
+   Either moves it to the end. */
+test("a prompt the agent never processed can be sent or queued again", async ({ page }) => {
+  await addProject(page);
+  await openProject(page);
+  await newTask(page);
+  await pickModel(page);
+  await sendPrompt(page, ["@wait 20000", "Checked."].join("\n"));
+  const working = page.getByLabel("Agent working");
+  await expect(working).toBeVisible();
+  const prompt = page.getByPlaceholder("Ask the agent…");
+  const queued = page.getByLabel("Queued prompt", { exact: true });
+  for (const text of ["Is game B next?", "And game C?", "And game D?"]) {
+    await prompt.fill(text);
+    await prompt.press("Enter");
+  }
+  await expect(queued).toHaveCount(3);
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await expect(working).toHaveCount(0);
+
+  const mine = page.locator("[data-message-id]").filter({ has: page.getByText("You", { exact: true }) });
+  const [b, c, d] = ["Is game B next?", "And game C?", "And game D?"].map((text) => mine.filter({ hasText: text }));
+  for (const asked of [b, c, d]) await expect(asked).toContainText("Not processed");
+  const text = (value) => page.getByText(value, { exact: true });
+  const before = async (left, right) =>
+    expect(await left.evaluate((node, next) => !!(node.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING),
+      await right.elementHandle())).toBe(true);
+
+  // Sent while idle, it runs now, below the prompts still unprocessed.
+  await b.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(text("Is game B next?")).toHaveCount(2);
+  await expect(working).toHaveCount(0);
+  await expect(b).not.toContainText("Not processed");
+  await before(d, b);
+
+  // Sent into a turn waiting on a background task, it joins that turn.
+  await sendPrompt(page, ["@open", "@background start b1 build game A", "Build started."].join("\n"));
+  await expect(working).toContainText("Waiting for 1 background task");
+  await c.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(text("And game C?")).toHaveCount(2);
+  await expect(c).not.toContainText("Not processed");
+  await expect(working).toContainText("Waiting for 1 background task");
+  await before(text("Build started."), c);
+  await sendPrompt(page, ["@background end b1 completed built", "All done."].join("\n"));
+  await expect(working).toHaveCount(0);
+
+  // While the agent is busy it can only be queued, and runs after.
+  await sendPrompt(page, ["@wait 3000", "Built."].join("\n"));
+  await expect(working).toBeVisible();
+  await expect(d.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
+  await d.getByRole("button", { name: "Enqueue", exact: true }).click();
+  await expect(queued).toHaveCount(1);
+  await expect(queued).toContainText("And game D?");
+  await expect(d).toHaveCount(0);
+  await expect(text("And game D?")).toHaveCount(2);
+  await expect(working).toHaveCount(0);
+  await expect(queued).toHaveCount(0);
+
+  const order = async () => {
+    await expect(page.getByText("Not processed")).toHaveCount(0);
+    await before(b, text("Build started."));
+    await before(c, text("All done."));
+    await before(text("All done."), text("Built."));
+    await before(text("Built."), d);
+  };
+  await order();
+  await page.reload();
+  await expect(text("And game D?")).toHaveCount(2);
+  await order();
+});

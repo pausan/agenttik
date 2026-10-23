@@ -58,9 +58,12 @@ type Event struct {
 	Turn    *store.Turn    `json:"turn,omitempty"`
 	Session *store.Session `json:"session,omitempty"`
 	Prompt  string         `json:"prompt,omitempty"`
+	// Message is the row an event stored. On started it is set only when
+	// the turn's prompt is one the transcript held, sent again unprocessed.
 	Message *store.Message `json:"message,omitempty"`
-	// Replaces is set on follow_up when the prompt moved below the reply it
-	// waited behind: the id it was stored under before.
+	// Replaces is set when a prompt the transcript held moved below rows
+	// stored after it — on follow_up, below the reply it waited behind, and
+	// on started, sent again — and is the id it was stored under before.
 	Replaces int64 `json:"replaces,omitempty"`
 	// AcceptsPrompts is set on a reply's done event when the turn stays open
 	// and takes prompts, and on session_background.
@@ -300,8 +303,11 @@ func (r *Runner) AcceptsPrompts(sessionID string) bool {
 //
 // The prompt is stored before the provider has it, without a turn: until the
 // provider starts on it, it lives only in the CLI's memory and this runner's,
-// and a turn that ends first would otherwise take it along.
-func (r *Runner) followUp(sessionID, prompt string) (turn *store.Turn, joined *store.Message, ending <-chan struct{}, err error) {
+// and a turn that ends first would otherwise take it along. stored is a prompt
+// the transcript holds already, one the agent never processed, and 0 for a new
+// one. It moves to the end once the provider has it, where a prompt sent now
+// goes.
+func (r *Runner) followUp(sessionID, prompt string, stored int64) (turn *store.Turn, joined *store.Message, ending <-chan struct{}, err error) {
 	r.mu.Lock()
 	active, ok := r.active[sessionID]
 	r.mu.Unlock()
@@ -314,14 +320,30 @@ func (r *Runner) followUp(sessionID, prompt string) (turn *store.Turn, joined *s
 	if open.followUp == nil {
 		return nil, nil, nil, nil
 	}
-	message, err := r.store.AddMessage(sessionID, 0, store.RoleUser, prompt)
-	if err != nil {
+	var message *store.Message
+	if stored != 0 {
+		// Checked again under the lock queueing it takes as well: it may have
+		// just been queued, or sent from another click.
+		if message, err = r.store.GetMessage(stored); err != nil {
+			return nil, nil, nil, err
+		}
+		if message.TurnID != 0 || slices.Contains(open.pending, stored) {
+			return nil, nil, nil, ErrNotUnprocessed
+		}
+	} else if message, err = r.store.AddMessage(sessionID, 0, store.RoleUser, prompt); err != nil {
 		return nil, nil, nil, err
 	}
 	if err := open.followUp.Send(attachments.Resolve(prompt, r.store.Dir())); err != nil {
-		_ = r.store.DeleteMessage(message.ID)
+		if stored == 0 {
+			_ = r.store.DeleteMessage(message.ID)
+		}
 		open.followUp = nil
 		return nil, nil, open.released, nil
+	}
+	if stored != 0 {
+		if moved, _, err := r.store.MoveMessageToEnd(stored, 0); err == nil {
+			message = moved
+		}
 	}
 	open.pending = append(open.pending, message.ID)
 	snapshot := open.turn
@@ -359,8 +381,9 @@ func (r *Runner) BackgroundTasks(sessionID string) []agent.BackgroundTask {
 // that turn takes prompts. It returns as soon as the provider has it; the turn
 // continues in the background and is observed over the hub.
 func (r *Runner) Send(sessionID, prompt string) (*store.Turn, error) {
-	return r.send(store.QueuedMessage{SessionID: sessionID, Prompt: prompt,
-		CreatedAt: time.Now().UnixMilli()})
+	turn, _, err := r.send(store.QueuedMessage{SessionID: sessionID, Prompt: prompt,
+		CreatedAt: time.Now().UnixMilli()}, 0)
+	return turn, err
 }
 
 // send is Send's body, over the queue row shape rather than a bare prompt.
@@ -369,13 +392,16 @@ func (r *Runner) Send(sessionID, prompt string) (*store.Turn, error) {
 // then the prompt goes back where it was waiting instead of being lost. A
 // prompt sent straight to a session has no row of its own yet; it is described
 // by one here, with the time it was accepted, for the same reason.
-func (r *Runner) send(queued store.QueuedMessage) (*store.Turn, error) {
-	turn, joined, ending, err := r.followUp(queued.SessionID, queued.Prompt)
+//
+// stored is a prompt the transcript holds already, as followUp takes it, and
+// joined is the prompt as stored when it went into the running turn.
+func (r *Runner) send(queued store.QueuedMessage, stored int64) (*store.Turn, *store.Message, error) {
+	turn, joined, ending, err := r.followUp(queued.SessionID, queued.Prompt, stored)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if joined != nil {
-		return turn, nil
+		return turn, joined, nil
 	}
 	if ending != nil {
 		select {
@@ -385,7 +411,8 @@ func (r *Runner) send(queued store.QueuedMessage) (*store.Turn, error) {
 	}
 	r.transfer.RLock()
 	defer r.transfer.RUnlock()
-	return r.sendDuringTransferLock(queued)
+	turn, err = r.sendDuringTransferLock(queued, stored)
+	return turn, nil, err
 }
 
 // WithIdleProject prevents new turns and clock fires while project data moves.
@@ -413,7 +440,7 @@ func startID(sess *store.Session, hasRun bool) string {
 	return sess.ID
 }
 
-func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage) (*store.Turn, error) {
+func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage, stored int64) (*store.Turn, error) {
 	sessionID, prompt := queued.SessionID, queued.Prompt
 	sess, err := r.store.GetSession(sessionID)
 	if err != nil {
@@ -516,7 +543,18 @@ func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage) (*store.Turn
 		release()
 		return nil, err
 	}
-	if _, err := r.store.AddMessage(sessionID, turn.ID, store.RoleUser, prompt); err != nil {
+	// A prompt the transcript holds already is the turn's from here, moved
+	// below everything as a prompt sent now would be. One queued or edited
+	// away meanwhile leaves no turn behind.
+	var adopted *store.Message
+	var replaces int64
+	if stored != 0 {
+		adopted, replaces, err = r.store.MoveMessageToEnd(stored, turn.ID)
+	} else {
+		_, err = r.store.AddMessage(sessionID, turn.ID, store.RoleUser, prompt)
+	}
+	if err != nil {
+		_ = r.store.DiscardTurn(turn.ID)
 		release()
 		return nil, err
 	}
@@ -570,7 +608,8 @@ func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage) (*store.Turn
 	open.turn = snapshot
 	open.mu.Unlock()
 	started := Event{SessionID: sess.ID, ProjectID: sess.ProjectID, TurnID: turn.ID,
-		Event: agent.Event{Type: "started"}, Turn: &snapshot, Session: sess, Prompt: prompt}
+		Event: agent.Event{Type: "started"}, Turn: &snapshot, Session: sess, Prompt: prompt,
+		Message: adopted, Replaces: replaces}
 	r.hub.Publish(sess.ID, started)
 	r.hub.Publish(ProjectTopic(sess.ProjectID), started)
 
@@ -583,7 +622,7 @@ func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage) (*store.Turn
 // scheduler picked up straight away is already gone from that list and the
 // transcript never draws it as queued.
 func (r *Runner) Enqueue(sessionID, prompt string) ([]store.QueuedMessage, error) {
-	sess, err := r.enqueue(sessionID, prompt)
+	sess, err := r.enqueue(sessionID, prompt, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -593,7 +632,9 @@ func (r *Runner) Enqueue(sessionID, prompt string) ([]store.QueuedMessage, error
 
 // enqueue accepts a prompt without dispatching it. Schedule ticks use this
 // while holding the transfer lock, then dispatch after releasing that lock.
-func (r *Runner) enqueue(sessionID, prompt string) (*store.Session, error) {
+// stored is a prompt the transcript holds already, one the agent never
+// processed, which leaves the transcript for the queue; 0 for a new one.
+func (r *Runner) enqueue(sessionID, prompt string, stored int64) (*store.Session, error) {
 	sess, err := r.store.GetSession(sessionID)
 	if err != nil {
 		return nil, err
@@ -604,7 +645,12 @@ func (r *Runner) enqueue(sessionID, prompt string) (*store.Session, error) {
 	if hasRun, err := r.store.HasTurns(sessionID); err == nil {
 		r.claimProjectPrompt(sess, hasRun)
 	}
-	if _, err := r.store.EnqueueMessage(sessionID, prompt, sess.Provider, sess.AccountID, sess.Model, sess.Effort); err != nil {
+	if stored != 0 {
+		err = r.queueStored(sess, stored)
+	} else {
+		_, err = r.store.EnqueueMessage(sessionID, prompt, sess.Provider, sess.AccountID, sess.Model, sess.Effort)
+	}
+	if err != nil {
 		return nil, err
 	}
 	if err := r.unarchiveTask(sess); err != nil {
@@ -705,7 +751,7 @@ func (r *Runner) ForceQueued(sessionID string, queuedID int64) (joined *store.Me
 	}
 	// A turn that takes prompts is not in the way: the prompt joins it. Its
 	// queue row goes only once the provider has it.
-	_, message, ending, err := r.followUp(sessionID, queued.Prompt)
+	_, message, ending, err := r.followUp(sessionID, queued.Prompt, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -794,7 +840,8 @@ func (r *Runner) sendQueued(queued *store.QueuedMessage) (*store.Turn, error) {
 			return nil, err
 		}
 	}
-	return r.send(*queued)
+	turn, _, err := r.send(*queued, 0)
+	return turn, err
 }
 
 // dispatchLock serializes queue dispatch within one project. One lock per

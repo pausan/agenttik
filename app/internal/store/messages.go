@@ -38,13 +38,14 @@ func (s *Store) DeleteMessage(id int64) error {
 	return nil
 }
 
-// MoveMessageToEnd gives a message to turnID, 0 for none, and puts it below
-// everything else in its session. A prompt sent into a running turn is stored
-// when it is accepted, which can be before the end of a reply it waits behind;
-// it moves below that reply once the agent starts on it. Ids are the
-// transcript's order, so a message with rows after it moves under a new id,
-// and replaced is the id it had. One already last keeps its id, and replaced
-// is 0.
+// MoveMessageToEnd gives a message without a turn to turnID, 0 for none, and
+// puts it below everything else in its session. A prompt sent into a running
+// turn is stored when it is accepted, which can be before the end of a reply
+// it waits behind; it moves below that reply once the agent starts on it. Ids
+// are the transcript's order, so a message with rows after it moves under a
+// new id, and replaced is the id it had. One already last keeps its id, and
+// replaced is 0. A message that has a turn is not found: of two callers after
+// the same prompt, only one gets it.
 func (s *Store) MoveMessageToEnd(id, turnID int64) (m *Message, replaced int64, err error) {
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -52,7 +53,8 @@ func (s *Store) MoveMessageToEnd(id, turnID int64) (m *Message, replaced int64, 
 	}
 	defer tx.Rollback()
 	var msg Message
-	if err := tx.QueryRow(`SELECT id, session_id, role, content, created_at FROM messages WHERE id = ?`, id).
+	if err := tx.QueryRow(`SELECT id, session_id, role, content, created_at FROM messages
+		WHERE id = ? AND turn_id IS NULL`, id).
 		Scan(&msg.ID, &msg.SessionID, &msg.Role, &msg.Content, &msg.CreatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, 0, ErrNotFound
@@ -88,18 +90,23 @@ func (s *Store) MoveMessageToEnd(id, turnID int64) (m *Message, replaced int64, 
 }
 
 // MessageToQueue puts a prompt the agent never started on back in its
-// session's queue, with the provider and model it is to run on, and takes it
-// out of the transcript, in one transaction.
+// session's queue, behind what waits there, with the provider and model it is
+// to run on, and takes it out of the transcript, in one transaction. As with
+// MoveMessageToEnd, a message that has a turn is not found.
 func (s *Store) MessageToQueue(id int64, provider string, accountID int64, model, effort string) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return fmt.Errorf("requeue message %d: %w", id, err)
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec(`INSERT INTO queued_messages (session_id, prompt, provider, account_id, model, effort, created_at)
-		SELECT session_id, content, ?, ?, ?, ?, ? FROM messages WHERE id = ?`,
-		provider, accountID, model, effort, nowMillis(), id); err != nil {
+	res, err := tx.Exec(`INSERT INTO queued_messages (session_id, prompt, provider, account_id, model, effort, created_at)
+		SELECT session_id, content, ?, ?, ?, ?, ? FROM messages WHERE id = ? AND turn_id IS NULL`,
+		provider, accountID, model, effort, nowMillis(), id)
+	if err != nil {
 		return fmt.Errorf("requeue message %d: %w", id, err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
 	}
 	if _, err := tx.Exec(`DELETE FROM messages WHERE id = ?`, id); err != nil {
 		return fmt.Errorf("requeue message %d: %w", id, err)

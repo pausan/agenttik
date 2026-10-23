@@ -61,6 +61,9 @@ func TestMoveMessageToEnd(t *testing.T) {
 	if moved.ID != prompt.ID || replaced != 0 || moved.TurnID != turn.ID {
 		t.Fatalf("last message moved: %+v replaced %d", moved, replaced)
 	}
+	if _, _, err := s.MoveMessageToEnd(prompt.ID, 0); err != ErrNotFound {
+		t.Fatalf("moving a prompt a turn has: %v", err)
+	}
 
 	late, err := s.AddMessage("task", 0, RoleUser, "and now?")
 	must(t, err)
@@ -101,6 +104,24 @@ func TestMessageToQueue(t *testing.T) {
 	queued, err := s.ListQueuedMessages("task")
 	must(t, err)
 	if len(queued) != 1 || queued[0].Prompt != "deploy when ready" || queued[0].Model != "m2" || queued[0].Effort != "high" {
+		t.Fatalf("queued = %+v", queued)
+	}
+	if err := s.MessageToQueue(prompt.ID, "fake", 0, "m2", "high"); err != ErrNotFound {
+		t.Fatalf("requeueing it twice: %v", err)
+	}
+
+	// One that ran stays where it is.
+	turn, err := s.StartTurn("task", "fake", "")
+	must(t, err)
+	ran, err := s.AddMessage("task", turn.ID, RoleUser, "build")
+	must(t, err)
+	if err := s.MessageToQueue(ran.ID, "fake", 0, "m2", "high"); err != ErrNotFound {
+		t.Fatalf("requeueing a prompt that ran: %v", err)
+	}
+	if messages, _ := s.ListMessages("task"); len(messages) != 1 {
+		t.Fatalf("messages = %+v", messages)
+	}
+	if queued, _ := s.ListQueuedMessages("task"); len(queued) != 1 {
 		t.Fatalf("queued = %+v", queued)
 	}
 }

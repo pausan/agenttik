@@ -321,6 +321,8 @@ func (s *Server) routes() {
 	api.Post("/sessions/:id/threads", s.createThread)
 	api.Post("/sessions/:id/spawn", s.spawnThread)
 	api.Post("/sessions/:id/messages/:message/edit", s.editMessage)
+	api.Post("/sessions/:id/messages/:message/send", s.sendUnprocessed)
+	api.Post("/sessions/:id/messages/:message/queue", s.queueUnprocessed)
 	api.Post("/sessions/:id/queue", s.enqueueMessage)
 	api.Patch("/sessions/:id/queue/:queuedID", s.updateQueuedMessage)
 	api.Delete("/sessions/:id/queue/:queuedID", s.deleteQueuedMessage)
@@ -495,6 +497,8 @@ func errorHandler(c *fiber.Ctx, err error) error {
 	case errors.Is(err, runner.ErrNotRunning):
 		code = fiber.StatusConflict
 	case errors.Is(err, runner.ErrForcePending):
+		code = fiber.StatusConflict
+	case errors.Is(err, runner.ErrNotUnprocessed):
 		code = fiber.StatusConflict
 	case errors.Is(err, runner.ErrApprovalGone):
 		code = fiber.StatusConflict

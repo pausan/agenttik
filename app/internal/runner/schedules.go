@@ -102,7 +102,7 @@ func (r *Runner) fireSchedule(s *store.Schedule, now time.Time) {
 	}
 	// The open run guards the schedule while its prompt waits in the project
 	// queue, executes, or waits for a provider retry. Only its first turn closes it.
-	if _, err := r.enqueue(sess.ID, s.Prompt); err != nil {
+	if _, err := r.enqueue(sess.ID, s.Prompt, 0); err != nil {
 		r.closeUnstartedScheduleRun(sess.ID, store.RunError)
 	}
 }

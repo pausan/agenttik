@@ -54,6 +54,20 @@ A reply that ends with background tasks still running leaves the turn open
   ([021](021-stop-active-tasks.md)) and prompts left by a crash, but not the
   copies a task opened from a thread starts with ([092](092-threads.md)):
   they ran in the thread, and are older than the task.
+- A "Not processed" prompt has Send and Enqueue buttons beside its label. They
+  do what the prompt bar does, with the prompt as it is; editing it would cut
+  the transcript below it. `POST /api/sessions/:id/messages/:message/send`
+  hands it to the running turn when that turn takes prompts, answering
+  `joined` with the prompt as stored and held like any other, or starts a turn
+  with it. While the agent is busy with something else it is refused, as Send
+  is. The message itself moves to the end of the transcript, where a prompt
+  sent now goes; a turn it starts carries it on its started event, with
+  `message` and `replaces`. `POST /api/sessions/:id/messages/:message/queue`
+  moves it out of the transcript to the end of the task's queue, with the
+  task's current model. Neither reorders anything else: Send starts beside the
+  project's other tasks, as Send always does, and Enqueue waits for the
+  project's queue. Both refuse, with 409, a prompt that ran, one the running
+  turn holds, or one that is not yours.
 - A prompt that reaches the turn just as it stops taking prompts starts the
   next turn: Send waits up to 30 seconds for the turn to end, and Send now
   claims the turn's release, as Force send does, without cutting it short.
@@ -139,8 +153,10 @@ The fake provider's `@background start <id> <description>` and
 `e2e/tests/background-tasks.spec.js`, covering placement between tools,
 updates, reloads, finished rows, reused task ids and turn summaries. Its
 `@open` directive keeps the turn open while a task runs, for the test of
-prompts sent and queued meanwhile. Runner tests cover follow-up order, a prompt
-missing a closing turn, and Send now joining an open turn. Runner
+prompts sent and queued meanwhile, and for unprocessed prompts sent and queued
+again. Runner tests cover follow-up order, a prompt missing a closing turn,
+Send now joining an open turn, and sending or queueing an unprocessed prompt
+into each state of a task. Runner
 tests cover prose boundaries, saved state and stream message identity;
 store tests cover interrupted tasks on restart. Browser unit tests cover
 updates during streaming and duplicate events. Each provider's parser has

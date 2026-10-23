@@ -3255,9 +3255,12 @@ function onSessionEvent(tab, msg) {
   if (wakesAgent(ev)) tab.detail.waiting = false;
   switch (ev.type) {
     case "started":
+      // A prompt sent again unprocessed comes as stored: the row moves
+      // instead of a bubble being drawn for it (specs/083-background-tasks.md).
+      if (msg.message) takeFollowUp(tab.detail.messages, msg.message, msg.replaces);
       startLocal(tab, msg.prompt, msg.turn);
       if (msg.session) tab.detail.session = msg.session;
-      takeQueued(tab, msg.prompt);
+      if (!msg.message) takeQueued(tab, msg.prompt);
       tab.detail.accepts_prompts = tab.detail.waiting = false;
       tab.detail.pending_follow_ups = [];
       break;
@@ -3697,19 +3700,110 @@ export async function forceQueued(queuedID) {
     if (result?.joined) {
       tab.detail.queued = result.queued;
       tab.detail.session.queue_count = result.queue_count + (tab.detail.pendingQueued?.length || 0);
-      // Stored and held by the turn until the agent starts on it.
-      if (result.message && !tab.takenFollowUps?.has(result.message.id) &&
-        !tab.detail.messages.some((m) => m.id === result.message.id)) {
-        endLive(tab);
-        tab.detail.messages.push(result.message);
-        tab.detail.pending_follow_ups = [...(tab.detail.pending_follow_ups || []), result.message.id];
-      }
+      if (result.message) holdFollowUp(tab, result.message);
       return;
     }
     await syncMessages(tab);
   } catch (e) {
     fail(e);
     throw e;
+  }
+}
+
+/* holdFollowUp shows a prompt the running turn has accepted, stored and held
+   until the agent starts on it, from the answer to the request that sent it.
+   The agent can start on it before that answer arrives, and the prompt is
+   then already where it belongs, not waiting any more. */
+function holdFollowUp(tab, message) {
+  if (tab.takenFollowUps?.has(message.id)) return;
+  if (tab.detail.messages.some((m) => m.id === message.id && m.turn_id)) return;
+  takeFollowUp(tab.detail.messages, message);
+  const pending = tab.detail.pending_follow_ups || [];
+  if (!pending.includes(message.id)) tab.detail.pending_follow_ups = [...pending, message.id];
+}
+
+function dropMessage(tab, id) {
+  const at = tab.detail.messages.findIndex((m) => m.id === id);
+  if (at >= 0) tab.detail.messages.splice(at, 1);
+}
+
+/* sendUnprocessed sends a prompt the agent never processed, as Send sends a
+   typed one: into the running turn when that turn takes prompts, otherwise
+   as a turn of its own. The server moves the message itself to the end of
+   the transcript rather than storing a copy, so the window places it from
+   what the server says — the started event, or the answer when the prompt
+   joined the turn. Unlike editing it, nothing below it goes
+   (specs/083-background-tasks.md). */
+export async function sendUnprocessed(message) {
+  const tab = S.owner;
+  if (tab?.kind !== "session" || !message?.id) return false;
+  try {
+    const result = await api("POST", `/api/sessions/${tab.sessionID}/messages/${message.id}/send`);
+    if (!tab.detail) return true;
+    if (result.joined) {
+      // Moved below what was stored after it, under a new id.
+      if (result.message.id !== message.id) dropMessage(tab, message.id);
+      holdFollowUp(tab, result.message);
+    } else {
+      startLocal(tab, "", result.turn);
+    }
+    tab.detail.session.done_at = 0;
+    refreshSessions();
+    refreshProjects();
+    reloadProjects();
+    return true;
+  } catch (e) {
+    fail(e);
+    return false;
+  }
+}
+
+/* queueUnprocessed puts a prompt the agent never processed at the end of the
+   task's queue, with the task's model, as Enqueue queues a typed one. It
+   leaves the transcript before the request does, for a queue that runs it at
+   once: that turn's started event draws it at the end, where it then goes.
+   A refusal puts it back. */
+export async function queueUnprocessed(message) {
+  const tab = S.owner;
+  if (tab?.kind !== "session" || !message?.id) return false;
+  dropMessage(tab, message.id);
+  const pendingQueued = tab.detail.pendingQueued || (tab.detail.pendingQueued = []);
+  const pending = {
+    id: `pending:${tab.sessionID}:${message.id}`,
+    session_id: tab.sessionID,
+    prompt: message.content,
+    provider: tab.detail.session.provider,
+    model: tab.detail.session.model,
+    effort: tab.detail.session.effort || "",
+    created_at: Date.now(),
+    pending: true,
+  };
+  pendingQueued.push(pending);
+  const settle = () => {
+    const at = pendingQueued.indexOf(pending);
+    if (at >= 0) pendingQueued.splice(at, 1);
+  };
+  try {
+    const result = await api("POST", `/api/sessions/${tab.sessionID}/messages/${message.id}/queue`);
+    settle();
+    // A transcript read while the request was out can have brought it back.
+    dropMessage(tab, message.id);
+    tab.detail.queued = result.queued;
+    tab.detail.session.queue_count = result.queue_count + pendingQueued.length;
+    tab.detail.session.done_at = 0;
+    refreshSessions();
+    refreshProjects();
+    reloadProjects();
+    return true;
+  } catch (e) {
+    settle();
+    const messages = tab.detail.messages;
+    if (!messages.some((m) => m.id === message.id)) {
+      const at = messages.findIndex((m) => !m.id || m.id > message.id);
+      messages.splice(at < 0 ? messages.length : at, 0, message);
+    }
+    fail(e);
+    return false;
   }
 }
 

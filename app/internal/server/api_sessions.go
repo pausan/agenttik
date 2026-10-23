@@ -444,6 +444,41 @@ func (s *Server) editMessage(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusAccepted).JSON(turn)
 }
 
+// sendUnprocessed sends one of your prompts the agent never processed, as
+// postMessage sends a typed one. Unlike an edit, it leaves the transcript
+// below it alone: the prompt itself moves to the end. A prompt that joins the
+// running turn comes back stored, for the window to show it waiting there.
+// See specs/083-background-tasks.md.
+func (s *Server) sendUnprocessed(c *fiber.Ctx) error {
+	messageID, err := strconv.ParseInt(c.Params("message"), 10, 64)
+	if err != nil {
+		return badRequest("invalid message id")
+	}
+	turn, joined, err := s.runner.SendUnprocessed(c.Params("id"), messageID)
+	if err != nil {
+		return err
+	}
+	if joined != nil {
+		return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"joined": true, "turn": turn, "message": joined})
+	}
+	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"turn": turn})
+}
+
+// queueUnprocessed puts one of your prompts the agent never processed at the
+// end of the task's queue, out of the transcript.
+func (s *Server) queueUnprocessed(c *fiber.Ctx) error {
+	messageID, err := strconv.ParseInt(c.Params("message"), 10, 64)
+	if err != nil {
+		return badRequest("invalid message id")
+	}
+	queued, err := s.runner.QueueUnprocessed(c.Params("id"), messageID)
+	if err != nil {
+		return err
+	}
+	s.sessionQueueChanged(c.Params("id"))
+	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"queued": queued, "queue_count": len(queued)})
+}
+
 func (s *Server) enqueueMessage(c *fiber.Ctx) error {
 	var body struct {
 		Prompt string `json:"prompt"`

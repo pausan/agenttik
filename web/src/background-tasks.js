@@ -42,10 +42,11 @@ export function runningTaskCount(messages) {
   return count;
 }
 
-/* takeFollowUp places a prompt the running turn has just started on, as the
-   server stored it. It was stored when accepted, and moved below a reply
-   stored after it under a new id, so the row it replaces goes, and so does
-   the bubble drawn on send, which has no id yet. See
+/* takeFollowUp places a prompt a turn has just started on, as the server
+   stored it: one the running turn held, or one sent again unprocessed, which
+   starts a turn of its own. It was stored before, and moved below rows stored
+   after it under a new id, so the row it replaces goes, and so does the
+   bubble drawn on send, which has no id yet. See
    specs/083-background-tasks.md. */
 export function takeFollowUp(messages, message, replaces = 0) {
   if (replaces) {

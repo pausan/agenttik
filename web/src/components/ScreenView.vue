@@ -54,6 +54,7 @@ let barDrag = null;
 const floating = computed(() => fullscreen.value || pseudo.value);
 const machine = computed(() => S.instanceInfo?.name || "this machine");
 const cmdIsCtrl = computed(() => MACOS && S.screen?.os !== "darwin");
+const ctrlIsCmd = computed(() => !MACOS && S.screen?.os === "darwin");
 const summary = computed(() => {
   if (status.value !== "live") return "";
   const parts = [state.codec.toUpperCase(), `${state.fps} fps`];
@@ -193,7 +194,7 @@ function onKeyDown(e) {
     return;
   }
   e.preventDefault();
-  const events = keyEvents(e, { down: true, cmdIsCtrl: cmdIsCtrl.value, mac: MACOS, typed });
+  const events = keyEvents(e, { down: true, cmdIsCtrl: cmdIsCtrl.value, ctrlIsCmd: ctrlIsCmd.value, mac: MACOS, typed });
   for (const ev of events) if (ev.t === "k") held.set(ev.code, ev.key);
   send(...events);
 }
@@ -205,7 +206,7 @@ function onKeyUp(e) {
     pasteCode = "";
     return;
   }
-  const events = keyEvents(e, { down: false, cmdIsCtrl: cmdIsCtrl.value, mac: MACOS, typed });
+  const events = keyEvents(e, { down: false, cmdIsCtrl: cmdIsCtrl.value, ctrlIsCmd: ctrlIsCmd.value, mac: MACOS, typed });
   for (const ev of events) held.delete(ev.code);
   send(...events);
 }
@@ -437,6 +438,16 @@ onBeforeUnmount(() => {
           @click="toggleFullscreen"
         />
       </div>
+    </div>
+
+    <div
+      v-if="S.screen?.control && status === 'live'"
+      class="flex items-center gap-2 border-b border-default bg-warning/10 px-2 py-1 text-xs text-warning"
+      data-testid="screen-control"
+    >
+      <UIcon name="i-lucide-mouse-pointer-ban" class="size-4 shrink-0" />
+      <span class="min-w-0 flex-1">{{ S.screen.control }}</span>
+      <UButton label="Check again" size="xs" color="warning" variant="soft" @click="loadScreenInfo" />
     </div>
 
     <div ref="pane" class="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden">

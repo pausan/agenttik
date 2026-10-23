@@ -25,6 +25,18 @@ func KeysymForRune(r rune) uint32 {
 	return 0x01000000 | uint32(r)
 }
 
+// RuneForKeysym is the character a keysym types, if it is one: the reverse
+// of KeysymForRune.
+func RuneForKeysym(ks uint32) (rune, bool) {
+	switch {
+	case ks >= 0x20 && ks <= 0x7e, ks >= 0xa0 && ks <= 0xff:
+		return rune(ks), true
+	case ks&0xff000000 == 0x01000000:
+		return rune(ks & 0xffffff), true
+	}
+	return 0, false
+}
+
 // browserKeys maps KeyboardEvent.key names, and the codes that tell left
 // from right, to keysyms.
 var browserKeys = map[string]uint32{

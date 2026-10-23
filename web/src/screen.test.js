@@ -114,6 +114,17 @@ test("a Mac's Cmd is the other machine's Ctrl, and Option types", () => {
   deepStrictEqual(keyEvents(key("f", "KeyF", { altKey: true }), { down: true, typed }), [{ t: "k", key: "f", code: "KeyF", d: true }], "Alt+F elsewhere is a shortcut");
 });
 
+test("Ctrl and the Windows key swap when another system views a Mac", () => {
+  const typed = new Set();
+  const pc = { ctrlIsCmd: true, typed };
+  deepStrictEqual(keyEvents(key("Control", "ControlLeft", { ctrlKey: true }), { down: true, ...pc }), [{ t: "k", key: "Meta", code: "MetaLeft", d: true }]);
+  deepStrictEqual(keyEvents(key("c", "KeyC", { ctrlKey: true }), { down: true, ...pc }), [{ t: "k", key: "c", code: "KeyC", d: true }]);
+  deepStrictEqual(keyEvents(key("Control", "ControlRight"), { down: false, ...pc }), [{ t: "k", key: "Meta", code: "MetaRight", d: false }]);
+  deepStrictEqual(keyEvents(key("Meta", "MetaLeft", { metaKey: true }), { down: true, ...pc }), [{ t: "k", key: "Control", code: "ControlLeft", d: true }]);
+  deepStrictEqual(keyEvents(key("OS", "OSRight"), { down: false, ...pc }), [{ t: "k", key: "Control", code: "ControlRight", d: false }]);
+  deepStrictEqual(keyEvents(key("Alt", "AltLeft", { altKey: true }), { down: true, ...pc }), [{ t: "k", key: "Alt", code: "AltLeft", d: true }]);
+});
+
 test("pointer, fit and wheel arithmetic", () => {
   const rect = { left: 10, top: 20, width: 960, height: 540 };
   deepStrictEqual(toScreen(10, 20, rect, 1920, 1080), [0, 0]);

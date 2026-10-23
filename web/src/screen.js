@@ -128,13 +128,22 @@ async function postInput(body) {
    travels as a key, held and released, so modifiers combine on the other end.
 
    `cmdIsCtrl` is a Mac viewing a machine that is not one: Cmd does what Ctrl
-   does there, so Cmd+C copies. `typed` remembers which keys went as text, so
-   their release sends nothing. */
-export function keyEvents(e, { down, cmdIsCtrl = false, mac = false, typed = new Set() }) {
+   does there, so Cmd+C copies. `ctrlIsCmd` is the other way round, another
+   system viewing a Mac: Ctrl and the Windows key swap, so Ctrl+C copies and
+   the Mac's Ctrl is still at hand. `typed` remembers which keys went as text,
+   so their release sends nothing. */
+export function keyEvents(e, { down, cmdIsCtrl = false, ctrlIsCmd = false, mac = false, typed = new Set() }) {
   let { key, code } = e;
+  const right = code.endsWith("Right");
   if (cmdIsCtrl && key === "Meta") {
     key = "Control";
-    code = code === "MetaRight" || code === "OSRight" ? "ControlRight" : "ControlLeft";
+    code = right ? "ControlRight" : "ControlLeft";
+  } else if (ctrlIsCmd && key === "Control") {
+    key = "Meta";
+    code = right ? "MetaRight" : "MetaLeft";
+  } else if (ctrlIsCmd && (key === "Meta" || key === "OS")) {
+    key = "Control";
+    code = right ? "ControlRight" : "ControlLeft";
   }
   if (!down) {
     if (typed.delete(code)) return [];

@@ -277,3 +277,20 @@ func TestShapeMessageIsPNG(t *testing.T) {
 		t.Fatal(ok, err)
 	}
 }
+
+// uncontrolled is a screen that shows but takes no input, as a Mac does
+// before Accessibility allows it.
+type uncontrolled struct{ *Fake }
+
+func (uncontrolled) ControlReason() string { return "not allowed" }
+
+func TestInfoSaysWhyInputWillNotArrive(t *testing.T) {
+	m := NewManager(func() (Display, error) { return NewFake(64, 32), nil })
+	if info := m.Info(); !info.Available || info.Control != "" {
+		t.Fatalf("a controllable screen: %+v", info)
+	}
+	m = NewManager(func() (Display, error) { return uncontrolled{NewFake(64, 32)}, nil })
+	if info := m.Info(); !info.Available || info.Control != "not allowed" {
+		t.Fatalf("an uncontrollable screen: %+v", info)
+	}
+}

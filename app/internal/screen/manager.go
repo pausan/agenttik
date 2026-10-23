@@ -54,12 +54,15 @@ func (m *Manager) Display() (Display, error) {
 
 // Info is what the UI needs to decide whether to offer a Screen tab.
 type Info struct {
-	Available bool     `json:"available"`
-	Reason    string   `json:"reason,omitempty"`
-	Width     int      `json:"width,omitempty"`
-	Height    int      `json:"height,omitempty"`
-	OS        string   `json:"os"`
-	Codecs    []string `json:"codecs"`
+	Available bool   `json:"available"`
+	Reason    string `json:"reason,omitempty"`
+	// Control says why input will not arrive though the screen shows, as
+	// on a Mac that has not allowed it.
+	Control string   `json:"control,omitempty"`
+	Width   int      `json:"width,omitempty"`
+	Height  int      `json:"height,omitempty"`
+	OS      string   `json:"os"`
+	Codecs  []string `json:"codecs"`
 }
 
 func (m *Manager) Info() Info {
@@ -71,6 +74,9 @@ func (m *Manager) Info() Info {
 	}
 	info.Available = true
 	info.Width, info.Height = d.Size()
+	if c, ok := d.(interface{ ControlReason() string }); ok {
+		info.Control = c.ControlReason()
+	}
 	return info
 }
 

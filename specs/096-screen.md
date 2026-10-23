@@ -44,10 +44,14 @@ screen.
 
 ## Capture and input
 
-`screen.Display` is one machine's screen, pointer, keyboard and clipboard.
-Linux X11 is the only implementation so far (`x11_linux.go`). It speaks the
-X protocol from Go (`jezek/xgb`, whose Close is safe when the server goes
-away) and links nothing:
+`screen.Display` is one machine's screen, pointer, keyboard and clipboard,
+in screen pixels. Keys are X keysyms on every system, so the viewer's layout
+does not matter. Systems without capture report "not supported".
+
+### Linux (X11)
+
+`x11_linux.go` speaks the X protocol from Go (`jezek/xgb`, whose Close is
+safe when the server goes away) and links nothing:
 
 - **Capture:** MIT-SHM. A System V segment is shared with the server and
   marked for removal at once, so it goes when both sides detach. A server on
@@ -70,13 +74,51 @@ away) and links nothing:
   transfers are not supported.
 
 Wayland sessions report themselves unavailable. With no `$DISPLAY`, `:0` is
-tried, for a server started outside the desktop session. macOS and Windows
-report "not supported yet".
+tried, for a server started outside the desktop session.
 
 Tests run their own Xvfb. They check a grabbed window's pixels and the damage
 count, pointer moves and clicks reaching a window, Shift added for `Q`, `é`
 on a spare key, Ctrl+C with its modifier, and clipboard text both ways between
 two programs.
+
+### macOS
+
+`quartz_darwin.go` shows the main display. It calls CoreGraphics, IOSurface,
+HIToolbox and AppKit through purego, so it builds without cgo like the rest:
+
+- **Permissions:** macOS asks the person at the machine, once each. Screen
+  Recording is checked when the display opens; without it the screen is
+  unavailable, says where to allow it, and agenttik must restart afterwards.
+  Accessibility is needed for input: without it macOS drops posted events, so
+  input fails, and `GET /api/screen` carries the reason as `control`. It is
+  asked again at most every two seconds until allowed.
+- **Capture:** a `CGDisplayStream` at the display's size in pixels, BGRA,
+  without the pointer, at most 30 frames a second. It delivers a frame only
+  when the screen changes, and each frame bumps the change count. The newest
+  IOSurface is kept; `Grab` copies it (about 1 ms at 2880×1800). A new
+  resolution or main display starts a new stream. One block handles every
+  stream, since purego callbacks are never freed.
+- **Points and pixels:** events place the pointer in points; on a Retina
+  screen each point is 2×2 pixels. `Size`, `Cursor` and `Move` use pixels.
+- **Pointer:** `CGEvent` moves, drags (while a button is held), buttons and
+  wheel lines (`CGEventCreateScrollWheelEvent2`; the variadic original cannot
+  be called portably). Presses within 500 ms and 4 points of the last count
+  up as a double or triple click. The shape is `NSCursor.currentSystemCursor`,
+  drawn at the screen's scale; its serial is a hash of the pixels.
+- **Keys:** the current layout is read with `UCKeyTranslate`, plain and
+  shifted, keypad left out, and read again when two seconds old. `Key`
+  presses the key that types a keysym with the held modifiers set on the
+  event; Super is Command. `Type` sets Shift as the layout needs and also
+  attaches the character, so one on no key still arrives.
+- **Clipboard:** `NSPasteboard` text. macOS only keeps a change counter, so
+  it is read twice a second while a viewer listens (`clipwatch.go`); this
+  process's own changes are not announced.
+
+Every Objective-C call runs in an autorelease pool on a locked thread.
+`AGENTTIK_SCREEN_LIVE=1 go test ./app/internal/screen -run Quartz -v` uses
+the Mac's real screen: a grab, the cursor's image, the layout, the clipboard
+with `pbcopy` and `pbpaste`, and, with Accessibility, a pointer move and
+Shift reaching the system. Without the variable only the pure parts run.
 
 ## Viewers
 
@@ -192,7 +234,7 @@ viewer at once.
 
 | Route | Does |
 |-------|------|
-| `GET /api/screen` | `{enabled, same_machine, available, reason, width, height, os, codecs}` |
+| `GET /api/screen` | `{enabled, same_machine, available, reason, control, width, height, os, codecs}`; `control` says why input will not arrive |
 | `PUT /api/screen` | `{enabled}` |
 | `GET /api/stream/screen?codec=vp9\|vp8\|jpeg` | one viewer's messages, as SSE `data:` JSON |
 | `POST /api/screen/input` | `{viewer, ack, key, events, received?}`: input, the last frame drawn, a keyframe request and arrival feedback |
@@ -238,6 +280,8 @@ available. There is one Screen tab per machine. Opening it from another
 project moves it there. Like a terminal it
 is not saved with the strip. Its stream runs only while the tab is in front.
 With sharing off, the tab says so and offers **Turn on screen sharing**.
+When the screen shows but input will not arrive (`control`), a banner says
+why and offers **Check again**.
 Settings › Server has the same switch, on by default, in desktop and web launches.
 
 **Drawing** (`web/src/screen.js`, `ScreenView.vue`). `chooseCodec` takes the
@@ -268,7 +312,9 @@ the app's own shortcuts do not fire, as in a terminal. A character typed
 without Ctrl, Cmd or (outside a Mac) Alt travels as text, so the two layouts
 need not match. AltGr and a Mac's Option type characters. Everything else
 travels as a key pressed and released. On a Mac viewing a machine that is not
-one, Cmd travels as Ctrl, so Cmd+C copies. Keys still held when focus leaves
+one, Cmd travels as Ctrl, so Cmd+C copies. The other way round, Ctrl and the
+Windows key swap, so Ctrl+C copies on the Mac and its Ctrl is still at hand.
+Any system can view and drive any other. Keys still held when focus leaves
 are released. Browsers keep some chords for themselves (Ctrl+W in Chrome, and
 Alt+Tab or Cmd+Tab everywhere).
 

@@ -346,8 +346,21 @@ func (s *Store) EnqueueMessage(sessionID, prompt, provider string, accountID int
 // same moment for the same reason: the wait the user is being told about
 // started when they sent it. See 045-provider-outage-retry.md.
 func (s *Store) RequeueMessage(v QueuedMessage, retryAt int64, failure string) (*QueuedMessage, error) {
+	return s.RequeueTaken(v, retryAt, failure, 0)
+}
+
+// RequeueTaken is RequeueMessage for a prompt stored in the transcript as
+// message taken, a follow-up the running turn had started on: the message
+// leaves the transcript in the same transaction, so the prompt is never in
+// both. 0 takes nothing out.
+func (s *Store) RequeueTaken(v QueuedMessage, retryAt int64, failure string, taken int64) (*QueuedMessage, error) {
 	v.RetryAt, v.RetryCount, v.RetryError = retryAt, v.RetryCount+1, failure
-	res, err := s.db.Exec(`INSERT INTO queued_messages
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("requeue message: %w", err)
+	}
+	defer tx.Rollback()
+	res, err := tx.Exec(`INSERT INTO queued_messages
 		(session_id, prompt, provider, account_id, model, effort, created_at, retry_at, retry_count, retry_error)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		v.SessionID, v.Prompt, v.Provider, v.AccountID, v.Model, v.Effort, v.CreatedAt,
@@ -356,6 +369,14 @@ func (s *Store) RequeueMessage(v QueuedMessage, retryAt int64, failure string) (
 		return nil, fmt.Errorf("requeue message: %w", err)
 	}
 	v.ID, _ = res.LastInsertId()
+	if taken != 0 {
+		if _, err := tx.Exec(`DELETE FROM messages WHERE id = ?`, taken); err != nil {
+			return nil, fmt.Errorf("requeue message: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("requeue message: %w", err)
+	}
 	return &v, nil
 }
 

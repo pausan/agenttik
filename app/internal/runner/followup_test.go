@@ -194,20 +194,26 @@ func TestUntakenFollowUpsSurviveTheTurn(t *testing.T) {
 	}
 }
 
-// After a provider outage agenttik retries the turn by itself, and prompts it
-// accepted but never started on wait in the queue behind that retry.
+// After a provider outage agenttik retries the prompt it interrupted by
+// itself — here a follow-up, not the turn's prompt, which was answered — and
+// prompts it accepted but never started on wait in the queue behind that
+// retry. Neither stays in the transcript as well.
 func TestUntakenFollowUpsWaitBehindAnOutageRetry(t *testing.T) {
 	p := newOpenProvider()
 	r, st, sess := setup(t, p)
 	if _, err := r.Send(sess.ID, "build"); err != nil {
 		t.Fatal(err)
 	}
-	p.events <- agent.Event{Type: agent.EventDone, FollowUp: p.followUp()}
+	p.events <- agent.Event{Type: agent.EventText, Text: "Build started."}
+	p.events <- agent.Event{Type: agent.EventDone, FollowUp: p.followUp(), Usage: &agent.Usage{OutputTokens: 10}}
 	waitFor(t, func() bool { return r.AcceptsPrompts(sess.ID) }, "the turn to take prompts")
-	if _, err := r.Send(sess.ID, "status?"); err != nil {
-		t.Fatal(err)
+	for _, prompt := range []string{"status?", "deploy?"} {
+		if _, err := r.Send(sess.ID, prompt); err != nil {
+			t.Fatal(err)
+		}
+		<-p.prompts
 	}
-	<-p.prompts
+	p.events <- agent.Event{Type: agent.EventFollowUp}
 	p.events <- agent.Event{Type: agent.EventError, Text: capacityFailure}
 	close(p.events)
 	waitFor(t, func() bool { return !r.Running(sess.ID) }, "the turn to end")
@@ -216,13 +222,74 @@ func TestUntakenFollowUpsWaitBehindAnOutageRetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(queued) != 2 || queued[0].Prompt != "build" || queued[0].RetryAt == 0 || queued[1].Prompt != "status?" {
+	if len(queued) != 2 || queued[0].Prompt != "status?" || queued[0].RetryAt == 0 || queued[1].Prompt != "deploy?" {
 		t.Fatalf("queue = %+v", queued)
 	}
 	for _, m := range mustMessages(t, st, sess.ID) {
-		if m.Content == "status?" {
+		if m.Content == "status?" || m.Content == "deploy?" {
 			t.Fatalf("requeued prompt still in the transcript: %+v", m)
 		}
+	}
+}
+
+// An outage while the agent answers a follow-up retries that follow-up, not
+// the turn's prompt, which was answered: retrying it would relaunch the work
+// it had started.
+func TestOutageRetriesTheFollowUpItInterrupted(t *testing.T) {
+	p := newOpenProvider()
+	r, st, sess := setup(t, p)
+	if _, err := r.Send(sess.ID, "build"); err != nil {
+		t.Fatal(err)
+	}
+	p.events <- agent.Event{Type: agent.EventText, Text: "Build started."}
+	p.events <- agent.Event{Type: agent.EventDone, FollowUp: p.followUp(), Usage: &agent.Usage{OutputTokens: 10}}
+	waitFor(t, func() bool { return r.AcceptsPrompts(sess.ID) }, "the turn to take prompts")
+	if _, err := r.Send(sess.ID, "status?"); err != nil {
+		t.Fatal(err)
+	}
+	<-p.prompts
+	p.events <- agent.Event{Type: agent.EventFollowUp}
+	p.events <- agent.Event{Type: agent.EventError, Text: capacityFailure}
+	close(p.events)
+	waitFor(t, func() bool { return !r.Running(sess.ID) }, "the turn to end")
+	queued, _ := st.ListQueuedMessages(sess.ID)
+	if len(queued) != 1 || queued[0].Prompt != "status?" || queued[0].RetryAt == 0 {
+		t.Fatalf("queue = %+v, want only status? waiting for a retry", queued)
+	}
+	if got, _ := st.GetSession(sess.ID); got.Status != store.StatusWaiting {
+		t.Fatalf("session status = %q", got.Status)
+	}
+}
+
+// An outage while the agent answers a background task's notification, with
+// no prompt of the user's in flight, retries nothing: everything asked was
+// answered. The turn ends as an error, and a follow-up it had not started on
+// is left unprocessed.
+func TestOutageWithNothingInFlightEndsTheTurn(t *testing.T) {
+	p := newOpenProvider()
+	r, st, sess := setup(t, p)
+	if _, err := r.Send(sess.ID, "build"); err != nil {
+		t.Fatal(err)
+	}
+	p.events <- agent.Event{Type: agent.EventText, Text: "Build started."}
+	p.events <- agent.Event{Type: agent.EventDone, FollowUp: p.followUp(), Usage: &agent.Usage{OutputTokens: 10}}
+	waitFor(t, func() bool { return r.AcceptsPrompts(sess.ID) }, "the turn to take prompts")
+	if _, err := r.Send(sess.ID, "status?"); err != nil {
+		t.Fatal(err)
+	}
+	<-p.prompts
+	p.events <- agent.Event{Type: agent.EventText, Text: "Game A built."}
+	p.events <- agent.Event{Type: agent.EventError, Text: capacityFailure}
+	close(p.events)
+	waitFor(t, func() bool { return !r.Running(sess.ID) }, "the turn to end")
+	if queued, _ := st.ListQueuedMessages(sess.ID); len(queued) != 0 {
+		t.Fatalf("queue = %+v", queued)
+	}
+	if got, _ := st.GetSession(sess.ID); got.Status != store.StatusError {
+		t.Fatalf("session status = %q", got.Status)
+	}
+	if last := lastMessage(t, st, sess.ID); last.Content != "status?" || last.TurnID != 0 {
+		t.Fatalf("last message = %+v", last)
 	}
 }
 

@@ -62,7 +62,7 @@ A reply that ends with background tasks still running leaves the turn open
   in `replaces`. The browser swaps it, or the bubble drawn on send, in place.
 - A turn that ends before the agent starts on an accepted prompt — Stop,
   quitting the app, the CLI dying — moves it to the end of the transcript,
-  still without a turn. After a provider outage, which agenttik retries by
+  still without a turn. After a provider outage that agenttik retries by
   itself, it goes back to the queue behind the retry instead.
 - A prompt of yours without a turn says so above its bubble: "Waiting for the
   agent" while the running turn holds it, "Not processed" once nothing will
@@ -102,8 +102,9 @@ A reply that ends with background tasks still running leaves the turn open
   project, once per 150 ms.
 
 The task prompt tells the agent the user can write meanwhile, so it ends its
-reply instead of waiting idly. Only the turn's first prompt is requeued if the
-provider turns out to be away ([045](045-provider-outage-retry.md)).
+reply instead of waiting idly. If the provider turns out to be away, the input
+the failure interrupted is requeued: the turn's prompt, or the follow-up being
+answered, never one already answered ([045](045-provider-outage-retry.md)).
 
 ## Event
 

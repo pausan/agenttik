@@ -637,7 +637,7 @@ func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage, stored int64
 	if err != nil {
 		// Nothing was produced, so an outage leaves no trace but the waiting
 		// prompt: the attempt is erased and the clock owns it from here.
-		if r.holdForOutage(sess, queued, turn, err.Error(), false) {
+		if r.holdForOutage(sess, queued, 0, turn, err.Error(), false) {
 			release()
 			return nil, ErrProviderAway
 		}
@@ -1089,6 +1089,14 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 	// record and requeueing it as if nothing had been tried. See
 	// 045-provider-outage-retry.md.
 	var produced bool
+	// inFlight is the input the agent is answering: the turn's prompt, then
+	// each follow-up it takes, and none once a reply ends, or while it answers
+	// a background task's notification. An outage puts back what it
+	// interrupted, and never a prompt already answered. inFlightMessage is a
+	// follow-up's message, 0 for the turn's prompt.
+	inFlight, inFlightMessage := &queued, int64(0)
+	var interrupted *store.QueuedMessage
+	var interruptedMessage int64
 
 	// flushText writes the assistant prose accumulated so far. Called before
 	// each tool call or new background task so the transcript keeps its order.
@@ -1178,6 +1186,7 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 			open.mu.Lock()
 			open.followUp = ev.FollowUp
 			open.mu.Unlock()
+			inFlight, inFlightMessage = nil, 0
 			if ev.Usage != nil {
 				turn.InputTokens = ev.Usage.InputTokens
 				turn.OutputTokens = ev.Usage.OutputTokens
@@ -1205,6 +1214,7 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 			}
 		case agent.EventError:
 			failure = ev.Text
+			interrupted, interruptedMessage = inFlight, inFlightMessage
 			r.store.AddMessage(sess.ID, turn.ID, store.RoleError, ev.Text)
 		case agent.EventApproval:
 			if ev.Approval == nil {
@@ -1232,6 +1242,12 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 			// The prompt joins the turn below the reply it waited behind.
 			flushText()
 			message, replaces, _ = r.store.MoveMessageToEnd(id, turn.ID)
+			if message != nil {
+				inFlight = &store.QueuedMessage{SessionID: sess.ID, Prompt: message.Content,
+					Provider: open.choice.Provider, AccountID: open.choice.AccountID,
+					Model: open.choice.Model, Effort: open.choice.Effort, CreatedAt: message.CreatedAt}
+				inFlightMessage = message.ID
+			}
 		case agent.EventBackground:
 			if ev.Background == nil {
 				continue
@@ -1288,7 +1304,10 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 	// and the session waits instead of reporting an error nobody caused — and
 	// the schedule that spawned it, if any, keeps its run open, since what it
 	// asked for has not happened yet. holdForOutage owns the turn from here.
-	held := failure != "" && r.holdForOutage(sess, queued, turn, failure, produced)
+	// That prompt is the input the failure interrupted; one that came while
+	// the agent answered no input of the user's ends the turn as an error.
+	held := failure != "" && interrupted != nil &&
+		r.holdForOutage(sess, *interrupted, interruptedMessage, turn, failure, produced)
 	if !held {
 		r.store.FinishTurn(turn)
 		r.store.SetSessionStatus(sess.ID, sessionStatus)

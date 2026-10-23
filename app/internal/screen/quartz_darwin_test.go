@@ -88,6 +88,31 @@ func TestQuartzLive(t *testing.T) {
 		}
 	}
 
+	// A new resolution restarts the stream while frames arrive.
+	t.Run("restart", func(t *testing.T) {
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			for range 5 {
+				q.mu.Lock()
+				err := q.startLocked()
+				q.mu.Unlock()
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				if _, _, _, err := d.Grab(pix); err != nil {
+					t.Error(err)
+				}
+			}
+		}()
+		select {
+		case <-done:
+		case <-time.After(10 * time.Second):
+			t.Fatal("restarting the stream hung")
+		}
+	})
+
 	t.Run("clipboard", func(t *testing.T) {
 		saved, _ := d.Clipboard()
 		defer d.SetClipboard(saved) //nolint:errcheck

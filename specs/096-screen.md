@@ -118,7 +118,8 @@ HIToolbox and AppKit through purego, so it builds without cgo like the rest:
 
 Every Objective-C call runs in an autorelease pool on a locked thread.
 `AGENTTIK_SCREEN_LIVE=1 go test ./app/internal/screen -run Quartz -v` uses
-the Mac's real screen: a grab, the cursor's image, the layout, the clipboard
+the Mac's real screen: a grab, restarting the stream while frames arrive,
+the cursor's image, the layout, the clipboard
 with `pbcopy` and `pbpaste`, and, with Accessibility, a pointer move and
 Shift reaching the system. Without the variable only the pure parts run.
 

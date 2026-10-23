@@ -10,10 +10,12 @@ import {
   loadInstanceInfo,
   copyText,
   fail,
+  loadScreenInfo,
   openExternal,
   resetServerTOTP,
   setServerAuth,
   setServerConfig,
+  setScreenEnabled,
   setServerTunnel,
 } from "../../store";
 import { ago, api } from "../../api";
@@ -30,7 +32,8 @@ const rows = computed(() =>
     ["Server", "name", "instance", "network", "expose", "browser", "host", "port", "0.0.0.0", "127.0.0.1", "localhost", "lan",
      "login", "password", "totp", "2fa", "authenticator", "qr", "seed", "secure",
      "public", "internet", "tunnel", "cloudflare", "trycloudflare", "https",
-     "trusted", "machines", "keys", "revoke"],
+     "trusted", "machines", "keys", "revoke",
+     "screen", "sharing", "remote desktop", "vnc", "mouse", "keyboard", "control", "view"],
     props.filter,
   ) !== null
     ? [1]
@@ -69,6 +72,14 @@ async function saveName() {
     savingName.value = false;
   }
 }
+
+/* The machine's own screen, for Screen tabs on other machines and for
+   agents. See specs/096-screen.md. */
+watch(() => props.active, (active) => { if (active) loadScreenInfo(); }, { immediate: true });
+const screenSharing = computed({
+  get: () => !!S.screen?.enabled,
+  set: (v) => setScreenEnabled(v),
+});
 
 const enabled = computed({
   get: () => S.serverConfig.enabled,
@@ -359,6 +370,15 @@ const qr = computed(() =>
         </div>
       </UFormField>
     </form>
+
+    <div class="mb-4">
+      <USwitch v-model="screenSharing" :disabled="!S.screen" label="Share this machine's screen" />
+      <p class="mt-1 max-w-[34rem] text-xs text-dimmed">
+        Lets agenttik windows on other machines view this screen and use its mouse, keyboard and clipboard,
+        from the Screen button next to Terminal, and lets agents take screenshots and click and type.
+        <template v-if="S.screen && !S.screen.available"> Not possible here: {{ S.screen.reason }}.</template>
+      </p>
+    </div>
 
     <p v-if="!S.serverConfig.available" class="text-xs text-dimmed">
       Not available here — a web launch is already the server, on the address it was started with.

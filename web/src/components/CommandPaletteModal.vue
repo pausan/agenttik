@@ -14,8 +14,10 @@ import {
   isModelChoiceVisible,
   modelAccountLabel,
   openProject,
+  openScreen,
   openTask,
   providerOf,
+  screenOffered,
   setModel,
   startCurrentTask,
 } from "../store";
@@ -35,6 +37,15 @@ const navigation = computed(() => [
     icon: "i-lucide-chart-no-axes-combined",
     onSelect: () => choose(() => emit("analytics")),
   },
+  ...(screenOffered()
+    ? [{
+      label: "Screen",
+      description: `View and control ${S.instanceInfo?.name || "the machine"}'s screen`,
+      icon: "i-lucide-monitor",
+      disabled: !currentProjectID(),
+      onSelect: () => choose(openScreen),
+    }]
+    : []),
   {
     label: "Projects",
     icon: "i-lucide-folder-kanban",

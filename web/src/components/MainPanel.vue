@@ -41,6 +41,7 @@ const PinnedPromptView = defineAsyncComponent(() => import("./PinnedPromptView.v
 const ScheduleView = defineAsyncComponent(() => import("./ScheduleView.vue"));
 const FileView = defineAsyncComponent(() => import("./FileView.vue"));
 const TerminalView = defineAsyncComponent(() => import("./TerminalView.vue"));
+const ScreenView = defineAsyncComponent(() => import("./ScreenView.vue"));
 const StatsPane = defineAsyncComponent(() => import("./StatsPane.vue"));
 
 /* A session title can be a whole sentence, and a job names itself exactly as
@@ -59,6 +60,7 @@ const KINDS = {
   file: { text: "text-amber-500", edge: "border-amber-500" },
   schedule: { text: "text-violet-500", edge: "border-violet-500" },
   terminal: { text: "text-emerald-500", edge: "border-emerald-500" },
+  screen: { text: "text-cyan-500", edge: "border-cyan-500" },
 };
 
 const items = computed(() =>
@@ -246,6 +248,7 @@ const badge = computed(() => {
       <!-- Keyed by the tab, so switching between two terminals builds the one
            in front rather than rewriting the last one's screen. -->
       <TerminalView v-else-if="current?.kind === 'terminal'" :key="current.id" :tab="current" />
+      <ScreenView v-else-if="current?.kind === 'screen'" :tab="current" />
       <Transcript ref="transcript" v-else-if="!current || current.kind === 'session'" :find-open="findOpen" @start-tour="emit('start-tour')" />
       <FileView
         v-for="tab in retainedHTML"
@@ -255,9 +258,9 @@ const badge = computed(() => {
       />
     </div>
 
-    <!-- A file carries its own bar, and a terminal is one. The prompt box
-         belongs to a conversation, and under either of those it is only in
-         the way. -->
-    <PromptBar @navigate-message="transcript?.navigateMessage($event)" v-if="S.detail && current?.kind !== 'file' && current?.kind !== 'terminal'" />
+    <!-- A file carries its own bar, and a terminal or a screen is one. The
+         prompt box belongs to a conversation, and under any of those it is
+         only in the way. -->
+    <PromptBar @navigate-message="transcript?.navigateMessage($event)" v-if="S.detail && current?.kind !== 'file' && current?.kind !== 'terminal' && current?.kind !== 'screen'" />
   </main>
 </template>

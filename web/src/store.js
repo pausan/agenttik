@@ -88,6 +88,9 @@ export const S = reactive({
   hiddenProjectsLoaded: false,
   actionModels: [],
   orchestrator: null, // shared settings, loaded when Settings opens
+  // The machine's screen: whether there is one to show this window, and
+  // whether sharing is on. See specs/096-screen.md.
+  screen: null,
   subscriptionLimits: {}, // "provider:account" -> its latest allowance buckets
   // Whether this desktop window's server is also exposed for a browser to
   // reach, read when Settings opens like the archived projects beside it.
@@ -1106,6 +1109,53 @@ export async function syncTerminals(projectID) {
    them at once: a window with eight projects should not spend eight requests
    at launch on shells it is not showing. */
 watch(() => S.activeProjectID, syncTerminals);
+
+/* ----------------------------------------------------------------- screen */
+
+/* The Screen tab shows the machine this window is connected to — a remote
+   profile, `--remote`, or a browser on another device — and drives its mouse
+   and keyboard. It is the machine's, not a project's, so there is one: opening
+   it from another project moves it there. Like a terminal it is not saved,
+   since it is a live view; the stream runs only while the tab is in front.
+   See specs/096-screen.md. */
+
+export async function loadScreenInfo() {
+  try {
+    S.screen = await api("GET", "/api/screen");
+  } catch {
+    S.screen = null; // an older server, or none to ask
+  }
+}
+
+/* The button is offered where it would show another machine: on this one it
+   would only show itself. */
+export function screenOffered() {
+  return !!S.screen?.available && !S.screen.same_machine;
+}
+
+export function openScreen() {
+  const projectID = currentProjectID();
+  if (!projectID) return;
+  let tab = S.tabs.find((t) => t.kind === "screen");
+  if (tab && tab.projectID !== projectID) {
+    S.tabs = S.tabs.filter((t) => t !== tab);
+    tab = null;
+  }
+  addTab(tab || {
+    id: "screen",
+    kind: "screen",
+    projectID,
+    label: S.instanceInfo?.name ? `Screen · ${S.instanceInfo.name}` : "Screen",
+  });
+}
+
+export async function setScreenEnabled(enabled) {
+  try {
+    S.screen = await api("PUT", "/api/screen", { enabled });
+  } catch (error) {
+    fail(error);
+  }
+}
 
 /* -------------------------------------------------------------- projects */
 
@@ -4079,6 +4129,7 @@ export function init() {
 
 async function initialize() {
   loadInstanceInfo().catch(fail);
+  loadScreenInfo();
   loadLastUsed();
   loadLayout();
   loadKeys();

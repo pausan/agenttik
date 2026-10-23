@@ -1,7 +1,7 @@
 <script setup>
 import { computed, defineAsyncComponent, nextTick, ref, watch } from "vue";
 
-import { S, createSchedule, contextWindow, enqueue, enterDoes, fail, hit, limitsKey, openTerminal, refreshSubscriptionLimits, send, setModel, setTaskPermission, providerOf, stopTurn } from "../store";
+import { S, createSchedule, contextWindow, enqueue, enterDoes, fail, hit, limitsKey, openScreen, openTerminal, refreshSubscriptionLimits, screenOffered, send, setModel, setTaskPermission, providerOf, stopTurn } from "../store";
 import { ago } from "../api";
 import Chord from "./Chord.vue";
 import ContextPane from "./ContextPane.vue";
@@ -452,6 +452,21 @@ function runMenuAction(action) {
           <span>{{ hint.what }}</span>
         </template>
       </p>
+      <!-- The screen of the machine this window is connected to; never drawn
+           on that machine itself. See specs/096-screen.md. -->
+      <UButton
+        v-if="screenOffered()"
+        type="button"
+        icon="i-lucide-monitor"
+        color="neutral"
+        variant="ghost"
+        size="xs"
+        label="Screen"
+        class="shrink-0"
+        title="View and control this machine's screen"
+        aria-label="View and control this machine's screen"
+        @click="openScreen()"
+      />
       <UButton
         type="button"
         icon="i-lucide-square-terminal"

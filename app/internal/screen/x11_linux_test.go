@@ -1,9 +1,10 @@
 package screen
 
 import (
-	"fmt"
+	"bufio"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,36 +13,41 @@ import (
 )
 
 // startXvfb runs a private X server for one test and points DISPLAY at it.
+// Xvfb picks a free display itself and writes its number to -displayfd, so
+// tests running at once never share one.
 func startXvfb(t *testing.T) string {
 	t.Helper()
 	if _, err := exec.LookPath("Xvfb"); err != nil {
 		t.Skip("Xvfb not installed")
 	}
-	for n := 90; n < 140; n++ {
-		if _, err := os.Stat(fmt.Sprintf("/tmp/.X11-unix/X%d", n)); err == nil {
-			continue
-		}
-		if _, err := os.Stat(fmt.Sprintf("/tmp/.X%d-lock", n)); err == nil {
-			continue
-		}
-		name := fmt.Sprintf(":%d", n)
-		cmd := exec.Command("Xvfb", name, "-screen", "0", "640x480x24", "-nolisten", "tcp")
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { cmd.Process.Kill(); cmd.Wait() })
-		for i := 0; i < 100; i++ {
-			if _, err := os.Stat(fmt.Sprintf("/tmp/.X11-unix/X%d", n)); err == nil {
-				t.Setenv("DISPLAY", name)
-				t.Setenv("WAYLAND_DISPLAY", "")
-				return name
-			}
-			time.Sleep(50 * time.Millisecond)
-		}
-		t.Fatal("Xvfb did not start")
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
 	}
-	t.Fatal("no free display number")
-	return ""
+	cmd := exec.Command("Xvfb", "-displayfd", "3", "-screen", "0", "640x480x24", "-nolisten", "tcp")
+	cmd.ExtraFiles = []*os.File{w}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	w.Close()
+	t.Cleanup(func() { cmd.Process.Kill(); cmd.Wait() })
+	number := make(chan string, 1)
+	go func() {
+		line, _ := bufio.NewReader(r).ReadString('\n')
+		number <- strings.TrimSpace(line)
+	}()
+	select {
+	case n := <-number:
+		if n == "" {
+			t.Fatal("Xvfb did not start")
+		}
+		t.Setenv("DISPLAY", ":"+n)
+		t.Setenv("WAYLAND_DISPLAY", "")
+		return ":" + n
+	case <-time.After(10 * time.Second):
+		t.Fatal("Xvfb did not start")
+		return ""
+	}
 }
 
 func openTest(t *testing.T) *x11 {

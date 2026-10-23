@@ -173,3 +173,71 @@ the same machine.
 Tests cover the switch, screenshots, actions, the clipboard, same-machine
 detection, and a viewer's stream, input and acknowledgements through a remote
 profile to a second instance.
+
+## The Screen tab
+
+**Where it is offered.** A **Screen** button sits beside **Terminal** under
+the prompt, and the command palette has **Screen**. Both appear only when the
+server has a display (`available`) and the browser is on another machine
+(`!same_machine`). That covers a remote profile, `--remote`, and a browser or
+tablet using the exposed listener or the tunnel. There is one Screen tab per
+machine. Opening it from another project moves it there. Like a terminal it
+is not saved with the strip. Its stream runs only while the tab is in front.
+With sharing off, the tab says so and offers **Turn on screen sharing**.
+Settings › Server has the same switch, in desktop and web launches.
+
+**Drawing** (`web/src/screen.js`, `ScreenView.vue`). `chooseCodec` takes the
+server's first codec that `VideoDecoder.isConfigSupported` accepts (VP9, then
+VP8), else JPEG. VP8/VP9 frames go through WebCodecs with
+`optimizeForLatency` and are drawn onto a canvas. Delta frames before the
+first keyframe are acknowledged but not decoded. A decoder error closes the
+decoder and asks for a keyframe. JPEG bands are decoded with
+`createImageBitmap` and drawn at their rows. The canvas keeps the screen's
+shape at the largest size the pane allows. The toolbar shows codec, frames
+drawn per second, bitrate and screen size.
+
+**Pointer.** With a mouse over the canvas, the pointer is the browser's own,
+wearing the remote shape as a CSS cursor, so it moves with no delay. Otherwise
+(touch, or an agent moving it) the remote shape is drawn where the remote
+pointer is. Moves are coalesced to the latest; buttons, wheel steps
+(about 60 px or 3 lines a step) and moves go in order.
+
+**Touch.** Trackpad mode (default) is a laptop trackpad: one finger moves
+the pointer by its slide, a tap clicks where the pointer is, a two-finger tap
+right-clicks, two fingers sliding scroll, and tap-then-hold drags. The other
+mode clicks where the finger touches. A keyboard button focuses the hidden
+input so a touch keyboard opens; its `input` events become text, Backspace and
+Enter.
+
+**Keyboard.** While the canvas has focus, every key goes to the remote, and
+the app's own shortcuts do not fire, as in a terminal. A character typed
+without Ctrl, Cmd or (outside a Mac) Alt travels as text, so the two layouts
+need not match. AltGr and a Mac's Option type characters. Everything else
+travels as a key pressed and released. On a Mac viewing a machine that is not
+one, Cmd travels as Ctrl, so Cmd+C copies. Keys still held when focus leaves
+are released. Browsers keep some chords for themselves (Ctrl+W in Chrome, and
+Alt+Tab or Cmd+Tab everywhere).
+
+**Clipboard.** Ctrl/Cmd+V lets the browser fire `paste`, which carries this
+machine's text without a permission prompt. That text is set as the remote
+clipboard, then the V keystroke follows, so the remote program pastes it. A
+paste with no keystroke behind it (a touch keyboard's menu) is typed. When the
+remote clipboard changes, the text is written to this machine's clipboard.
+Where the browser refuses without a recent click (Safari), a **Copy remote
+clipboard** button does it on the next click.
+
+**Full screen.** The toolbar button uses the Fullscreen API on the tab, with
+a CSS stand-in where that is missing (iPhone). In full screen the toolbar
+floats faintly at the top and its button exits; Esc also exits native full
+screen.
+
+Tests: `web/src/screen.test.js` covers the input queue (one request in flight,
+coalescing, newest acknowledgement), key translation (text against keys, Cmd
+as Ctrl, AltGr, Option, released typed keys), pointer, fit and wheel
+arithmetic, every trackpad gesture, and codec choice.
+`e2e/tests/screen.spec.js` runs an Xvfb with an `xev` window per test. With
+VP9 and with JPEG it turns sharing on from the tab and checks drawn pixels, a
+right click and a key reaching xev, clipboard both ways, full screen in and
+out, and 0 fps on a still screen. It also checks a tablet tap clicking where
+it lands and the touch keyboard button, and that the machine itself is not
+offered its own screen.

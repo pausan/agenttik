@@ -36,8 +36,9 @@ async function computeTestPath() {
 
 /* Every test gets its own server, on its own port, over its own database, so
    nothing one test adds is visible to another and they can run in parallel.
-   Port 0 lets the OS pick; the server prints the URL it settled on. */
-export async function startServer() {
+   Port 0 lets the OS pick; the server prints the URL it settled on. `env`
+   adds to the server's environment, such as the X display it shows. */
+export async function startServer({ env = {} } = {}) {
   try {
     await access(BIN);
   } catch {
@@ -53,7 +54,7 @@ export async function startServer() {
     // SHELL is what a terminal tab runs (see app/internal/terminals), and it
     // names the tab as well. Pinning it keeps terminals.spec.js reading the
     // same screen and the same tab labels on every machine.
-    env: { ...process.env, AGENTTIK_FAKE_PROVIDER: "1", SHELL: "/bin/sh", PATH: await testPath(), XDG_DATA_HOME: join(dataDir, "xdg-data") },
+    env: { ...process.env, AGENTTIK_FAKE_PROVIDER: "1", SHELL: "/bin/sh", PATH: await testPath(), XDG_DATA_HOME: join(dataDir, "xdg-data"), ...env },
   });
   const stderr = [];
   proc.stderr.on("data", (b) => stderr.push(String(b)));

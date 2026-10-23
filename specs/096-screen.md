@@ -39,3 +39,39 @@ Settings come from measurements of 1080p desktop video (scrolling and typing):
 `go test ./app/internal/screen/vpx -bench .` checks keyframes, near-free
 unchanged frames, halving, and reports ms and Mbps for a scrolling 1080p
 screen.
+
+## Capture and input
+
+`screen.Display` is one machine's screen, pointer, keyboard and clipboard.
+Linux X11 is the only implementation so far (`x11_linux.go`). It speaks the
+X protocol from Go (`jezek/xgb`, whose Close is safe when the server goes
+away) and links nothing:
+
+- **Capture:** MIT-SHM. A System V segment is shared with the server and
+  marked for removal at once, so it goes when both sides detach. A server on
+  another machine cannot attach, so plain `GetImage` is used instead. The
+  pixel format must be 32 bits per pixel, little-endian (BGRX).
+- **Changes:** DAMAGE on the root window bumps a counter, as do cursor shape
+  changes (XFIXES) and screen resizes (root `ConfigureNotify`, which also
+  resizes the segment). A viewer whose count has not moved skips the grab.
+- **Pointer:** XTEST motion and buttons. Buttons 4–7 are the wheel.
+- **Keys:** everything is a keysym, so the viewer's layout does not matter.
+  `Key` presses the key that types a keysym, as is, so held modifiers apply.
+  This is how Ctrl+C travels. `Type` taps one character and adds or lifts
+  Shift as the server's layout needs, allowing for Caps Lock. A keysym with
+  no key is mapped onto a spare key first, as xdotool does.
+- **Clipboard:** text only, as `UTF8_STRING`. An invisible window owns
+  `CLIPBOARD` to set it and answers `TARGETS`, `UTF8_STRING`, `TEXT` and
+  `STRING`. Reading asks the owner to convert into a property, with a
+  two-second limit. XFIXES selection events announce when another program
+  takes the clipboard. Text is limited to one X request (about 256 KB); INCR
+  transfers are not supported.
+
+Wayland sessions report themselves unavailable. With no `$DISPLAY`, `:0` is
+tried, for a server started outside the desktop session. macOS and Windows
+report "not supported yet".
+
+Tests run their own Xvfb. They check a grabbed window's pixels and the damage
+count, pointer moves and clicks reaching a window, Shift added for `Q`, `é`
+on a spare key, Ctrl+C with its modifier, and clipboard text both ways between
+two programs.

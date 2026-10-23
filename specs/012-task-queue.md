@@ -46,6 +46,10 @@ say which:
   prompt at a time, so that turn really is in the way: it is cancelled and the
   prompt starts as it exits. Only that task's turn — the rest of the project
   keeps going.
+- **Send now** again when that turn only waits on background tasks and takes
+  prompts ([083](083-background-tasks.md)): the prompt joins the turn and
+  nothing is cancelled. The request then answers at once with
+  `{"joined": true, "queued": [...]}`, and the window updates only the queue.
 
 Either way the prompt bypasses ordering exactly once; the queue behind it
 resumes its ordinary scheduler order. The selected prompt remains queued until

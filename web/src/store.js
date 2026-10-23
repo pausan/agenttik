@@ -16,7 +16,7 @@ import { projectQueueAction } from "./project-queue.js";
 import { DEFAULT_SCHEDULE, scheduleRecurrence } from "./schedules.js";
 import { createTaskSounds, TASK_SOUNDS_KEY } from "./task-sounds.js";
 import { trackTaskAttention, reconcileTaskCompletions } from "./task-attention.js";
-import { upsertBackgroundMessage } from "./background-tasks.js";
+import { takeFollowUp, upsertBackgroundMessage, wakesAgent } from "./background-tasks.js";
 import { recordError } from "./diagnostics.js";
 import { api, apiURL, storage, clientStorage, diagnosticStorage } from "./api";
 import { debounce } from "./debounce";
@@ -1264,6 +1264,17 @@ const reloadLists = debounce(() => {
   refreshSessions().catch(() => {});
 }, 150);
 
+/* reloadBackgroundWork re-reads what draws a running task's background work
+   (specs/083): the sidebar's listing, and the task lists of the project tabs
+   it happened in. Changes are collected per project, so two projects do not
+   collapse into one reload. */
+const backgroundProjects = new Set();
+const reloadBackgroundWork = debounce(() => {
+  refreshProjects().catch(() => {});
+  for (const t of S.tabs) if (t.kind === "project" && backgroundProjects.has(t.projectID)) reloadProjectTab(t);
+  backgroundProjects.clear();
+}, 150);
+
 export async function addProject(path, name) {
   await api("POST", "/api/projects", { path, name });
   await refreshProjects();
@@ -1948,6 +1959,8 @@ async function loadTaskTab(id, silent = false) {
     if (!silent) fail(e);
     return null;
   }
+  // A turn that takes prompts was last seen between replies.
+  detail.waiting = detail.accepts_prompts;
   return () => {
     rememberUsed(detail.session);
     setContextTab({
@@ -3166,6 +3179,13 @@ function onEvent(msg) {
     reloadProjects();
     return;
   }
+  // A running turn's background tasks started or ended, or it began taking
+  // prompts: the sidebar row says so (specs/083-background-tasks.md).
+  if (msg.event?.type === "session_background") {
+    backgroundProjects.add(msg.project_id);
+    reloadBackgroundWork();
+    return;
+  }
   // A background request has written what an archived task came to. Only the
   // project's task list draws it, and only the archived half of it, so the
   // lists that hold open tasks are left alone. See specs/051-task-outcomes.md.
@@ -3190,7 +3210,9 @@ function onEvent(msg) {
     }
     return;
   }
-  const turnMoved = ["started", "done"].includes(msg.event?.type);
+  // A turn that waits on background tasks ends one reply after another; only
+  // its last done, which carries the stats, moves the turn.
+  const turnMoved = msg.event?.type === "started" || (msg.event?.type === "done" && !!msg.stats);
   if (turnMoved) {
     const stage = msg.event.type === "done" && msg.stats ? "final" : "event";
     const seen = `${stage}:${msg.event.type}:${msg.session_id}:${msg.turn_id}`;
@@ -3228,11 +3250,18 @@ function onEvent(msg) {
 
 function onSessionEvent(tab, msg) {
   const ev = msg.event;
+  // Between replies of a turn that waits on background tasks, until the agent
+  // starts on something again.
+  if (wakesAgent(ev)) tab.detail.waiting = false;
   switch (ev.type) {
     case "started":
       startLocal(tab, msg.prompt, msg.turn);
       if (msg.session) tab.detail.session = msg.session;
       takeQueued(tab, msg.prompt);
+      tab.detail.accepts_prompts = tab.detail.waiting = false;
+      break;
+    case "follow_up":
+      if (msg.message) takeFollowUp(tab.detail.messages, msg.message);
       break;
     case "text":
       appendLive(tab, "assistant", ev.text);
@@ -3275,6 +3304,8 @@ function onSessionEvent(tab, msg) {
       break;
     case "done":
       endLive(tab);
+      // A reply that leaves the turn open lets the prompt bar send into it.
+      tab.detail.accepts_prompts = tab.detail.waiting = !msg.stats && !!msg.accepts_prompts;
       if (msg.stats) {
         tab.detail.stats = msg.stats;
         tab.detail.liveUsage = null;
@@ -3373,6 +3404,9 @@ async function syncMessages(tab, preserveLive = false) {
     // it. See specs/045-provider-outage-retry.md.
     tab.detail.session.status = detail.session.status;
     tab.detail.running = detail.running;
+    if (tab.detail.accepts_prompts !== detail.accepts_prompts) {
+      tab.detail.accepts_prompts = tab.detail.waiting = detail.accepts_prompts;
+    }
     if (keepLive) return;
     tab.detail.messages = detail.messages;
     tab.detail.turns = detail.turns;
@@ -3641,8 +3675,17 @@ export async function forceQueued(queuedID) {
   const tab = S.owner;
   if (tab?.kind !== "session" || !queuedID) return;
   try {
-    await api("POST", `/api/sessions/${tab.sessionID}/queue/force`, { queued_id: queuedID });
-    if (tab.detail) await syncMessages(tab);
+    const result = await api("POST", `/api/sessions/${tab.sessionID}/queue/force`, { queued_id: queuedID });
+    if (!tab.detail) return;
+    // A prompt that joined the running turn changes only the queue. Reading
+    // the whole transcript back would replace rows streamed meanwhile,
+    // including this prompt itself (specs/083-background-tasks.md).
+    if (result?.joined) {
+      tab.detail.queued = result.queued;
+      tab.detail.session.queue_count = result.queue_count + (tab.detail.pendingQueued?.length || 0);
+      return;
+    }
+    await syncMessages(tab);
   } catch (e) {
     fail(e);
     throw e;

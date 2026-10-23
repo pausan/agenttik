@@ -54,6 +54,11 @@ func (s *Server) listSessions(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
+	for i := range sessions {
+		if sessions[i].Status == store.StatusRunning {
+			sessions[i].BackgroundTasks, sessions[i].AcceptsPrompts = s.runner.BackgroundWork(sessions[i].ID)
+		}
+	}
 	return c.JSON(sessions)
 }
 
@@ -121,6 +126,9 @@ type sessionDetail struct {
 	Turns    []store.Turn    `json:"turns"`
 	Stats    *store.Stats    `json:"stats"`
 	Running  bool            `json:"running"`
+	// AcceptsPrompts says the running turn takes prompts now: its reply
+	// ended with background tasks still running.
+	AcceptsPrompts bool `json:"accepts_prompts"`
 
 	// Queued are the prompts waiting their turn, oldest first. The transcript
 	// draws them under the messages so a queued prompt is visible.
@@ -165,7 +173,8 @@ func (s *Server) getSession(c *fiber.Ctx) error {
 		return err
 	}
 	return c.JSON(sessionDetail{Session: sess, Messages: messages,
-		Turns: turns, Stats: stats, Running: s.runner.Running(id), Queued: queued,
+		Turns: turns, Stats: stats, Running: s.runner.Running(id),
+		AcceptsPrompts: s.runner.AcceptsPrompts(id), Queued: queued,
 		Background: s.runner.BackgroundTasks(id),
 		Outputs:    turnOutputs(sess.ProjectPath, turns, messages),
 		Threads:    threads, Origin: s.origin(sess)})
@@ -527,8 +536,19 @@ func (s *Server) forceQueuedMessage(c *fiber.Ctx) error {
 	if body.QueuedID <= 0 {
 		return badRequest("queued_id is required")
 	}
-	if err := s.runner.ForceQueued(c.Params("id"), body.QueuedID); err != nil {
+	joined, err := s.runner.ForceQueued(c.Params("id"), body.QueuedID)
+	if err != nil {
 		return err
+	}
+	if joined {
+		// The prompt went into the running turn, which goes on streaming.
+		// Only the queue changed, so that is all the window re-reads: a
+		// whole transcript read here would land after newer streamed rows.
+		queued, err := s.store.ListQueuedMessages(c.Params("id"))
+		if err != nil {
+			return err
+		}
+		return c.JSON(fiber.Map{"joined": true, "queued": queued, "queue_count": len(queued)})
 	}
 	return c.SendStatus(fiber.StatusAccepted)
 }

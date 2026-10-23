@@ -378,6 +378,77 @@ func TestParseWaitsForBackgroundTasks(t *testing.T) {
 	}
 }
 
+// While background tasks keep the turn open, the user's prompts go into the
+// same CLI. A prompt written but not yet taken holds stdin open even after
+// the tasks end, so its reply is not cut off; the CLI's echo says it was
+// taken.
+func TestParseTakesFollowUpsWhileTasksRun(t *testing.T) {
+	stdin := &pipe{}
+	h := &host{w: stdin}
+	if err := h.sendPrompt("build it"); err != nil {
+		t.Fatal(err)
+	}
+	p := streamParser{host: h, subagents: map[string]struct{}{}}
+	out := make(chan agent.Event, 16)
+	feed := func(lines ...string) []agent.Event {
+		for _, l := range lines {
+			p.handleLine([]byte(l), out)
+		}
+		var got []agent.Event
+		for len(out) > 0 {
+			got = append(got, <-out)
+		}
+		return got
+	}
+	last := func(events []agent.Event) agent.Event {
+		t.Helper()
+		if len(events) == 0 {
+			t.Fatal("no events")
+		}
+		return events[len(events)-1]
+	}
+
+	// A background subagent keeps calling tools after the main reply.
+	if got := feed(`{"type":"assistant","parent_tool_use_id":"agent-1","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{}}]}}`); len(got) != 1 || !got[0].Tool.Subagent {
+		t.Fatalf("subagent tool call = %+v", got)
+	}
+	if got := feed(`{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t2","name":"Bash","input":{}}]}}`); len(got) != 1 || got[0].Tool.Subagent {
+		t.Fatalf("main agent tool call = %+v", got)
+	}
+	// The first prompt's echo is not a follow-up.
+	if got := feed(`{"type":"user","message":{"role":"user","content":"build it"},"isReplay":true}`); len(got) != 0 {
+		t.Fatalf("first echo = %+v", got)
+	}
+	done := last(feed(`{"type":"system","subtype":"background_tasks_changed","tasks":[{"task_id":"b1"}]}`,
+		`{"type":"result","subtype":"success","usage":{}}`))
+	if done.Type != agent.EventDone || done.FollowUp == nil || stdin.closed {
+		t.Fatalf("reply with a task running: %+v closed=%v", done, stdin.closed)
+	}
+	if err := done.FollowUp.Send("status?"); err != nil {
+		t.Fatal(err)
+	}
+	if line := stdin.lines(t)[1]; line["message"].(map[string]any)["content"] != "status?" {
+		t.Fatalf("follow-up line = %v", line)
+	}
+	// The task ends and the agent answers its notification before taking
+	// the prompt: stdin stays open for it.
+	done = last(feed(`{"type":"system","subtype":"background_tasks_changed","tasks":[]}`,
+		`{"type":"result","subtype":"success","usage":{}}`))
+	if done.FollowUp == nil || stdin.closed {
+		t.Fatalf("reply with a prompt waiting: %+v closed=%v", done, stdin.closed)
+	}
+	if got := feed(`{"type":"user","message":{"role":"user","content":"status?"},"isReplay":true}`); len(got) != 1 || got[0].Type != agent.EventFollowUp {
+		t.Fatalf("follow-up echo = %+v", got)
+	}
+	done = last(feed(`{"type":"result","subtype":"success","usage":{}}`))
+	if done.FollowUp != nil || !stdin.closed {
+		t.Fatalf("last reply: %+v closed=%v", done, stdin.closed)
+	}
+	if err := p.followUp.Send("too late"); err == nil {
+		t.Error("a follow-up after close should fail")
+	}
+}
+
 func TestParseUsesLatestBackgroundTaskStates(t *testing.T) {
 	for name, ending := range map[string]string{
 		"completed patch":      `{"type":"system","subtype":"task_updated","task_id":"helper","patch":{"status":"completed","end_time":1791011226631}}`,
@@ -487,7 +558,7 @@ func TestPromptIsAStreamJSONLine(t *testing.T) {
 	if line["type"] != "user" || !strings.HasSuffix(content, "\n\nhi\nthere") {
 		t.Errorf("prompt line = %v", line)
 	}
-	for _, guidance := range []string{"stop disposable background helpers", "Keep waiting for tests", "explicitly asked to keep running"} {
+	for _, guidance := range []string{"keep writing to you", "stop disposable background helpers", "Keep waiting for tests", "explicitly asked to keep running"} {
 		if !strings.Contains(content, guidance) {
 			t.Errorf("prompt missing guidance %q", guidance)
 		}
@@ -496,7 +567,7 @@ func TestPromptIsAStreamJSONLine(t *testing.T) {
 
 func TestBuildArgsAsksOnlyForTaskTurns(t *testing.T) {
 	task := strings.Join(buildArgs(agent.TurnRequest{}), " ")
-	if !strings.Contains(task, "--input-format stream-json --permission-prompt-tool stdio") {
+	if !strings.Contains(task, "--input-format stream-json --permission-prompt-tool stdio --replay-user-messages") {
 		t.Errorf("task turn args %q should prompt over stdio", task)
 	}
 	isolated := strings.Join(buildArgs(agent.TurnRequest{Isolated: true}), " ")

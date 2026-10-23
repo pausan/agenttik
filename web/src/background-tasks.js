@@ -27,3 +27,44 @@ export function durationLabel(secs) {
   const m = Math.floor((secs % 3600) / 60);
   return h ? `${h}:${pad(m)}:${pad(secs % 60)}` : `${m}:${pad(secs % 60)}`;
 }
+
+/* runningTaskCount is how many of the transcript's tasks are still running. */
+export function runningTaskCount(messages) {
+  let count = 0;
+  for (const m of messages) {
+    if (m.role !== "background") continue;
+    try {
+      if (JSON.parse(m.content).status === "running") count++;
+    } catch {
+      /* an unreadable row is not a running task */
+    }
+  }
+  return count;
+}
+
+/* takeFollowUp places a prompt the running turn has just started on, as the
+   server stored it. The bubble drawn on send has no id yet, and it can sit
+   before the end of a reply that was still streaming, so it moves to the end.
+   See specs/083-background-tasks.md. */
+export function takeFollowUp(messages, message) {
+  if (messages.some((m) => m.id === message.id)) return;
+  const at = messages.findLastIndex((m) => !m.id && m.role === "user" && m.content === message.content);
+  if (at >= 0) messages.splice(at, 1);
+  const last = messages.at(-1);
+  if (last?.streaming) last.streaming = false;
+  messages.push(message);
+}
+
+/* wakesAgent says an event shows the main agent at work again, between
+   replies of a turn that waits on background tasks. A background subagent's
+   tool calls do not: it works while the main agent waits. */
+export function wakesAgent(ev) {
+  if (ev.type === "tool_use") return !ev.tool?.subagent;
+  return ["text", "thinking", "follow_up"].includes(ev.type);
+}
+
+/* waitingLabel is the progress line of a turn that takes prompts. */
+export function waitingLabel(waiting, tasks) {
+  const count = tasks === 1 ? "1 background task" : tasks ? `${tasks} background tasks` : "background tasks";
+  return waiting ? `Waiting for ${count} · you can keep writing` : `Working · ${count} · you can keep writing`;
+}

@@ -252,7 +252,9 @@ const hints = computed(() => [
    specs/028, specs/062): Send, Enqueue, Schedule and Pinned task, in that order, so it never
    reshuffles when Settings moves Enter between Send and Enqueue. */
 const actions = computed(() => ({
-  send: { label: "Send", icon: "i-lucide-send", run: submit, disabled: empty.value || !!S.detail?.running || uploading.value },
+  /* A running turn refuses a second prompt, unless it is only waiting on
+     background tasks and takes prompts meanwhile (specs/083). */
+  send: { label: "Send", icon: "i-lucide-send", run: submit, disabled: empty.value || (!!S.detail?.running && !S.detail?.accepts_prompts) || uploading.value },
   enqueue: { label: "Enqueue", icon: "i-lucide-clock", run: enqueuePrompt, disabled: empty.value || uploading.value },
   /* Schedule keeps the prompt rather than sending it: the dialog asks how
      often and how many times, and every run after that is a session of its

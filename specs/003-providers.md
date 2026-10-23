@@ -155,19 +155,27 @@ Events consumed from stdout JSONL:
 | `...{"delta":{"type":"thinking_delta"}}` | `thinking` |
 | `{"type":"assistant","message":{"content":[{"type":"tool_use",...}]}}` | `tool_use` |
 | `{"type":"user","message":{"content":[{"type":"tool_result",...}]}}` | `tool_result` |
+| `{"type":"user","message":{"content":"..."},"isReplay":true}` | `follow_up` for every prompt after the first |
 | `{"type":"control_request","request":{"subtype":"can_use_tool",...}}` | `approval` |
 | `{"type":"control_cancel_request",...}` | `approval_resolved` |
 | `{"type":"system","subtype":"background_tasks_changed","tasks":[...]}` | `background` states for tasks that started or ended |
-| `{"type":"result",...}` | `done` with running turn totals; stdin is closed unless background tasks run |
+| `{"type":"result",...}` | `done` with running turn totals; stdin is closed unless background tasks run or a prompt waits |
 
 A result is one reply, not always the end of the turn. When the agent ends a
 reply with background tasks running (`run_in_background` commands, background
-agents) and says it will wait, stdin stays open. When a task finishes, the CLI
-wakes the agent itself (`task_notification`, a fresh `init`) and it replies
-again, possibly starting more background work. Stdin closes at the first
-result with no background task running, and the turn ends when the CLI exits.
-Until then the task shows as working; Stop kills the CLI and its tasks.
-Closing stdin earlier makes the CLI kill the tasks and never wake the agent.
+agents), stdin stays open. When a task finishes, the CLI wakes the agent itself
+(`task_notification`, a fresh `init`) and it replies again, possibly starting
+more background work. Meanwhile the turn takes the user's prompts: that done
+event carries a `FollowUp`, which writes each prompt to stdin as another user
+line. The CLI answers input in the order it arrives, queuing a prompt written
+while it replies, and each input gets its own `init` … `result`.
+`--replay-user-messages` echoes every prompt as the CLI starts on it; the echo
+of any prompt after the first becomes `follow_up`. Stdin closes at the first
+result with no background task running and every written prompt echoed, so a
+late prompt's reply can still start background work. The turn ends when the
+CLI exits; Stop kills the CLI and its tasks. Closing stdin earlier makes the
+CLI kill the tasks and never wake the agent. A prompt written after the close
+is refused and starts the next turn.
 Each result's `usage` covers its own reply and is summed; `total_cost_usd` is
 already the process total, so the last one is kept. The runner stores each
 reply as its own message.

@@ -352,6 +352,8 @@ async function doDelete() {
             :unread="!!S.unreadTasks[row.task.id]"
             @toggle-unread="toggleTaskUnread(row.task.id)"
             :queued="row.task.queue_count"
+            :background="row.task.background_tasks || 0"
+            :accepts-prompts="!!row.task.accepts_prompts"
             :approval="!!S.approvals[row.task.id]"
             :sub="subtitle(row.task)"
             :outcome="row.archived ? row.task.summary : ''"

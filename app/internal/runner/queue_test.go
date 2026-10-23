@@ -184,7 +184,7 @@ func TestForceQueuedReturnsOnceThePromptHasStarted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := r.ForceQueued(sess.ID, q.ID); err != nil {
+	if _, err := r.ForceQueued(sess.ID, q.ID); err != nil {
 		t.Fatal(err)
 	}
 	// No waiting: the answer means the new turn is already on record.
@@ -212,7 +212,7 @@ func TestForceQueuedReportsAFailedStart(t *testing.T) {
 		t.Fatal(err)
 	}
 	fp.runErr = errors.New("provider would not start")
-	if err := r.ForceQueued(sess.ID, q.ID); err == nil || err.Error() != "provider would not start" {
+	if _, err := r.ForceQueued(sess.ID, q.ID); err == nil || err.Error() != "provider would not start" {
 		t.Fatalf("force = %v, want the start failure", err)
 	}
 	if n, _ := st.QueueCount(sess.ID); n != 1 {
@@ -310,7 +310,7 @@ func TestCapacityWaitHoldsProjectQueue(t *testing.T) {
 	if err != nil || len(otherQueue) != 1 {
 		t.Fatalf("other model's queue = %+v, %v", otherQueue, err)
 	}
-	if err := r.ForceQueued("other", otherQueue[0].ID); err != nil {
+	if _, err := r.ForceQueued("other", otherQueue[0].ID); err != nil {
 		t.Fatal(err)
 	}
 	if !r.Running("other") {

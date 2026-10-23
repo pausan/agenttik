@@ -70,3 +70,89 @@ test("background tasks stay between surrounding tools after updates and reloads"
   await expect(tasks).toHaveCount(3);
   await expect(tasks.last()).toContainText("completed · passed");
 });
+
+/* A turn that waits on background tasks takes prompts meanwhile: Send goes
+   into it, and a queued prompt's Send now joins it instead of stopping it. */
+test("prompts join a turn that waits on background tasks without stopping them", async ({ page }) => {
+  await addProject(page);
+  await openProject(page);
+  await newTask(page);
+  await pickModel(page);
+  // The task starts after the title is refined, whose refresh would
+  // otherwise redraw the sidebar on its own.
+  await sendPrompt(page, ["@open", "@wait 1500", "@background start b1 build game A", "Build started."].join("\n"));
+
+  const working = page.getByLabel("Agent working");
+  const task = page.getByLabel("Background task", { exact: true });
+  await expect(page.getByText("Build started.", { exact: true })).toBeVisible();
+  await expect(working).toContainText("Waiting for 1 background task · you can keep writing");
+  // The sidebar row says so too, for a task that is not on screen.
+  const rowMarker = page.getByLabel("1 background task running · you can keep writing", { exact: true });
+  await expect(rowMarker).toBeVisible();
+
+  await sendPrompt(page, ["@tool Read status", "Still building."].join("\n"));
+  await expect(page.getByText("Still building.", { exact: true })).toBeVisible();
+  await expect(working).toContainText("Waiting for 1 background task");
+  await expect(task).toContainText(/running \ds/);
+
+  // Send now on a queued prompt joins the turn too. A transcript read is
+  // slow on a long task, so it lands after the rows streamed meanwhile; held
+  // back here, one that replaced the transcript would wipe this prompt's
+  // reply. Only the queue may be read back.
+  const prompt = page.getByPlaceholder("Ask the agent…");
+  const queued = page.getByLabel("Queued prompt", { exact: true });
+  await prompt.fill(["@wait 1000", "Any news on the build?"].join("\n"));
+  await prompt.press("Enter");
+  await expect(queued).toHaveCount(1);
+  const transcript = /\/api\/sessions\/[^/?]+$/;
+  await page.route(transcript, async (route) => {
+    if (route.request().method() !== "GET") return route.continue();
+    const response = await route.fetch();
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await route.fulfill({ response });
+  });
+  await queued.getByRole("button", { name: "Send now" }).click();
+  await expect(queued).toHaveCount(0);
+  await page.waitForTimeout(3000);
+  // The reply is stored only once it ends, well after a read taken on click.
+  await expect(page.locator("main").getByText("Any news on the build?", { exact: true })).toBeVisible();
+  await expect(page.locator("main").getByText(/@wait 1000\s+Any news on the build\?/)).toBeVisible();
+  await expect(working).toContainText("Waiting for 1 background task");
+  await page.unroute(transcript);
+
+  await prompt.fill(["@background end b1 completed built", "All done."].join("\n"));
+  await prompt.press("Enter");
+  await expect(queued).toHaveCount(1);
+  await queued.getByRole("button", { name: "Send now" }).click();
+  await expect(page.getByText("All done.", { exact: true })).toBeVisible();
+  await expect(working).toHaveCount(0);
+  await expect(rowMarker).toHaveCount(0);
+  await expect(task).toContainText("completed · built");
+  await expect(queued).toHaveCount(0);
+
+  // One turn holds all three prompts, in the order they were answered.
+  const order = async () => {
+    const texts = ["Build started.", "Still building.", "All done."].map((text) => page.getByText(text, { exact: true }));
+    for (const [left, right] of [[task, texts[0]], [texts[0], texts[1]], [texts[1], texts[2]]]) {
+      expect(await left.evaluate((node, next) => !!(node.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING),
+        await right.elementHandle())).toBe(true);
+    }
+  };
+  await order();
+  await page.reload();
+  await expect(page.getByText("All done.", { exact: true })).toBeVisible();
+  await order();
+});
+
+/* The project page's task list follows a task's background work live, while
+   the task itself is not on screen. */
+test("the project page's task list shows background work as it changes", async ({ page }) => {
+  await addProject(page);
+  await openProject(page);
+  await newTask(page);
+  await pickModel(page);
+  await sendPrompt(page, ["@open", "@wait 1500", "@background start b1 build game A", "Build started."].join("\n"));
+  await openProject(page);
+  const marker = page.locator("main").getByLabel("1 background task running · you can keep writing", { exact: true });
+  await expect(marker).toBeVisible();
+});

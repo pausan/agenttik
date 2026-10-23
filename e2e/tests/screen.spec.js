@@ -20,7 +20,7 @@ const haveX = ["Xvfb", "xev", "xsel"].every((bin) => {
 /* Xvfb picks a free display itself and says which on fd 3, so parallel
    tests never share one. */
 async function startDisplay() {
-  const xvfb = spawn("Xvfb", ["-displayfd", "3", "-screen", "0", "800x600x24", "-nolisten", "tcp"], {
+  const xvfb = spawn("Xvfb", ["-displayfd", "3", "-screen", "0", "800x600x24", "-nolisten", "tcp", "-noreset"], {
     stdio: ["ignore", "ignore", "ignore", "pipe"],
   });
   const display = await new Promise((resolve, reject) => {

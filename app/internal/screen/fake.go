@@ -11,7 +11,7 @@ type Fake struct {
 	mu      sync.Mutex
 	w, h    int
 	pix     []byte
-	changes uint64
+	changes changeSignal
 	x, y    int
 	log     []string
 	clip    string
@@ -35,7 +35,7 @@ func (f *Fake) Fill(x, y, w, h int, r, g, b byte) {
 			f.pix[i], f.pix[i+1], f.pix[i+2], f.pix[i+3] = b, g, r, 255
 		}
 	}
-	f.changes++
+	f.changes.bump()
 }
 
 // Log is the input received so far, one line per call.
@@ -82,11 +82,9 @@ func (f *Fake) Grab(dst []byte) ([]byte, int, int, error) {
 	return dst, f.w, f.h, nil
 }
 
-func (f *Fake) Changes() uint64 {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.changes
-}
+func (f *Fake) Changes() uint64 { return f.changes.count.Load() }
+
+func (f *Fake) ChangedSince(n uint64) <-chan struct{} { return f.changes.since(n) }
 
 func (f *Fake) Cursor() (int, int, uint32, error) {
 	f.mu.Lock()

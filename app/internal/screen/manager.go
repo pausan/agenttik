@@ -160,6 +160,7 @@ type Band struct {
 // than by how much their buffers hold.
 const (
 	frameRate       = 30
+	frameInterval   = time.Second / frameRate
 	maxUnacked      = 6
 	maxUnackedBytes = 256 << 10
 	ackTimeout      = 2 * time.Second
@@ -303,16 +304,30 @@ func (v *Viewer) run(ctx context.Context) {
 		cx, cy     = -1, -1
 		serial     uint32
 		shapeKnown bool
-		last       time.Time
+		last       time.Time // when the last frame was grabbed
+		pacing     bool      // waiting out the frame interval
 	)
 	defer func() {
 		if enc != nil {
 			enc.Close()
 		}
 	}()
-	tick := time.NewTicker(time.Second / frameRate)
-	defer tick.Stop()
+	// The pointer is polled; moving it does not damage the screen.
+	pointer := time.NewTicker(frameInterval)
+	defer pointer.Stop()
+	pace := time.NewTimer(frameInterval)
+	pace.Stop()
+	defer pace.Stop()
 	for {
+		// A frame is grabbed when the screen changes, not on a clock: a clock
+		// at the same rate as an animation lands just before half its changes
+		// and merges them into the next frame. Damage while a frame interval
+		// is still running, or while the viewer is behind, waits for the
+		// timer or the acknowledgement instead.
+		var damaged <-chan struct{}
+		if !pacing && v.ready() {
+			damaged = v.d.ChangedSince(changes)
+		}
 		select {
 		case <-ctx.Done():
 			return
@@ -321,27 +336,15 @@ func (v *Viewer) run(ctx context.Context) {
 				return
 			}
 			continue
-		case <-tick.C:
+		case <-pointer.C:
+			if !v.sendPointer(ctx, &cx, &cy, &serial, &shapeKnown) {
+				return
+			}
+			continue
+		case <-pace.C:
+			pacing = false
+		case <-damaged:
 		case <-v.wake:
-		}
-
-		// The pointer is drawn by the viewer, so moving it costs a few bytes
-		// rather than a frame.
-		if x, y, s, err := v.d.Cursor(); err == nil {
-			if s != serial || !shapeKnown {
-				if shape, err := v.d.CursorShape(); err == nil {
-					serial, shapeKnown = shape.Serial, true
-					if msg, ok := shapeMessage(shape); ok && !v.send(ctx, msg) {
-						return
-					}
-				}
-			}
-			if x != cx || y != cy {
-				cx, cy = x, y
-				if !v.send(ctx, Message{Type: "cursor", X: x, Y: y}) {
-					return
-				}
-			}
 		}
 
 		if !v.ready() {
@@ -354,11 +357,21 @@ func (v *Viewer) run(ctx context.Context) {
 		if now == changes && !key {
 			continue
 		}
+		if wait := time.Until(last.Add(frameInterval)); wait > 0 {
+			pace.Reset(wait)
+			pacing = true
+			continue
+		}
 		changes = now
 		pix, w, h, err := v.d.Grab(buf)
 		if err != nil {
 			continue
 		}
+		ms := 0
+		if !last.IsZero() {
+			ms = int(time.Since(last).Milliseconds())
+		}
+		last = time.Now()
 		buf = pix
 		if enc == nil || enc.Size() != [2]int{w, h} {
 			if enc != nil {
@@ -373,15 +386,10 @@ func (v *Viewer) run(ctx context.Context) {
 		if !key && prev != nil && bytes.Equal(prev, pix) {
 			continue
 		}
-		ms := 0
-		if !last.IsZero() {
-			ms = int(time.Since(last).Milliseconds())
-		}
 		msg, size, err := enc.Encode(pix, prev, ms, key)
 		if err != nil {
 			continue
 		}
-		last = time.Now()
 		// The two buffers swap: this screen is the next one's reference.
 		buf, prev = prev, pix
 		if size == 0 {
@@ -397,6 +405,29 @@ func (v *Viewer) run(ctx context.Context) {
 			return
 		}
 	}
+}
+
+// sendPointer tells the viewer where the pointer is and, when it changed,
+// what it looks like. The viewer draws it, so moving it costs a few bytes
+// rather than a frame.
+func (v *Viewer) sendPointer(ctx context.Context, cx, cy *int, serial *uint32, known *bool) bool {
+	x, y, s, err := v.d.Cursor()
+	if err != nil {
+		return true
+	}
+	if s != *serial || !*known {
+		if shape, err := v.d.CursorShape(); err == nil {
+			*serial, *known = shape.Serial, true
+			if msg, ok := shapeMessage(shape); ok && !v.send(ctx, msg) {
+				return false
+			}
+		}
+	}
+	if x != *cx || y != *cy {
+		*cx, *cy = x, y
+		return v.send(ctx, Message{Type: "cursor", X: x, Y: y})
+	}
+	return true
 }
 
 func shapeMessage(s CursorShape) (Message, bool) {

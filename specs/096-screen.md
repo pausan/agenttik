@@ -90,11 +90,17 @@ own goroutine, encoder and stream of messages:
 | `shape` | pointer image as PNG, with its hot spot |
 | `clip` | text another program put on the clipboard |
 
-The loop runs 30 times a second. The pointer is drawn by the viewer, so moving
-it sends a `cursor` message, not a frame; shapes are sent when the XFIXES
-serial changes. A frame is grabbed only when the damage count moved (or a
-keyframe was asked for). It is not encoded when its pixels equal the last
-frame's. Two buffers swap, so a steady stream allocates nothing per frame.
+A frame is grabbed when the screen changes, not on a clock. The display
+signals damage (`ChangedSince`), and the viewer grabs at once if the last frame
+is at least 1/30 s old, or when that interval runs out. Polling at 30 Hz
+measured 17 fps on a screen changing 30 times a second: ticks landed just
+before the damage, so half saw nothing and the next merged two. A display
+without damage reports a change every time, which makes the loop grab every
+1/30 s. The pointer is polled 30 times a second and drawn by the viewer, so
+moving it sends a `cursor` message, not a frame; shapes are sent when the
+XFIXES serial changes. A grabbed frame is not encoded when its pixels equal
+the last frame's. Two buffers swap, so a steady stream allocates nothing per
+frame.
 
 **Pacing.** A viewer acknowledges each frame it has drawn. While it has 6
 frames or 256 KB unacknowledged, no new frame is grabbed. This bounds latency
@@ -138,6 +144,18 @@ The orchestrator's built-in prompt ([054](054-orchestrator-project.md))
 documents `GET /api/screen`, the screenshot and the actions through
 `agenttik --api`, which writes the PNG to stdout unchanged. It also tells the
 orchestrator not to turn sharing on unless the user asks.
+
+`AGENTTIK_SCREEN_MEASURE=1 go test ./app/internal/screen -run TestScreenMeasure -v`
+draws on a 1080p Xvfb 30 times a second and reports what a viewer acknowledging
+at once receives. On a Ryzen AI 9 365:
+
+| Scene | VP9 | VP8 | JPEG |
+|-------|-----|-----|------|
+| Scrolling page of word-sized blocks | 28.8 fps, 0.75 Mbps | 28.8 fps, 0.62 Mbps | 28.8 fps, 82 Mbps |
+| One word added per frame | 28.6 fps, 0.05 Mbps | 28.8 fps, 0.08 Mbps | 28.6 fps, 3.7 Mbps |
+
+Grabbing a 1080p screen over MIT-SHM takes 0.9 ms, comparing it with the last
+0.2 ms, and VP9-encoding an unchanged one 3.6 ms.
 
 Tests use `screen.Fake`: frames only on change, changed bands only, keyframes
 on request, pacing by acknowledgement, input order and release on close,

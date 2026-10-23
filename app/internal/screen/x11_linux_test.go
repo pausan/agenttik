@@ -12,6 +12,9 @@ import (
 	"github.com/jezek/xgb/xproto"
 )
 
+// xvfbScreen is the size and depth of the next test server.
+var xvfbScreen = "640x480x24"
+
 // startXvfb runs a private X server for one test and points DISPLAY at it.
 // Xvfb picks a free display itself and writes its number to -displayfd, so
 // tests running at once never share one.
@@ -24,7 +27,7 @@ func startXvfb(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command("Xvfb", "-displayfd", "3", "-screen", "0", "640x480x24", "-nolisten", "tcp")
+	cmd := exec.Command("Xvfb", "-displayfd", "3", "-screen", "0", xvfbScreen, "-nolisten", "tcp", "-noreset")
 	cmd.ExtraFiles = []*os.File{w}
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)

@@ -39,7 +39,7 @@ type x11 struct {
 	shmID   int
 	shmData []byte
 
-	changes  atomic.Uint64
+	changes  changeSignal
 	damaged  bool // DAMAGE is working, so Changes can be trusted
 	serial   atomic.Uint32
 	maxBytes int // longest property this connection can write
@@ -175,9 +175,16 @@ func (x *x11) Size() (int, int) {
 
 func (x *x11) Changes() uint64 {
 	if !x.damaged {
-		return x.changes.Add(1)
+		return x.changes.count.Add(1)
 	}
-	return x.changes.Load()
+	return x.changes.count.Load()
+}
+
+func (x *x11) ChangedSince(n uint64) <-chan struct{} {
+	if !x.damaged {
+		return closed
+	}
+	return x.changes.since(n)
 }
 
 // attachShm shares a capture buffer with the X server, sized for the screen
@@ -598,11 +605,11 @@ func (x *x11) handle(ev xgb.Event) {
 	defer done()
 	switch e := ev.(type) {
 	case damage.NotifyEvent:
-		x.changes.Add(1)
+		x.changes.bump()
 		damage.Subtract(x.conn, e.Damage, 0, 0)
 	case xfixes.CursorNotifyEvent:
 		x.serial.Store(e.CursorSerial)
-		x.changes.Add(1)
+		x.changes.bump()
 	case xproto.ConfigureNotifyEvent:
 		if e.Window == x.root {
 			x.mu.Lock()
@@ -611,7 +618,7 @@ func (x *x11) handle(ev xgb.Event) {
 				x.attachShm()
 			}
 			x.mu.Unlock()
-			x.changes.Add(1)
+			x.changes.bump()
 		}
 	case xproto.MappingNotifyEvent:
 		if e.Request == xproto.MappingKeyboard {

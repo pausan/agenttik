@@ -411,6 +411,10 @@ CREATE INDEX idx_sessions_parent ON sessions(parent_id) WHERE parent_id != '';`,
 	// Whether this machine's screen may be viewed and controlled. See
 	// specs/096-screen.md.
 	`ALTER TABLE server_config ADD COLUMN screen_enabled INTEGER NOT NULL DEFAULT 0;`,
+	// Enable sharing on every machine, including existing installations, and
+	// use the same default when any server setting creates the config row.
+	`ALTER TABLE server_config DROP COLUMN screen_enabled;
+ALTER TABLE server_config ADD COLUMN screen_enabled INTEGER NOT NULL DEFAULT 1;`,
 }
 
 // migrate reports whether it created the schema in an empty database.

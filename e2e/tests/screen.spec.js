@@ -94,9 +94,14 @@ for (const codec of ["vp9", "jpeg"]) {
     try {
       await addProject(page);
       await newTask(page);
+      if (codec === "jpeg") {
+        await page.request.put(server.url + "/api/screen", { data: { enabled: false } });
+      }
       await page.getByRole("button", { name: "View and control this machine's screen" }).click();
-      await expect(page.getByText(/Screen sharing is off on/)).toBeVisible();
-      await page.getByRole("button", { name: "Turn on screen sharing" }).click();
+      if (codec === "jpeg") {
+        await expect(page.getByText(/Screen sharing is off on/)).toBeVisible();
+        await page.getByRole("button", { name: "Turn on screen sharing" }).click();
+      }
 
       await expect(page.getByTestId("screen-summary")).toContainText(`${codec.toUpperCase()} ·`);
       await expect(page.getByTestId("screen-summary")).toContainText("800×600");
@@ -150,7 +155,6 @@ test("a tablet taps where it clicks and brings up its keyboard", async ({ browse
   const server = await startServer({ env: { DISPLAY: x.env.DISPLAY, WAYLAND_DISPLAY: "" } });
   const { page, context, errors } = await remotePage(browser, server, undefined, { hasTouch: true, viewport: { width: 1180, height: 820 } });
   try {
-    await page.request.put(server.url + "/api/screen", { data: { enabled: true } });
     await addProject(page);
     await newTask(page);
     await page.getByRole("button", { name: "View and control this machine's screen" }).click();
@@ -173,8 +177,38 @@ test("a tablet taps where it clicks and brings up its keyboard", async ({ browse
 });
 
 test("no Screen button on the machine itself", async ({ page }) => {
+  await page.route("**/api/screen", route => route.fulfill({
+    json: { enabled: true, available: true, same_machine: true },
+  }));
+  await page.reload();
   await addProject(page);
   await newTask(page);
   await expect(page.getByRole("button", { name: "Open a terminal in the project folder" })).toBeVisible();
   await expect(page.getByRole("button", { name: "View and control this machine's screen" })).toHaveCount(0);
+});
+
+test("a remote profile offers Screen even over loopback with no display", async ({ page, agenttik }) => {
+  const remote = await startServer({ env: { DISPLAY: "invalid-display", WAYLAND_DISPLAY: "" } });
+  try {
+    const state = await (await page.request.post(`${agenttik.url}/api/remotes`, { data: { address: remote.url } })).json();
+    await page.goto(`${agenttik.url}/?remote=${state.remote.id}`);
+    await addProject(page);
+    await newTask(page);
+    await page.getByRole("button", { name: "View and control this machine's screen" }).click();
+    await expect(page.getByText("No screen to show", { exact: true })).toBeVisible();
+  } finally {
+    await remote.stop();
+  }
+});
+
+test("a remote desktop connection offers Screen despite a loopback client address", async ({ page }) => {
+  await page.route("**/api/screen", route => route.fulfill({
+    headers: { "X-Agenttik-Remote": "http://office.example" },
+    json: { enabled: true, available: false, same_machine: true, reason: "No display connected" },
+  }));
+  await page.reload();
+  await addProject(page);
+  await newTask(page);
+  await page.getByRole("button", { name: "View and control this machine's screen" }).click();
+  await expect(page.getByText("No display connected", { exact: true })).toBeVisible();
 });

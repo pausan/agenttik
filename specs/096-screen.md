@@ -183,7 +183,8 @@ change the bitrate without resetting the stream and check JPEG quality.
 
 The screen belongs to the machine, so every profile answers from the
 instance's one manager and the instance's switch
-(`server_config.screen_enabled`, off by default). Everything but
+(`server_config.screen_enabled`, on by default on every machine). Upgrading
+also enables sharing on existing installations. Everything but
 `GET`/`PUT /api/screen` answers 403 while it is off. Turning it off ends every
 viewer at once.
 
@@ -208,12 +209,13 @@ kbit/s. The server applies it before discarding acknowledged frames. Unknown,
 repeated and invalid reports are ignored. Reconnecting starts a new viewer
 and clears the browser's arrival samples.
 
-`same_machine` is how the UI hides the Screen button where it would only show
-itself. agenttik's own proxies (the exposed listener and the tunnel) append the
-client to `X-Forwarded-For`, so its last entry is trusted; without one, the
+`same_machine` identifies a browser on the server itself. agenttik's own
+proxies (the exposed listener and the tunnel) append the client to
+`X-Forwarded-For`, so its last entry is trusted; without one, the
 connection's address is the client's. A loopback client is this machine. A
-remote profile's requests come from the forwarding machine, so they are never
-the same machine.
+remote connection can also use loopback. The UI recognizes remote profiles
+from the `remote` query and `--remote` connections from the
+`X-Agenttik-Remote` response header, independently of `same_machine`.
 
 Tests cover the switch, screenshots, actions, the clipboard, same-machine
 detection, and a viewer's stream, input and acknowledgements through a remote
@@ -223,13 +225,15 @@ profile to a second instance.
 
 **Where it is offered.** A **Screen** button sits beside **Terminal** under
 the prompt, and the command palette has **Screen**. Both appear only when the
-server has a display (`available`) and the browser is on another machine
-(`!same_machine`). That covers a remote profile, `--remote`, and a browser or
-tablet using the exposed listener or the tunnel. There is one Screen tab per
-machine. Opening it from another project moves it there. Like a terminal it
+window is connected to another machine: a remote profile, `--remote`, or a
+browser or tablet using the exposed listener or the tunnel (`!same_machine`).
+Local windows hide both even when sharing is enabled. A remote machine with
+no usable display still offers Screen; opening it explains why no screen is
+available. There is one Screen tab per machine. Opening it from another
+project moves it there. Like a terminal it
 is not saved with the strip. Its stream runs only while the tab is in front.
 With sharing off, the tab says so and offers **Turn on screen sharing**.
-Settings › Server has the same switch, in desktop and web launches.
+Settings › Server has the same switch, on by default, in desktop and web launches.
 
 **Drawing** (`web/src/screen.js`, `ScreenView.vue`). `chooseCodec` takes the
 server's first codec that `VideoDecoder.isConfigSupported` accepts (VP9, then

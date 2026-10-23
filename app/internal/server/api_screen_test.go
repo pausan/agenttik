@@ -27,8 +27,14 @@ func TestScreenRoutesNeedTheSwitch(t *testing.T) {
 	f := fakeScreen(t, s)
 
 	info := decode[screenInfo](t, do(t, s, "GET", "/api/screen", nil))
-	if info.Enabled || !info.Available || info.Width != 320 || len(info.Codecs) == 0 {
+	if !info.Enabled || !info.Available || info.Width != 320 || len(info.Codecs) == 0 {
 		t.Fatalf("info %+v", info)
+	}
+	if resp := do(t, s, "GET", "/api/screen/shot", nil); resp.StatusCode != http.StatusOK {
+		t.Fatalf("shot with default sharing: %d", resp.StatusCode)
+	}
+	if info := decode[screenInfo](t, do(t, s, "PUT", "/api/screen", map[string]bool{"enabled": false})); info.Enabled {
+		t.Fatal("sharing did not turn off")
 	}
 	for _, path := range []string{"/api/screen/shot", "/api/screen/clipboard", "/api/stream/screen"} {
 		if resp := do(t, s, "GET", path, nil); resp.StatusCode != http.StatusForbidden {
@@ -144,9 +150,6 @@ func TestScreenInputAppliesArrivalBeforeAcknowledgement(t *testing.T) {
 func TestScreenThroughRemoteProfile(t *testing.T) {
 	remoteSrv, remoteStore := newTestServer(t)
 	f := fakeScreen(t, remoteSrv)
-	if err := remoteStore.SetScreenEnabled(true); err != nil {
-		t.Fatal(err)
-	}
 	address := listen(t, remoteSrv)
 	local, _ := newTestServer(t)
 	state := decode[remoteState](t, do(t, local, "POST", "/api/remotes", map[string]string{"address": address}))

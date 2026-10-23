@@ -6,9 +6,8 @@ import (
 	"fmt"
 )
 
-// GetServerConfig returns the saved exposed-server setting, or the zero
-// value if it has never been set — the caller fills that in with the app's
-// compiled-in default rather than a second copy of it living here.
+// GetServerConfig returns the saved settings, with screen sharing enabled
+// when no row exists. The caller fills in the listener's compiled-in default.
 func (s *Store) GetServerConfig() (ServerConfig, error) {
 	var c ServerConfig
 	err := s.db.QueryRow(
@@ -18,7 +17,7 @@ func (s *Store) GetServerConfig() (ServerConfig, error) {
 		Scan(&c.Enabled, &c.Host, &c.Port, &c.AuthEnabled, &c.PasswordHash, &c.TOTPSecret, &c.TOTPDisabled,
 			&c.TunnelEnabled, &c.TunnelCredentials, &c.ScreenEnabled)
 	if errors.Is(err, sql.ErrNoRows) {
-		return ServerConfig{}, nil
+		return ServerConfig{ScreenEnabled: true}, nil
 	}
 	if err != nil {
 		return ServerConfig{}, fmt.Errorf("get server config: %w", err)

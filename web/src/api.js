@@ -14,6 +14,11 @@ export const profileID = params.get("profile") || "default";
 // instance. The server keeps its own catalogs and window paths local.
 export const remoteID = params.get("remote") || "";
 
+// Explicit remote connections also count when their proxy uses loopback.
+export function isRemoteConnection() {
+  return !!(remoteID || remoteInstance);
+}
+
 export function apiURL(path) {
   if (!path.startsWith("/api/")) return path;
   const query = [];

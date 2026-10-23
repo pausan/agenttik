@@ -18,7 +18,7 @@ import { createTaskSounds, TASK_SOUNDS_KEY } from "./task-sounds.js";
 import { trackTaskAttention, reconcileTaskCompletions } from "./task-attention.js";
 import { upsertBackgroundMessage } from "./background-tasks.js";
 import { recordError } from "./diagnostics.js";
-import { api, apiURL, storage, clientStorage, diagnosticStorage } from "./api";
+import { api, apiURL, storage, clientStorage, diagnosticStorage, isRemoteConnection } from "./api";
 import { debounce } from "./debounce";
 import { ACCENTS, DEFAULT_COLORS, NEUTRALS, applyColors } from "./theme";
 import { ACTIONS, matches } from "./shortcuts";
@@ -1130,7 +1130,7 @@ export async function loadScreenInfo() {
 /* The button is offered where it would show another machine: on this one it
    would only show itself. */
 export function screenOffered() {
-  return !!S.screen?.available && !S.screen.same_machine;
+  return !!S.screen && (isRemoteConnection() || S.screen.same_machine === false);
 }
 
 export function openScreen() {

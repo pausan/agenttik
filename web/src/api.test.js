@@ -57,13 +57,15 @@ test("live Codex usage adds to finished turns until final stats replace it", () 
 });
 
 test("remote tabs and drafts are scoped to their server across connection checks", async () => {
-  const { api, instanceKey } = await import("./api.js");
+  const { api, instanceKey, isRemoteConnection } = await import("./api.js");
   const original = globalThis.fetch;
   try {
     strictEqual(instanceKey("agenttik.openTabs"), "agenttik.openTabs");
+    strictEqual(isRemoteConnection(), false);
     globalThis.fetch = async () => new Response("{}", { headers: { "Content-Type": "application/json", "X-Agenttik-Remote": "https://one.example" } });
     await api("GET", "/api/projects");
     strictEqual(instanceKey("agenttik.openTabs"), "agenttik.openTabs:https://one.example");
+    strictEqual(isRemoteConnection(), true);
     globalThis.fetch = async () => new Response("{}", { headers: { "Content-Type": "application/json" } });
     await api("POST", "/api/remote/connect", { address: "two.example" });
     strictEqual(instanceKey("agenttik.openTabs"), "agenttik.openTabs:https://one.example");
@@ -72,6 +74,17 @@ test("remote tabs and drafts are scoped to their server across connection checks
     strictEqual(instanceKey("agenttik.openTabs"), "agenttik.openTabs:https://two.example");
   } finally {
     globalThis.fetch = original;
+  }
+});
+
+test("a remote profile is a remote connection before its first response", async () => {
+  const original = globalThis.location;
+  try {
+    globalThis.location = { search: "?remote=office&profile=work" };
+    const { isRemoteConnection } = await import("./api.js?remote-profile");
+    strictEqual(isRemoteConnection(), true);
+  } finally {
+    globalThis.location = original;
   }
 });
 

@@ -407,7 +407,7 @@ type ServerConfig struct {
 	TunnelCredentials string `json:"-"`
 
 	// ScreenEnabled lets viewers and agents see and drive this machine's
-	// screen. Off until someone at the machine turns it on. See
+	// screen. On by default on every machine. See
 	// 096-screen.md.
 	ScreenEnabled bool `json:"-"`
 }

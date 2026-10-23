@@ -135,3 +135,33 @@ func (f *Fake) ClipboardChanges() (<-chan string, func()) {
 }
 
 func (f *Fake) Close() {}
+
+// FakeAudio is sound in memory, for tests: Read answers the frames given to
+// Play, in order, and waits for more.
+type FakeAudio struct {
+	frames chan []int16
+	done   chan struct{}
+	once   sync.Once
+}
+
+func NewFakeAudio() *FakeAudio {
+	return &FakeAudio{frames: make(chan []int16, 64), done: make(chan struct{})}
+}
+
+// Play queues one frame of interleaved stereo samples.
+func (a *FakeAudio) Play(pcm []int16) { a.frames <- pcm }
+
+// Closed is closed once the capture is.
+func (a *FakeAudio) Closed() <-chan struct{} { return a.done }
+
+func (a *FakeAudio) Read(pcm []int16) error {
+	select {
+	case f := <-a.frames:
+		copy(pcm, f)
+		return nil
+	case <-a.done:
+		return errAudioClosed
+	}
+}
+
+func (a *FakeAudio) Close() { a.once.Do(func() { close(a.done) }) }

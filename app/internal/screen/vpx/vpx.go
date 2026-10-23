@@ -39,7 +39,7 @@ const (
 	// starved VP9 to 31 dB where 250 ms gives 51 dB at any cap.
 	keyMs = 250
 
-	shimABI = 2 // avx_abi in shim/agenttik_vpx.c
+	shimABI = 3 // avx_abi in shim/agenttik_vpx.c
 )
 
 var (
@@ -51,6 +51,10 @@ var (
 	avxClose  func(e uintptr)
 	avxKbps   func(e uintptr, kbps int32) int32
 	avxError  func() string
+
+	aopOpen   func(kbps int32) uintptr
+	aopEncode func(e uintptr, pcm unsafe.Pointer, samples int32, out unsafe.Pointer, size int32) int32
+	aopClose  func(e uintptr)
 )
 
 // Load makes the library ready, once. Its error is the reason there is no
@@ -86,6 +90,9 @@ func load() error {
 	purego.RegisterLibFunc(&avxClose, handle, "avx_close")
 	purego.RegisterLibFunc(&avxKbps, handle, "avx_set_kbps")
 	purego.RegisterLibFunc(&avxError, handle, "avx_error")
+	purego.RegisterLibFunc(&aopOpen, handle, "aop_open")
+	purego.RegisterLibFunc(&aopEncode, handle, "aop_encode")
+	purego.RegisterLibFunc(&aopClose, handle, "aop_close")
 	return nil
 }
 

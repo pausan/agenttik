@@ -1,7 +1,8 @@
 # Screen viewing and control
 
-agenttik can show another machine's screen and drive its mouse and keyboard:
-for a person, in a Screen tab, and for an agent, through an HTTP API.
+agenttik can show another machine's screen, play its sound and drive its
+mouse and keyboard: for a person, in a Screen tab, and for an agent, through
+an HTTP API.
 
 ## The encoder
 
@@ -9,14 +10,16 @@ Screens travel as VP9 with colour at full resolution (4:4:4, profile 1)
 where the browser decodes it, else VP9 4:2:0, else VP8, encoded by libvpx. Nothing is installed on the machine and nothing goes through cgo:
 
 - `scripts/build-vpx.sh [goos] [goarch]` builds a static libvpx (pinned
-  version, VP8/VP9 encoders only, realtime only) and links it with
+  version, VP8/VP9 encoders only, realtime only) and a static libopus (pinned
+  release tarball, checked against its SHA-256) and links them with
   `app/internal/screen/vpx/shim/agenttik_vpx.c` into one shared library,
   `app/internal/screen/vpx/lib/<goos>_<goarch>/`. `make build` and
   `make build-web` run it when the library is missing or the shim changes
   (`make vpx`). CI builds it natively on Linux and macOS and cross-builds
   the Windows DLL on Linux with MinGW; `make build-windows-amd64` and
   `make build-macos-arm64` build theirs when missing or older than the shim.
-- The release binary embeds its platform's library (about 1.8 MB). On first
+- The release binary embeds its platform's library (about 2.1 MB, 0.36 MB of
+  it Opus). On first
   use it is written to the user cache directory, named by its hash, and loaded
   with purego, which works with `CGO_ENABLED=0` (web and Windows builds).
 - A build without the library still works. `vpx.Load` gives the reason and
@@ -25,7 +28,8 @@ where the browser decodes it, else VP9 4:2:0, else VP8, encoded by libvpx. Nothi
   older shim.
 
 The shim is the whole API agenttik uses: `avx_abi`, `avx_open`, `avx_encode`,
-`avx_set_kbps`, `avx_close`, `avx_error`, with plain integers and pointers.
+`avx_set_kbps`, `avx_close`, `avx_error`, and `aop_open`, `aop_encode`,
+`aop_close` for sound, with plain integers and pointers.
 libvpx's own API takes structs whose layout changes between versions and a variadic control
 call that cannot be made portably from Go. The shim also converts BGRA to
 I420 or I444 (BT.601), optionally halving each side by averaging.
@@ -47,7 +51,7 @@ Settings come from measurements of 1080p desktop video (scrolling and typing):
 | Up to 4 threads | 1080p scrolling encodes in about 10 ms a frame, conversion included |
 
 `go test ./app/internal/screen/vpx -bench .` checks keyframes, a first
-keyframe as large as one covering a second, near-free unchanged frames, halving, and reports ms and Mbps for a scrolling 1080p
+keyframe as large as one covering a second, near-free unchanged frames, halving, a second of tone near the Opus bitrate, and reports ms and Mbps for a scrolling 1080p
 screen.
 
 ## Capture and input
@@ -168,6 +172,34 @@ coordinate mapping and key coverage run with `go test` on Windows;
 `AGENTTIK_SCREEN_LIVE=1` adds a grab, the cursor, the clipboard against
 PowerShell's `Set-Clipboard`, and a pointer move.
 
+## Sound
+
+A viewer can ask for the machine's sound: what its default output plays,
+not its microphone. `screen.Audio` reads it as 48 kHz 16-bit stereo; each
+viewer that asks opens its own capture and Opus encoder (64 kbit/s, music
+mode, 20 ms packets) and stops them when it no longer wants sound or closes.
+
+- **Linux:** `audio_linux.go` records the `@DEFAULT_MONITOR@` source, the
+  monitor of whatever output is the default, over the PulseAudio protocol
+  (`jfreymuth/pulse`, pure Go), which PipeWire's `pipewire-pulse` also
+  speaks. `PULSE_SOURCE` names another source, as for libpulse;
+  `PULSE_SERVER` another server. The server asks for 20 ms fragments. What
+  arrives is buffered; a reader more than a second behind loses the oldest.
+- **macOS and Windows:** not yet. `GET /api/screen` says `audio: false` and the
+  Screen tab shows no sound button.
+
+Exact silence (all-zero samples, which an idle output's monitor gives) is not
+encoded or sent, so a quiet machine costs nothing. Packets are numbered by
+the 20 ms they cover, counting silence, and travel two to a message
+(`audio`); silence flushes a half-full message at once. A capture or encoder
+that fails sends one `audio` message with the reason in `text` and stops.
+
+`AGENTTIK_SCREEN_LIVE=1 go test ./app/internal/screen -run PulseLive` loads a
+null sink of its own, plays a tone into it with `paplay`, records it, and
+checks that closing wakes a waiting read. Tests with `screen.FakeAudio`
+check numbering across silence, flushing, stopping, closing a viewer while
+sound plays, the error message and `Info.audio`.
+
 ## Viewers
 
 `screen.Manager` is the machine's one screen. The display opens on first use
@@ -181,6 +213,7 @@ own goroutine, encoder and stream of messages:
 | `cursor` | pointer position, in screen pixels |
 | `shape` | pointer image as PNG, with its hot spot |
 | `clip` | text another program put on the clipboard |
+| `audio` | `seq` of the first packet and base64 Opus packets (`a`), or `text` saying why there is no sound |
 
 A frame is grabbed when the screen changes, not on a clock. The display
 signals damage (`ChangedSince`), and the viewer grabs at once if the last frame
@@ -234,6 +267,9 @@ the viewer's cap. JPEG quality and frame pacing reduce traffic; the cap is appro
 
 Screens wider than 2560 or taller than 1600 are halved before VP8/VP9
 encoding.
+
+Sound goes out as it is captured and is not paced by acknowledgements; its
+bytes are not counted in the rate control, which reads the link from frames.
 
 **Input.** A viewer's events are applied in order: `m` move, `b` button, `w`
 wheel steps, `k` key down/up by browser `key` and `code`, `c` text. Keys are
@@ -293,10 +329,10 @@ viewer at once.
 
 | Route | Does |
 |-------|------|
-| `GET /api/screen` | `{enabled, same_machine, available, reason, control, width, height, os, codecs}`; `control` says why input will not arrive |
+| `GET /api/screen` | `{enabled, same_machine, available, reason, control, width, height, os, codecs, audio}`; `control` says why input will not arrive, `audio` that sound can be asked for |
 | `PUT /api/screen` | `{enabled}` |
 | `GET /api/stream/screen?codec=vp9\|vp8\|jpeg` | one viewer's messages, as SSE `data:` JSON |
-| `POST /api/screen/input` | `{viewer, ack, key, events, received?}`: input, the last frame drawn, a keyframe request and arrival feedback |
+| `POST /api/screen/input` | `{viewer, ack, key, events, received?, audio?}`: input, the last frame drawn, a keyframe request, arrival feedback and whether to send sound |
 | `GET`/`PUT /api/screen/clipboard` | `{text}` |
 | `GET /api/screen/shot?width=&format=png\|jpeg` | a screenshot; `X-Screen-Width/Height` and `X-Image-Width/Height` headers |
 | `POST /api/screen/actions` | `{width, height, actions}`; answers `{cursor: {x, y}}` |
@@ -353,9 +389,25 @@ first keyframe are acknowledged but not decoded. A decoder error closes the
 decoder and asks for a keyframe. JPEG bands are decoded with
 `createImageBitmap` and drawn at their rows. The canvas keeps the screen's
 shape at the largest size the pane allows. The toolbar shows codec, frames
-drawn per second, bitrate and screen size, in tabular digits. Its height is
-fixed, and in full screen so is its width (34 rem, less on a narrow screen),
-so it does not shrink when the numbers do.
+drawn per second, bitrate (frames and sound) and screen size, in tabular
+digits. Its height is fixed, and in full screen so is its width (34 rem, less
+on a narrow screen), so it does not shrink when the numbers do.
+
+**Sound** (`AudioPlayer`, `AudioClock` in `screen.js`). The toolbar's
+speaker button appears when the machine offers sound, and is disabled where
+`AudioDecoder` does not take Opus or there is no `AudioContext`. Sound is on
+unless turned off (`screen.sound` in `localStorage`); the choice is sent
+after each `hello`, so a reconnect keeps it. Packets are decoded by WebCodecs
+and each is played as an `AudioBufferSource` scheduled on a 48 kHz
+`AudioContext`. Sound is queued 60 ms ahead; running dry mid-sound adds 20 ms
+to that, up to 300 ms. A gap in packet numbers is left-out silence: the sound
+starts again one lead ahead. More than 150 ms queued beyond the lead (a burst
+after a stall, or clock drift) drops packets. Browsers hold an
+`AudioContext` until a click: any press or key on the screen resumes it, and
+packets that arrive while it is held are discarded rather than queued.
+Turning sound off closes the decoder and context and tells the server to
+stop. A server-side failure turns the button amber with the reason as its
+title.
 
 **Pointer.** With a mouse over the canvas, the pointer is the browser's own,
 wearing the remote shape as a CSS cursor, so it moves with no delay. Otherwise
@@ -397,20 +449,28 @@ dragged anywhere but its buttons (a move cursor), stays wholly on screen, and
 its place is kept in `localStorage` (`screen.bar`).
 
 Tests: `web/src/screen.test.js` covers the input queue (one request in flight,
-coalescing, newest acknowledgement and arrival report), throughput after
-startup and idle, key translation (text against keys, Cmd as Ctrl, AltGr,
-Option, released typed keys), pointer, fit and wheel
-arithmetic, every trackpad gesture, and codec choice.
+coalescing, newest acknowledgement and arrival report, the sound flag once
+per viewer), throughput after startup and idle, key translation (text
+against keys, Cmd as Ctrl, AltGr, Option, released typed keys), pointer, fit
+and wheel arithmetic, every trackpad gesture, codec choice, Opus support and
+sound scheduling (lead, growth after running dry, restart after a gap,
+dropping a burst).
 `e2e/tests/screen.spec.js` runs an Xvfb with an `xev` window per test. With
 VP9 4:4:4, VP9 4:2:0 (a browser refusing profile 1) and JPEG it turns sharing on from the tab and checks drawn pixels,
 arrival feedback, a right click and a key reaching xev, clipboard both ways,
 full screen in and out with its toolbar dragged against an edge and keeping
-its size when the numbers drop to 0 fps and 0 kbps, and 0 fps on a still screen. It also checks a tablet
+its size when the numbers drop to 0 fps and 0 kbps, and 0 fps on a still screen.
+With `pactl` and `paplay` each server records a null sink of the test's own
+(`PULSE_SOURCE`) and a tone played into it must reach the page's Web Audio
+(counted on `AudioBufferSourceNode.start`; Playwright's Chromium is muted),
+and stop when muted. Without them, or in other tests, the server gets no
+sound server and the button says why. It also checks a tablet
 tap clicking where it lands and the touch keyboard button, and that the machine itself is not
 offered its own screen.
 
 `make test-desktop-screen` runs the real `screen.js` in a real Wails/WebKitGTK
 window, through the same loopback proxy the app uses, against a fake screen.
 It checks the screen is drawn and input comes back, and logs the codec the
-window picked from the server's list. WebKitGTK 2.52 picks VP9 4:2:0: the
-window is a secure context, so WebCodecs and the clipboard API are there.
+window picked from the server's list and whether it plays sound. WebKitGTK
+2.52 picks VP9 4:2:0 and decodes Opus: the window is a secure context, so
+WebCodecs and the clipboard API are there.

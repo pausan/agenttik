@@ -1,6 +1,7 @@
 // agenttik_vpx is the whole of libvpx that agenttik calls: open an encoder,
-// hand it a BGRA screen, take back one compressed frame. It is linked with a
-// static libvpx into one shared library per platform and loaded from Go
+// hand it a BGRA screen, take back one compressed frame. The aop_ calls do the
+// same for the screen's sound with libopus. It is linked with a static libvpx
+// and libopus into one shared library per platform and loaded from Go
 // without cgo (app/internal/screen/vpx). Keeping the surface to plain ints
 // and pointers is what makes that safe: libvpx's own API takes large structs
 // whose layout changes between versions, and a variadic control call that
@@ -10,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "opus.h"
 #include "vpx/vp8cx.h"
 #include "vpx/vpx_encoder.h"
 
@@ -37,7 +39,7 @@ EXPORT const char *avx_error(void) { return last_error; }
 
 // avx_abi numbers the calls below. Go checks it before calling anything, so a
 // library built from an older shim is refused rather than called wrongly.
-EXPORT int avx_abi(void) { return 2; }
+EXPORT int avx_abi(void) { return 3; }
 
 // avx_open starts an encoder for a src_w x src_h screen, encoded at that size
 // divided by scale. codec is 8 or 9. crf is the constant quality level and
@@ -294,3 +296,31 @@ EXPORT void avx_close(avx *e) {
   free(e->out);
   free(e);
 }
+
+// aop_open starts an Opus encoder for interleaved 16-bit stereo at 48 kHz,
+// tuned for music and film rather than speech, variable bitrate around kbps.
+EXPORT OpusEncoder *aop_open(int kbps) {
+  int err;
+  OpusEncoder *e = opus_encoder_create(48000, 2, OPUS_APPLICATION_AUDIO, &err);
+  if (err != OPUS_OK) {
+    last_error = opus_strerror(err);
+    return NULL;
+  }
+  opus_encoder_ctl(e, OPUS_SET_BITRATE(kbps * 1000));
+  opus_encoder_ctl(e, OPUS_SET_SIGNAL(OPUS_SIGNAL_MUSIC));
+  return e;
+}
+
+// aop_encode compresses one frame of samples per channel (960 is 20 ms) into
+// out, answering the packet's length or -1.
+EXPORT int aop_encode(OpusEncoder *e, const int16_t *pcm, int samples,
+                      uint8_t *out, int cap) {
+  int n = opus_encode(e, pcm, samples, out, cap);
+  if (n < 0) {
+    last_error = opus_strerror(n);
+    return -1;
+  }
+  return n;
+}
+
+EXPORT void aop_close(OpusEncoder *e) { opus_encoder_destroy(e); }

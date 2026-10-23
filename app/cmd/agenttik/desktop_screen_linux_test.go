@@ -32,7 +32,8 @@ import (
 // context, and the window's own scheme decides whether it is one. This runs
 // the real screen.js in a real window, through the same loopback proxy the
 // app uses, against a server with a fake screen, and checks the screen is
-// drawn and input comes back. It reports which codec the window chose.
+// drawn and input comes back. It reports which codec the window chose and
+// whether it can play the sound.
 // Run with make test-desktop-screen (needs Xvfb and the desktop libraries).
 func TestDesktopScreen(t *testing.T) {
 	if os.Getenv("AGENTTIK_SCREEN_TEST_CHILD") != "1" {
@@ -81,7 +82,7 @@ func TestDesktopScreen(t *testing.T) {
 	sources["index.html"] = &fstest.MapFile{Data: []byte(`<canvas id="c"></canvas>
 <script type="importmap">{"imports":{"vue":"/vue.js"}}</script>
 <script type="module">
-import { chooseCodec, ScreenStream } from '/screen.js';
+import { audioSupported, chooseCodec, ScreenStream } from '/screen.js';
 const report = (q) => fetch('/result?' + new URLSearchParams(q));
 try {
   const info = await (await fetch('/api/screen')).json();
@@ -99,7 +100,7 @@ try {
   stream.input.push({ t: 'm', x: 7, y: 9 });
   await new Promise((r) => setTimeout(r, 500));
   stream.close();
-  await report({ codec, red, secure: String(isSecureContext), clipboard: String(!!navigator.clipboard) });
+  await report({ codec, red, secure: String(isSecureContext), clipboard: String(!!navigator.clipboard), sound: String(await audioSupported()) });
 } catch (e) { await report({ error: e.message }); }
 </script>`)}
 
@@ -116,7 +117,7 @@ try {
 					return
 				}
 				q := r.URL.Query()
-				t.Logf("screen codec %s, secure context %s, clipboard API %s", q.Get("codec"), q.Get("secure"), q.Get("clipboard"))
+				t.Logf("screen codec %s, secure context %s, clipboard API %s, plays sound %s", q.Get("codec"), q.Get("secure"), q.Get("clipboard"), q.Get("sound"))
 				if msg := q.Get("error"); msg != "" {
 					t.Errorf("browser error: %s", msg)
 				}

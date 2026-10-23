@@ -1,7 +1,7 @@
 import { deepStrictEqual, strictEqual } from "node:assert/strict";
 import { test } from "node:test";
 
-import { ArrivalMeter, InputQueue, Trackpad, WheelSteps, chooseCodec, decodeBase64, fitSize, keyEvents, mouseButton, toScreen } from "./screen.js";
+import { ArrivalMeter, AudioClock, InputQueue, Trackpad, WheelSteps, audioSupported, chooseCodec, decodeBase64, fitSize, keyEvents, mouseButton, toScreen } from "./screen.js";
 
 /* A send that waits until the test lets it finish, so a test can act while a
    request is in flight. */
@@ -189,4 +189,53 @@ test("the codec is the best both ends have", async () => {
 
 test("base64 decodes to bytes", () => {
   deepStrictEqual([...decodeBase64("AAEC/w==")], [0, 1, 2, 255]);
+});
+
+test("the sound flag travels once, and again for a new viewer", async () => {
+  const { sent, send, release } = heldSend();
+  const q = new InputQueue(send);
+  q.setViewer("v1");
+  q.setAudio(true);
+  strictEqual(sent[0].audio, true);
+  q.acknowledge(1);
+  release();
+  await tick();
+  strictEqual(sent[1].audio, undefined);
+  q.setAudio(false);
+  release();
+  await tick();
+  strictEqual(sent[2].audio, false);
+  q.setAudio(true);
+  q.setViewer("v2"); // a reconnect: the stream says it again after hello
+  release();
+  await tick();
+  strictEqual(sent.length, 3);
+});
+
+test("sound is queued ahead, waits longer after running dry, and drops a burst", () => {
+  const c = new AudioClock();
+  const d = 0.02;
+  // The first packet starts one lead ahead; the next follows on.
+  strictEqual(c.at(1, d, 10), 10.06);
+  strictEqual(c.at(2, d, 10.01), 10.08);
+  // Running dry in the middle of sound lengthens the lead.
+  strictEqual(c.at(3, d, 10.2), 10.28);
+  strictEqual(c.lead.toFixed(2), "0.08");
+  // A gap in the numbers is silence left out: start again, same lead.
+  strictEqual(c.at(40, d, 11), 11.08);
+  strictEqual(c.lead.toFixed(2), "0.08");
+  // A burst far ahead of the lead is dropped until the queue is near live.
+  let dropped = 0;
+  for (let seq = 41; seq < 61; seq++) if (c.at(seq, d, 11) < 0) dropped++;
+  strictEqual(dropped, 13);
+});
+
+test("sound plays where the browser decodes Opus", async () => {
+  const opus = { isConfigSupported: async ({ codec }) => ({ supported: codec === "opus" }) };
+  const none = { isConfigSupported: async () => ({ supported: false }) };
+  const context = function AudioContext() {};
+  strictEqual(await audioSupported(opus, context), true);
+  strictEqual(await audioSupported(none, context), false);
+  strictEqual(await audioSupported(opus, undefined), false);
+  strictEqual(await audioSupported(undefined, context), false);
 });

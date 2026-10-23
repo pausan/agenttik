@@ -151,8 +151,8 @@ func (s *Server) streamScreen(c *fiber.Ctx) error {
 }
 
 // screenInput is a viewer's input, its acknowledgement of the frames it has
-// drawn and its request for a keyframe, in one request so a viewer has one
-// in flight at a time.
+// drawn, its request for a keyframe and whether it wants the sound, in one
+// request so a viewer has one in flight at a time.
 func (s *Server) screenInput(c *fiber.Ctx) error {
 	m, err := s.screenManager()
 	if err != nil {
@@ -162,6 +162,7 @@ func (s *Server) screenInput(c *fiber.Ctx) error {
 		Viewer   string         `json:"viewer"`
 		Ack      uint64         `json:"ack"`
 		Key      bool           `json:"key"`
+		Audio    *bool          `json:"audio"`
 		Events   []screen.Event `json:"events"`
 		Received *struct {
 			Seq  uint64  `json:"seq"`
@@ -184,6 +185,9 @@ func (s *Server) screenInput(c *fiber.Ctx) error {
 	}
 	if body.Key {
 		v.RequestKey()
+	}
+	if body.Audio != nil {
+		v.SetAudio(*body.Audio)
 	}
 	if err := v.Input(body.Events); err != nil {
 		return badRequest("%v", err)

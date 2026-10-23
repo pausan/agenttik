@@ -3,7 +3,9 @@
    Frames come down one SSE stream per viewer and are drawn on a canvas:
    VP9 or VP8 through WebCodecs, or JPEG bands where WebCodecs is missing.
    Input, the acknowledgement of the last frame drawn and keyframe requests go
-   back up in one POST at a time, which is what paces the stream.
+   back up in one POST at a time, which is what paces the stream. The machine's
+   sound, when asked for, comes down the same stream as Opus and plays through
+   WebCodecs and Web Audio.
 
    Nothing here holds a component. ScreenView wires DOM events into the
    functions below and draws what ScreenStream hands it. */
@@ -34,6 +36,18 @@ export async function chooseCodec(serverCodecs, decoder = globalThis.VideoDecode
   return "jpeg";
 }
 
+/* audioSupported says whether this browser can play the machine's sound. */
+export async function audioSupported(decoder = globalThis.AudioDecoder, context = globalThis.AudioContext) {
+  if (!decoder?.isConfigSupported || !context) return false;
+  try {
+    return (await decoder.isConfigSupported(OPUS)).supported;
+  } catch {
+    return false;
+  }
+}
+
+const OPUS = { codec: "opus", sampleRate: 48000, numberOfChannels: 2 };
+
 export function decodeBase64(text) {
   if (typeof Uint8Array.fromBase64 === "function") return Uint8Array.fromBase64(text);
   const bin = atob(text);
@@ -56,6 +70,7 @@ export class InputQueue {
     this.ack = 0;
     this.sentAck = 0;
     this.key = false;
+    this.audio = null; // whether to send the sound, until it has been said
     this.received = null;
     this.busy = false;
     this.closed = false;
@@ -66,6 +81,7 @@ export class InputQueue {
     this.events = [];
     this.ack = this.sentAck = 0;
     this.key = false;
+    this.audio = null;
     this.received = null;
   }
 
@@ -88,12 +104,19 @@ export class InputQueue {
     this.flush();
   }
 
+  setAudio(on) {
+    this.audio = on;
+    this.flush();
+  }
+
   async flush() {
     if (this.busy || this.closed || !this.viewer) return;
-    if (!this.events.length && this.ack === this.sentAck && !this.key) return;
+    if (!this.events.length && this.ack === this.sentAck && !this.key && this.audio === null) return;
     const body = { viewer: this.viewer, ack: this.ack, key: this.key, events: this.events };
     if (this.received) body.received = this.received;
+    if (this.audio !== null) body.audio = this.audio;
     this.received = null;
+    this.audio = null;
     this.events = [];
     this.sentAck = this.ack;
     this.key = false;
@@ -318,15 +341,17 @@ export class ArrivalMeter {
   }
 }
 
-/* ScreenStream opens the viewer's stream and draws it on `canvas`. It calls
-   `onState({ codec, sw, sh, fps, kbps })` as things change, `onCursor(x, y)`,
-   `onShape(url, hx, hy, w, h)` and `onClip(text)`. */
+/* ScreenStream opens the viewer's stream and draws it on `canvas`, and plays
+   the sound when `audio` is set. It calls `onState({ codec, sw, sh, fps,
+   kbps })` as things change, `onCursor(x, y)`, `onShape(url, hx, hy, w, h)`,
+   `onClip(text)` and `onAudioError(text)` when there is no sound. */
 export class ScreenStream {
-  constructor(canvas, codec, { onState, onCursor, onShape, onClip, onError } = {}) {
+  constructor(canvas, codec, { audio = false, onState, onCursor, onShape, onClip, onAudioError, onError } = {}) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d", { alpha: false });
     this.codec = codec;
-    this.handlers = { onState, onCursor, onShape, onClip, onError };
+    this.handlers = { onState, onCursor, onShape, onClip, onAudioError, onError };
+    this.player = audio ? new AudioPlayer() : null;
     this.input = new InputQueue();
     this.decoder = null;
     this.pending = [];
@@ -353,6 +378,7 @@ export class ScreenStream {
       case "hello":
         // A new viewer: the first one, or one opened by a reconnect.
         this.input.setViewer(msg.id);
+        if (this.player) this.input.setAudio(true);
         this.arrivals = new ArrivalMeter();
         this.resetDecoder();
         this.codec = msg.codec;
@@ -377,7 +403,26 @@ export class ScreenStream {
       case "clip":
         this.handlers.onClip?.(msg.text || "");
         break;
+      case "audio":
+        if (msg.text) this.handlers.onAudioError?.(msg.text);
+        for (const p of msg.a || []) this.bytes += (p.length * 3) / 4;
+        if (msg.a) this.player?.push(msg.seq, msg.a);
+        break;
     }
+  }
+
+  /* setAudio starts or stops the sound. Call it from a click: browsers only
+     let sound start after one. */
+  setAudio(on) {
+    if (!on === !this.player) return;
+    this.player?.close();
+    this.player = on ? new AudioPlayer() : null;
+    this.input.setAudio(on);
+  }
+
+  /* resumeAudio lets sound play that the browser held until a click. */
+  resumeAudio() {
+    this.player?.resume();
   }
 
   update(change) {
@@ -470,6 +515,95 @@ export class ScreenStream {
     this.es.close();
     this.input.close();
     this.resetDecoder();
+    this.player?.close();
+  }
+}
+
+/* ------------------------------------------------------------------ sound */
+
+const PACKET_US = 20000; // each Opus packet is 20 ms
+const MIN_LEAD = 0.06; // seconds of sound queued ahead of the speakers
+const MAX_LEAD = 0.3;
+const SLACK = 0.15; // queued beyond the lead before packets are dropped
+
+/* AudioClock decides when each decoded packet plays. Sound is queued `lead`
+   seconds ahead, which absorbs the network's jitter. Running dry in the
+   middle of sound means the lead was too short, so it grows; a gap in the
+   packet numbers is silence the server left out, so the sound simply starts
+   again. Queued far beyond the lead (a burst after a stall, or the two
+   machines' clocks drifting) drops packets to stay close to live. */
+export class AudioClock {
+  constructor() {
+    this.lead = MIN_LEAD;
+    this.next = 0; // when the queued sound ends, on the context's clock
+    this.expect = -1;
+  }
+
+  /* at answers when packet `seq`, `duration` seconds long, starts, or -1 to
+     drop it. `now` is the audio context's current time. */
+  at(seq, duration, now) {
+    const contiguous = seq === this.expect;
+    this.expect = seq + 1;
+    if (this.next < now + 0.005) {
+      if (contiguous && this.next > 0) this.lead = Math.min(MAX_LEAD, this.lead + 0.02);
+      this.next = now + this.lead;
+    } else if (this.next > now + this.lead + SLACK) {
+      return -1;
+    }
+    const start = this.next;
+    this.next += duration;
+    return start;
+  }
+}
+
+/* AudioPlayer decodes Opus packets and plays them through Web Audio. */
+export class AudioPlayer {
+  constructor() {
+    this.ctx = new AudioContext({ latencyHint: "interactive", sampleRate: 48000 });
+    this.clock = new AudioClock();
+    this.decoder = null;
+  }
+
+  push(seq, packets) {
+    // Held until a click: nothing would play, so nothing is queued.
+    if (this.ctx.state !== "running") return;
+    if (!this.decoder || this.decoder.state === "closed") this.open();
+    packets.forEach((p, i) => {
+      try {
+        this.decoder.decode(new EncodedAudioChunk({ type: "key", timestamp: (seq + i) * PACKET_US, data: decodeBase64(p) }));
+      } catch {
+        this.decoder = null;
+      }
+    });
+  }
+
+  open() {
+    this.decoder = new AudioDecoder({ output: (data) => this.play(data), error: () => (this.decoder = null) });
+    this.decoder.configure(OPUS);
+  }
+
+  play(data) {
+    const buf = this.ctx.createBuffer(data.numberOfChannels, data.numberOfFrames, data.sampleRate);
+    for (let c = 0; c < data.numberOfChannels; c++) {
+      data.copyTo(buf.getChannelData(c), { planeIndex: c, format: "f32-planar" });
+    }
+    const at = this.clock.at(Math.round(data.timestamp / PACKET_US), buf.duration, this.ctx.currentTime);
+    data.close();
+    if (at < 0) return;
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(this.ctx.destination);
+    src.start(at);
+  }
+
+  resume() {
+    if (this.ctx.state === "suspended") this.ctx.resume().catch(() => {});
+  }
+
+  close() {
+    if (this.decoder && this.decoder.state !== "closed") this.decoder.close();
+    this.decoder = null;
+    this.ctx.close().catch(() => {});
   }
 }
 

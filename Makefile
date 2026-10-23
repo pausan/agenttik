@@ -26,7 +26,7 @@ endif
 VERSION_LDFLAGS := -X main.version=$(VERSION)
 
 # VPX_LIB is the screen encoder library the binary embeds, built from source by
-# scripts/build-vpx.sh (needs git, a C compiler and nasm). See specs/096-screen.md.
+# scripts/build-vpx.sh (needs git, curl, a C compiler and nasm). See specs/096-screen.md.
 VPX_LIB := $(firstword $(wildcard app/internal/screen/vpx/lib/$(shell go env GOOS)_$(shell go env GOARCH)/*agenttikvpx*))
 
 .PHONY: all build build-web vpx build-windows-amd64 build-macos-arm64 run run-web test test-startup e2e vet fmt clean deps hooks ui ui-dev

@@ -12,6 +12,7 @@ import {
   ScreenStream,
   Trackpad,
   WheelSteps,
+  audioSupported,
   chooseCodec,
   fitSize,
   keyEvents,
@@ -40,6 +41,9 @@ const pseudo = ref(false); // a CSS stand-in where the Fullscreen API is missing
 const barAt = ref(JSON.parse(localStorage.getItem("screen.bar") || "null"));
 const touchDevice = typeof navigator !== "undefined" && navigator.maxTouchPoints > 0;
 const touchMode = ref(localStorage.getItem("screen.touch") || "trackpad");
+// The machine's sound: on unless turned off; `playable` once both ends can,
+// `error` why the machine sends none.
+const sound = reactive({ on: localStorage.getItem("screen.sound") !== "off", playable: false, error: "" });
 
 let stream = null;
 let observer = null;
@@ -71,8 +75,11 @@ async function start() {
   if (!S.screen.enabled) return (status.value = "off");
   status.value = "starting";
   const codec = await chooseCodec(S.screen.codecs);
+  sound.playable = !!S.screen.audio && (await audioSupported());
+  sound.error = "";
   if (!canvas.value) return; // the tab went while the codec was chosen
   stream = new ScreenStream(canvas.value, codec, {
+    audio: sound.playable && sound.on,
     onState(next) {
       const resized = next.sw !== state.sw || next.sh !== state.sh;
       Object.assign(state, next);
@@ -92,6 +99,9 @@ async function start() {
       Object.assign(pointer, { url, hx, hy, w, h });
     },
     onClip: receiveClipboard,
+    onAudioError(text) {
+      sound.error = text;
+    },
     async onError() {
       status.value = "reconnecting";
       await loadScreenInfo();
@@ -106,6 +116,20 @@ function stop(next) {
   stream = null;
   if (next) status.value = next;
 }
+
+function toggleSound() {
+  sound.on = !sound.on;
+  sound.error = "";
+  localStorage.setItem("screen.sound", sound.on ? "on" : "off");
+  stream?.setAudio(sound.on);
+  keys.value?.focus({ preventScroll: true });
+}
+
+const soundTitle = computed(() => {
+  if (!sound.playable) return "This browser cannot play the sound";
+  if (sound.on && sound.error) return `No sound: ${sound.error}`;
+  return sound.on ? "Mute" : "Play the sound";
+});
 
 async function turnOn() {
   await setScreenEnabled(true);
@@ -133,6 +157,7 @@ function screenPoint(e) {
 
 function onPointerDown(e) {
   keys.value?.focus({ preventScroll: true });
+  stream?.resumeAudio(); // browsers hold sound until a click
   if (!state.sw) return;
   e.preventDefault();
   if (e.pointerType === "touch" && touchMode.value === "trackpad") {
@@ -184,6 +209,7 @@ function onKeyDown(e) {
   // Every key belongs to the other machine while the screen has focus, as in
   // a terminal: Ctrl+W there closes a window over there, not this tab.
   e.stopPropagation();
+  stream?.resumeAudio();
   if (e.key === "Unidentified" || e.key === "Process" || e.isComposing) return; // `input` brings it
   if (isPaste(e) && !e.repeat) {
     // Let the browser fire `paste`, which carries this machine's clipboard
@@ -429,6 +455,18 @@ onBeforeUnmount(() => {
           />
         </template>
         <UButton
+          v-if="S.screen?.audio"
+          :icon="sound.playable && sound.on && !sound.error ? 'i-lucide-volume-2' : 'i-lucide-volume-x'"
+          size="xs"
+          :color="sound.on && sound.error ? 'warning' : 'neutral'"
+          variant="ghost"
+          :disabled="!sound.playable"
+          :title="soundTitle"
+          :aria-label="soundTitle"
+          data-testid="screen-sound"
+          @click="toggleSound"
+        />
+        <UButton
           :icon="floating ? 'i-lucide-minimize' : 'i-lucide-maximize'"
           size="xs"
           color="neutral"
@@ -497,8 +535,8 @@ onBeforeUnmount(() => {
       <div v-else-if="status === 'off'" class="max-w-md p-6 text-center text-sm text-muted">
         <p class="mb-1 font-medium text-highlighted">Screen sharing is off on {{ machine }}</p>
         <p class="mb-3">
-          Turning it on lets this window, and any agent with access to {{ machine }}, see its screen and use its
-          mouse and keyboard. It can be turned off in Settings › Server.
+          Turning it on lets this window, and any agent with access to {{ machine }}, see its screen, hear its
+          sound and use its mouse and keyboard. It can be turned off in Settings › Server.
         </p>
         <UButton label="Turn on screen sharing" icon="i-lucide-monitor-up" @click="turnOn" />
       </div>

@@ -19,7 +19,8 @@ import (
 // display opens on first use, not at startup, and a failure is remembered
 // for a few seconds so a machine without one is not asked on every request.
 type Manager struct {
-	open func() (Display, error)
+	open      func() (Display, error)
+	openAudio func() (Audio, error)
 
 	mu      sync.Mutex
 	display Display
@@ -31,8 +32,12 @@ type Manager struct {
 const retryOpen = 5 * time.Second
 
 func NewManager(open func() (Display, error)) *Manager {
-	return &Manager{open: open, viewers: map[string]*Viewer{}}
+	return &Manager{open: open, openAudio: openAudio, viewers: map[string]*Viewer{}}
 }
+
+// UseAudio replaces how the machine's sound is recorded, for tests; nil has
+// none.
+func (m *Manager) UseAudio(open func() (Audio, error)) { m.openAudio = open }
 
 // Display opens the screen if it is not open yet.
 func (m *Manager) Display() (Display, error) {
@@ -63,10 +68,12 @@ type Info struct {
 	Height  int      `json:"height,omitempty"`
 	OS      string   `json:"os"`
 	Codecs  []string `json:"codecs"`
+	// Audio says a viewer can ask for the machine's sound, as Opus.
+	Audio bool `json:"audio"`
 }
 
 func (m *Manager) Info() Info {
-	info := Info{OS: runtime.GOOS, Codecs: Codecs()}
+	info := Info{OS: runtime.GOOS, Codecs: Codecs(), Audio: m.openAudio != nil && vpx.Load() == nil}
 	d, err := m.Display()
 	if err != nil {
 		info.Reason = err.Error()
@@ -127,6 +134,11 @@ type Viewer struct {
 	wantKey  bool
 	keys     map[string]uint32 // held keys by KeyboardEvent.code
 	buttons  map[int]bool
+
+	audioMu    sync.Mutex
+	audioStop  context.CancelFunc // nil while no sound is sent
+	audioDone  chan struct{}
+	audioEnded bool
 }
 
 type sentFrame struct {
@@ -137,7 +149,7 @@ type sentFrame struct {
 
 // Message is one event on a viewer's stream.
 type Message struct {
-	Type string `json:"t"` // hello, frame, cursor, shape, clip
+	Type string `json:"t"` // hello, frame, cursor, shape, clip, audio
 
 	Seq   uint64 `json:"seq,omitempty"`
 	Codec string `json:"codec,omitempty"`
@@ -160,6 +172,8 @@ type Message struct {
 	HotY int    `json:"hy,omitempty"`
 	Text string `json:"text,omitempty"`
 	ID   string `json:"id,omitempty"`
+	// Packets are base64 Opus packets of 20 ms each, the first numbered Seq.
+	Packets []string `json:"a,omitempty"`
 }
 
 // Band is one horizontal strip of a JPEG frame.
@@ -334,6 +348,7 @@ func (v *Viewer) send(ctx context.Context, msg Message) bool {
 func (v *Viewer) run(ctx context.Context) {
 	defer close(v.done)
 	defer close(v.out)
+	defer v.stopAudio(true)
 	clips, stopClips := v.d.ClipboardChanges()
 	defer stopClips()
 

@@ -8,14 +8,50 @@ import { addProject, expect, newTask, startServer, test } from "../fixtures.js";
    The browser says it is on another machine (X-Forwarded-For), which is what
    brings the Screen button out. */
 
-const haveX = ["Xvfb", "xev", "xsel"].every((bin) => {
+const have = (bin) => {
   try {
     execFileSync("which", [bin], { stdio: "ignore" });
     return true;
   } catch {
     return false;
   }
-});
+};
+const haveX = ["Xvfb", "xev", "xsel"].every(have);
+const haveSound = have("pactl") && have("paplay") && (() => {
+  try {
+    execFileSync("pactl", ["info"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+})();
+let sinks = 0;
+
+/* A sound card of the test's own that nobody hears. The server records its
+   monitor (PULSE_SOURCE) and `play` sends it ten seconds of a 440 Hz tone. */
+function startSink() {
+  const name = `agenttik_e2e_${process.pid}_${sinks++}`;
+  const module = execFileSync("pactl", ["load-module", "module-null-sink", `sink_name=${name}`], { encoding: "utf8" }).trim();
+  let player;
+  return {
+    source: `${name}.monitor`,
+    play() {
+      const tone = Buffer.alloc(48000 * 4 * 10);
+      for (let i = 0; i < tone.length / 4; i++) {
+        const v = Math.round(8000 * Math.sin((2 * Math.PI * 440 * i) / 48000));
+        tone.writeInt16LE(v, 4 * i);
+        tone.writeInt16LE(v, 4 * i + 2);
+      }
+      player = spawn("paplay", [`--device=${name}`, "--raw", "--format=s16le", "--rate=48000", "--channels=2"]);
+      player.stdin.on("error", () => {});
+      player.stdin.end(tone);
+    },
+    stop() {
+      player?.kill();
+      execFileSync("pactl", ["unload-module", module]);
+    },
+  };
+}
 
 /* Xvfb picks a free display itself and says which on fd 3, so parallel
    tests never share one. */
@@ -54,6 +90,15 @@ async function remotePage(browser, server, init, options = {}) {
     extraHTTPHeaders: { "X-Forwarded-For": "192.0.2.10" },
     permissions: ["clipboard-read", "clipboard-write"],
     ...options,
+  });
+  // Counts the sound the page plays (Playwright's Chromium is muted).
+  await context.addInitScript(() => {
+    window.soundStarts = 0;
+    const start = AudioBufferSourceNode.prototype.start;
+    AudioBufferSourceNode.prototype.start = function (...args) {
+      window.soundStarts++;
+      return start.apply(this, args);
+    };
   });
   const page = await context.newPage();
   if (init) await page.addInitScript(init);
@@ -97,7 +142,10 @@ for (const [codec, setup] of Object.entries(browsers)) {
   test(`screen tab shows and drives another machine (${codec})`, async ({ browser }) => {
     test.skip(!haveX, "needs Xvfb, xev and xsel");
     const x = await startDisplay();
-    const server = await startServer({ env: { DISPLAY: x.env.DISPLAY, WAYLAND_DISPLAY: "" } });
+    // The sound comes from a sink of the test's own, or from no server at all.
+    const sink = haveSound ? startSink() : null;
+    const sound = sink ? { PULSE_SOURCE: sink.source } : { PULSE_SERVER: "unix:/nonexistent" };
+    const server = await startServer({ env: { DISPLAY: x.env.DISPLAY, WAYLAND_DISPLAY: "", ...sound } });
     const { page, context, errors } = await remotePage(browser, server, setup);
     const feedback = [];
     page.on("request", (request) => {
@@ -137,6 +185,20 @@ for (const [codec, setup] of Object.entries(browsers)) {
       await expect.poll(x.events).toMatch(/ButtonPress[\s\S]*button 3/);
       await page.keyboard.type("q");
       await expect.poll(x.events).toContain("keysym 0x71, q");
+
+      // The machine's sound plays here, and stops when muted.
+      const soundButton = page.getByTestId("screen-sound");
+      if (sink) {
+        sink.play();
+        await expect.poll(() => page.evaluate(() => window.soundStarts), { message: "sound plays" }).toBeGreaterThan(10);
+        await soundButton.click();
+        await expect(soundButton).toHaveAttribute("title", "Play the sound");
+        const muted = await page.evaluate(() => window.soundStarts);
+        await page.waitForTimeout(300);
+        expect(await page.evaluate(() => window.soundStarts)).toBe(muted);
+      } else {
+        await expect(soundButton).toHaveAttribute("title", /^No sound: /);
+      }
 
       // The other machine's clipboard comes to this one...
       x.copy("copied over there");
@@ -178,6 +240,7 @@ for (const [codec, setup] of Object.entries(browsers)) {
     } finally {
       await context.close();
       await server.stop();
+      sink?.stop();
       x.stop();
     }
   });
@@ -186,7 +249,8 @@ for (const [codec, setup] of Object.entries(browsers)) {
 test("a tablet taps where it clicks and brings up its keyboard", async ({ browser }) => {
   test.skip(!haveX, "needs Xvfb, xev and xsel");
   const x = await startDisplay();
-  const server = await startServer({ env: { DISPLAY: x.env.DISPLAY, WAYLAND_DISPLAY: "" } });
+  // No sound server, so the machine's own sound is never recorded.
+  const server = await startServer({ env: { DISPLAY: x.env.DISPLAY, WAYLAND_DISPLAY: "", PULSE_SERVER: "unix:/nonexistent" } });
   const { page, context, errors } = await remotePage(browser, server, undefined, { hasTouch: true, viewport: { width: 1180, height: 820 } });
   try {
     await addProject(page);

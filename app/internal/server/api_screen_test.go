@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/pausan/agenttik/app/internal/screen"
+	"github.com/pausan/agenttik/app/internal/screen/vpx"
 )
 
 func fakeScreen(t *testing.T, s *Server) *screen.Fake {
@@ -150,6 +151,8 @@ func TestScreenInputAppliesArrivalBeforeAcknowledgement(t *testing.T) {
 func TestScreenThroughRemoteProfile(t *testing.T) {
 	remoteSrv, remoteStore := newTestServer(t)
 	f := fakeScreen(t, remoteSrv)
+	sound := screen.NewFakeAudio()
+	remoteSrv.screen.UseAudio(func() (screen.Audio, error) { return sound, nil })
 	address := listen(t, remoteSrv)
 	local, _ := newTestServer(t)
 	state := decode[remoteState](t, do(t, local, "POST", "/api/remotes", map[string]string{"address": address}))
@@ -205,7 +208,7 @@ func TestScreenThroughRemoteProfile(t *testing.T) {
 	}
 
 	body, _ := json.Marshal(map[string]any{
-		"viewer": hello.ID, "ack": frame.Seq,
+		"viewer": hello.ID, "ack": frame.Seq, "audio": true,
 		"events": []screen.Event{{T: "m", X: 7, Y: 8}, {T: "c", Text: "x"}},
 	})
 	post, err := http.Post("http://"+localAddr+"/api/screen/input?remote="+id, "application/json", bytes.NewReader(body))
@@ -218,5 +221,16 @@ func TestScreenThroughRemoteProfile(t *testing.T) {
 	f.Fill(0, 0, 10, 10, 255, 255, 255)
 	if next := wait("frame"); next.Seq != frame.Seq+1 {
 		t.Fatalf("next frame %d", next.Seq)
+	}
+
+	// The sound it asked for comes down the same stream.
+	pcm := make([]int16, 2*960)
+	for i := range pcm {
+		pcm[i] = int16(i%50) * 100
+	}
+	sound.Play(pcm)
+	sound.Play(pcm)
+	if msg := wait("audio"); vpx.Load() == nil && (msg.Seq != 1 || len(msg.Packets) != 2) {
+		t.Fatalf("audio %+v", msg)
 	}
 }

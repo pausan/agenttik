@@ -2919,7 +2919,7 @@ function clearTree() {
 
 /* --------------------------------------------------------- editing files */
 
-/* The Tree's own file operations. Each asks the server and then re-reads the
+/* Shared project file operations. Each asks the server and then re-reads the
    listing rather than patching it: the watcher would refresh a beat later
    anyway, and doing it here is what puts the row on screen with the
    keystroke. Changed is re-read with it, because a file made or deleted is a
@@ -2941,8 +2941,7 @@ export async function createEntry(parent, name, dir = false) {
   return made.path;
 }
 
-export async function renameEntry(path, name) {
-  const id = currentProjectID();
+export async function renameEntry(path, name, id = currentProjectID()) {
   const to = joinPath(parentPath(path), name);
   if (!id || !to || to === path) return "";
   const moved = await api("POST", `/api/projects/${id}/entry/rename`, { path, to });

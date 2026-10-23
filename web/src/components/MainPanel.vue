@@ -9,6 +9,7 @@ import { computed, defineAsyncComponent, inject, onMounted, onUnmounted, ref, wa
 import {
   S,
   closeTab,
+  isOutsideProject,
   moveTab,
   persistTabOrder,
   selectTab,
@@ -20,6 +21,7 @@ import Transcript from "./Transcript.vue";
 import PromptBar from "./PromptBar.vue";
 import StatusDot from "./StatusDot.vue";
 import PageFind from "./PageFind.vue";
+import TreeActionModal from "./TreeActionModal.vue";
 
 const transcript = ref(null);
 const find = ref(null);
@@ -82,6 +84,22 @@ const items = computed(() =>
 );
 
 const projectRunning = computed(() => S.project?.sessions.filter(task => task.status === "running").length || 0);
+
+const action = ref(null);
+const aimedTabID = ref("");
+const aimedTab = computed(() => S.tabs.find((tab) => tab.id === aimedTabID.value));
+function aimTab(event) {
+  aimedTabID.value = event.target.closest("[data-tab-id]")?.dataset.tabId || "";
+}
+const tabMenu = computed(() => {
+  const tab = aimedTab.value;
+  return [{
+    label: "Rename",
+    icon: "i-lucide-pencil",
+    disabled: tab?.kind !== "file" || !!tab.commit || isOutsideProject(tab.path) || /^deleted file mode /m.test(tab.diff || ""),
+    onSelect: () => { action.value = { kind: "rename", path: tab.path, projectID: tab.projectID }; },
+  }];
+});
 
 const dragging = ref("");
 
@@ -153,43 +171,46 @@ const badge = computed(() => {
 <template>
   <main class="flex min-h-0 min-w-0 flex-col">
     <div v-show="!expanded || conversation" class="main-tab-bar flex shrink-0 items-center gap-2.5 border-b border-default pr-3">
-      <div role="tablist" class="flex min-w-0 flex-1 items-center overflow-x-auto">
-        <div
-          v-for="item in items"
-          :key="item.id"
-          role="tab"
-          draggable="true"
-          :aria-selected="item.id === S.activeTab"
-          :aria-label="item.name"
-          :title="item.title"
-          class="flex shrink-0 cursor-grab items-center gap-1.5 border-b-2 px-2.5 py-2 active:cursor-grabbing"
-          :class="item.id === S.activeTab ? item.colors.edge : 'border-transparent'"
-          @click="selectTab(item.id)"
-          @dragstart="onStart($event, item.id)"
-          @dragover="onOver($event, item.id)"
-          @dragend="onEnd"
-          @drop.prevent="onEnd($event, item.id)"
-        >
-          <StatusDot v-if="item.running" status="running" />
-          <span
-            class="truncate"
-            :class="[
-              item.colors.text,
-              item.id === S.activeTab ? 'font-medium' : 'opacity-75',
-              item.temp ? 'italic' : '',
-            ]"
-            >{{ item.label }}</span
+      <UContextMenu :items="tabMenu">
+        <div role="tablist" class="flex min-w-0 flex-1 items-center overflow-x-auto" @contextmenu="aimTab">
+          <div
+            v-for="item in items"
+            :key="item.id"
+            :data-tab-id="item.id"
+            role="tab"
+            draggable="true"
+            :aria-selected="item.id === S.activeTab"
+            :aria-label="item.name"
+            :title="item.title"
+            class="flex shrink-0 cursor-grab items-center gap-1.5 border-b-2 px-2.5 py-2 active:cursor-grabbing"
+            :class="item.id === S.activeTab ? item.colors.edge : 'border-transparent'"
+            @click="selectTab(item.id)"
+            @dragstart="onStart($event, item.id)"
+            @dragover="onOver($event, item.id)"
+            @dragend="onEnd"
+            @drop.prevent="onEnd($event, item.id)"
           >
-          <button
-            type="button"
-            class="tab-close inline-flex size-4 shrink-0 cursor-pointer items-center justify-center rounded text-dimmed hover:bg-accented hover:text-highlighted"
-            :aria-label="`Close ${item.name}`"
-            title="Close"
-            @click.stop="closeTab(item.id)"
-            >×</button
-          >
+            <StatusDot v-if="item.running" status="running" />
+            <span
+              class="truncate"
+              :class="[
+                item.colors.text,
+                item.id === S.activeTab ? 'font-medium' : 'opacity-75',
+                item.temp ? 'italic' : '',
+              ]"
+              >{{ item.label }}</span
+            >
+            <button
+              type="button"
+              class="tab-close inline-flex size-4 shrink-0 cursor-pointer items-center justify-center rounded text-dimmed hover:bg-accented hover:text-highlighted"
+              :aria-label="`Close ${item.name}`"
+              title="Close"
+              @click.stop="closeTab(item.id)"
+              >×</button
+            >
+          </div>
         </div>
-      </div>
+      </UContextMenu>
 
       <!-- Sits outside the scrolling strip so it stays reachable with a
            dozen tabs open. -->
@@ -285,5 +306,6 @@ const badge = computed(() => {
          prompt box belongs to a conversation, and under any of those it is
          only in the way. -->
     <PromptBar @navigate-message="transcript?.navigateMessage($event)" v-if="S.detail && current?.kind !== 'file' && current?.kind !== 'terminal' && current?.kind !== 'screen'" />
+    <TreeActionModal v-model:action="action" />
   </main>
 </template>

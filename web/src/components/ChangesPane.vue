@@ -104,7 +104,7 @@ async function act(action, path) {
         <span class="text-xs font-semibold">Changes <span class="text-dimmed">{{ unstaged.length }}</span></span>
         <UButton icon="i-lucide-plus" aria-label="Stage all files" title="Stage all files" size="xs" variant="ghost" color="neutral" :disabled="busy || !unstaged.length" @click="act('stage')" />
       </div>
-      <FileList allow-revert :disabled="busy" :files="unstaged" empty="No edited files." @show-in-tree="emit('show-in-tree', $event)">
+      <FileList allow-revert allow-rename :disabled="busy" :files="unstaged" empty="No edited files." @show-in-tree="emit('show-in-tree', $event)">
         <template #actions="{ file }">
           <button type="button" :class="ROW_BUTTON" :aria-label="`Stage ${file.path}`" :title="`Stage ${file.path}`" :disabled="busy" @click="act('stage', file.path)">
             <UIcon name="i-lucide-plus" class="size-4 shrink-0" />

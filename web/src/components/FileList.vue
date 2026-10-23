@@ -11,6 +11,7 @@ const emit = defineEmits(["show-in-tree"]);
 const props = defineProps({
   files: { type: Array, required: true }, // [{ path, status? }]
   allowRevert: { type: Boolean, default: false },
+  allowRename: { type: Boolean, default: false },
   disabled: { type: Boolean, default: false },
   compactEmpty: { type: Boolean, default: false },
   empty: { type: String, required: true },
@@ -33,6 +34,12 @@ function revert(path) {
 }
 
 const menu = computed(() => [
+  ...(props.allowRename ? [{
+    label: "Rename",
+    icon: "i-lucide-pencil",
+    disabled: props.disabled || !aimed.value || props.files.find((f) => f.path === aimed.value)?.status === "D",
+    onSelect: () => { action.value = { kind: "rename", path: aimed.value, projectID: currentProjectID() }; },
+  }] : []),
   ...(props.allowRevert && S.changed.some((f) => f.path === aimed.value) ? [{
     label: "Revert changes…",
     icon: "i-lucide-undo-2",

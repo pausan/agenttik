@@ -13,6 +13,8 @@ and line-ending-only changes remain listed, as do staged changes whose working
 copy matches HEAD again (the file then appears in both lists).
 
 A plus button stages a file. A minus button unstages it.
+Unstaged rows offer **Rename** on right click, using the shared file-name
+dialog ([046](046-tree-file-actions.md)); renaming does not stage the file.
 Both lists have an undo-arrow button on each row, with a tooltip, to revert
 the file after confirmation (discarding both staged and unstaged changes).
 Each section also offers an all-files button. Unstaging preserves working

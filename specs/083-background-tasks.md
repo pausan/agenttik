@@ -54,7 +54,10 @@ A reply that ends with background tasks still running leaves the turn open
   and its row reads "Send now…" with a hint saying why beforehand. The
   buttons name the model and effort, and the subscription and provider too
   when those are what differ, so the two never read the same. A 409 the
-  browser did not see coming asks the same.
+  browser did not see coming asks the same. If the turn ends while the
+  dialog is open, the answer has no turn to join or stop: Send starts a turn
+  on the task's choice, and Send now on the prompt's saved one, which is the
+  model each was meant for.
 - An accepted prompt is stored before the provider is handed it, as a user
   message without a turn: if the agent is replying, the CLI holds it until
   that reply ends, and only the store would otherwise remember it.

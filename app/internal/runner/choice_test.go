@@ -67,6 +67,17 @@ func TestSendRefusesAJoinOnAnotherChoice(t *testing.T) {
 	if r.RunningChoice(sess.ID) != nil {
 		t.Fatal("an ended turn still has a choice")
 	}
+
+	// Told to join a turn that has ended meanwhile, as when it ends with the
+	// dialog open, the prompt has nothing to join and starts a turn on the
+	// task's own choice.
+	if _, err := r.SendWith(sess.ID, "next", Join); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return !r.Running(sess.ID) }, "the next turn to end")
+	if turns, _ := st.ListTurns(sess.ID); len(turns) != 2 || turns[1].Model != "m2" {
+		t.Fatalf("turns = %+v", turns)
+	}
 }
 
 // Send now on a prompt queued for another choice than the turn's does not

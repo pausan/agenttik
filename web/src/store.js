@@ -3259,9 +3259,16 @@ function onSessionEvent(tab, msg) {
       if (msg.session) tab.detail.session = msg.session;
       takeQueued(tab, msg.prompt);
       tab.detail.accepts_prompts = tab.detail.waiting = false;
+      tab.detail.pending_follow_ups = [];
       break;
     case "follow_up":
-      if (msg.message) takeFollowUp(tab.detail.messages, msg.message);
+      if (msg.message) takeFollowUp(tab.detail.messages, msg.message, msg.replaces);
+      tab.detail.pending_follow_ups = (tab.detail.pending_follow_ups || [])
+        .filter((id) => id !== msg.replaces && id !== msg.message?.id);
+      // The agent can start on a prompt before Send now's answer arrives,
+      // and that answer must not add it back as still waiting.
+      tab.takenFollowUps ??= new Set();
+      for (const id of [msg.replaces, msg.message?.id]) if (id) tab.takenFollowUps.add(id);
       break;
     case "text":
       appendLive(tab, "assistant", ev.text);
@@ -3407,6 +3414,7 @@ async function syncMessages(tab, preserveLive = false) {
     if (tab.detail.accepts_prompts !== detail.accepts_prompts) {
       tab.detail.accepts_prompts = tab.detail.waiting = detail.accepts_prompts;
     }
+    tab.detail.pending_follow_ups = detail.pending_follow_ups || [];
     if (keepLive) return;
     tab.detail.messages = detail.messages;
     tab.detail.turns = detail.turns;
@@ -3535,6 +3543,12 @@ export async function send(prompt) {
 
   try {
     const turn = await api("POST", `/api/sessions/${tab.sessionID}/messages`, { prompt });
+    // Answered with the turn already running: the prompt joined it, and
+    // waits there until the agent starts on it (specs/083).
+    if (wasRunning && tab.detail.turns.some((t) => t.id === turn.id)) {
+      const at = tab.detail.messages.indexOf(echo);
+      if (at >= 0) tab.detail.messages[at].waiting = true;
+    }
     tab.detail.session.done_at = 0;
     startLocal(tab, "", turn);
     refreshSessions();
@@ -3683,6 +3697,13 @@ export async function forceQueued(queuedID) {
     if (result?.joined) {
       tab.detail.queued = result.queued;
       tab.detail.session.queue_count = result.queue_count + (tab.detail.pendingQueued?.length || 0);
+      // Stored and held by the turn until the agent starts on it.
+      if (result.message && !tab.takenFollowUps?.has(result.message.id) &&
+        !tab.detail.messages.some((m) => m.id === result.message.id)) {
+        endLive(tab);
+        tab.detail.messages.push(result.message);
+        tab.detail.pending_follow_ups = [...(tab.detail.pending_follow_ups || []), result.message.id];
+      }
       return;
     }
     await syncMessages(tab);

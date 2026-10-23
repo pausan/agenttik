@@ -43,16 +43,36 @@ export function runningTaskCount(messages) {
 }
 
 /* takeFollowUp places a prompt the running turn has just started on, as the
-   server stored it. The bubble drawn on send has no id yet, and it can sit
-   before the end of a reply that was still streaming, so it moves to the end.
-   See specs/083-background-tasks.md. */
-export function takeFollowUp(messages, message) {
-  if (messages.some((m) => m.id === message.id)) return;
-  const at = messages.findLastIndex((m) => !m.id && m.role === "user" && m.content === message.content);
-  if (at >= 0) messages.splice(at, 1);
+   server stored it. It was stored when accepted, and moved below a reply
+   stored after it under a new id, so the row it replaces goes, and so does
+   the bubble drawn on send, which has no id yet. See
+   specs/083-background-tasks.md. */
+export function takeFollowUp(messages, message, replaces = 0) {
+  if (replaces) {
+    const old = messages.findIndex((m) => m.id === replaces);
+    if (old >= 0) messages.splice(old, 1);
+  }
+  const at = messages.findIndex((m) => m.id === message.id);
+  if (at >= 0) {
+    messages[at] = message;
+    return;
+  }
+  const echo = messages.findLastIndex((m) => !m.id && m.role === "user" && m.content === message.content);
+  if (echo >= 0) messages.splice(echo, 1);
   const last = messages.at(-1);
   if (last?.streaming) last.streaming = false;
   messages.push(message);
+}
+
+/* promptState says whether the agent has seen a prompt of yours: "waiting"
+   while the running turn holds it, "unprocessed" when it has no turn and
+   none will take it — the task stopped first, or Stop moved it in from the
+   queue. Prompts that ran say nothing, and so does a bubble not stored yet,
+   unless sending it joined a running turn. */
+export function promptState(message, pending = []) {
+  if (message.role !== "user" || message.turn_id) return "";
+  if (!message.id) return message.waiting ? "waiting" : "";
+  return pending.includes(message.id) ? "waiting" : "unprocessed";
 }
 
 /* wakesAgent says an event shows the main agent at work again, between

@@ -13,6 +13,7 @@
 import { computed, nextTick, ref } from "vue";
 
 import { S, copyText, editMessage, setModel } from "../store";
+import { promptState } from "../background-tasks";
 import { promptImages, promptText } from "../prompt-images";
 import ConversationImage from "./ConversationImage.vue";
 import MarkdownContent from "./MarkdownContent.vue";
@@ -52,6 +53,20 @@ const classes = computed(() => [
   BUBBLE[props.message.role],
   props.message.streaming ? "streaming" : "",
 ]);
+
+/* Whether the agent has seen this prompt, said only when it has not
+   (specs/083-background-tasks.md). */
+const state = computed(() => (props.inThread ? "" : promptState(props.message, S.detail?.pending_follow_ups)));
+const STATE = {
+  waiting: {
+    label: "Waiting for the agent",
+    title: "The agent has this message and starts on it once it finishes what it is doing.",
+  },
+  unprocessed: {
+    label: "Not processed",
+    title: "The agent never processed this message: the task stopped before it got to it. Edit it to send it again.",
+  },
+};
 
 const editable = computed(
   () => !props.inThread && props.message.role === "user" && !!props.message.id && !props.message.streaming,
@@ -107,6 +122,9 @@ function onKey(e) {
     >
       <span class="text-[11px] font-medium tracking-wider text-dimmed uppercase">
         {{ WHO[message.role] || message.role }}
+      </span>
+      <span v-if="state" class="text-[11px] text-dimmed" :class="{ 'italic': state === 'waiting' }" :title="STATE[state].title">
+        {{ STATE[state].label }}
       </span>
       <!-- The actions stay in the layout and only appear on hover, so a
            bubble does not shift when the pointer reaches it. -->

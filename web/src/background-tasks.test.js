@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { durationLabel, runningTaskCount, takeFollowUp, taskSeconds, upsertBackgroundMessage, waitingLabel, wakesAgent } from "./background-tasks.js";
+import { durationLabel, promptState, runningTaskCount, takeFollowUp, taskSeconds, upsertBackgroundMessage, waitingLabel, wakesAgent } from "./background-tasks.js";
 
 test("a task starts after current prose and updates without moving or splitting later prose", () => {
   const before = { role: "assistant", content: "Starting tests", streaming: true };
@@ -81,4 +81,27 @@ test("a turn that takes prompts names its background tasks, working or waiting",
   assert.equal(waitingLabel(true, 1), "Waiting for 1 background task · you can keep writing");
   assert.equal(waitingLabel(false, 2), "Working · 2 background tasks · you can keep writing");
   assert.equal(waitingLabel(true, 0), "Waiting for background tasks · you can keep writing");
+});
+
+test("a follow-up that moved below a reply replaces its earlier row", () => {
+  const messages = [
+    { id: 1, role: "user", content: "build", turn_id: 7 },
+    { id: 2, role: "user", content: "status?", turn_id: 0 },
+    { id: 3, role: "assistant", content: "Game A built", turn_id: 7 },
+  ];
+  takeFollowUp(messages, { id: 4, role: "user", content: "status?", turn_id: 7 }, 2);
+  assert.deepEqual(messages.map((m) => m.id), [1, 3, 4]);
+  // One that kept its id is updated in place.
+  takeFollowUp(messages, { id: 4, role: "user", content: "status?", turn_id: 7 });
+  assert.deepEqual(messages.map((m) => m.id), [1, 3, 4]);
+});
+
+test("a stored prompt without a turn is waiting while held, else unprocessed", () => {
+  assert.equal(promptState({ id: 5, role: "user", turn_id: 0 }, [5]), "waiting");
+  assert.equal(promptState({ id: 5, role: "user", turn_id: 0 }, []), "unprocessed");
+  assert.equal(promptState({ id: 5, role: "user" }), "unprocessed");
+  assert.equal(promptState({ id: 5, role: "user", turn_id: 9 }), "");
+  assert.equal(promptState({ role: "user", content: "just sent" }), "");
+  assert.equal(promptState({ role: "user", content: "joined", waiting: true }), "waiting");
+  assert.equal(promptState({ id: 6, role: "assistant", turn_id: 0 }), "");
 });

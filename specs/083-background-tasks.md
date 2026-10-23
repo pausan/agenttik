@@ -30,17 +30,31 @@ A reply that ends with background tasks still running leaves the turn open
   the stream on that done event.
 - Send hands the prompt to the turn instead of refusing it, and answers with
   the running turn. Send now on a queued prompt does the same instead of
-  cancelling the turn (Force send), and answers `joined` with the remaining
-  queue. The browser then updates only the queue: reading the transcript back
-  would land after rows streamed meanwhile and replace them, the prompt
-  included. Enqueue still waits for the turn to end, and the project's queue
-  still waits for it too.
+  cancelling the turn (Force send), and answers `joined` with the stored
+  prompt and the remaining queue; its queue row goes only once the provider
+  has the prompt. The browser then updates only the queue: reading the
+  transcript back would land after rows streamed meanwhile and replace them,
+  the prompt included. Enqueue still waits for the turn to end, and the
+  project's queue still waits for it too.
+- An accepted prompt is stored before the provider is handed it, as a user
+  message without a turn: if the agent is replying, the CLI holds it until
+  that reply ends, and only the store would otherwise remember it.
+  `GET /api/sessions/:id` lists such prompts in `pending_follow_ups`.
 - The provider sends `follow_up` as it starts on each prompt, in order. The
-  runner stores the prompt then, as a user message of the same turn, so it
-  lands after any reply it waited behind. The browser moves the bubble drawn
-  on send to that place.
-- A prompt that reaches the turn just as it stops taking prompts waits for it
-  to end, up to 30 seconds, and starts the next turn.
+  prompt then joins the turn, below the reply it waited behind: when rows were
+  stored after it, it moves under a new id, and the event carries the old one
+  in `replaces`. The browser swaps it, or the bubble drawn on send, in place.
+- A turn that ends before the agent starts on an accepted prompt — Stop,
+  quitting the app, the CLI dying — moves it to the end of the transcript,
+  still without a turn. After a provider outage, which agenttik retries by
+  itself, it goes back to the queue behind the retry instead.
+- A prompt of yours without a turn says so above its bubble: "Waiting for the
+  agent" while the running turn holds it, "Not processed" once nothing will
+  take it. That includes queued prompts Stop moved into the transcript
+  ([021](021-stop-active-tasks.md)) and prompts left by a crash.
+- A prompt that reaches the turn just as it stops taking prompts starts the
+  next turn: Send waits up to 30 seconds for the turn to end, and Send now
+  claims the turn's release, as Force send does, without cutting it short.
 - The prompt bar's Send stays enabled, and the progress line says how many
   tasks are running, and whether the agent is replying or waiting. A
   background subagent keeps calling tools while the agent waits; those calls

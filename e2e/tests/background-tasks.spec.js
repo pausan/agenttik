@@ -156,3 +156,34 @@ test("the project page's task list shows background work as it changes", async (
   const marker = page.locator("main").getByLabel("1 background task running · you can keep writing", { exact: true });
   await expect(marker).toBeVisible();
 });
+
+/* A prompt the turn accepted is stored at once. If the task stops before the
+   agent gets to it, it stays in the transcript, marked as not processed. */
+test("a prompt the agent never got to stays, marked as not processed", async ({ page }) => {
+  await addProject(page);
+  await openProject(page);
+  await newTask(page);
+  await pickModel(page);
+  await sendPrompt(page, ["@open", "@background start b1 build game A", "Build started."].join("\n"));
+  const working = page.getByLabel("Agent working");
+  await expect(working).toContainText("Waiting for 1 background task");
+  // The agent starts on one prompt and is kept busy by it.
+  await sendPrompt(page, ["@wait 20000", "Checked."].join("\n"));
+  await expect(working).toContainText("Working · 1 background task");
+
+  const prompt = page.getByPlaceholder("Ask the agent…");
+  const queued = page.getByLabel("Queued prompt", { exact: true });
+  await prompt.fill("Is game B next?");
+  await prompt.press("Enter");
+  await queued.getByRole("button", { name: "Send now" }).click();
+  await expect(queued).toHaveCount(0);
+  const asked = page.locator("[data-message-id]").filter({ hasText: "Is game B next?" });
+  await expect(asked).toContainText("Waiting for the agent");
+
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await expect(working).toHaveCount(0);
+  await expect(asked).toContainText("Not processed");
+  await expect(page.locator("[data-message-id]").last()).toContainText("Is game B next?");
+  await page.reload();
+  await expect(asked).toContainText("Not processed");
+});

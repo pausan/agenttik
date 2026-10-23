@@ -6,18 +6,108 @@ import (
 	"fmt"
 )
 
+// A turnID of 0 stores none: a prompt the agent has not started on belongs to
+// no turn, as a queued prompt moved in by Stop does not.
 func (s *Store) AddMessage(sessionID string, turnID int64, role, content string) (*Message, error) {
 	m := &Message{SessionID: sessionID, TurnID: turnID, Role: role,
 		Content: content, CreatedAt: nowMillis()}
 	res, err := s.db.Exec(
 		`INSERT INTO messages (session_id, turn_id, role, content, created_at)
 		 VALUES (?, ?, ?, ?, ?)`,
-		m.SessionID, m.TurnID, m.Role, m.Content, m.CreatedAt)
+		m.SessionID, turnOrNull(m.TurnID), m.Role, m.Content, m.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("add message: %w", err)
 	}
 	m.ID, _ = res.LastInsertId()
 	return m, nil
+}
+
+func turnOrNull(turnID int64) any {
+	if turnID == 0 {
+		return nil
+	}
+	return turnID
+}
+
+// DeleteMessage drops one message, the undoing of an AddMessage whose purpose
+// fell through.
+func (s *Store) DeleteMessage(id int64) error {
+	if _, err := s.db.Exec(`DELETE FROM messages WHERE id = ?`, id); err != nil {
+		return fmt.Errorf("delete message %d: %w", id, err)
+	}
+	return nil
+}
+
+// MoveMessageToEnd gives a message to turnID, 0 for none, and puts it below
+// everything else in its session. A prompt sent into a running turn is stored
+// when it is accepted, which can be before the end of a reply it waits behind;
+// it moves below that reply once the agent starts on it. Ids are the
+// transcript's order, so a message with rows after it moves under a new id,
+// and replaced is the id it had. One already last keeps its id, and replaced
+// is 0.
+func (s *Store) MoveMessageToEnd(id, turnID int64) (m *Message, replaced int64, err error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, 0, fmt.Errorf("move message %d: %w", id, err)
+	}
+	defer tx.Rollback()
+	var msg Message
+	if err := tx.QueryRow(`SELECT id, session_id, role, content, created_at FROM messages WHERE id = ?`, id).
+		Scan(&msg.ID, &msg.SessionID, &msg.Role, &msg.Content, &msg.CreatedAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, 0, ErrNotFound
+		}
+		return nil, 0, fmt.Errorf("move message %d: %w", id, err)
+	}
+	msg.TurnID = turnID
+	var later bool
+	if err := tx.QueryRow(`SELECT EXISTS (SELECT 1 FROM messages WHERE session_id = ? AND id > ?)`,
+		msg.SessionID, id).Scan(&later); err != nil {
+		return nil, 0, fmt.Errorf("move message %d: %w", id, err)
+	}
+	if !later {
+		if _, err := tx.Exec(`UPDATE messages SET turn_id = ? WHERE id = ?`, turnOrNull(turnID), id); err != nil {
+			return nil, 0, fmt.Errorf("move message %d: %w", id, err)
+		}
+	} else {
+		res, err := tx.Exec(`INSERT INTO messages (session_id, turn_id, role, content, created_at)
+			VALUES (?, ?, ?, ?, ?)`, msg.SessionID, turnOrNull(turnID), msg.Role, msg.Content, msg.CreatedAt)
+		if err != nil {
+			return nil, 0, fmt.Errorf("move message %d: %w", id, err)
+		}
+		if _, err := tx.Exec(`DELETE FROM messages WHERE id = ?`, id); err != nil {
+			return nil, 0, fmt.Errorf("move message %d: %w", id, err)
+		}
+		msg.ID, _ = res.LastInsertId()
+		replaced = id
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, 0, fmt.Errorf("move message %d: %w", id, err)
+	}
+	return &msg, replaced, nil
+}
+
+// MessageToQueue puts a prompt the agent never started on back in its
+// session's queue, with the provider and model it is to run on, and takes it
+// out of the transcript, in one transaction.
+func (s *Store) MessageToQueue(id int64, provider string, accountID int64, model, effort string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("requeue message %d: %w", id, err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`INSERT INTO queued_messages (session_id, prompt, provider, account_id, model, effort, created_at)
+		SELECT session_id, content, ?, ?, ?, ?, ? FROM messages WHERE id = ?`,
+		provider, accountID, model, effort, nowMillis(), id); err != nil {
+		return fmt.Errorf("requeue message %d: %w", id, err)
+	}
+	if _, err := tx.Exec(`DELETE FROM messages WHERE id = ?`, id); err != nil {
+		return fmt.Errorf("requeue message %d: %w", id, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("requeue message %d: %w", id, err)
+	}
+	return nil
 }
 
 // SetMessageContent updates a task's state without changing its transcript position.

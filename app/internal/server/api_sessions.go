@@ -129,6 +129,9 @@ type sessionDetail struct {
 	// AcceptsPrompts says the running turn takes prompts now: its reply
 	// ended with background tasks still running.
 	AcceptsPrompts bool `json:"accepts_prompts"`
+	// PendingFollowUps are the stored prompts that turn accepted and has not
+	// started on yet. Other prompts without a turn were never processed.
+	PendingFollowUps []int64 `json:"pending_follow_ups"`
 
 	// Queued are the prompts waiting their turn, oldest first. The transcript
 	// draws them under the messages so a queued prompt is visible.
@@ -144,6 +147,14 @@ type sessionDetail struct {
 	// thread a spawned task came from. See specs/092-threads.md.
 	Threads []store.ThreadRef `json:"threads"`
 	Origin  *threadOrigin     `json:"origin,omitempty"`
+}
+
+// pendingIDs is never null, so the window can read it as a list.
+func pendingIDs(ids []int64) []int64 {
+	if ids == nil {
+		return []int64{}
+	}
+	return ids
 }
 
 func (s *Server) getSession(c *fiber.Ctx) error {
@@ -174,7 +185,8 @@ func (s *Server) getSession(c *fiber.Ctx) error {
 	}
 	return c.JSON(sessionDetail{Session: sess, Messages: messages,
 		Turns: turns, Stats: stats, Running: s.runner.Running(id),
-		AcceptsPrompts: s.runner.AcceptsPrompts(id), Queued: queued,
+		AcceptsPrompts: s.runner.AcceptsPrompts(id), PendingFollowUps: pendingIDs(s.runner.PendingFollowUps(id)),
+		Queued:     queued,
 		Background: s.runner.BackgroundTasks(id),
 		Outputs:    turnOutputs(sess.ProjectPath, turns, messages),
 		Threads:    threads, Origin: s.origin(sess)})
@@ -540,15 +552,15 @@ func (s *Server) forceQueuedMessage(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	if joined {
+	if joined != nil {
 		// The prompt went into the running turn, which goes on streaming.
-		// Only the queue changed, so that is all the window re-reads: a
+		// The window adds the stored prompt and re-reads only the queue: a
 		// whole transcript read here would land after newer streamed rows.
 		queued, err := s.store.ListQueuedMessages(c.Params("id"))
 		if err != nil {
 			return err
 		}
-		return c.JSON(fiber.Map{"joined": true, "queued": queued, "queue_count": len(queued)})
+		return c.JSON(fiber.Map{"joined": true, "message": joined, "queued": queued, "queue_count": len(queued)})
 	}
 	return c.SendStatus(fiber.StatusAccepted)
 }

@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -96,6 +97,13 @@ func TestPromptJoinsATurnWaitingOnBackgroundTasks(t *testing.T) {
 	if got := <-p.prompts; got != "status?" {
 		t.Fatalf("provider was handed %q", got)
 	}
+	// Stored on acceptance, without a turn until the provider starts on it.
+	if last := lastMessage(t, st, sess.ID); last.Content != "status?" || last.TurnID != 0 {
+		t.Fatalf("accepted prompt stored as %+v", last)
+	}
+	if pending := r.PendingFollowUps(sess.ID); len(pending) != 1 {
+		t.Fatalf("pending = %v", pending)
+	}
 	// A task notification is answered before the prompt is taken.
 	p.events <- agent.Event{Type: agent.EventText, Text: "Game A built."}
 	p.events <- agent.Event{Type: agent.EventDone, FollowUp: p.followUp()}
@@ -119,8 +127,143 @@ func TestPromptJoinsATurnWaitingOnBackgroundTasks(t *testing.T) {
 	if turns, _ := st.ListTurns(sess.ID); len(turns) != 1 {
 		t.Fatalf("turns = %d, want 1", len(turns))
 	}
+	messages, _ := st.ListMessages(sess.ID)
+	for _, m := range messages {
+		if m.TurnID != first.ID {
+			t.Errorf("message %q has turn %d", m.Content, m.TurnID)
+		}
+	}
 	if r.AcceptsPrompts(sess.ID) {
 		t.Error("an ended turn still takes prompts")
+	}
+}
+
+func lastMessage(t *testing.T, st *store.Store, sessionID string) store.Message {
+	t.Helper()
+	messages, err := st.ListMessages(sessionID)
+	if err != nil || len(messages) == 0 {
+		t.Fatalf("messages = %v, err %v", messages, err)
+	}
+	return messages[len(messages)-1]
+}
+
+// A turn that ends before the provider starts on the prompts it accepted —
+// stopped, quit, or the CLI gone — keeps them: they move to the end of the
+// transcript without a turn, which marks them unprocessed. Send now loses its
+// queue row only once the provider has the prompt.
+func TestUntakenFollowUpsSurviveTheTurn(t *testing.T) {
+	p := newOpenProvider()
+	r, st, sess := setup(t, p)
+	if _, err := r.Send(sess.ID, "build"); err != nil {
+		t.Fatal(err)
+	}
+	p.events <- agent.Event{Type: agent.EventDone, FollowUp: p.followUp()}
+	waitFor(t, func() bool { return r.AcceptsPrompts(sess.ID) }, "the turn to take prompts")
+	if _, err := r.Send(sess.ID, "status?"); err != nil {
+		t.Fatal(err)
+	}
+	<-p.prompts
+	queued, err := r.Enqueue(sess.ID, "deploy when ready")
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined, err := r.ForceQueued(sess.ID, queued[0].ID)
+	if err != nil || joined == nil || joined.Content != "deploy when ready" || joined.TurnID != 0 {
+		t.Fatalf("joined %+v, err %v", joined, err)
+	}
+	<-p.prompts
+	p.events <- agent.Event{Type: agent.EventText, Text: "Still working."}
+	close(p.events)
+	waitFor(t, func() bool { return !r.Running(sess.ID) }, "the turn to end")
+
+	messages, err := st.ListMessages(sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, m := range messages {
+		got = append(got, fmt.Sprintf("%s:%s:%v", m.Role, m.Content, m.TurnID != 0))
+	}
+	want := []string{"user:build:true", "assistant:Still working.:true", "user:status?:false", "user:deploy when ready:false"}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("messages = %q, want %q", got, want)
+	}
+	if left, _ := st.ListQueuedMessages(sess.ID); len(left) != 0 {
+		t.Fatalf("queue = %+v", left)
+	}
+}
+
+// After a provider outage agenttik retries the turn by itself, and prompts it
+// accepted but never started on wait in the queue behind that retry.
+func TestUntakenFollowUpsWaitBehindAnOutageRetry(t *testing.T) {
+	p := newOpenProvider()
+	r, st, sess := setup(t, p)
+	if _, err := r.Send(sess.ID, "build"); err != nil {
+		t.Fatal(err)
+	}
+	p.events <- agent.Event{Type: agent.EventDone, FollowUp: p.followUp()}
+	waitFor(t, func() bool { return r.AcceptsPrompts(sess.ID) }, "the turn to take prompts")
+	if _, err := r.Send(sess.ID, "status?"); err != nil {
+		t.Fatal(err)
+	}
+	<-p.prompts
+	p.events <- agent.Event{Type: agent.EventError, Text: capacityFailure}
+	close(p.events)
+	waitFor(t, func() bool { return !r.Running(sess.ID) }, "the turn to end")
+
+	queued, err := st.ListQueuedMessages(sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(queued) != 2 || queued[0].Prompt != "build" || queued[0].RetryAt == 0 || queued[1].Prompt != "status?" {
+		t.Fatalf("queue = %+v", queued)
+	}
+	for _, m := range mustMessages(t, st, sess.ID) {
+		if m.Content == "status?" {
+			t.Fatalf("requeued prompt still in the transcript: %+v", m)
+		}
+	}
+}
+
+func mustMessages(t *testing.T, st *store.Store, sessionID string) []store.Message {
+	t.Helper()
+	messages, err := st.ListMessages(sessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return messages
+}
+
+// A prompt the closing turn refuses leaves no trace of the attempt: Send now
+// then starts it as a turn of its own, from its queue row.
+func TestRefusedSendNowStartsTheNextTurn(t *testing.T) {
+	p := newOpenProvider()
+	r, st, sess := setup(t, p)
+	if _, err := r.Send(sess.ID, "build"); err != nil {
+		t.Fatal(err)
+	}
+	p.events <- agent.Event{Type: agent.EventDone, FollowUp: p.followUp()}
+	waitFor(t, func() bool { return r.AcceptsPrompts(sess.ID) }, "the turn to take prompts")
+	queued, err := r.Enqueue(sess.ID, "deploy when ready")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.refuse.Store(true)
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		close(p.events)
+	}()
+	if joined, err := r.ForceQueued(sess.ID, queued[0].ID); err != nil || joined != nil {
+		t.Fatalf("joined %+v, err %v", joined, err)
+	}
+	waitFor(t, func() bool { return !r.Running(sess.ID) && p.runs.Load() == 2 }, "the prompt's own turn")
+	waitFor(t, func() bool { return !r.Running(sess.ID) }, "its turn to end")
+	var got []string
+	for _, m := range mustMessages(t, st, sess.ID) {
+		got = append(got, fmt.Sprintf("%s:%v", m.Content, m.TurnID != 0))
+	}
+	if fmt.Sprint(got) != fmt.Sprint([]string{"build:true", "deploy when ready:true"}) {
+		t.Fatalf("messages = %q", got)
 	}
 }
 
@@ -165,7 +308,7 @@ func TestForceQueuedJoinsAnOpenTurn(t *testing.T) {
 	if err != nil || len(queued) != 1 {
 		t.Fatalf("queued %+v, err %v", queued, err)
 	}
-	if joined, err := r.ForceQueued(sess.ID, queued[0].ID); err != nil || !joined {
+	if joined, err := r.ForceQueued(sess.ID, queued[0].ID); err != nil || joined == nil {
 		t.Fatalf("joined %v, err %v", joined, err)
 	}
 	if got := <-p.prompts; got != "deploy when ready" {

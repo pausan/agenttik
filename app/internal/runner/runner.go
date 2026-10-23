@@ -59,6 +59,9 @@ type Event struct {
 	Session *store.Session `json:"session,omitempty"`
 	Prompt  string         `json:"prompt,omitempty"`
 	Message *store.Message `json:"message,omitempty"`
+	// Replaces is set on follow_up when the prompt moved below the reply it
+	// waited behind: the id it was stored under before.
+	Replaces int64 `json:"replaces,omitempty"`
 	// AcceptsPrompts is set on a reply's done event when the turn stays open
 	// and takes prompts, and on session_background.
 	AcceptsPrompts bool `json:"accepts_prompts,omitempty"`
@@ -82,10 +85,11 @@ type openTurn struct {
 	turn store.Turn
 	// followUp is set while the turn takes prompts.
 	followUp *agent.FollowUp
-	// pending are prompts handed over and not yet taken, oldest first. Each
-	// is stored when the provider starts on it, so it lands after the reply
-	// it was waiting behind.
-	pending  []string
+	// pending are the stored messages of prompts handed over and not yet
+	// taken, oldest first. Each is stored when accepted, without a turn, and
+	// joins the turn when the provider starts on it, below the reply it was
+	// waiting behind.
+	pending  []int64
 	released chan struct{} // closed once the turn has ended
 }
 
@@ -290,34 +294,52 @@ func (r *Runner) AcceptsPrompts(sessionID string) bool {
 }
 
 // followUp hands prompt to the session's running turn when that turn takes
-// prompts, and reports whether it did. A turn that has just stopped taking
-// them is waited out, so the prompt can start the next turn instead.
-func (r *Runner) followUp(sessionID, prompt string) (*store.Turn, bool) {
+// prompts. joined is the prompt as stored when it did. A turn that has just
+// stopped taking them is ending by itself: ending is then closed once it has,
+// so the prompt can start the next turn instead.
+//
+// The prompt is stored before the provider has it, without a turn: until the
+// provider starts on it, it lives only in the CLI's memory and this runner's,
+// and a turn that ends first would otherwise take it along.
+func (r *Runner) followUp(sessionID, prompt string) (turn *store.Turn, joined *store.Message, ending <-chan struct{}, err error) {
 	r.mu.Lock()
 	active, ok := r.active[sessionID]
 	r.mu.Unlock()
 	if !ok {
-		return nil, false
+		return nil, nil, nil, nil
 	}
 	open := active.open
 	open.mu.Lock()
+	defer open.mu.Unlock()
 	if open.followUp == nil {
-		open.mu.Unlock()
-		return nil, false
+		return nil, nil, nil, nil
+	}
+	message, err := r.store.AddMessage(sessionID, 0, store.RoleUser, prompt)
+	if err != nil {
+		return nil, nil, nil, err
 	}
 	if err := open.followUp.Send(attachments.Resolve(prompt, r.store.Dir())); err != nil {
+		_ = r.store.DeleteMessage(message.ID)
 		open.followUp = nil
-		open.mu.Unlock()
-		select {
-		case <-open.released:
-		case <-time.After(forceWait):
-		}
-		return nil, false
+		return nil, nil, open.released, nil
 	}
-	open.pending = append(open.pending, prompt)
-	turn := open.turn
-	open.mu.Unlock()
-	return &turn, true
+	open.pending = append(open.pending, message.ID)
+	snapshot := open.turn
+	return &snapshot, message, nil, nil
+}
+
+// PendingFollowUps lists the stored prompts the session's running turn has
+// accepted and not started on yet.
+func (r *Runner) PendingFollowUps(sessionID string) []int64 {
+	r.mu.Lock()
+	active, ok := r.active[sessionID]
+	r.mu.Unlock()
+	if !ok {
+		return nil
+	}
+	active.open.mu.Lock()
+	defer active.open.mu.Unlock()
+	return slices.Clone(active.open.pending)
 }
 
 // BackgroundTasks lists what the session's running turn has left working,
@@ -348,8 +370,18 @@ func (r *Runner) Send(sessionID, prompt string) (*store.Turn, error) {
 // prompt sent straight to a session has no row of its own yet; it is described
 // by one here, with the time it was accepted, for the same reason.
 func (r *Runner) send(queued store.QueuedMessage) (*store.Turn, error) {
-	if turn, ok := r.followUp(queued.SessionID, queued.Prompt); ok {
+	turn, joined, ending, err := r.followUp(queued.SessionID, queued.Prompt)
+	if err != nil {
+		return nil, err
+	}
+	if joined != nil {
 		return turn, nil
+	}
+	if ending != nil {
+		select {
+		case <-ending:
+		case <-time.After(forceWait):
+		}
 	}
 	r.transfer.RLock()
 	defer r.transfer.RUnlock()
@@ -657,28 +689,34 @@ func (r *Runner) DeleteQueued(sessionID string, queuedID int64) error {
 // It returns once the prompt has started, or with why it could not, so the
 // window that asked keeps showing the request until then. A turn slower than
 // forceWait to stop is answered as accepted and the prompt starts on its own.
-// joined says the prompt went into the running turn rather than a new one.
-func (r *Runner) ForceQueued(sessionID string, queuedID int64) (joined bool, err error) {
+// joined is the prompt as stored when it went into the running turn, and nil
+// when it started a turn of its own.
+func (r *Runner) ForceQueued(sessionID string, queuedID int64) (joined *store.Message, err error) {
 	queued, err := r.store.GetQueuedMessage(queuedID)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	if queued.SessionID != sessionID {
-		return false, store.ErrNotFound
+		return nil, store.ErrNotFound
 	}
 	sess, err := r.store.GetSession(sessionID)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	// A turn that takes prompts is not in the way: the prompt joins it.
-	if _, ok := r.followUp(sessionID, queued.Prompt); ok {
-		return true, r.store.RemoveQueuedMessage(queuedID)
+	// A turn that takes prompts is not in the way: the prompt joins it. Its
+	// queue row goes only once the provider has it.
+	_, message, ending, err := r.followUp(sessionID, queued.Prompt)
+	if err != nil {
+		return nil, err
+	}
+	if message != nil {
+		return message, r.store.RemoveQueuedMessage(queuedID)
 	}
 
 	r.mu.Lock()
 	if _, pending := r.forced[sessionID]; pending {
 		r.mu.Unlock()
-		return false, ErrForcePending
+		return nil, ErrForcePending
 	}
 	done := make(chan error, 1)
 	turn, running := r.active[sessionID]
@@ -687,18 +725,20 @@ func (r *Runner) ForceQueued(sessionID string, queuedID int64) (joined bool, err
 	}
 	r.mu.Unlock()
 
-	if running {
-		turn.cancel()
-	} else {
+	if !running {
 		// Nothing of this session's own is in the way, so start it here
 		// rather than waiting for a turn that is not coming.
 		go r.runForced(sess.ProjectID, queuedID, done)
+	} else if ending == nil {
+		turn.cancel()
 	}
+	// A turn that stopped taking prompts is ending by itself, and its last
+	// moments are not cut short: the prompt starts as it releases.
 	select {
 	case err := <-done:
-		return false, err
+		return nil, err
 	case <-time.After(forceWait):
-		return false, nil
+		return nil, nil
 	}
 }
 
@@ -986,6 +1026,7 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 
 	for ev := range events {
 		var message *store.Message
+		var replaces int64
 		switch ev.Type {
 		case agent.EventSessionStarted:
 			if ev.ProviderSessionID != "" && ev.ProviderSessionID != sess.ProviderSessionID {
@@ -1077,11 +1118,12 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 				open.mu.Unlock()
 				continue
 			}
-			prompt := open.pending[0]
+			id := open.pending[0]
 			open.pending = open.pending[1:]
 			open.mu.Unlock()
+			// The prompt joins the turn below the reply it waited behind.
 			flushText()
-			message, _ = r.store.AddMessage(sess.ID, turn.ID, store.RoleUser, prompt)
+			message, replaces, _ = r.store.MoveMessageToEnd(id, turn.ID)
 		case agent.EventBackground:
 			if ev.Background == nil {
 				continue
@@ -1095,7 +1137,7 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 			r.mu.Unlock()
 		}
 		out := Event{SessionID: sess.ID, ProjectID: sess.ProjectID, TurnID: turn.ID, Event: ev, Message: message,
-			AcceptsPrompts: ev.FollowUp != nil}
+			Replaces: replaces, AcceptsPrompts: ev.FollowUp != nil}
 		r.hub.Publish(sess.ID, out)
 		if ev.Type == agent.EventBackground || ev.Type == agent.EventDone {
 			if tasks, accepts := r.BackgroundWork(sess.ID); tasks != shownTasks || accepts != shownAccepts {
@@ -1138,19 +1180,40 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 	// and the session waits instead of reporting an error nobody caused — and
 	// the schedule that spawned it, if any, keeps its run open, since what it
 	// asked for has not happened yet. holdForOutage owns the turn from here.
-	if failure == "" || !r.holdForOutage(sess, queued, turn, failure, produced) {
+	held := failure != "" && r.holdForOutage(sess, queued, turn, failure, produced)
+	if !held {
 		r.store.FinishTurn(turn)
 		r.store.SetSessionStatus(sess.ID, sessionStatus)
 		if sess.ScheduleID != 0 {
 			r.finishScheduledRun(sess, turn.Status)
 		}
 	}
+	r.leaveUntaken(sess, queued, open, held)
 
 	stats, _ := r.store.SessionStats(sess.ID)
 	done := Event{SessionID: sess.ID, ProjectID: sess.ProjectID, TurnID: turn.ID,
 		Event: agent.Event{Type: agent.EventDone}, Stats: stats}
 	r.hub.Publish(sess.ID, done)
 	r.hub.Publish(ProjectTopic(sess.ProjectID), done)
+}
+
+// leaveUntaken settles the prompts a turn accepted and ended without starting
+// on: it was stopped, the app quit, or the provider died. Their messages move
+// to the end of the transcript, still without a turn, which is what marks them
+// unprocessed, as Stop leaves queued prompts. After a provider outage, which
+// agenttik retries by itself, they go back to the queue behind the retry.
+func (r *Runner) leaveUntaken(sess *store.Session, queued store.QueuedMessage, open *openTurn, held bool) {
+	open.mu.Lock()
+	untaken := open.pending
+	open.pending, open.followUp = nil, nil
+	open.mu.Unlock()
+	for _, id := range untaken {
+		if held {
+			_ = r.store.MessageToQueue(id, queued.Provider, queued.AccountID, queued.Model, queued.Effort)
+		} else {
+			_, _, _ = r.store.MoveMessageToEnd(id, 0)
+		}
+	}
 }
 
 // toolSummary is a one-line record of a tool call for the transcript. The full

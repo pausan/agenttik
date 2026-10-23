@@ -167,7 +167,7 @@ func TestUntakenFollowUpsSurviveTheTurn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	joined, err := r.ForceQueued(sess.ID, queued[0].ID)
+	joined, err := r.ForceQueued(sess.ID, queued[0].ID, Refuse)
 	if err != nil || joined == nil || joined.Content != "deploy when ready" || joined.TurnID != 0 {
 		t.Fatalf("joined %+v, err %v", joined, err)
 	}
@@ -253,7 +253,7 @@ func TestRefusedSendNowStartsTheNextTurn(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 		close(p.events)
 	}()
-	if joined, err := r.ForceQueued(sess.ID, queued[0].ID); err != nil || joined != nil {
+	if joined, err := r.ForceQueued(sess.ID, queued[0].ID, Refuse); err != nil || joined != nil {
 		t.Fatalf("joined %+v, err %v", joined, err)
 	}
 	waitFor(t, func() bool { return !r.Running(sess.ID) && p.runs.Load() == 2 }, "the prompt's own turn")
@@ -308,7 +308,7 @@ func TestForceQueuedJoinsAnOpenTurn(t *testing.T) {
 	if err != nil || len(queued) != 1 {
 		t.Fatalf("queued %+v, err %v", queued, err)
 	}
-	if joined, err := r.ForceQueued(sess.ID, queued[0].ID); err != nil || joined == nil {
+	if joined, err := r.ForceQueued(sess.ID, queued[0].ID, Refuse); err != nil || joined == nil {
 		t.Fatalf("joined %v, err %v", joined, err)
 	}
 	if got := <-p.prompts; got != "deploy when ready" {

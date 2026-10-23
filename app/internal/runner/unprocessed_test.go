@@ -37,7 +37,7 @@ func TestSendUnprocessedStartsATurn(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	turn, joined, err := r.SendUnprocessed(sess.ID, first.ID)
+	turn, joined, err := r.SendUnprocessed(sess.ID, first.ID, Refuse)
 	if err != nil || turn == nil || joined != nil {
 		t.Fatalf("turn %+v joined %+v, err %v", turn, joined, err)
 	}
@@ -75,7 +75,7 @@ func TestSendUnprocessedJoinsATurnTakingPrompts(t *testing.T) {
 	p.events <- agent.Event{Type: agent.EventDone, FollowUp: p.followUp()}
 	waitFor(t, func() bool { return r.AcceptsPrompts(sess.ID) }, "the turn to take prompts")
 
-	turn, joined, err := r.SendUnprocessed(sess.ID, stopped.ID)
+	turn, joined, err := r.SendUnprocessed(sess.ID, stopped.ID, Refuse)
 	if err != nil || joined == nil || turn.ID != first.ID || joined.TurnID != 0 || joined.ID == stopped.ID {
 		t.Fatalf("turn %+v joined %+v, err %v", turn, joined, err)
 	}
@@ -89,7 +89,7 @@ func TestSendUnprocessedJoinsATurnTakingPrompts(t *testing.T) {
 		t.Fatalf("pending = %v", pending)
 	}
 	// The turn has it now, so it is neither sent nor queued again.
-	if _, _, err := r.SendUnprocessed(sess.ID, joined.ID); !errors.Is(err, ErrNotUnprocessed) {
+	if _, _, err := r.SendUnprocessed(sess.ID, joined.ID, Refuse); !errors.Is(err, ErrNotUnprocessed) {
 		t.Fatalf("sending it twice: %v", err)
 	}
 	if _, err := r.QueueUnprocessed(sess.ID, joined.ID); !errors.Is(err, ErrNotUnprocessed) {
@@ -121,7 +121,7 @@ func TestQueueUnprocessedWaitsBehindTheQueue(t *testing.T) {
 	if _, err := r.Send(sess.ID, "build"); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := r.SendUnprocessed(sess.ID, stopped.ID); !errors.Is(err, ErrBusy) {
+	if _, _, err := r.SendUnprocessed(sess.ID, stopped.ID, Refuse); !errors.Is(err, ErrBusy) {
 		t.Fatalf("sent into a busy turn: %v", err)
 	}
 	if got, want := transcript(t, st, sess.ID), "[Is game B next?:false build:true]"; got != want {
@@ -190,7 +190,7 @@ func TestUnprocessedRefusesOtherMessages(t *testing.T) {
 		{spawned.ID, ran.ID, store.ErrNotFound},
 		{sess.ID, 99999, store.ErrNotFound},
 	} {
-		if _, _, err := r.SendUnprocessed(tc.session, tc.id); !errors.Is(err, tc.want) {
+		if _, _, err := r.SendUnprocessed(tc.session, tc.id, Refuse); !errors.Is(err, tc.want) {
 			t.Errorf("send %s/%d: %v, want %v", tc.session, tc.id, err, tc.want)
 		}
 		if _, err := r.QueueUnprocessed(tc.session, tc.id); !errors.Is(err, tc.want) {
@@ -206,7 +206,7 @@ func TestUnprocessedRefusesOtherMessages(t *testing.T) {
 // behind.
 func TestSentPromptGoneLeavesNoTurn(t *testing.T) {
 	r, st, sess := setup(t, &fakeProvider{script: []agent.Event{{Type: agent.EventDone}}})
-	if _, _, err := r.send(store.QueuedMessage{SessionID: sess.ID, Prompt: "gone"}, 99999); !errors.Is(err, store.ErrNotFound) {
+	if _, _, err := r.send(store.QueuedMessage{SessionID: sess.ID, Prompt: "gone"}, 99999, false); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("send = %v", err)
 	}
 	if turns, _ := st.ListTurns(sess.ID); len(turns) != 0 || r.Running(sess.ID) {

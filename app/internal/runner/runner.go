@@ -84,6 +84,9 @@ type activeTurn struct {
 // reply ended while background tasks it started still run, and the provider
 // waits on them. See specs/083-background-tasks.md.
 type openTurn struct {
+	// choice is what the turn runs on, set as it starts and never changed.
+	choice Choice
+
 	mu   sync.Mutex
 	turn store.Turn
 	// followUp is set while the turn takes prompts.
@@ -296,10 +299,14 @@ func (r *Runner) AcceptsPrompts(sessionID string) bool {
 	return active.open.followUp != nil
 }
 
-// followUp hands prompt to the session's running turn when that turn takes
-// prompts. joined is the prompt as stored when it did. A turn that has just
-// stopped taking them is ending by itself: ending is then closed once it has,
-// so the prompt can start the next turn instead.
+// followUp hands the prompt queued describes to the session's running turn
+// when that turn takes prompts. joined is the prompt as stored when it did. A
+// turn that has just stopped taking them is ending by itself: ending is then
+// closed once it has, so the prompt can start the next turn instead.
+//
+// The turn runs on the choice its process was started on, and a prompt meant
+// for another one is refused with a ChoiceError rather than run on it behind
+// the user's back, unless anyChoice says to (083-background-tasks.md).
 //
 // The prompt is stored before the provider has it, without a turn: until the
 // provider starts on it, it lives only in the CLI's memory and this runner's,
@@ -307,7 +314,8 @@ func (r *Runner) AcceptsPrompts(sessionID string) bool {
 // the transcript holds already, one the agent never processed, and 0 for a new
 // one. It moves to the end once the provider has it, where a prompt sent now
 // goes.
-func (r *Runner) followUp(sessionID, prompt string, stored int64) (turn *store.Turn, joined *store.Message, ending <-chan struct{}, err error) {
+func (r *Runner) followUp(queued store.QueuedMessage, stored int64, anyChoice bool) (turn *store.Turn, joined *store.Message, ending <-chan struct{}, err error) {
+	sessionID, prompt := queued.SessionID, queued.Prompt
 	r.mu.Lock()
 	active, ok := r.active[sessionID]
 	r.mu.Unlock()
@@ -319,6 +327,9 @@ func (r *Runner) followUp(sessionID, prompt string, stored int64) (turn *store.T
 	defer open.mu.Unlock()
 	if open.followUp == nil {
 		return nil, nil, nil, nil
+	}
+	if want := choiceOf(queued); !anyChoice && want != open.choice {
+		return nil, nil, nil, &ChoiceError{Running: open.choice, Wanted: want}
 	}
 	var message *store.Message
 	if stored != 0 {
@@ -379,11 +390,29 @@ func (r *Runner) BackgroundTasks(sessionID string) []agent.BackgroundTask {
 
 // Send starts a turn, or hands the prompt to the session's running turn when
 // that turn takes prompts. It returns as soon as the provider has it; the turn
-// continues in the background and is observed over the hub.
+// continues in the background and is observed over the hub. A running turn on
+// another choice than the session's refuses it with a ChoiceError.
 func (r *Runner) Send(sessionID, prompt string) (*store.Turn, error) {
-	turn, _, err := r.send(store.QueuedMessage{SessionID: sessionID, Prompt: prompt,
-		CreatedAt: time.Now().UnixMilli()}, 0)
+	return r.SendWith(sessionID, prompt, Refuse)
+}
+
+// SendWith is Send, saying what to do about a running turn that takes prompts
+// on another choice than the session's: the model was changed while it ran.
+// Join hands it the prompt anyway; Stop is not offered here.
+func (r *Runner) SendWith(sessionID, prompt string, mismatch Mismatch) (*store.Turn, error) {
+	sess, err := r.store.GetSession(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	turn, _, err := r.send(sessionPrompt(sess, prompt), 0, mismatch == Join)
 	return turn, err
+}
+
+// sessionPrompt describes a prompt sent straight to a session, accepted now,
+// on the session's choice.
+func sessionPrompt(sess *store.Session, prompt string) store.QueuedMessage {
+	return store.QueuedMessage{SessionID: sess.ID, Prompt: prompt, Provider: sess.Provider,
+		AccountID: sess.AccountID, Model: sess.Model, Effort: sess.Effort, CreatedAt: time.Now().UnixMilli()}
 }
 
 // send is Send's body, over the queue row shape rather than a bare prompt.
@@ -393,10 +422,10 @@ func (r *Runner) Send(sessionID, prompt string) (*store.Turn, error) {
 // prompt sent straight to a session has no row of its own yet; it is described
 // by one here, with the time it was accepted, for the same reason.
 //
-// stored is a prompt the transcript holds already, as followUp takes it, and
-// joined is the prompt as stored when it went into the running turn.
-func (r *Runner) send(queued store.QueuedMessage, stored int64) (*store.Turn, *store.Message, error) {
-	turn, joined, ending, err := r.followUp(queued.SessionID, queued.Prompt, stored)
+// stored and anyChoice are as followUp takes them, and joined is the prompt
+// as stored when it went into the running turn.
+func (r *Runner) send(queued store.QueuedMessage, stored int64, anyChoice bool) (*store.Turn, *store.Message, error) {
+	turn, joined, ending, err := r.followUp(queued, stored, anyChoice)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -505,7 +534,7 @@ func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage, stored int64
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	r.turns.Add(1)
-	open := &openTurn{released: make(chan struct{})}
+	open := &openTurn{choice: choiceOf(queued), released: make(chan struct{})}
 	r.active[sessionID] = activeTurn{projectID: sess.ProjectID, cancel: cancel, open: open}
 	r.busyChanged()
 	r.mu.Unlock()
@@ -729,15 +758,17 @@ func (r *Runner) DeleteQueued(sessionID string, queuedID int64) error {
 // turn that genuinely is in the way is the session's own — a provider cannot
 // take a second prompt in place — so that one is cancelled and the prompt
 // starts as it exits. A turn that takes prompts while background tasks run is
-// not in the way, and the prompt joins it. The message stays in the queue
-// until Send has accepted it, so a failed launch cannot lose it.
+// not in the way, and the prompt joins it — when it runs on the prompt's
+// saved choice; mismatch says what to do when it does not. The message stays
+// in the queue until Send has accepted it, so a failed launch or a refused
+// join cannot lose it.
 //
 // It returns once the prompt has started, or with why it could not, so the
 // window that asked keeps showing the request until then. A turn slower than
 // forceWait to stop is answered as accepted and the prompt starts on its own.
 // joined is the prompt as stored when it went into the running turn, and nil
 // when it started a turn of its own.
-func (r *Runner) ForceQueued(sessionID string, queuedID int64) (joined *store.Message, err error) {
+func (r *Runner) ForceQueued(sessionID string, queuedID int64, mismatch Mismatch) (joined *store.Message, err error) {
 	queued, err := r.store.GetQueuedMessage(queuedID)
 	if err != nil {
 		return nil, err
@@ -750,8 +781,13 @@ func (r *Runner) ForceQueued(sessionID string, queuedID int64) (joined *store.Me
 		return nil, err
 	}
 	// A turn that takes prompts is not in the way: the prompt joins it. Its
-	// queue row goes only once the provider has it.
-	_, message, ending, err := r.followUp(sessionID, queued.Prompt, 0)
+	// queue row goes only once the provider has it. On another choice than
+	// the prompt's own, it joins only if told to; told to stop instead, the
+	// turn is cancelled as any turn in the way is.
+	_, message, ending, err := r.followUp(*queued, 0, mismatch == Join)
+	if other := (*ChoiceError)(nil); errors.As(err, &other) && mismatch == Stop {
+		err = nil
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -840,7 +876,12 @@ func (r *Runner) sendQueued(queued *store.QueuedMessage) (*store.Turn, error) {
 			return nil, err
 		}
 	}
-	turn, _, err := r.send(*queued, 0)
+	turn, _, err := r.send(*queued, 0, false)
+	if other := (*ChoiceError)(nil); errors.As(err, &other) {
+		// Its session's turn takes prompts, but on another choice: the
+		// prompt waits for that turn to end, as for any turn in the way.
+		return nil, ErrBusy
+	}
 	return turn, err
 }
 

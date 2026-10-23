@@ -36,6 +36,20 @@ A reply that ends with background tasks still running leaves the turn open
   transcript back would land after rows streamed meanwhile and replace them,
   the prompt included. Enqueue still waits for the turn to end, and the
   project's queue still waits for it too.
+- The turn's process runs on the choice it started on: provider, subscription,
+  model and effort. A prompt joins it only on the same one. Send compares the
+  task's current choice, which the picker can change while the turn runs;
+  Send now compares the queued prompt's saved choice. On another, the request
+  is refused with 409, carrying `running` and `wanted`, and nothing is
+  consumed. `on_mismatch: "join"` sends it on the turn's choice anyway. Send
+  now also takes `"stop"`, which stops the turn, background tasks included,
+  and runs the prompt on its own choice, as Force send does.
+- `GET /api/sessions/:id` reports `running_choice`, and the browser takes it
+  from the started event's session, so it asks before sending: the dialog
+  shows both choices and offers "Send with ‹model›" or Cancel, with how to
+  run the prompt on its own model: enqueue it, or Force send it from the
+  queue. A queued prompt's Send now also offers "Force send with ‹model›". A
+  409 the browser did not see coming asks the same.
 - An accepted prompt is stored before the provider is handed it, as a user
   message without a turn: if the agent is replying, the CLI holds it until
   that reply ends, and only the store would otherwise remember it.
@@ -153,10 +167,11 @@ The fake provider's `@background start <id> <description>` and
 `e2e/tests/background-tasks.spec.js`, covering placement between tools,
 updates, reloads, finished rows, reused task ids and turn summaries. Its
 `@open` directive keeps the turn open while a task runs, for the test of
-prompts sent and queued meanwhile, and for unprocessed prompts sent and queued
-again. Runner tests cover follow-up order, a prompt missing a closing turn,
-Send now joining an open turn, and sending or queueing an unprocessed prompt
-into each state of a task. Runner
+prompts sent and queued meanwhile, for unprocessed prompts sent and queued
+again, and for the dialog of a prompt meant for another model. Runner tests
+cover follow-up order, a prompt missing a closing turn, Send now joining an
+open turn, sending or queueing an unprocessed prompt into each state of a
+task, and joining only on the turn's choice unless told what to do. Runner
 tests cover prose boundaries, saved state and stream message identity;
 store tests cover interrupted tasks on restart. Browser unit tests cover
 updates during streaming and duplicate events. Each provider's parser has

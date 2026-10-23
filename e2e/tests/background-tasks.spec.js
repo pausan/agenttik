@@ -260,3 +260,50 @@ test("a prompt the agent never processed can be sent or queued again", async ({ 
   await expect(text("And game D?")).toHaveCount(2);
   await order();
 });
+
+/* A turn waiting on background tasks runs on the model it started on. A
+   prompt meant for another asks first: it can go on the turn's model, stay
+   where it is, or — queued — run on its own by stopping the turn. */
+test("a prompt for another model asks before going into the running turn", async ({ page }) => {
+  await addProject(page);
+  await openProject(page);
+  await newTask(page);
+  await pickModel(page);
+  await sendPrompt(page, ["@open", "@background start b1 build game A", "Build started."].join("\n"));
+  const working = page.getByLabel("Agent working");
+  await expect(working).toContainText("Waiting for 1 background task");
+  await pickModel(page, "Fake Careful");
+
+  const dialog = page.getByRole("dialog", { name: "Send on the running turn's model?" });
+  const prompt = page.getByPlaceholder("Ask the agent…");
+  const text = (value) => page.getByText(value, { exact: true });
+  // Cancelled, nothing is sent and the text stays in the box.
+  await sendPrompt(page, "Status of game A?");
+  await expect(dialog.getByLabel("Running turn")).toContainText("Fake Quick");
+  await expect(dialog.getByLabel("Prompt's model")).toContainText("Fake Careful");
+  await expect(dialog.getByRole("button", { name: /^Force send/ })).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(prompt).toHaveValue("Status of game A?");
+  await expect(page.locator("[data-message-id]").filter({ hasText: "Status of game A?" })).toHaveCount(0);
+
+  // Sent on the turn's model, it joins the turn, which keeps its task.
+  await prompt.press("Control+Enter");
+  await dialog.getByRole("button", { name: "Send with Fake Quick", exact: true }).click();
+  await expect(text("Status of game A?")).toHaveCount(2);
+  await expect(working).toContainText("Waiting for 1 background task");
+
+  // Queued, it keeps the task's new model; Send now can stop the turn to run
+  // it on that model.
+  await prompt.fill("Deploy game A.");
+  await prompt.press("Enter");
+  const queued = page.getByLabel("Queued prompt", { exact: true });
+  await expect(queued).toHaveCount(1);
+  await queued.getByRole("button", { name: "Send now" }).click();
+  await expect(dialog.getByLabel("Prompt's model")).toContainText("Fake Careful");
+  await dialog.getByRole("button", { name: "Force send with Fake Careful" }).click();
+  await expect(queued).toHaveCount(0);
+  await expect(text("Deploy game A.")).toHaveCount(2);
+  await expect(working).toHaveCount(0);
+  await expect(page.getByLabel("Background task", { exact: true })).toContainText("stopped");
+});

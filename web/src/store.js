@@ -16,7 +16,7 @@ import { projectQueueAction } from "./project-queue.js";
 import { DEFAULT_SCHEDULE, scheduleRecurrence } from "./schedules.js";
 import { createTaskSounds, TASK_SOUNDS_KEY } from "./task-sounds.js";
 import { trackTaskAttention, reconcileTaskCompletions } from "./task-attention.js";
-import { takeFollowUp, upsertBackgroundMessage, wakesAgent } from "./background-tasks.js";
+import { choiceOf, otherChoice, takeFollowUp, upsertBackgroundMessage, wakesAgent } from "./background-tasks.js";
 import { recordError } from "./diagnostics.js";
 import { api, apiURL, storage, clientStorage, diagnosticStorage } from "./api";
 import { debounce } from "./debounce";
@@ -130,6 +130,7 @@ export const S = reactive({
   diffContext: "changes",
   diffView: "unified", // "unified" or "split", likewise
   closing: null, // a close waiting on what to do with unsaved edits
+  mismatch: null, // a prompt waiting on whether to go into a turn on another model
   promptFocus: 0,
   queuedEdit: 0, // counter the transcript watches, to open its last queued prompt
   taskStatsOpen: false,
@@ -3260,6 +3261,9 @@ function onSessionEvent(tab, msg) {
       if (msg.message) takeFollowUp(tab.detail.messages, msg.message, msg.replaces);
       startLocal(tab, msg.prompt, msg.turn);
       if (msg.session) tab.detail.session = msg.session;
+      // The session as the turn starts is what the turn runs on, whatever
+      // the picker says later.
+      tab.detail.running_choice = msg.session ? choiceOf(msg.session) : null;
       if (!msg.message) takeQueued(tab, msg.prompt);
       tab.detail.accepts_prompts = tab.detail.waiting = false;
       tab.detail.pending_follow_ups = [];
@@ -3418,6 +3422,7 @@ async function syncMessages(tab, preserveLive = false) {
       tab.detail.accepts_prompts = tab.detail.waiting = detail.accepts_prompts;
     }
     tab.detail.pending_follow_ups = detail.pending_follow_ups || [];
+    tab.detail.running_choice = detail.running_choice || null;
     if (keepLive) return;
     tab.detail.messages = detail.messages;
     tab.detail.turns = detail.turns;
@@ -3529,12 +3534,18 @@ function releaseProjectPrompt(tab, claimed) {
 
    Nothing draws it twice: the reply contributes only the turn, and the started
    event's startLocal skips a prompt that is already the last message. A
-   failure takes the bubble back out and returns the text to the box. */
-export async function send(prompt) {
+   failure takes the bubble back out and returns the text to the box.
+
+   A running turn that takes prompts, but runs on another model than the
+   task's, asks first, with the text still in the box: onMismatch is the
+   answer (specs/083-background-tasks.md). */
+export async function send(prompt, onMismatch = "") {
   const tab = S.owner;
   if (tab?.kind !== "session") return;
   prompt = prompt.trim();
   if (!prompt) return;
+  const running = onMismatch ? null : otherChoice(tab.detail, tab.detail.session);
+  if (running && !(onMismatch = await askMismatch(running, choiceOf(tab.detail.session)))) return;
 
   const typed = tab.draft;
   const wasRunning = tab.detail.running;
@@ -3545,7 +3556,7 @@ export async function send(prompt) {
   tab.detail.running = true;
 
   try {
-    const turn = await api("POST", `/api/sessions/${tab.sessionID}/messages`, { prompt });
+    const turn = await api("POST", `/api/sessions/${tab.sessionID}/messages`, { prompt, on_mismatch: onMismatch });
     // Answered with the turn already running: the prompt joined it, and
     // waits there until the agent starts on it (specs/083).
     if (wasRunning && tab.detail.turns.some((t) => t.id === turn.id)) {
@@ -3566,6 +3577,12 @@ export async function send(prompt) {
     if (!tab.draft) tab.draft = typed;
     // A refusal because the session is busy leaves that turn running.
     tab.detail.running = wasRunning;
+    // The model changed elsewhere since this window last looked.
+    if (e.data?.running && !onMismatch) {
+      const answer = await askMismatch(e.data.running, e.data.wanted);
+      if (answer) await send(prompt, answer);
+      return;
+    }
     fail(e);
   }
 }
@@ -3688,11 +3705,19 @@ export function editLastQueued() {
 // back before returning, so the button stays busy until the new turn is on
 // screen: over a slow link the stream's started event can come seconds after
 // the answer, and an idle "Force send" in between reads as a failure.
-export async function forceQueued(queuedID) {
+//
+// A running turn that takes prompts on another model than the prompt's saved
+// one asks first, offering to stop it as well: onMismatch is the answer
+// (specs/083-background-tasks.md).
+export async function forceQueued(queuedID, onMismatch = "") {
   const tab = S.owner;
   if (tab?.kind !== "session" || !queuedID) return;
+  const queued = tab.detail.queued?.find((q) => q.id === queuedID);
+  const running = onMismatch || !queued ? null : otherChoice(tab.detail, queued);
+  if (running && !(onMismatch = await askMismatch(running, choiceOf(queued), true))) return;
   try {
-    const result = await api("POST", `/api/sessions/${tab.sessionID}/queue/force`, { queued_id: queuedID });
+    const result = await api("POST", `/api/sessions/${tab.sessionID}/queue/force`,
+      { queued_id: queuedID, on_mismatch: onMismatch });
     if (!tab.detail) return;
     // A prompt that joined the running turn changes only the queue. Reading
     // the whole transcript back would replace rows streamed meanwhile,
@@ -3705,9 +3730,33 @@ export async function forceQueued(queuedID) {
     }
     await syncMessages(tab);
   } catch (e) {
+    if (e.data?.running && !onMismatch) {
+      const answer = await askMismatch(e.data.running, e.data.wanted, true);
+      if (answer) await forceQueued(queuedID, answer);
+      return;
+    }
     fail(e);
     throw e;
   }
+}
+
+/* askMismatch asks what to do with a prompt the running turn takes only on
+   its own model, effort, subscription and provider — not the ones the prompt
+   is meant for. "join" sends it on the turn's, "stop", offered for a queued
+   prompt, stops the turn to run it on its own, and "" leaves it where it is.
+   The question is ChoiceMismatchModal.vue (specs/083-background-tasks.md). */
+function askMismatch(running, wanted, queued = false) {
+  S.mismatch?.resolve("");
+  return new Promise((resolve) => {
+    S.mismatch = { running, wanted, queued, resolve };
+  });
+}
+
+export function resolveMismatch(answer) {
+  const pending = S.mismatch;
+  if (!pending) return;
+  S.mismatch = null;
+  pending.resolve(answer);
 }
 
 /* holdFollowUp shows a prompt the running turn has accepted, stored and held
@@ -3732,13 +3781,17 @@ function dropMessage(tab, id) {
    as a turn of its own. The server moves the message itself to the end of
    the transcript rather than storing a copy, so the window places it from
    what the server says — the started event, or the answer when the prompt
-   joined the turn. Unlike editing it, nothing below it goes
+   joined the turn. Unlike editing it, nothing below it goes. A running turn
+   on another model than the task's asks first, as Send does
    (specs/083-background-tasks.md). */
-export async function sendUnprocessed(message) {
+export async function sendUnprocessed(message, onMismatch = "") {
   const tab = S.owner;
   if (tab?.kind !== "session" || !message?.id) return false;
+  const running = onMismatch ? null : otherChoice(tab.detail, tab.detail.session);
+  if (running && !(onMismatch = await askMismatch(running, choiceOf(tab.detail.session)))) return false;
   try {
-    const result = await api("POST", `/api/sessions/${tab.sessionID}/messages/${message.id}/send`);
+    const result = await api("POST", `/api/sessions/${tab.sessionID}/messages/${message.id}/send`,
+      { on_mismatch: onMismatch });
     if (!tab.detail) return true;
     if (result.joined) {
       // Moved below what was stored after it, under a new id.
@@ -3753,6 +3806,10 @@ export async function sendUnprocessed(message) {
     reloadProjects();
     return true;
   } catch (e) {
+    if (e.data?.running && !onMismatch) {
+      const answer = await askMismatch(e.data.running, e.data.wanted);
+      return answer ? sendUnprocessed(message, answer) : false;
+    }
     fail(e);
     return false;
   }

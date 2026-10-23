@@ -485,7 +485,20 @@ type apiError struct {
 	Error string `json:"error"`
 }
 
+// choiceConflict is the body of a prompt refused because the running turn
+// takes prompts only on another choice than the prompt's.
+type choiceConflict struct {
+	Error   string        `json:"error"`
+	Running runner.Choice `json:"running"`
+	Wanted  runner.Choice `json:"wanted"`
+}
+
 func errorHandler(c *fiber.Ctx, err error) error {
+	// The window asks what to do from the two choices, so they come along.
+	if mismatch := (*runner.ChoiceError)(nil); errors.As(err, &mismatch) {
+		return c.Status(fiber.StatusConflict).JSON(choiceConflict{Error: err.Error(),
+			Running: mismatch.Running, Wanted: mismatch.Wanted})
+	}
 	code := fiber.StatusInternalServerError
 	switch {
 	case errors.Is(err, store.ErrNotFound):

@@ -3,7 +3,6 @@ package runner
 import (
 	"errors"
 	"slices"
-	"time"
 
 	"github.com/pausan/agenttik/app/internal/store"
 )
@@ -14,18 +13,17 @@ import (
 var ErrNotUnprocessed = errors.New("not a prompt the agent left unprocessed")
 
 // SendUnprocessed sends one of a session's prompts the agent never processed,
-// as Send sends a typed one: into the running turn when that turn takes
+// as SendWith sends a typed one: into the running turn when that turn takes
 // prompts, otherwise as a turn of its own. The message is not written again:
 // it moves to the end of the transcript, where a prompt sent now goes, and is
 // the turn's from there. joined is the message as stored when the running
 // turn holds it.
-func (r *Runner) SendUnprocessed(sessionID string, messageID int64) (turn *store.Turn, joined *store.Message, err error) {
-	message, err := r.unprocessed(sessionID, messageID)
+func (r *Runner) SendUnprocessed(sessionID string, messageID int64, mismatch Mismatch) (turn *store.Turn, joined *store.Message, err error) {
+	sess, message, err := r.unprocessed(sessionID, messageID)
 	if err != nil {
 		return nil, nil, err
 	}
-	return r.send(store.QueuedMessage{SessionID: sessionID, Prompt: message.Content,
-		CreatedAt: time.Now().UnixMilli()}, messageID)
+	return r.send(sessionPrompt(sess, message.Content), messageID, mismatch == Join)
 }
 
 // QueueUnprocessed puts one of a session's prompts the agent never processed
@@ -33,7 +31,7 @@ func (r *Runner) SendUnprocessed(sessionID string, messageID int64) (turn *store
 // current choice of model. It leaves the transcript, and comes back to it
 // when it runs.
 func (r *Runner) QueueUnprocessed(sessionID string, messageID int64) ([]store.QueuedMessage, error) {
-	message, err := r.unprocessed(sessionID, messageID)
+	_, message, err := r.unprocessed(sessionID, messageID)
 	if err != nil {
 		return nil, err
 	}
@@ -49,23 +47,23 @@ func (r *Runner) QueueUnprocessed(sessionID string, messageID int64) ([]store.Qu
 // without a turn, and not held by the running turn. A task spawned from a
 // thread starts with copies of the thread's messages, without turns too; they
 // ran in the thread, and are older than the task.
-func (r *Runner) unprocessed(sessionID string, messageID int64) (*store.Message, error) {
+func (r *Runner) unprocessed(sessionID string, messageID int64) (*store.Session, *store.Message, error) {
 	sess, err := r.store.GetSession(sessionID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	message, err := r.store.GetMessage(messageID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if message.SessionID != sessionID {
-		return nil, store.ErrNotFound
+		return nil, nil, store.ErrNotFound
 	}
 	if message.Role != store.RoleUser || message.TurnID != 0 || message.CreatedAt < sess.CreatedAt ||
 		slices.Contains(r.PendingFollowUps(sessionID), messageID) {
-		return nil, ErrNotUnprocessed
+		return nil, nil, ErrNotUnprocessed
 	}
-	return message, nil
+	return sess, message, nil
 }
 
 // queueStored moves an unprocessed prompt to its session's queue under the

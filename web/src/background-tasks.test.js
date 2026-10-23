@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { durationLabel, promptState, runningTaskCount, takeFollowUp, taskSeconds, upsertBackgroundMessage, waitingLabel, wakesAgent } from "./background-tasks.js";
+import { durationLabel, otherChoice, promptState, runningTaskCount, sameChoice, takeFollowUp, taskSeconds, upsertBackgroundMessage, waitingLabel, wakesAgent } from "./background-tasks.js";
 
 test("a task starts after current prose and updates without moving or splitting later prose", () => {
   const before = { role: "assistant", content: "Starting tests", streaming: true };
@@ -109,4 +109,22 @@ test("a stored prompt without a turn is waiting while held, else unprocessed", (
 test("a spawned task's copies of its thread's prompts ran there", () => {
   assert.equal(promptState({ id: 7, role: "user", created_at: 100 }, [], 200), "");
   assert.equal(promptState({ id: 8, role: "user", created_at: 200 }, [], 200), "unprocessed");
+});
+
+test("a choice is its provider, subscription, model and effort", () => {
+  const session = { id: "s", provider: "claude", account_id: 0, model: "opus", effort: "", title: "Task" };
+  assert.equal(sameChoice(session, { provider: "claude", model: "opus" }), true);
+  assert.equal(sameChoice(session, { provider: "claude", account_id: 2, model: "opus" }), false);
+  assert.equal(sameChoice(session, { provider: "claude", model: "opus", effort: "high" }), false);
+  assert.equal(sameChoice(session, { provider: "claude", model: "sonnet" }), false);
+});
+
+test("sending asks first only into a turn that takes prompts on another choice", () => {
+  const running = { provider: "claude", account_id: 0, model: "opus", effort: "high" };
+  const open = { running: true, accepts_prompts: true, running_choice: running };
+  const wanted = { provider: "claude", model: "sonnet", effort: "high" };
+  assert.deepEqual(otherChoice(open, wanted), running);
+  assert.equal(otherChoice(open, running), null);
+  assert.equal(otherChoice({ ...open, accepts_prompts: false }, wanted), null);
+  assert.equal(otherChoice({ running: false, accepts_prompts: false }, wanted), null);
 });

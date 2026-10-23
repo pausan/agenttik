@@ -78,6 +78,28 @@ export function promptState(message, pending = [], since = 0) {
   return pending.includes(message.id) ? "waiting" : "unprocessed";
 }
 
+/* choiceOf is what a turn runs on, or what a prompt is meant to run on: the
+   provider, the subscription, the model and the effort of a session, a
+   queued prompt or a running turn. */
+export function choiceOf(x) {
+  return { provider: x.provider, account_id: x.account_id || 0, model: x.model, effort: x.effort || "" };
+}
+
+export function sameChoice(a, b) {
+  const [x, y] = [choiceOf(a), choiceOf(b)];
+  return x.provider === y.provider && x.account_id === y.account_id && x.model === y.model && x.effort === y.effort;
+}
+
+/* otherChoice is the choice of a running turn that takes prompts, when it is
+   not the one a prompt is meant for. Its process was started on that choice
+   and runs on no other, so sending into it asks first; null when nothing
+   needs asking. */
+export function otherChoice(detail, wanted) {
+  const running = detail?.running_choice;
+  if (!detail?.running || !detail.accepts_prompts || !running || sameChoice(running, wanted)) return null;
+  return running;
+}
+
 /* wakesAgent says an event shows the main agent at work again, between
    replies of a turn that waits on background tasks. A background subagent's
    tool calls do not: it works while the main agent waits. */

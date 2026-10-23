@@ -15,6 +15,7 @@ import {
   updateQueuedPrompt,
 } from "../store";
 import { turnSummaries } from "../api";
+import { messageTime } from "../message-time";
 import { tabScroll, vTabScroll } from "../tab-scroll";
 import ApprovalCard from "./ApprovalCard.vue";
 import ModelSelection from "./ModelSelection.vue";
@@ -59,12 +60,12 @@ const allRows = computed(() => {
     i--;
     out.push({ at, tools });
   }
-  // A finished turn closes with its time, tokens and cost under its last row,
-  // then the task's totals so far. Turns whose messages an edit removed still
+  // A finished turn closes with its time, tokens, cost and end time under its
+  // last row, then the task's totals so far. Turns whose messages an edit removed still
   // count, as they do in Stats. Rows streamed before the turn ended carry no
   // turn id; the transcript is re-read when it ends, and that read supplies them.
   // The result files it presented go between its last row and that line.
-  const summaries = turnSummaries(S.detail?.turns || []);
+  const summaries = turnSummaries(S.detail?.turns || [], messageTime);
   const outputs = new Map();
   for (const o of S.detail?.outputs || []) {
     if (!outputs.has(o.turn_id)) outputs.set(o.turn_id, []);

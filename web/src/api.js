@@ -237,8 +237,9 @@ export function turnSummary(turns) {
 }
 
 // Build every footer in one pass, retaining only the formatted totals rather
-// than a copy of all earlier turns for each message row.
-export function turnSummaries(turns) {
+// than a copy of all earlier turns for each message row. clock, when given,
+// writes the time the turn ended after the turn's own figures.
+export function turnSummaries(turns, clock) {
   const summaries = new Map();
   let ms = 0, input = 0, output = 0, usd = 0, estimated = false, count = 0;
   for (const turn of turns) {
@@ -248,7 +249,7 @@ export function turnSummaries(turns) {
     output += turn.output_tokens || 0;
     usd += (turn.cost_usd || 0) + (turn.estimated_cost_usd || 0);
     estimated ||= !!turn.estimated_cost_usd;
-    const line = turnSummary([turn]);
+    const line = turnSummary([turn]) + (clock ? ` · ${clock(turn.ended_at)}` : "");
     summaries.set(turn.id, ++count > 1 ? `${line} — total ${roughUsage(ms, input, output, usd, estimated)}` : line);
   }
   return summaries;

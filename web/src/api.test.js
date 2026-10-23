@@ -172,6 +172,16 @@ test("all turn footers match prefix totals, including failed and edited-away tur
   strictEqual(turnSummaries([]).size, 0);
 });
 
+test("footers name the time the turn ended before the totals", () => {
+  const turns = [
+    { id: 1, started_at: 0, ended_at: 42_000, input_tokens: 850, output_tokens: 12, cost_usd: 0.004 },
+    { id: 2, started_at: 50_000, ended_at: 95_000, input_tokens: 40, output_tokens: 8300, cost_usd: 0.64 },
+  ];
+  const summaries = turnSummaries(turns, (ms) => `@${ms}`);
+  strictEqual(summaries.get(1), "42s · 850 in / 12 out · <$0.01 · @42000");
+  strictEqual(summaries.get(2), "45s · 40 in / 8.3k out · $0.64 · @95000 — total 1min 27s · 890 in / 8.3k out · $0.64");
+});
+
 test("10,000 turn footers read usage fields a bounded number of times", () => {
   let reads = 0;
   const turns = Array.from({ length: 10_000 }, (_, id) => new Proxy({

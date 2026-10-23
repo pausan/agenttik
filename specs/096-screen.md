@@ -114,7 +114,11 @@ HIToolbox and AppKit through purego, so it builds without cgo like the rest:
   up as a double or triple click. The shape is `NSCursor.currentSystemCursor`,
   drawn at the screen's scale; its serial is a hash of the pixels.
 - **Keys:** the current layout is read with `UCKeyTranslate`, plain and
-  shifted, keypad left out, and read again when two seconds old. `Key`
+  shifted, keypad left out, and read again when two seconds old. The read
+  runs on the main thread while an application runs there (the desktop
+  window), else always on one thread of its own: built against a recent SDK,
+  HIToolbox traps an application reading layouts off the main thread, and
+  aborts a process without one that reads them from a second thread. `Key`
   presses the key that types a keysym with the held modifiers set on the
   event; Super is Command. `Type` sets Shift as the layout needs and also
   attaches the character, so one on no key still arrives.

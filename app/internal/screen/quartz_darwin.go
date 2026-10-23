@@ -113,11 +113,21 @@ var (
 		poolPush            func() uintptr
 		poolPop             func(uintptr)
 		pasteboardStringKey objc.ID
+		dispatchSync        func(uintptr, objc.Block)
+		mainQueue           uintptr
+		nsApp               *objc.ID
 	}
 	cgOnce  sync.Once
 	cgErr   error
 	cgBlock objc.Block // one frame handler for every stream; purego callbacks are never freed
 	cgQueue uintptr
+	// layout runs the keyboard layout reads; see onLayoutThread.
+	layout struct {
+		sync.Mutex
+		f     func()
+		block objc.Block
+		work  chan func()
+	}
 	// cgCurrent is the open display, which cgBlock hands frames to.
 	cgCurrent struct {
 		sync.Mutex
@@ -140,6 +150,7 @@ var (
 	selHotSpot                            = objc.RegisterName("hotSpot")
 	selImage                              = objc.RegisterName("image")
 	selInitWithBytesLengthEncoding        = objc.RegisterName("initWithBytes:length:encoding:")
+	selIsRunning                          = objc.RegisterName("isRunning")
 	selLengthOfBytesUsingEncoding         = objc.RegisterName("lengthOfBytesUsingEncoding:")
 	selNumberWithBool                     = objc.RegisterName("numberWithBool:")
 	selNumberWithDouble                   = objc.RegisterName("numberWithDouble:")
@@ -182,11 +193,15 @@ func loadQuartz() (err error) {
 		return h
 	}
 	fn := func(lib uintptr, ptr any, name string) { purego.RegisterLibFunc(ptr, lib, name) }
-	global := func(lib uintptr, name string) uintptr {
+	symbol := func(lib uintptr, name string) uintptr {
 		sym, err := purego.Dlsym(lib, name)
 		if err != nil {
 			panic(err)
 		}
+		return sym
+	}
+	global := func(lib uintptr, name string) uintptr {
+		sym := symbol(lib, name)
 		return **(**uintptr)(unsafe.Pointer(&sym))
 	}
 	g := open("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
@@ -241,6 +256,10 @@ func loadQuartz() (err error) {
 	fn(ios, &cg.surfaceUse, "IOSurfaceIncrementUseCount")
 	fn(ios, &cg.surfaceUnuse, "IOSurfaceDecrementUseCount")
 	fn(sys, &cg.queueCreate, "dispatch_queue_create")
+	fn(sys, &cg.dispatchSync, "dispatch_sync")
+	cg.mainQueue = symbol(sys, "_dispatch_main_q")
+	nsApp := symbol(appkit, "NSApp")
+	cg.nsApp = *(**objc.ID)(unsafe.Pointer(&nsApp))
 	fn(ax, &cg.axTrusted, "AXIsProcessTrusted")
 	fn(ax, &cg.axTrustedPrompt, "AXIsProcessTrustedWithOptions")
 	cg.axPromptKey = global(ax, "kAXTrustedCheckOptionPrompt")
@@ -263,6 +282,14 @@ func loadQuartz() (err error) {
 			q.frame(status, surface)
 		}
 	})
+	layout.block = objc.NewBlock(func(objc.Block) { layout.f() })
+	layout.work = make(chan func())
+	go func() {
+		runtime.LockOSThread()
+		for f := range layout.work {
+			f()
+		}
+	}()
 	return nil
 }
 
@@ -767,12 +794,36 @@ func utf16Of(r rune) []uint16 {
 // read again when two seconds old so a layout switch is seen.
 func (q *quartz) keyForLocked(r rune) (macKey, bool) {
 	if q.keymap == nil || time.Since(q.keymapAt) > 2*time.Second {
-		q.keymap, q.keymapAt = readKeymap(), time.Now()
+		onLayoutThread(func() { q.keymap = readKeymap() })
+		q.keymapAt = time.Now()
 	}
 	if k, ok := q.keymap[r]; ok {
 		return k, true
 	}
 	return macKey{}, false
+}
+
+// onLayoutThread runs f where HIToolbox lets this process read keyboard
+// layouts. In a program built against a recent SDK it traps when an
+// application reads them off the main thread, and aborts when a process with
+// no application reads them from a thread other than its first. So: the main
+// thread while an application runs there (the desktop window), else a thread
+// kept for it.
+func onLayoutThread(f func()) {
+	if app := *cg.nsApp; app != 0 && objc.Send[bool](app, selIsRunning) {
+		layout.Lock()
+		defer layout.Unlock()
+		layout.f = f
+		cg.dispatchSync(cg.mainQueue, layout.block)
+		layout.f = nil
+		return
+	}
+	done := make(chan struct{})
+	layout.work <- func() {
+		defer close(done)
+		f()
+	}
+	<-done
 }
 
 // readKeymap asks the current layout what each key types, plain and

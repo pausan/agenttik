@@ -31,13 +31,15 @@ Settings come from measurements of 1080p desktop video (scrolling and typing):
 | Choice | Why |
 |--------|-----|
 | Constant quality with an adaptive bitrate cap | A fixed bitrate spends its whole budget on an unchanged screen; CQ halved typing traffic |
+| VP9 quality level 28 | Against 40: scrolling text at 42.6 dB PSNR instead of 37.5, for about 25% more bits and the same time |
+| Keyframes cover at least 250 ms | libvpx budgets a frame by its duration; a first frame of 1 ms came out at 31 dB, 250 ms gives 51 dB at any cap |
 | VP9 speed 8, screen tuning, `aq-mode 3`, row multithreading | About 30% smaller than VP8 when scrolling, at equal SSIM |
 | VP8 speed 12, static threshold 100 | Above 12, quality falls apart in motion and bitrate doubles |
 | No lookahead, keyframes only on request | Lowest latency; a keyframe costs 10–30× a delta |
 | Up to 4 threads | 1080p scrolling encodes in about 10 ms a frame, conversion included |
 
-`go test ./app/internal/screen/vpx -bench .` checks keyframes, near-free
-unchanged frames, halving, and reports ms and Mbps for a scrolling 1080p
+`go test ./app/internal/screen/vpx -bench .` checks keyframes, a first
+keyframe as large as one covering a second, near-free unchanged frames, halving, and reports ms and Mbps for a scrolling 1080p
 screen.
 
 ## Capture and input
@@ -166,8 +168,8 @@ at once receives. On a Ryzen AI 9 365:
 
 | Scene | VP9 | VP8 | JPEG |
 |-------|-----|-----|------|
-| Scrolling page of word-sized blocks | 28.8 fps, 0.75 Mbps | 28.8 fps, 0.62 Mbps | 28.8 fps, 82 Mbps |
-| One word added per frame | 28.6 fps, 0.05 Mbps | 28.8 fps, 0.08 Mbps | 28.6 fps, 3.7 Mbps |
+| Scrolling page of word-sized blocks | 29.0 fps, 0.94 Mbps | 28.8 fps, 0.53 Mbps | 28.8 fps, 76 Mbps |
+| One word added per frame | 28.8 fps, 0.06 Mbps | 28.6 fps, 0.08 Mbps | 28.4 fps, 3.4 Mbps |
 
 Grabbing a 1080p screen over MIT-SHM takes 0.9 ms, comparing it with the last
 0.2 ms, and VP9-encoding an unchanged one 3.6 ms.

@@ -60,6 +60,28 @@ func TestEncodeKeyThenSmallDeltas(t *testing.T) {
 	}
 }
 
+// A first frame comes 0 ms after nothing. It must still get a keyframe's
+// worth of bits, or a still screen stays blurred until something moves.
+func TestFirstKeyframeIsNotStarved(t *testing.T) {
+	needLibrary(t)
+	still := screenBGRA(1280, 720, 0)
+	size := func(ms int) int {
+		enc, err := NewEncoder(1280, 720, Options{Codec: VP9, Kbps: 2000})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer enc.Close()
+		frame, _, err := enc.Encode(still, 1280*4, ms, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(frame)
+	}
+	if first, settled := size(0), size(1000); first*10 < settled*9 {
+		t.Fatalf("first keyframe %d bytes, %d with a second to cover", first, settled)
+	}
+}
+
 func TestEncodeHalvesLargeScreens(t *testing.T) {
 	needLibrary(t)
 	enc, err := NewEncoder(1280, 720, Options{Scale: 2})

@@ -22,16 +22,22 @@ import (
 // Settings measured on 1080p desktop video, scrolling and typing: constant
 // quality with a bitrate cap keeps a still screen almost free, VP9's screen
 // tuning is about 30% smaller than VP8 at the same quality, and VP8 above
-// speed 12 loses visible quality for little time.
+// speed 12 loses visible quality for little time. VP9 at 28 rather than 40
+// keeps text sharp in motion for about 25% more bits and no more time.
 const (
 	VP8 = 8
 	VP9 = 9
 
 	DefaultKbps = 3000
-	crfVP9      = 40
+	crfVP9      = 28
 	crfVP8      = 30
 	speedVP9    = 8
 	speedVP8    = 12
+
+	// keyMs is the least time a keyframe is said to cover. libvpx gives a
+	// frame the bits its duration buys at the cap; a first frame of 1 ms
+	// starved VP9 to 31 dB where 250 ms gives 51 dB at any cap.
+	keyMs = 250
 )
 
 var (
@@ -160,6 +166,7 @@ func (e *Encoder) Encode(bgra []byte, stride, ms int, forceKey bool) (frame []by
 	force := int32(0)
 	if forceKey {
 		force = 1
+		ms = max(ms, keyMs)
 	}
 	var out unsafe.Pointer
 	var isKey int32

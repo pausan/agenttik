@@ -150,7 +150,8 @@ for (const [codec, setup] of Object.entries(browsers)) {
       // Full screen, and back.
       await page.getByRole("button", { name: "Full screen" }).click();
       await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(true);
-      // Its bar is dragged out of the way, and stays on screen.
+      // Its bar is dragged out of the way, and stays on screen. Its size
+      // does not follow what the summary says.
       const bar = page.getByTestId("screen-bar");
       await page.mouse.move(0, 0);
       await expect(bar).toHaveCSS("opacity", "0.7");
@@ -163,6 +164,9 @@ for (const [codec, setup] of Object.entries(browsers)) {
       const after = await bar.boundingBox();
       expect(after.x).toBe(0);
       expect(after.y).toBeCloseTo(before.y + 300, 0);
+      await expect.poll(async () => (await page.getByTestId("screen-summary").innerText()).includes(" 0 fps · 0 kbps"), { timeout: 10_000 }).toBe(true);
+      const still = await bar.boundingBox();
+      expect([still.width, still.height]).toEqual([before.width, before.height]);
       await bar.hover({ position: { x: 4, y: 4 } });
       await expect(bar).toHaveCSS("opacity", "1");
       await page.getByRole("button", { name: "Exit full screen" }).click();

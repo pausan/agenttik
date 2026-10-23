@@ -58,7 +58,7 @@ const ctrlIsCmd = computed(() => !MACOS && S.screen?.os === "darwin");
 const summary = computed(() => {
   if (status.value !== "live") return "";
   const parts = [state.codec.toUpperCase().replace("-444", " 4:4:4"), `${state.fps} fps`];
-  if (state.kbps) parts.push(state.kbps >= 1000 ? `${(state.kbps / 1000).toFixed(1)} Mbps` : `${state.kbps} kbps`);
+  parts.push(state.kbps >= 1000 ? `${(state.kbps / 1000).toFixed(1)} Mbps` : `${state.kbps} kbps`);
   if (state.sw) parts.push(`${state.sw}×${state.sh}`);
   return parts.join(" · ");
 });
@@ -382,9 +382,9 @@ onBeforeUnmount(() => {
   >
     <div
       ref="bar"
-      class="flex items-center gap-2 px-2 py-1 text-xs"
+      class="flex h-8 shrink-0 items-center gap-2 px-2 text-xs"
       :class="floating
-        ? ['absolute z-10 cursor-move touch-none rounded-md bg-black text-white opacity-70 transition-opacity select-none hover:opacity-100 focus-within:opacity-100',
+        ? ['absolute z-10 w-[34rem] max-w-[calc(100%-1rem)] cursor-move touch-none rounded-md bg-black text-white opacity-70 transition-opacity select-none hover:opacity-100 focus-within:opacity-100',
            barAt ? '' : 'top-1 left-1/2 -translate-x-1/2']
         : 'border-b border-default bg-default text-muted'"
       :style="floating && barAt ? { left: barAt.x + 'px', top: barAt.y + 'px' } : null"
@@ -396,9 +396,9 @@ onBeforeUnmount(() => {
     >
       <UIcon name="i-lucide-monitor" class="size-4 shrink-0" />
       <span class="truncate font-medium">{{ machine }}</span>
-      <span v-if="summary" class="truncate text-dimmed max-sm:hidden" data-testid="screen-summary">{{ summary }}</span>
+      <span v-if="summary" class="truncate text-dimmed tabular-nums max-sm:hidden" data-testid="screen-summary">{{ summary }}</span>
       <span v-else-if="status === 'reconnecting'" class="text-warning">Reconnecting…</span>
-      <div class="ml-auto flex items-center gap-1">
+      <div class="ml-auto flex shrink-0 items-center gap-1">
         <UButton
           v-if="remoteClip"
           icon="i-lucide-clipboard-copy"

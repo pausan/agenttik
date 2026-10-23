@@ -353,7 +353,9 @@ first keyframe are acknowledged but not decoded. A decoder error closes the
 decoder and asks for a keyframe. JPEG bands are decoded with
 `createImageBitmap` and drawn at their rows. The canvas keeps the screen's
 shape at the largest size the pane allows. The toolbar shows codec, frames
-drawn per second, bitrate and screen size.
+drawn per second, bitrate and screen size, in tabular digits. Its height is
+fixed, and in full screen so is its width (34 rem, less on a narrow screen),
+so it does not shrink when the numbers do.
 
 **Pointer.** With a mouse over the canvas, the pointer is the browser's own,
 wearing the remote shape as a CSS cursor, so it moves with no delay. Otherwise
@@ -402,7 +404,8 @@ arithmetic, every trackpad gesture, and codec choice.
 `e2e/tests/screen.spec.js` runs an Xvfb with an `xev` window per test. With
 VP9 4:4:4, VP9 4:2:0 (a browser refusing profile 1) and JPEG it turns sharing on from the tab and checks drawn pixels,
 arrival feedback, a right click and a key reaching xev, clipboard both ways,
-full screen in and out with its toolbar dragged against an edge, and 0 fps on a still screen. It also checks a tablet
+full screen in and out with its toolbar dragged against an edge and keeping
+its size when the numbers drop to 0 fps and 0 kbps, and 0 fps on a still screen. It also checks a tablet
 tap clicking where it lands and the touch keyboard button, and that the machine itself is not
 offered its own screen.
 

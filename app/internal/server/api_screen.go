@@ -159,10 +159,15 @@ func (s *Server) screenInput(c *fiber.Ctx) error {
 		return err
 	}
 	var body struct {
-		Viewer string         `json:"viewer"`
-		Ack    uint64         `json:"ack"`
-		Key    bool           `json:"key"`
-		Events []screen.Event `json:"events"`
+		Viewer   string         `json:"viewer"`
+		Ack      uint64         `json:"ack"`
+		Key      bool           `json:"key"`
+		Events   []screen.Event `json:"events"`
+		Received *struct {
+			Seq  uint64  `json:"seq"`
+			At   float64 `json:"at"`
+			Kbps float64 `json:"kbps"`
+		} `json:"received"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return badRequest("invalid body: %v", err)
@@ -170,6 +175,9 @@ func (s *Server) screenInput(c *fiber.Ctx) error {
 	v := m.Viewer(body.Viewer)
 	if v == nil {
 		return fiber.NewError(fiber.StatusNotFound, screen.ErrNotViewing.Error())
+	}
+	if r := body.Received; r != nil {
+		v.Received(r.Seq, r.At, r.Kbps)
 	}
 	if body.Ack > 0 {
 		v.Ack(body.Ack)

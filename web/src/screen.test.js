@@ -1,7 +1,7 @@
 import { deepStrictEqual, strictEqual } from "node:assert/strict";
 import { test } from "node:test";
 
-import { InputQueue, Trackpad, WheelSteps, chooseCodec, decodeBase64, fitSize, keyEvents, mouseButton, toScreen } from "./screen.js";
+import { ArrivalMeter, InputQueue, Trackpad, WheelSteps, chooseCodec, decodeBase64, fitSize, keyEvents, mouseButton, toScreen } from "./screen.js";
 
 /* A send that waits until the test lets it finish, so a test can act while a
    request is in flight. */
@@ -16,6 +16,40 @@ function heldSend() {
 }
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+test("arrival throughput excludes the first frame and resets after idle", () => {
+  const meter = new ArrivalMeter();
+  deepStrictEqual(meter.record(1, 100000, 0), { seq: 1, at: 0, kbps: 0 });
+  deepStrictEqual(meter.record(2, 12500, 100), { seq: 2, at: 100, kbps: 1000 });
+  deepStrictEqual(meter.record(3, 25000, 300), { seq: 3, at: 300, kbps: 1000 });
+  deepStrictEqual(meter.record(4, 12500, 1200), { seq: 4, at: 1200, kbps: 1000 / 9 });
+  deepStrictEqual(meter.record(5, 12500, 3000), { seq: 5, at: 3000, kbps: 0 });
+});
+
+test("arrival feedback joins acknowledgements and keeps the latest arrival", async () => {
+  const { sent, send, release } = heldSend();
+  const q = new InputQueue(send);
+  q.setViewer("v1");
+  q.received = { seq: 1, at: 100, kbps: 0 };
+  q.acknowledge(1);
+  deepStrictEqual(sent[0].received, { seq: 1, at: 100, kbps: 0 });
+  q.received = { seq: 2, at: 200, kbps: 1000 };
+  q.acknowledge(2);
+  q.received = { seq: 3, at: 300, kbps: 1000 };
+  q.acknowledge(3);
+  release();
+  await tick();
+  strictEqual(sent[1].ack, 3);
+  deepStrictEqual(sent[1].received, { seq: 3, at: 300, kbps: 1000 });
+  q.received = { seq: 4, at: 400, kbps: 1000 };
+  q.setViewer("v2");
+  q.acknowledge(1);
+  release();
+  await tick();
+  strictEqual(sent[2].viewer, "v2");
+  strictEqual(sent[2].received, undefined);
+  release();
+});
 
 test("input keeps one request in flight and joins what comes meanwhile", async () => {
   const { sent, send, release } = heldSend();

@@ -97,6 +97,47 @@ func TestScreenSameMachine(t *testing.T) {
 	}
 }
 
+func TestScreenInputAppliesArrivalBeforeAcknowledgement(t *testing.T) {
+	s, store := newTestServer(t)
+	f := fakeScreen(t, s)
+	if err := store.SetScreenEnabled(true); err != nil {
+		t.Fatal(err)
+	}
+	v, err := s.screen.Watch("jpeg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer v.Close()
+	frame := func() screen.Message {
+		t.Helper()
+		deadline := time.After(3 * time.Second)
+		for {
+			select {
+			case msg := <-v.Messages():
+				if msg.Type == "frame" {
+					return msg
+				}
+			case <-deadline:
+				t.Fatal("no frame")
+			}
+		}
+	}
+	for i := 0; i < 2; i++ {
+		msg := frame()
+		resp := do(t, s, "POST", "/api/screen/input", map[string]any{
+			"viewer": v.ID, "ack": msg.Seq,
+			"received": map[string]any{"seq": msg.Seq, "at": 1000 + i*1000, "kbps": 600},
+		})
+		if resp.StatusCode != 204 {
+			t.Fatalf("feedback: %d", resp.StatusCode)
+		}
+		f.Fill(0, 0, 20, 20, byte(i*100), 255, 0)
+	}
+	if msg := frame(); msg.Cap != 540 {
+		t.Fatalf("cap after queueing feedback: %d, want 540", msg.Cap)
+	}
+}
+
 // The whole trip a Screen tab on another machine makes: its window asks its
 // own instance for the remote profile's stream, which forwards it, and its
 // input and acknowledgements go the same way.

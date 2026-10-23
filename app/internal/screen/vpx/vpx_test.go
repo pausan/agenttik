@@ -75,6 +75,26 @@ func TestEncodeHalvesLargeScreens(t *testing.T) {
 	}
 }
 
+func TestChangeBitrateWhileEncoding(t *testing.T) {
+	needLibrary(t)
+	for _, codec := range []int{VP8, VP9} {
+		enc, err := NewEncoder(640, 360, Options{Codec: codec})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer enc.Close()
+		for i, kbps := range []int{2000, 500, 100, 8000} {
+			if err := enc.SetKbps(kbps); err != nil {
+				t.Fatalf("VP%d at %d kbps: %v", codec, kbps, err)
+			}
+			frame, key, err := enc.Encode(screenBGRA(640, 360, i*4), 640*4, 33, i == 0)
+			if err != nil || len(frame) == 0 || key != (i == 0) {
+				t.Fatalf("VP%d at %d kbps: %d bytes, key %v, %v", codec, kbps, len(frame), key, err)
+			}
+		}
+	}
+}
+
 // BenchmarkScroll1080p is the worst common case: the whole screen moving.
 func BenchmarkScroll1080p(b *testing.B) {
 	needLibrary(b)

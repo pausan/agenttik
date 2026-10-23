@@ -21,6 +21,7 @@
 
 typedef struct {
   vpx_codec_ctx_t codec;
+  vpx_codec_enc_cfg_t cfg;
   vpx_image_t img;
   int scale; // 1, or 2 to halve each side of the source
   int src_w, src_h;
@@ -99,6 +100,7 @@ EXPORT avx *avx_open(int codec, int src_w, int src_h, int scale, int threads,
     last_error = "out of memory";
     return NULL;
   }
+  e->cfg = cfg;
   e->scale = scale;
   e->src_w = src_w;
   e->src_h = src_h;
@@ -202,6 +204,21 @@ EXPORT int avx_encode(avx *e, const uint8_t *bgra, int stride, int ms,
   }
   *out = e->out;
   return (int)e->out_len;
+}
+
+// avx_set_kbps moves the bitrate cap while encoding, as the viewer's link
+// allows more or less. Answers 0 on success.
+EXPORT int avx_set_kbps(avx *e, int kbps) {
+  if (kbps < 1) kbps = 1;
+  if ((int)e->cfg.rc_target_bitrate == kbps) return 0;
+  vpx_codec_enc_cfg_t cfg = e->cfg;
+  cfg.rc_target_bitrate = kbps;
+  if (vpx_codec_enc_config_set(&e->codec, &cfg)) {
+    last_error = vpx_codec_error(&e->codec);
+    return -1;
+  }
+  e->cfg = cfg;
+  return 0;
 }
 
 EXPORT void avx_close(avx *e) {

@@ -41,9 +41,12 @@ ui:
 ui-dev:
 	cd $(UI) && npm install --no-audit --no-fund && npm run dev
 
-## vpx: build the embedded screen encoder for this machine, once
-vpx:
+## vpx: build the embedded screen encoder when missing or its shim changes
+vpx: $(VPX_LIB)
 ifeq ($(VPX_LIB),)
+	scripts/build-vpx.sh
+else
+$(VPX_LIB): app/internal/screen/vpx/shim/agenttik_vpx.c scripts/build-vpx.sh
 	scripts/build-vpx.sh
 endif
 

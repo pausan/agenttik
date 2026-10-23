@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"image/jpeg"
 	"image/png"
+	"math"
 	"slices"
 	"testing"
 	"time"
@@ -99,8 +100,11 @@ func TestViewerWaitsForAcknowledgements(t *testing.T) {
 	}
 	defer v.Close()
 	next(t, v, "hello")
+	v.mu.Lock()
+	window, _ := v.rate.window()
+	v.mu.Unlock()
 	var last Message
-	for i := 0; i < maxUnacked; i++ {
+	for i := 0; i < window; i++ {
 		f.Fill(0, 0, 160, 120, byte(i*20), 0, 0)
 		last = next(t, v, "frame")
 	}
@@ -142,6 +146,57 @@ func TestViewerInputAndRelease(t *testing.T) {
 	}
 	if got := f.Log(); !slices.Equal(got, want) {
 		t.Fatalf("log\n%q\nwant\n%q", got, want)
+	}
+}
+
+func TestViewerArrivalFeedback(t *testing.T) {
+	start := time.Now().Add(-100 * time.Millisecond)
+	v := &Viewer{
+		rate:     newRateControl(start),
+		sent:     3,
+		inFlight: []sentFrame{{seq: 1, at: start}, {seq: 2, at: start.Add(33 * time.Millisecond)}, {seq: 3, at: start.Add(66 * time.Millisecond)}},
+	}
+	v.Received(99, 1000, 600) // unknown frame
+	v.Received(1, math.Inf(1), 600)
+	v.Received(1, 1000, math.NaN())
+	v.Received(1, 1e20, 600)
+	if len(v.rate.delays) != 0 {
+		t.Fatal("invalid feedback changed the rate")
+	}
+	v.Received(1, 1000, 600)
+	v.Received(1, 1000, 600) // already recorded
+	v.Received(2, 1233, 600) // 200 ms more delay
+	v.Ack(2)
+	if len(v.rate.delays) != 2 || v.rate.kbps != 540 || v.rate.queue != 200*time.Millisecond || v.rate.srtt == 0 {
+		t.Fatalf("feedback: %+v", v.rate)
+	}
+	// An acknowledgement may arrive after the timeout cleared its frames.
+	v.inFlight = nil
+	v.Ack(3)
+}
+
+func TestJPEGQualityFollowsTheBitrate(t *testing.T) {
+	const w, h = 320, 128
+	pix := make([]byte, w*h*4)
+	for i := range pix {
+		pix[i] = byte(i*37 + i/53)
+	}
+	e := jpegEncoder{w: w, h: h}
+	e.SetKbps(maxKbps)
+	_, high, err := e.Encode(pix, nil, 0, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.SetKbps(minKbps)
+	msg, low, err := e.Encode(pix, nil, 0, true)
+	if err != nil || low >= high {
+		t.Fatalf("JPEG at minimum cap: %d bytes, full quality: %d, %v", low, high, err)
+	}
+	for _, band := range msg.Bands {
+		data, _ := base64.StdEncoding.DecodeString(band.Data)
+		if _, err := jpeg.Decode(bytes.NewReader(data)); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

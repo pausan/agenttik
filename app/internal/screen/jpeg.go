@@ -2,6 +2,7 @@ package screen
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/base64"
 	"image"
 	"image/jpeg"
@@ -15,7 +16,8 @@ import (
 // bands that changed, each a JPEG encoded on its own core. Typing touches a
 // band or two; scrolling sends them all.
 type jpegEncoder struct {
-	w, h int
+	w, h    int
+	quality int
 }
 
 const (
@@ -25,6 +27,12 @@ const (
 
 func (e *jpegEncoder) Size() [2]int { return [2]int{e.w, e.h} }
 func (e *jpegEncoder) Close()       {}
+
+// SetKbps picks a quality for the cap: full quality from 2.75 Mbit/s, down
+// to 25 on the slowest links.
+func (e *jpegEncoder) SetKbps(kbps int) {
+	e.quality = max(25, min(jpegQuality, 20+kbps/50))
+}
 
 func (e *jpegEncoder) Encode(pix, prev []byte, _ int, key bool) (Message, int, error) {
 	stride := e.w * 4
@@ -49,7 +57,7 @@ func (e *jpegEncoder) Encode(pix, prev []byte, _ int, key bool) (Message, int, e
 			defer wg.Done()
 			for i := range work {
 				y := changed[i]
-				data, err := encodeJPEG(pix, e.w, y, min(y+bandRows, e.h), jpegQuality)
+				data, err := encodeJPEG(pix, e.w, y, min(y+bandRows, e.h), cmp.Or(e.quality, jpegQuality))
 				bands[i], errs[i], sizes[i] = Band{Y: y, Data: base64.StdEncoding.EncodeToString(data)}, err, len(data)
 			}
 		}()

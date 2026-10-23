@@ -54,6 +54,7 @@ export class InputQueue {
     this.ack = 0;
     this.sentAck = 0;
     this.key = false;
+    this.received = null;
     this.busy = false;
     this.closed = false;
   }
@@ -63,6 +64,7 @@ export class InputQueue {
     this.events = [];
     this.ack = this.sentAck = 0;
     this.key = false;
+    this.received = null;
   }
 
   push(...events) {
@@ -88,6 +90,8 @@ export class InputQueue {
     if (this.busy || this.closed || !this.viewer) return;
     if (!this.events.length && this.ack === this.sentAck && !this.key) return;
     const body = { viewer: this.viewer, ack: this.ack, key: this.key, events: this.events };
+    if (this.received) body.received = this.received;
+    this.received = null;
     this.events = [];
     this.sentAck = this.ack;
     this.key = false;
@@ -285,6 +289,24 @@ export class Trackpad {
 
 /* ----------------------------------------------------------------- stream */
 
+/* ArrivalMeter measures payload throughput over the last second. The first
+   frame only starts the clock; including its bytes would overstate the rate.
+   An idle screen starts a fresh window when its next frame arrives. */
+export class ArrivalMeter {
+  constructor() {
+    this.samples = [];
+  }
+
+  record(seq, bytes, at = performance.now()) {
+    while (this.samples.length && at - this.samples[0].at > 1000) this.samples.shift();
+    this.samples.push({ at, bytes });
+    const elapsed = at - this.samples[0].at;
+    let received = 0;
+    for (let i = 1; i < this.samples.length; i++) received += this.samples[i].bytes;
+    return { seq, at, kbps: elapsed > 0 ? received * 8 / elapsed : 0 };
+  }
+}
+
 /* ScreenStream opens the viewer's stream and draws it on `canvas`. It calls
    `onState({ codec, sw, sh, fps, kbps })` as things change, `onCursor(x, y)`,
    `onShape(url, hx, hy, w, h)` and `onClip(text)`. */
@@ -301,6 +323,7 @@ export class ScreenStream {
     this.state = { codec, sw: 0, sh: 0, fps: 0, kbps: 0 };
     this.drawn = 0;
     this.bytes = 0;
+    this.arrivals = new ArrivalMeter();
     this.chain = Promise.resolve();
     this.meter = setInterval(() => this.measure(), 1000);
     this.es = openEventStream(apiURL("/api/stream/screen?codec=" + codec));
@@ -319,17 +342,21 @@ export class ScreenStream {
       case "hello":
         // A new viewer: the first one, or one opened by a reconnect.
         this.input.setViewer(msg.id);
+        this.arrivals = new ArrivalMeter();
         this.resetDecoder();
         this.codec = msg.codec;
         this.update({ codec: msg.codec, sw: msg.sw, sh: msg.sh });
         break;
-      case "frame":
+      case "frame": {
         if (msg.sw !== this.state.sw || msg.sh !== this.state.sh) this.update({ sw: msg.sw, sh: msg.sh });
-        if (msg.d) this.bytes += (msg.d.length * 3) / 4;
-        for (const band of msg.bands || []) this.bytes += (band.d.length * 3) / 4;
+        let bytes = msg.d ? (msg.d.length * 3) / 4 : 0;
+        for (const band of msg.bands || []) bytes += (band.d.length * 3) / 4;
+        this.bytes += bytes;
+        this.input.received = this.arrivals.record(msg.seq, bytes);
         if (msg.bands) this.chain = this.chain.then(() => this.drawBands(msg));
         else this.decode(msg);
         break;
+      }
       case "cursor":
         this.handlers.onCursor?.(msg.x, msg.y);
         break;

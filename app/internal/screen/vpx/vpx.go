@@ -27,7 +27,7 @@ const (
 	VP8 = 8
 	VP9 = 9
 
-	defaultKbps = 3000
+	DefaultKbps = 3000
 	crfVP9      = 40
 	crfVP8      = 30
 	speedVP9    = 8
@@ -41,6 +41,7 @@ var (
 	avxOpen   func(codec, w, h, scale, threads, kbps, crf, speed int32) uintptr
 	avxEncode func(e uintptr, bgra unsafe.Pointer, stride, ms, forceKey int32, out *unsafe.Pointer, key *int32) int32
 	avxClose  func(e uintptr)
+	avxKbps   func(e uintptr, kbps int32) int32
 	avxError  func() string
 )
 
@@ -67,6 +68,7 @@ func load() error {
 	purego.RegisterLibFunc(&avxOpen, handle, "avx_open")
 	purego.RegisterLibFunc(&avxEncode, handle, "avx_encode")
 	purego.RegisterLibFunc(&avxClose, handle, "avx_close")
+	purego.RegisterLibFunc(&avxKbps, handle, "avx_set_kbps")
 	purego.RegisterLibFunc(&avxError, handle, "avx_error")
 	return nil
 }
@@ -136,7 +138,7 @@ func NewEncoder(w, h int, opts Options) (*Encoder, error) {
 		opts.Threads = min(4, max(1, runtime.NumCPU()/2))
 	}
 	if opts.Kbps <= 0 {
-		opts.Kbps = defaultKbps
+		opts.Kbps = DefaultKbps
 	}
 	crf, speed := crfVP9, speedVP9
 	if opts.Codec == VP8 {
@@ -172,6 +174,15 @@ func (e *Encoder) Encode(bgra []byte, stride, ms int, forceKey bool) (frame []by
 	frame = make([]byte, n)
 	copy(frame, unsafe.Slice((*byte)(out), n))
 	return frame, isKey != 0, nil
+}
+
+// SetKbps moves the bitrate cap; constant quality stays, so a screen that
+// needs less than the cap is unaffected.
+func (e *Encoder) SetKbps(kbps int) error {
+	if avxKbps(e.handle, int32(kbps)) != 0 {
+		return fmt.Errorf("set bitrate: %s", avxError())
+	}
+	return nil
 }
 
 // Close frees the encoder.

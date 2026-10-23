@@ -84,6 +84,13 @@ for (const codec of ["vp9", "jpeg"]) {
     const server = await startServer({ env: { DISPLAY: x.env.DISPLAY, WAYLAND_DISPLAY: "" } });
     // A browser without WebCodecs gets JPEG bands.
     const { page, context, errors } = await remotePage(browser, server, codec === "jpeg" ? () => { delete window.VideoDecoder; } : undefined);
+    const feedback = [];
+    page.on("request", (request) => {
+      if (request.method() === "POST" && request.url().includes("/api/screen/input")) {
+        const body = request.postDataJSON();
+        if (body.received) feedback.push(body);
+      }
+    });
     try {
       await addProject(page);
       await newTask(page);
@@ -98,6 +105,11 @@ for (const codec of ["vp9", "jpeg"]) {
         const outside = await pixel(page, 50, 50);
         return inside.every((v) => v > 200) && outside.every((v) => v < 60);
       }, { message: "the white xev window is drawn where it is" }).toBe(true);
+      await expect.poll(() => feedback.length).toBeGreaterThan(0);
+      expect(feedback[0].received.seq).toBeGreaterThan(0);
+      expect(feedback[0].received.at).toBeGreaterThan(0);
+      expect(feedback[0].received.kbps).toBeGreaterThanOrEqual(0);
+      expect(feedback[0].ack).toBeGreaterThan(0);
 
       // A click and a key reach the xev window on the other end.
       const [px, py] = await at(page, 550, 400);

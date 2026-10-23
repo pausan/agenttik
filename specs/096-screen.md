@@ -12,8 +12,8 @@ libvpx. Nothing is installed on the machine and nothing goes through cgo:
   version, VP8/VP9 encoders only, realtime only) and links it with
   `app/internal/screen/vpx/shim/agenttik_vpx.c` into one shared library,
   `app/internal/screen/vpx/lib/<goos>_<goarch>/`. `make build` and
-  `make build-web` run it when the library is missing (`make vpx`). CI builds
-  it for Linux, the only platform with screen capture so far.
+  `make build-web` run it when the library is missing or the shim changes
+  (`make vpx`). CI builds it for Linux, the only platform with screen capture so far.
 - The release binary embeds its platform's library (about 1.8 MB). On first
   use it is written to the user cache directory, named by its hash, and loaded
   with purego, which works with `CGO_ENABLED=0` (web and Windows builds).
@@ -21,8 +21,8 @@ libvpx. Nothing is installed on the machine and nothing goes through cgo:
   the screen is sent as JPEG instead.
 
 The shim is the whole API agenttik uses: `avx_open`, `avx_encode`,
-`avx_close`, `avx_error`, with plain integers and pointers. libvpx's own API
-takes structs whose layout changes between versions and a variadic control
+`avx_set_kbps`, `avx_close`, `avx_error`, with plain integers and pointers.
+libvpx's own API takes structs whose layout changes between versions and a variadic control
 call that cannot be made portably from Go. The shim also converts BGRA to
 I420 (BT.601), optionally halving each side by averaging.
 
@@ -30,7 +30,7 @@ Settings come from measurements of 1080p desktop video (scrolling and typing):
 
 | Choice | Why |
 |--------|-----|
-| Constant quality with a bitrate cap (3 Mbps) | A fixed bitrate spends its whole budget on an unchanged screen; CQ halved typing traffic |
+| Constant quality with an adaptive bitrate cap | A fixed bitrate spends its whole budget on an unchanged screen; CQ halved typing traffic |
 | VP9 speed 8, screen tuning, `aq-mode 3`, row multithreading | About 30% smaller than VP8 when scrolling, at equal SSIM |
 | VP8 speed 12, static threshold 100 | Above 12, quality falls apart in motion and bitrate doubles |
 | No lookahead, keyframes only on request | Lowest latency; a keyframe costs 10–30× a delta |
@@ -85,36 +85,51 @@ own goroutine, encoder and stream of messages:
 | Message | Carries |
 |---------|---------|
 | `hello` | viewer id, codec, screen size |
-| `frame` | sequence number, key flag, frame and screen size, base64 VP8/VP9 frame or JPEG bands |
+| `frame` | sequence number, key flag, bitrate cap in kbit/s, frame and screen size, base64 VP8/VP9 frame or JPEG bands |
 | `cursor` | pointer position, in screen pixels |
 | `shape` | pointer image as PNG, with its hot spot |
 | `clip` | text another program put on the clipboard |
 
 A frame is grabbed when the screen changes, not on a clock. The display
 signals damage (`ChangedSince`), and the viewer grabs at once if the last frame
-is at least 1/30 s old, or when that interval runs out. Polling at 30 Hz
-measured 17 fps on a screen changing 30 times a second: ticks landed just
-before the damage, so half saw nothing and the next merged two. A display
+is at least one frame interval old, or when that interval runs out. Polling
+at 30 Hz measured 17 fps on a screen changing 30 times a second: ticks landed
+just before the damage, so half saw nothing and the next merged two. A display
 without damage reports a change every time, which makes the loop grab every
-1/30 s. The pointer is polled 30 times a second and drawn by the viewer, so
-moving it sends a `cursor` message, not a frame; shapes are sent when the
-XFIXES serial changes. A grabbed frame is not encoded when its pixels equal
-the last frame's. Two buffers swap, so a steady stream allocates nothing per
-frame.
+1/30 s at the starting cap. The pointer is polled 30 times a second and drawn
+by the viewer, so moving it sends a `cursor` message, not a frame; shapes are
+sent when the XFIXES serial changes. A grabbed frame is not encoded when its pixels equal
+the last frame's. Two pixel buffers swap, avoiding a full-screen allocation
+per frame.
 
-**Pacing.** A viewer acknowledges each frame it has drawn. While it has 6
-frames or 256 KB unacknowledged, no new frame is grabbed. This bounds latency
-by what is in flight, not by the buffers of every proxy in between (the
-desktop window, a remote profile, the quick tunnel). A slow link gets fewer
-frames, each still current. Acknowledgements missing for two seconds are
-assumed lost.
+**Rate control.** Each viewer starts at a 2 Mbps cap, bounded to 100 kbit/s–8
+Mbps. It reports the latest frame's arrival time on its monotonic clock and
+payload throughput over the last second. The difference between arrival and
+send times includes a constant clock offset; the smallest difference in the
+last ten seconds is the baseline, so no clock synchronization is needed.
+Delay above that baseline measures queueing. More than 100 ms cuts the cap
+by 15%, or to 90% of measured throughput if lower. Cuts wait at least 300 ms
+plus the queue delay and pause while the queue drains. Below 50 ms for 500 ms,
+the cap grows by 6% every 200 ms. VP8/VP9 reconfigure in place when the cap
+changes by more than 5%.
+
+**Pacing.** The frame rate follows the cap, budgeting 30 kbit per frame,
+with a floor of 5 fps and a ceiling of 30 fps. A viewer acknowledges each
+frame it has drawn. Its unacknowledged window allows one smoothed round trip
+plus 100 ms of frames and bytes at the cap, with bounds of 4–30 frames and a
+48 KB byte floor. While either window is full, no new frame is grabbed.
+This bounds latency by what is in flight through the desktop window, remote
+profile and quick tunnel. Acknowledgements missing for two seconds are
+assumed lost. An older client without arrival reports keeps the starting cap
+and still uses acknowledgement pacing.
 
 **Keyframes** are sent first, after a size change (a new encoder) and when
 the viewer asks (`RequestKey`, after a decode error).
 
 **JPEG fallback.** With no VP8/VP9 library, or for a client without
 WebCodecs, frames are 64-row bands; only the bands that differ from the last
-frame are sent. Each is encoded on its own core at quality 75.
+frame are sent. Each is encoded on its own core at quality 25–75, following
+the viewer's cap. JPEG quality and frame pacing reduce traffic; the cap is approximate.
 
 Screens wider than 2560 or taller than 1600 are halved before VP8/VP9
 encoding.
@@ -159,7 +174,10 @@ Grabbing a 1080p screen over MIT-SHM takes 0.9 ms, comparing it with the last
 
 Tests use `screen.Fake`: frames only on change, changed bands only, keyframes
 on request, pacing by acknowledgement, input order and release on close,
-clipboard forwarding, screenshot scaling and action coordinates.
+clipboard forwarding, screenshot scaling and action coordinates. Rate tests
+cover growth, congestion, recovery, bounded history and a busy VP9 screen
+through a simulated 1 Mbps link with 50 ms delay each way. Encoder tests
+change the bitrate without resetting the stream and check JPEG quality.
 
 ## HTTP
 
@@ -174,7 +192,7 @@ viewer at once.
 | `GET /api/screen` | `{enabled, same_machine, available, reason, width, height, os, codecs}` |
 | `PUT /api/screen` | `{enabled}` |
 | `GET /api/stream/screen?codec=vp9\|vp8\|jpeg` | one viewer's messages, as SSE `data:` JSON |
-| `POST /api/screen/input` | `{viewer, ack, key, events}`: input, the last frame drawn, a keyframe request |
+| `POST /api/screen/input` | `{viewer, ack, key, events, received?}`: input, the last frame drawn, a keyframe request and arrival feedback |
 | `GET`/`PUT /api/screen/clipboard` | `{text}` |
 | `GET /api/screen/shot?width=&format=png\|jpeg` | a screenshot; `X-Screen-Width/Height` and `X-Image-Width/Height` headers |
 | `POST /api/screen/actions` | `{width, height, actions}`; answers `{cursor: {x, y}}` |
@@ -184,7 +202,11 @@ cannot hold a WebSocket. Frame payloads are base64. The stream is gzipped when
 the client accepts it, which wins back most of base64's third. The same SSE
 carries over remote profiles and through the quick tunnel's websocket bridge
 unchanged. A viewer keeps one input request in flight, which also carries its
-acknowledgements.
+acknowledgements. Optional `received: {seq, at, kbps}` gives the latest
+frame's arrival time in milliseconds and its recent payload throughput in
+kbit/s. The server applies it before discarding acknowledged frames. Unknown,
+repeated and invalid reports are ignored. Reconnecting starts a new viewer
+and clears the browser's arrival samples.
 
 `same_machine` is how the UI hides the Screen button where it would only show
 itself. agenttik's own proxies (the exposed listener and the tunnel) append the
@@ -255,14 +277,15 @@ floats faintly at the top and its button exits; Esc also exits native full
 screen.
 
 Tests: `web/src/screen.test.js` covers the input queue (one request in flight,
-coalescing, newest acknowledgement), key translation (text against keys, Cmd
-as Ctrl, AltGr, Option, released typed keys), pointer, fit and wheel
+coalescing, newest acknowledgement and arrival report), throughput after
+startup and idle, key translation (text against keys, Cmd as Ctrl, AltGr,
+Option, released typed keys), pointer, fit and wheel
 arithmetic, every trackpad gesture, and codec choice.
 `e2e/tests/screen.spec.js` runs an Xvfb with an `xev` window per test. With
-VP9 and with JPEG it turns sharing on from the tab and checks drawn pixels, a
-right click and a key reaching xev, clipboard both ways, full screen in and
-out, and 0 fps on a still screen. It also checks a tablet tap clicking where
-it lands and the touch keyboard button, and that the machine itself is not
+VP9 and with JPEG it turns sharing on from the tab and checks drawn pixels,
+arrival feedback, a right click and a key reaching xev, clipboard both ways,
+full screen in and out, and 0 fps on a still screen. It also checks a tablet
+tap clicking where it lands and the touch keyboard button, and that the machine itself is not
 offered its own screen.
 
 `make test-desktop-screen` runs the real `screen.js` in a real Wails/WebKitGTK

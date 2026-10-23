@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"math"
 	"runtime"
 	"sync"
 	"time"
@@ -114,6 +115,8 @@ type Viewer struct {
 	acked    uint64
 	inFlight []sentFrame
 	ackedAt  time.Time
+	rate     *rateControl
+	received uint64
 	wantKey  bool
 	keys     map[string]uint32 // held keys by KeyboardEvent.code
 	buttons  map[int]bool
@@ -122,6 +125,7 @@ type Viewer struct {
 type sentFrame struct {
 	seq   uint64
 	bytes int
+	at    time.Time
 }
 
 // Message is one event on a viewer's stream.
@@ -139,6 +143,9 @@ type Message struct {
 	SH    int    `json:"sh,omitempty"`
 	Data  string `json:"d,omitempty"` // base64
 	Bands []Band `json:"bands,omitempty"`
+	// Cap is the bitrate, in kbit/s, the stream is held to for this viewer's
+	// link.
+	Cap int `json:"cap,omitempty"`
 
 	X    int    `json:"x,omitempty"`
 	Y    int    `json:"y,omitempty"`
@@ -159,11 +166,9 @@ type Band struct {
 // a remote profile, the tunnel) bounded by what is unacknowledged rather
 // than by how much their buffers hold.
 const (
-	frameRate       = 30
-	frameInterval   = time.Second / frameRate
-	maxUnacked      = 6
-	maxUnackedBytes = 256 << 10
-	ackTimeout      = 2 * time.Second
+	frameRate     = 30
+	frameInterval = time.Second / frameRate
+	ackTimeout    = 2 * time.Second
 )
 
 // Watch starts a viewer. codec is the client's preference; the hello
@@ -185,7 +190,7 @@ func (m *Manager) Watch(codec string) (*Viewer, error) {
 	v := &Viewer{
 		ID: hex.EncodeToString(id), m: m, d: d, codec: codec,
 		out: make(chan Message, 4), cancel: cancel, done: make(chan struct{}),
-		wake: make(chan struct{}, 1), wantKey: true, ackedAt: time.Now(),
+		wake: make(chan struct{}, 1), wantKey: true, ackedAt: time.Now(), rate: newRateControl(time.Now()),
 		keys: map[string]uint32{}, buttons: map[int]bool{},
 	}
 	m.mu.Lock()
@@ -235,10 +240,37 @@ func (v *Viewer) Ack(seq uint64) {
 		for i < len(v.inFlight) && v.inFlight[i].seq <= seq {
 			i++
 		}
+		if i > 0 {
+			v.rate.rtt(time.Since(v.inFlight[i-1].at))
+		}
 		v.inFlight = v.inFlight[i:]
 	}
 	v.mu.Unlock()
 	v.poke()
+}
+
+// Received records when frame seq arrived on the viewer's clock, in
+// milliseconds from any origin, and how many kbit/s it has been receiving.
+// This is what the rate control reads the link from.
+func (v *Viewer) Received(seq uint64, arrivedMs, recvKbps float64) {
+	if math.IsNaN(arrivedMs) || math.Abs(arrivedMs) >= float64(math.MaxInt64)/float64(time.Millisecond) {
+		return
+	}
+	if math.IsNaN(recvKbps) || math.IsInf(recvKbps, 0) || recvKbps < 0 {
+		return
+	}
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if seq <= v.received {
+		return
+	}
+	for _, f := range v.inFlight {
+		if f.seq == seq {
+			v.received = seq
+			v.rate.received(f.at, time.Duration(arrivedMs*float64(time.Millisecond)), recvKbps, time.Now())
+			return
+		}
+	}
 }
 
 // RequestKey asks for a frame that decodes on its own, after a decoder
@@ -275,7 +307,8 @@ func (v *Viewer) ready() bool {
 	for _, f := range v.inFlight {
 		bytes += f.bytes
 	}
-	return len(v.inFlight) < maxUnacked && bytes < maxUnackedBytes
+	maxFrames, maxBytes := v.rate.window()
+	return len(v.inFlight) < maxFrames && bytes < maxBytes
 }
 
 func (v *Viewer) send(ctx context.Context, msg Message) bool {
@@ -357,7 +390,10 @@ func (v *Viewer) run(ctx context.Context) {
 		if now == changes && !key {
 			continue
 		}
-		if wait := time.Until(last.Add(frameInterval)); wait > 0 {
+		v.mu.Lock()
+		interval, kbps := v.rate.interval(), int(v.rate.kbps)
+		v.mu.Unlock()
+		if wait := time.Until(last.Add(interval)); wait > 0 {
 			pace.Reset(wait)
 			pacing = true
 			continue
@@ -386,6 +422,7 @@ func (v *Viewer) run(ctx context.Context) {
 		if !key && prev != nil && bytes.Equal(prev, pix) {
 			continue
 		}
+		enc.SetKbps(kbps)
 		msg, size, err := enc.Encode(pix, prev, ms, key)
 		if err != nil {
 			continue
@@ -398,8 +435,8 @@ func (v *Viewer) run(ctx context.Context) {
 		v.mu.Lock()
 		v.sent++
 		v.wantKey = false
-		msg.Seq, msg.SW, msg.SH, msg.Codec = v.sent, w, h, v.codec
-		v.inFlight = append(v.inFlight, sentFrame{seq: v.sent, bytes: size})
+		msg.Seq, msg.SW, msg.SH, msg.Codec, msg.Cap = v.sent, w, h, v.codec, kbps
+		v.inFlight = append(v.inFlight, sentFrame{seq: v.sent, bytes: size, at: time.Now()})
 		v.mu.Unlock()
 		if !v.send(ctx, msg) {
 			return
@@ -447,6 +484,8 @@ type frameEncoder interface {
 	// Encode compresses pix; prev is the screen the viewer last got, nil
 	// when it has none. size is the payload's length, 0 for nothing to send.
 	Encode(pix, prev []byte, ms int, key bool) (msg Message, size int, err error)
+	// SetKbps holds the stream to about kbps; JPEG does it with quality.
+	SetKbps(kbps int)
 	Close()
 }
 
@@ -466,16 +505,34 @@ func newFrameEncoder(codec string, w, h int) (frameEncoder, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &vpxEncoder{enc: enc, w: w, h: h}, nil
+	return &vpxEncoder{enc: enc, w: w, h: h, kbps: vpx.DefaultKbps}, nil
 }
 
 type vpxEncoder struct {
 	enc  *vpx.Encoder
 	w, h int
+	kbps int
 }
 
 func (e *vpxEncoder) Size() [2]int { return [2]int{e.w, e.h} }
-func (e *vpxEncoder) Close()       { e.enc.Close() }
+
+func (e *vpxEncoder) SetKbps(kbps int) {
+	// Only a real change reconfigures the encoder.
+	if abs(kbps-e.kbps)*20 > e.kbps {
+		if e.enc.SetKbps(kbps) == nil {
+			e.kbps = kbps
+		}
+	}
+}
+
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
+
+func (e *vpxEncoder) Close() { e.enc.Close() }
 
 func (e *vpxEncoder) Encode(pix, _ []byte, ms int, key bool) (Message, int, error) {
 	frame, isKey, err := e.enc.Encode(pix, e.w*4, ms, key)

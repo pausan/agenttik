@@ -87,7 +87,14 @@ export function choiceOf(x) {
 
 export function sameChoice(a, b) {
   const [x, y] = [choiceOf(a), choiceOf(b)];
-  return x.provider === y.provider && x.account_id === y.account_id && x.model === y.model && x.effort === y.effort;
+  return sameGroup(x, y) && x.model === y.model && x.effort === y.effort;
+}
+
+/* sameGroup says whether two choices run on the same subscription of the
+   same provider, whatever their models. */
+export function sameGroup(a, b) {
+  const [x, y] = [choiceOf(a), choiceOf(b)];
+  return x.provider === y.provider && x.account_id === y.account_id;
 }
 
 /* otherChoice is the choice of a running turn that takes prompts, when it is

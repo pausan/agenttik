@@ -11,12 +11,23 @@
    and an unprocessed prompt all ask it (specs/083-background-tasks.md). */
 import { computed } from "vue";
 
+import { sameGroup } from "../background-tasks";
 import { S, modelGroupLabel, modelLabelOf, resolveMismatch } from "../store";
 
 const ask = computed(() => S.mismatch);
 const effort = (value) => (value ? value[0].toUpperCase() + value.slice(1) : "Default effort");
 const full = (c) => (c ? [modelGroupLabel(c.provider, c.account_id), modelLabelOf(c.provider, c.model), effort(c.effort)].join(" · ") : "");
-const short = (c) => (c ? [modelLabelOf(c.provider, c.model), ...(c.effort ? [effort(c.effort)] : [])].join(" · ") : "");
+/* The buttons name the model and effort, and the subscription and provider
+   too when those are what differ, so the two never read the same. */
+const otherGroup = computed(() => !!ask.value && !sameGroup(ask.value.running, ask.value.wanted));
+const short = (c) =>
+  c
+    ? [
+        ...(otherGroup.value ? [modelGroupLabel(c.provider, c.account_id)] : []),
+        modelLabelOf(c.provider, c.model),
+        ...(c.effort ? [effort(c.effort)] : []),
+      ].join(" · ")
+    : "";
 </script>
 
 <template>

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { durationLabel, otherChoice, promptState, runningTaskCount, sameChoice, takeFollowUp, taskSeconds, upsertBackgroundMessage, waitingLabel, wakesAgent } from "./background-tasks.js";
+import { durationLabel, otherChoice, promptState, runningTaskCount, sameChoice, sameGroup, takeFollowUp, taskSeconds, upsertBackgroundMessage, waitingLabel, wakesAgent } from "./background-tasks.js";
 
 test("a task starts after current prose and updates without moving or splitting later prose", () => {
   const before = { role: "assistant", content: "Starting tests", streaming: true };
@@ -127,4 +127,12 @@ test("sending asks first only into a turn that takes prompts on another choice",
   assert.equal(otherChoice(open, running), null);
   assert.equal(otherChoice({ ...open, accepts_prompts: false }, wanted), null);
   assert.equal(otherChoice({ running: false, accepts_prompts: false }, wanted), null);
+});
+
+test("two choices on one subscription of one provider share a group", () => {
+  const work = { provider: "claude", account_id: 1, model: "opus", effort: "high" };
+  assert.equal(sameGroup(work, { provider: "claude", account_id: 1, model: "sonnet" }), true);
+  assert.equal(sameGroup(work, { provider: "claude", account_id: 2, model: "opus", effort: "high" }), false);
+  assert.equal(sameGroup(work, { provider: "codex", account_id: 1, model: "opus" }), false);
+  assert.equal(sameGroup({ provider: "claude" }, { provider: "claude", account_id: 0 }), true);
 });

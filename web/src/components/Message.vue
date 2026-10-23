@@ -96,7 +96,9 @@ async function submit(enqueue = false) {
 }
 
 function onKey(e) {
-  if (e.key === "Escape") draft.value = null;
+  if (e.key !== "Escape") return;
+  e.preventDefault();
+  draft.value = null;
 }
 </script>
 

@@ -4,7 +4,7 @@
    The strip is the active project's tabs only. Each kind has its own colour,
    tabs can be dragged within their kind. Session shortcuts use the sidebar
    order, so file tabs never consume an Alt number. */
-import { computed, defineAsyncComponent, inject, ref, watch } from "vue";
+import { computed, defineAsyncComponent, inject, onMounted, onUnmounted, ref, watch } from "vue";
 
 import {
   S,
@@ -27,7 +27,7 @@ const findOpen = ref(false);
 const content = ref(null);
 defineExpose({ find: () => find.value?.show() });
 
-const fileExpanded = inject("fileExpanded");
+const expanded = inject("expanded");
 
 const emit = defineEmits(["start-tour"]);
 
@@ -119,6 +119,18 @@ const retainedHTML = computed(() => {
 });
 const running = computed(() => !!S.detail?.running);
 
+/* An expanded conversation hides both sidebars but keeps this strip, which
+   holds its Restore button. Escape restores too, unless something else
+   spent it: an open popover or menu, or a prompt or thread being edited. */
+const conversation = computed(() => !!S.detail && (!current.value || current.value.kind === "session"));
+function onExpandKey(e) {
+  if (e.key !== "Escape" || e.defaultPrevented || !expanded.value || !conversation.value) return;
+  if (document.querySelector("[data-dismissable-layer]")) return;
+  expanded.value = false;
+}
+onMounted(() => window.addEventListener("keydown", onExpandKey));
+onUnmounted(() => window.removeEventListener("keydown", onExpandKey));
+
 /* Stats belongs to the task in front. Leaving that task closes its popover so
    it cannot reopen unexpectedly on a later conversation. The shared flag
    also lets Command Palette open the same control. */
@@ -140,7 +152,7 @@ const badge = computed(() => {
 
 <template>
   <main class="flex min-h-0 min-w-0 flex-col">
-    <div v-show="!fileExpanded" class="main-tab-bar flex shrink-0 items-center gap-2.5 border-b border-default pr-3">
+    <div v-show="!expanded || conversation" class="main-tab-bar flex shrink-0 items-center gap-2.5 border-b border-default pr-3">
       <div role="tablist" class="flex min-w-0 flex-1 items-center overflow-x-auto">
         <div
           v-for="item in items"
@@ -235,6 +247,17 @@ const badge = computed(() => {
               </div>
             </template>
           </UPopover>
+          <UButton
+            :icon="expanded ? 'i-lucide-minimize' : 'i-lucide-maximize'"
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            class="max-md:hidden"
+            :aria-label="expanded ? 'Restore conversation' : 'Expand conversation'"
+            :title="expanded ? 'Restore conversation (Escape)' : 'Expand conversation'"
+            :aria-pressed="expanded"
+            @click="expanded = !expanded"
+          />
         </template>
       </div>
     </div>

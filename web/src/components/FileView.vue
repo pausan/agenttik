@@ -27,18 +27,18 @@ import HexEditor from "./HexEditor.vue";
 
 const props = defineProps({ tab: { type: Object, required: true } });
 
-const fileExpanded = inject("fileExpanded");
-watch(() => props.tab.mode, () => { fileExpanded.value = false; });
+const expanded = inject("expanded");
+watch(() => props.tab.mode, () => { expanded.value = false; });
 function onExpandKey(event) {
-  if (event.key !== "Escape" || !fileExpanded.value) return;
+  if (event.key !== "Escape" || !expanded.value) return;
   event.preventDefault();
   event.stopImmediatePropagation();
-  fileExpanded.value = false;
+  expanded.value = false;
 }
 onMounted(() => window.addEventListener("keydown", onExpandKey, true));
 onUnmounted(() => {
   window.removeEventListener("keydown", onExpandKey, true);
-  fileExpanded.value = false;
+  expanded.value = false;
 });
 
 const image = computed(() => isImage(props.tab.path));
@@ -168,14 +168,14 @@ const stat = computed(() => {
         >Save</UButton
       >
       <UButton
-        :icon="fileExpanded ? 'i-lucide-minimize' : 'i-lucide-maximize'"
+        :icon="expanded ? 'i-lucide-minimize' : 'i-lucide-maximize'"
         size="xs"
         color="neutral"
         variant="ghost"
-        :aria-label="`${fileExpanded ? 'Restore' : 'Expand'} ${expandLabel}`"
-        :title="fileExpanded ? `Restore ${expandLabel} (Escape)` : `Expand ${expandLabel}`"
-        :aria-pressed="fileExpanded"
-        @click="fileExpanded = !fileExpanded"
+        :aria-label="`${expanded ? 'Restore' : 'Expand'} ${expandLabel}`"
+        :title="expanded ? `Restore ${expandLabel} (Escape)` : `Expand ${expandLabel}`"
+        :aria-pressed="expanded"
+        @click="expanded = !expanded"
       />
       <UTabs
         :model-value="tab.mode"

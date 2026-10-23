@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, provide, ref, watch } from "vue";
+import { computed, inject, nextTick, onMounted, onUnmounted, provide, ref, watch } from "vue";
 
 import {
   deleteQueued,
@@ -24,6 +24,8 @@ import TranscriptRows from "./TranscriptRows.vue";
 
 defineProps({ findOpen: Boolean });
 const emit = defineEmits(["start-tour"]);
+// Expanded, the conversation drops its reading width so wide tables fit.
+const expanded = inject("expanded");
 const box = ref(null);
 const content = ref(null);
 const transcriptRows = ref(null);
@@ -284,7 +286,9 @@ function cancelEdit() {
 }
 
 function onEditKey(e) {
-  if (e.key === "Escape") cancelEdit();
+  if (e.key !== "Escape") return;
+  e.preventDefault();
+  cancelEdit();
 }
 
 async function saveEdit(q) {
@@ -453,7 +457,8 @@ watch(
     <div
       v-else
       ref="content"
-      class="relative mx-auto max-w-[860px] px-6 pt-5 pb-2 max-md:px-3 max-md:pt-3"
+      class="relative mx-auto px-6 pt-5 pb-2 max-md:px-3 max-md:pt-3"
+      :class="{ 'max-w-[860px]': !expanded }"
       @mouseup="readSelection"
       @keyup.shift="readSelection"
     >

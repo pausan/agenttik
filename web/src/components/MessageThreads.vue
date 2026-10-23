@@ -41,6 +41,7 @@ function onKey(e) {
     e.preventDefault();
     ask();
   } else if (e.key === "Escape") {
+    e.preventDefault();
     S.threadDraft = null;
   }
 }

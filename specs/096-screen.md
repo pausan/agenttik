@@ -282,8 +282,10 @@ clipboard** button does it on the next click.
 
 **Full screen.** The toolbar button uses the Fullscreen API on the tab, with
 a CSS stand-in where that is missing (iPhone). In full screen the toolbar
-floats faintly at the top and its button exits; Esc also exits native full
-screen.
+floats at the top, solid black at 70% opacity and opaque under the pointer,
+and its button exits; Esc also exits native full screen. The toolbar can be
+dragged anywhere but its buttons (a move cursor), stays wholly on screen, and
+its place is kept in `localStorage` (`screen.bar`).
 
 Tests: `web/src/screen.test.js` covers the input queue (one request in flight,
 coalescing, newest acknowledgement and arrival report), throughput after
@@ -293,7 +295,7 @@ arithmetic, every trackpad gesture, and codec choice.
 `e2e/tests/screen.spec.js` runs an Xvfb with an `xev` window per test. With
 VP9 and with JPEG it turns sharing on from the tab and checks drawn pixels,
 arrival feedback, a right click and a key reaching xev, clipboard both ways,
-full screen in and out, and 0 fps on a still screen. It also checks a tablet
+full screen in and out with its toolbar dragged against an edge, and 0 fps on a still screen. It also checks a tablet
 tap clicking where it lands and the touch keyboard button, and that the machine itself is not
 offered its own screen.
 

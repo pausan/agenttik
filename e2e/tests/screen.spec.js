@@ -135,6 +135,21 @@ for (const codec of ["vp9", "jpeg"]) {
       // Full screen, and back.
       await page.getByRole("button", { name: "Full screen" }).click();
       await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(true);
+      // Its bar is dragged out of the way, and stays on screen.
+      const bar = page.getByTestId("screen-bar");
+      await page.mouse.move(0, 0);
+      await expect(bar).toHaveCSS("opacity", "0.7");
+      const before = await bar.boundingBox();
+      await page.mouse.move(before.x + 4, before.y + before.height / 2);
+      await expect(bar).toHaveCSS("cursor", "move");
+      await page.mouse.down();
+      await page.mouse.move(before.x - 5000, before.y + before.height / 2 + 300, { steps: 4 });
+      await page.mouse.up();
+      const after = await bar.boundingBox();
+      expect(after.x).toBe(0);
+      expect(after.y).toBeCloseTo(before.y + 300, 0);
+      await bar.hover({ position: { x: 4, y: 4 } });
+      await expect(bar).toHaveCSS("opacity", "1");
       await page.getByRole("button", { name: "Exit full screen" }).click();
       await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(false);
 

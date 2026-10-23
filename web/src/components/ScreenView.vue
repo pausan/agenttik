@@ -23,6 +23,7 @@ import {
 defineProps({ tab: { type: Object, required: true } });
 
 const root = ref(null);
+const bar = ref(null);
 const pane = ref(null);
 const canvas = ref(null);
 const keys = ref(null);
@@ -34,6 +35,9 @@ const status = ref("starting"); // starting | live | reconnecting | off | unavai
 const remoteClip = ref("");
 const fullscreen = ref(false);
 const pseudo = ref(false); // a CSS stand-in where the Fullscreen API is missing
+// Where the full-screen bar was dragged to, its corner in pixels; null centres
+// it at the top.
+const barAt = ref(JSON.parse(localStorage.getItem("screen.bar") || "null"));
 const touchDevice = typeof navigator !== "undefined" && navigator.maxTouchPoints > 0;
 const touchMode = ref(localStorage.getItem("screen.touch") || "trackpad");
 
@@ -45,7 +49,9 @@ const typed = new Set();
 const held = new Map(); // key events sent down and not yet up, by code
 let pasteCode = "";
 let pasteTimer = 0;
+let barDrag = null;
 
+const floating = computed(() => fullscreen.value || pseudo.value);
 const machine = computed(() => S.instanceInfo?.name || "this machine");
 const cmdIsCtrl = computed(() => MACOS && S.screen?.os !== "darwin");
 const summary = computed(() => {
@@ -111,6 +117,7 @@ function fit() {
   if (!el) return;
   [size.w, size.h] = fitSize(el.clientWidth, el.clientHeight, state.sw, state.sh);
   if (size.w) pad.scale = state.sw / size.w;
+  if (floating.value && barAt.value) placeBar(barAt.value.x, barAt.value.y);
 }
 
 /* ---------------------------------------------------------------- input */
@@ -297,6 +304,38 @@ function onFullscreenChange() {
   nextTick(fit);
 }
 
+/* In full screen the bar floats and can be dragged by anything but its
+   buttons. It is kept wholly inside the screen, here and when that shrinks. */
+function onBarPointerDown(e) {
+  if (!floating.value || e.button !== 0 || e.target.closest("button")) return;
+  e.preventDefault();
+  const r = bar.value.getBoundingClientRect();
+  barDrag = { id: e.pointerId, dx: e.clientX - r.left, dy: e.clientY - r.top };
+  bar.value.setPointerCapture(e.pointerId);
+}
+
+function onBarPointerMove(e) {
+  if (barDrag?.id !== e.pointerId) return;
+  const area = root.value.getBoundingClientRect();
+  placeBar(e.clientX - barDrag.dx - area.left, e.clientY - barDrag.dy - area.top);
+}
+
+function onBarPointerUp(e) {
+  if (barDrag?.id !== e.pointerId) return;
+  barDrag = null;
+  localStorage.setItem("screen.bar", JSON.stringify(barAt.value));
+}
+
+function placeBar(x, y) {
+  const el = bar.value;
+  if (!el) return;
+  const clamp = (v, hi) => Math.round(Math.max(0, Math.min(v, hi)));
+  barAt.value = {
+    x: clamp(x, root.value.clientWidth - el.offsetWidth),
+    y: clamp(y, root.value.clientHeight - el.offsetHeight),
+  };
+}
+
 /* --------------------------------------------------------------- cursor */
 
 /* With a mouse over the canvas the pointer is this machine's, wearing the
@@ -341,10 +380,18 @@ onBeforeUnmount(() => {
     :class="{ 'fixed inset-0 z-[100]': pseudo }"
   >
     <div
+      ref="bar"
       class="flex items-center gap-2 px-2 py-1 text-xs"
-      :class="fullscreen || pseudo
-        ? 'absolute top-1 left-1/2 z-10 -translate-x-1/2 rounded-md bg-black/60 text-white opacity-40 transition-opacity hover:opacity-100 focus-within:opacity-100'
+      :class="floating
+        ? ['absolute z-10 cursor-move touch-none rounded-md bg-black text-white opacity-70 transition-opacity select-none hover:opacity-100 focus-within:opacity-100',
+           barAt ? '' : 'top-1 left-1/2 -translate-x-1/2']
         : 'border-b border-default bg-default text-muted'"
+      :style="floating && barAt ? { left: barAt.x + 'px', top: barAt.y + 'px' } : null"
+      data-testid="screen-bar"
+      @pointerdown="onBarPointerDown"
+      @pointermove="onBarPointerMove"
+      @pointerup="onBarPointerUp"
+      @pointercancel="onBarPointerUp"
     >
       <UIcon name="i-lucide-monitor" class="size-4 shrink-0" />
       <span class="truncate font-medium">{{ machine }}</span>
@@ -381,12 +428,12 @@ onBeforeUnmount(() => {
           />
         </template>
         <UButton
-          :icon="fullscreen || pseudo ? 'i-lucide-minimize' : 'i-lucide-maximize'"
+          :icon="floating ? 'i-lucide-minimize' : 'i-lucide-maximize'"
           size="xs"
           color="neutral"
           variant="ghost"
-          :title="fullscreen || pseudo ? 'Exit full screen' : 'Full screen'"
-          :aria-label="fullscreen || pseudo ? 'Exit full screen' : 'Full screen'"
+          :title="floating ? 'Exit full screen' : 'Full screen'"
+          :aria-label="floating ? 'Exit full screen' : 'Full screen'"
           @click="toggleFullscreen"
         />
       </div>

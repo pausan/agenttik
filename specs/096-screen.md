@@ -137,3 +137,39 @@ seconds. The answer is the pointer's position in the request's space.
 Tests use `screen.Fake`: frames only on change, changed bands only, keyframes
 on request, pacing by acknowledgement, input order and release on close,
 clipboard forwarding, screenshot scaling and action coordinates.
+
+## HTTP
+
+The screen belongs to the machine, so every profile answers from the
+instance's one manager and the instance's switch
+(`server_config.screen_enabled`, off by default). Everything but
+`GET`/`PUT /api/screen` answers 403 while it is off. Turning it off ends every
+viewer at once.
+
+| Route | Does |
+|-------|------|
+| `GET /api/screen` | `{enabled, same_machine, available, reason, width, height, os, codecs}` |
+| `PUT /api/screen` | `{enabled}` |
+| `GET /api/stream/screen?codec=vp9\|vp8\|jpeg` | one viewer's messages, as SSE `data:` JSON |
+| `POST /api/screen/input` | `{viewer, ack, key, events}`: input, the last frame drawn, a keyframe request |
+| `GET`/`PUT /api/screen/clipboard` | `{text}` |
+| `GET /api/screen/shot?width=&format=png\|jpeg` | a screenshot; `X-Screen-Width/Height` and `X-Image-Width/Height` headers |
+| `POST /api/screen/actions` | `{width, height, actions}`; answers `{cursor: {x, y}}` |
+
+Frames travel over SSE and input over POST, like terminals: the desktop window
+cannot hold a WebSocket. Frame payloads are base64. The stream is gzipped when
+the client accepts it, which wins back most of base64's third. The same SSE
+carries over remote profiles and through the quick tunnel's websocket bridge
+unchanged. A viewer keeps one input request in flight, which also carries its
+acknowledgements.
+
+`same_machine` is how the UI hides the Screen button where it would only show
+itself. agenttik's own proxies (the exposed listener and the tunnel) append the
+client to `X-Forwarded-For`, so its last entry is trusted; without one, the
+connection's address is the client's. A loopback client is this machine. A
+remote profile's requests come from the forwarding machine, so they are never
+the same machine.
+
+Tests cover the switch, screenshots, actions, the clipboard, same-machine
+detection, and a viewer's stream, input and acknowledgements through a remote
+profile to a second instance.

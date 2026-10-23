@@ -405,6 +405,11 @@ type ServerConfig struct {
 	// process. See 084-quick-tunnel.md.
 	TunnelEnabled     bool   `json:"-"`
 	TunnelCredentials string `json:"-"`
+
+	// ScreenEnabled lets viewers and agents see and drive this machine's
+	// screen. Off until someone at the machine turns it on. See
+	// 096-screen.md.
+	ScreenEnabled bool `json:"-"`
 }
 
 // Session status values. Waiting is idle with a reason: the session has a

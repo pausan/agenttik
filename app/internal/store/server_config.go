@@ -13,10 +13,10 @@ func (s *Store) GetServerConfig() (ServerConfig, error) {
 	var c ServerConfig
 	err := s.db.QueryRow(
 		`SELECT enabled, host, port, auth_enabled, password_hash, totp_secret, totp_disabled,
-		        tunnel_enabled, tunnel_credentials
+		        tunnel_enabled, tunnel_credentials, screen_enabled
 		   FROM server_config WHERE id = 1`).
 		Scan(&c.Enabled, &c.Host, &c.Port, &c.AuthEnabled, &c.PasswordHash, &c.TOTPSecret, &c.TOTPDisabled,
-			&c.TunnelEnabled, &c.TunnelCredentials)
+			&c.TunnelEnabled, &c.TunnelCredentials, &c.ScreenEnabled)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ServerConfig{}, nil
 	}
@@ -69,6 +69,19 @@ func (s *Store) SetServerTunnel(enabled bool, credentials string) error {
 		enabled, credentials)
 	if err != nil {
 		return fmt.Errorf("set server tunnel: %w", err)
+	}
+	return nil
+}
+
+// SetScreenEnabled says whether this machine's screen may be viewed and
+// controlled, leaving everything else alone.
+func (s *Store) SetScreenEnabled(enabled bool) error {
+	_, err := s.db.Exec(
+		`INSERT INTO server_config (id, screen_enabled) VALUES (1, ?)
+		 ON CONFLICT(id) DO UPDATE SET screen_enabled = excluded.screen_enabled`,
+		enabled)
+	if err != nil {
+		return fmt.Errorf("set screen sharing: %w", err)
 	}
 	return nil
 }

@@ -35,6 +35,7 @@ import (
 	"github.com/pausan/agenttik/app/internal/quicktunnel"
 	"github.com/pausan/agenttik/app/internal/remote"
 	"github.com/pausan/agenttik/app/internal/runner"
+	"github.com/pausan/agenttik/app/internal/screen"
 	"github.com/pausan/agenttik/app/internal/smartsearch"
 	"github.com/pausan/agenttik/app/internal/store"
 	"github.com/pausan/agenttik/app/internal/terminals"
@@ -63,6 +64,11 @@ type Server struct {
 	// than in the store because a shell only exists while this process does.
 	// See specs/073-terminals.md.
 	terminals *terminals.Manager
+
+	// screen is this machine's screen for Screen tabs and agents. Only the
+	// instance's own server uses it; profiles answer from that one. See
+	// specs/096-screen.md.
+	screen *screen.Manager
 
 	// closing is closed by Shutdown to release the SSE handlers. Fiber waits
 	// for every open connection, and a live stream never ends on its own, so
@@ -138,7 +144,7 @@ func New(s *store.Store, reg *agent.Registry, r *runner.Runner) *Server {
 	}))
 
 	srv := &Server{app: app, store: s, runner: r, registry: reg,
-		watchers: newWatchers(r.Hub()), terminals: terminals.NewManager(),
+		watchers: newWatchers(r.Hub()), terminals: terminals.NewManager(), screen: screen.NewManager(screen.Open),
 		closing: make(chan struct{}), previewKey: make([]byte, 32)}
 	if _, err := rand.Read(srv.previewKey); err != nil {
 		panic(err)
@@ -345,6 +351,15 @@ func (s *Server) routes() {
 	api.Get("/stream", s.streamAll)
 	// Terminal output has a stream of its own. See streamTerminals.
 	api.Get("/stream/terminals", s.streamTerminals)
+	// So does each Screen tab. See api_screen.go.
+	api.Get("/stream/screen", s.streamScreen)
+	api.Get("/screen", s.getScreen)
+	api.Put("/screen", s.putScreen)
+	api.Post("/screen/input", s.screenInput)
+	api.Get("/screen/clipboard", s.getScreenClipboard)
+	api.Put("/screen/clipboard", s.putScreenClipboard)
+	api.Get("/screen/shot", s.screenShot)
+	api.Post("/screen/actions", s.screenActions)
 
 	api.Get("/stars", s.listStars)
 	api.Post("/stars", s.addStar)
@@ -376,6 +391,7 @@ func (s *Server) Shutdown() error {
 		s.remotes.stop()
 	}
 	s.terminals.Shutdown()
+	s.screen.Close()
 	s.closeOnce.Do(func() { close(s.closing); s.search.Close() })
 	return s.app.ShutdownWithTimeout(shutdownTimeout)
 }

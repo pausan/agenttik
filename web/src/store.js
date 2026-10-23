@@ -3318,6 +3318,9 @@ function onSessionEvent(tab, msg) {
       break;
     case "done":
       endLive(tab);
+      // A reply that failed while the turn goes on leaves the follow-up it
+      // interrupted unprocessed, in place (specs/083-background-tasks.md).
+      if (msg.message) takeFollowUp(tab.detail.messages, msg.message);
       // A reply that leaves the turn open lets the prompt bar send into it.
       tab.detail.accepts_prompts = tab.detail.waiting = !msg.stats && !!msg.accepts_prompts;
       if (msg.stats) {

@@ -524,3 +524,91 @@ func TestSendJustAfterTheLastReplyStartsTheNext(t *testing.T) {
 	}
 	waitFor(t, func() bool { return !r.Running(sess.ID) }, "the next turn to end")
 }
+
+// A reply that fails while background tasks keep the turn open is that
+// reply's failure, not the turn's. The follow-up it interrupted is left as
+// never processed, for the user to send again; its error row stays; and the
+// turn ends as its last reply does, retrying nothing.
+func TestFailedReplyInATurnThatGoesOn(t *testing.T) {
+	p := newOpenProvider()
+	r, st, sess := setup(t, p)
+	if _, err := r.Send(sess.ID, "build"); err != nil {
+		t.Fatal(err)
+	}
+	p.events <- agent.Event{Type: agent.EventText, Text: "Build started."}
+	p.events <- agent.Event{Type: agent.EventDone, FollowUp: p.followUp(), Usage: &agent.Usage{OutputTokens: 10}}
+	waitFor(t, func() bool { return r.AcceptsPrompts(sess.ID) }, "the turn to take prompts")
+	if _, err := r.Send(sess.ID, "status?"); err != nil {
+		t.Fatal(err)
+	}
+	<-p.prompts
+	p.events <- agent.Event{Type: agent.EventFollowUp}
+	p.events <- agent.Event{Type: agent.EventError, Text: capacityFailure}
+	// Tasks still run: the failed reply's done keeps the turn open.
+	p.events <- agent.Event{Type: agent.EventDone, FollowUp: p.followUp(), Usage: &agent.Usage{OutputTokens: 10}}
+	waitFor(t, func() bool {
+		m, err := st.GetMessage(lastUser(t, st, sess.ID, "status?").ID)
+		return err == nil && m.TurnID == 0
+	}, "the interrupted follow-up to be left unprocessed")
+	if _, err := r.Send(sess.ID, "status again?"); err != nil {
+		t.Fatal(err)
+	}
+	<-p.prompts
+	p.events <- agent.Event{Type: agent.EventFollowUp}
+	p.events <- agent.Event{Type: agent.EventText, Text: "All good, build done."}
+	p.events <- agent.Event{Type: agent.EventDone, Usage: &agent.Usage{OutputTokens: 10}}
+	close(p.events)
+	waitFor(t, func() bool { return !r.Running(sess.ID) }, "the turn to end")
+
+	queued, _ := st.ListQueuedMessages(sess.ID)
+	got, _ := st.GetSession(sess.ID)
+	turns, _ := st.ListTurns(sess.ID)
+	if len(queued) != 0 || got.Status != store.StatusIdle || len(turns) != 1 || turns[0].Status != "ok" {
+		t.Fatalf("queue %+v, session %s, turns %+v", queued, got.Status, turns)
+	}
+	var order []string
+	for _, m := range mustMessages(t, st, sess.ID) {
+		order = append(order, fmt.Sprintf("%s:%v", m.Role, m.TurnID != 0))
+	}
+	want := "[user:true assistant:true user:false error:true user:true assistant:true]"
+	if fmt.Sprint(order) != want {
+		t.Fatalf("messages = %v, want %s", order, want)
+	}
+}
+
+// The same holds for a reply to a background task's notification, with no
+// prompt of the user's in flight: the turn goes on and ends fine.
+func TestFailedNotificationReplyInATurnThatGoesOn(t *testing.T) {
+	p := newOpenProvider()
+	r, st, sess := setup(t, p)
+	if _, err := r.Send(sess.ID, "build"); err != nil {
+		t.Fatal(err)
+	}
+	p.events <- agent.Event{Type: agent.EventText, Text: "Build started."}
+	p.events <- agent.Event{Type: agent.EventDone, FollowUp: p.followUp(), Usage: &agent.Usage{OutputTokens: 10}}
+	waitFor(t, func() bool { return r.AcceptsPrompts(sess.ID) }, "the turn to take prompts")
+	p.events <- agent.Event{Type: agent.EventError, Text: capacityFailure}
+	p.events <- agent.Event{Type: agent.EventDone, FollowUp: p.followUp(), Usage: &agent.Usage{OutputTokens: 10}}
+	p.events <- agent.Event{Type: agent.EventText, Text: "Game A built."}
+	p.events <- agent.Event{Type: agent.EventDone, Usage: &agent.Usage{OutputTokens: 10}}
+	close(p.events)
+	waitFor(t, func() bool { return !r.Running(sess.ID) }, "the turn to end")
+	queued, _ := st.ListQueuedMessages(sess.ID)
+	got, _ := st.GetSession(sess.ID)
+	turns, _ := st.ListTurns(sess.ID)
+	if len(queued) != 0 || got.Status != store.StatusIdle || len(turns) != 1 || turns[0].Status != "ok" {
+		t.Fatalf("queue %+v, session %s, turns %+v", queued, got.Status, turns)
+	}
+}
+
+func lastUser(t *testing.T, st *store.Store, sessionID, content string) store.Message {
+	t.Helper()
+	messages := mustMessages(t, st, sessionID)
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == store.RoleUser && messages[i].Content == content {
+			return messages[i]
+		}
+	}
+	t.Fatalf("no prompt %q in %+v", content, messages)
+	return store.Message{}
+}

@@ -151,3 +151,25 @@ func TestQueuedToMessage(t *testing.T) {
 		t.Fatalf("taking it twice: %v", err)
 	}
 }
+
+// A message detached from its turn stays where it stands, without a turn.
+func TestDetachMessage(t *testing.T) {
+	s := testStore(t)
+	project, err := s.CreateProject("project", "/tmp/project")
+	must(t, err)
+	must(t, s.CreateSession(&Session{ID: "task", ProjectID: project.ID, Provider: "fake", Model: "fake"}))
+	turn, err := s.StartTurn("task", "fake", "")
+	must(t, err)
+	prompt, err := s.AddMessage("task", turn.ID, RoleUser, "status?")
+	must(t, err)
+	_, err = s.AddMessage("task", turn.ID, RoleError, "at capacity")
+	must(t, err)
+	detached, err := s.DetachMessage(prompt.ID)
+	must(t, err)
+	if detached.ID != prompt.ID || detached.TurnID != 0 {
+		t.Fatalf("detached = %+v", detached)
+	}
+	if messages, _ := s.ListMessages("task"); len(messages) != 2 || messages[0].ID != prompt.ID || messages[0].TurnID != 0 {
+		t.Fatalf("messages = %+v", messages)
+	}
+}

@@ -76,6 +76,11 @@ A reply that ends with background tasks still running leaves the turn open
   quitting the app, the CLI dying — moves it to the end of the transcript,
   still without a turn. After a provider outage that agenttik retries by
   itself, it goes back to the queue behind the retry instead.
+- A reply that fails while background tasks keep the turn open does not fail
+  the turn ([045](045-provider-outage-retry.md)). Its error row stays, and a
+  follow-up it interrupted leaves the turn where it stands, unprocessed, for
+  Send or Enqueue. The done event that keeps the turn open carries it as
+  `message`, and the browser updates it in place.
 - A prompt of yours without a turn says so above its bubble: "Waiting for the
   agent" while the running turn holds it, "Not processed" once nothing will
   take it. That includes queued prompts Stop moved into the transcript

@@ -150,6 +150,16 @@ func (s *Store) QueuedToMessage(id int64) (*Message, error) {
 	return &m, nil
 }
 
+// DetachMessage takes a message out of its turn where it stands: a follow-up
+// whose reply failed while the turn went on is left as never processed, for
+// the user to send again.
+func (s *Store) DetachMessage(id int64) (*Message, error) {
+	if _, err := s.db.Exec(`UPDATE messages SET turn_id = NULL WHERE id = ?`, id); err != nil {
+		return nil, fmt.Errorf("detach message %d: %w", id, err)
+	}
+	return s.GetMessage(id)
+}
+
 // SetMessageContent updates a task's state without changing its transcript position.
 func (s *Store) SetMessageContent(id int64, content string) error {
 	_, err := s.db.Exec(`UPDATE messages SET content = ? WHERE id = ?`, content, id)

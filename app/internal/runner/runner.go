@@ -59,7 +59,8 @@ type Event struct {
 	Session *store.Session `json:"session,omitempty"`
 	Prompt  string         `json:"prompt,omitempty"`
 	// Message is the row an event stored. On started it is set only when
-	// the turn's prompt is one the transcript held, sent again unprocessed.
+	// the turn's prompt is one the transcript held, sent again unprocessed;
+	// on done, only when a failed reply left a follow-up unprocessed.
 	Message *store.Message `json:"message,omitempty"`
 	// Replaces is set when a prompt the transcript held moved below rows
 	// stored after it — on follow_up, below the reply it waited behind, and
@@ -1193,6 +1194,17 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 			open.mu.Lock()
 			open.followUp, open.closing = ev.FollowUp, ev.FollowUp == nil
 			open.mu.Unlock()
+			if failure != "" && ev.FollowUp != nil {
+				// The reply failed, but the turn goes on: background tasks still
+				// run and it takes prompts. The failure was the reply's, not the
+				// turn's, so it is settled here: its error row stays, a follow-up
+				// it interrupted is left as never processed, for the user to send
+				// again, and the turn ends as its last reply does.
+				if interruptedMessage != 0 {
+					message, _ = r.store.DetachMessage(interruptedMessage)
+				}
+				failure, interrupted, interruptedMessage = "", nil, 0
+			}
 			inFlight, inFlightMessage = nil, 0
 			if ev.Usage != nil {
 				turn.InputTokens = ev.Usage.InputTokens

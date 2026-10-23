@@ -57,6 +57,8 @@ test("a passage can be asked about in a thread, which can become a task", async 
   const back = page.getByRole("button", { name: /Continued from a thread in/ });
   await expect(back).toBeVisible();
   await expect(conversation(page)).toHaveCount(4);
+  // Its copies of the thread's prompts have no turn, but they ran there.
+  await expect(conversation(page).getByText("Not processed")).toHaveCount(0);
   await sendPrompt(page, "Carry on.");
   await expect(conversation(page).last()).toContainText("side thread about this passage");
   await expect(conversation(page).last()).toContainText("User: And Lyon?");

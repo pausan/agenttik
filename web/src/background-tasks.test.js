@@ -105,3 +105,8 @@ test("a stored prompt without a turn is waiting while held, else unprocessed", (
   assert.equal(promptState({ role: "user", content: "joined", waiting: true }), "waiting");
   assert.equal(promptState({ id: 6, role: "assistant", turn_id: 0 }), "");
 });
+
+test("a spawned task's copies of its thread's prompts ran there", () => {
+  assert.equal(promptState({ id: 7, role: "user", created_at: 100 }, [], 200), "");
+  assert.equal(promptState({ id: 8, role: "user", created_at: 200 }, [], 200), "unprocessed");
+});

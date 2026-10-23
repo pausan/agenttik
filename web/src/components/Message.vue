@@ -56,7 +56,9 @@ const classes = computed(() => [
 
 /* Whether the agent has seen this prompt, said only when it has not
    (specs/083-background-tasks.md). */
-const state = computed(() => (props.inThread ? "" : promptState(props.message, S.detail?.pending_follow_ups)));
+const state = computed(() =>
+  props.inThread ? "" : promptState(props.message, S.detail?.pending_follow_ups, S.detail?.session?.created_at),
+);
 const STATE = {
   waiting: {
     label: "Waiting for the agent",

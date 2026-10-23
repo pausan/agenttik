@@ -68,9 +68,11 @@ export function takeFollowUp(messages, message, replaces = 0) {
    while the running turn holds it, "unprocessed" when it has no turn and
    none will take it — the task stopped first, or Stop moved it in from the
    queue. Prompts that ran say nothing, and so does a bubble not stored yet,
-   unless sending it joined a running turn. */
-export function promptState(message, pending = []) {
-  if (message.role !== "user" || message.turn_id) return "";
+   unless sending it joined a running turn. So do the prompts a task spawned
+   from a thread copies from it: they have no turn either, but they ran in
+   the thread, before the task was created at since. */
+export function promptState(message, pending = [], since = 0) {
+  if (message.role !== "user" || message.turn_id || message.created_at < since) return "";
   if (!message.id) return message.waiting ? "waiting" : "";
   return pending.includes(message.id) ? "waiting" : "unprocessed";
 }

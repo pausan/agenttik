@@ -51,7 +51,9 @@ A reply that ends with background tasks still running leaves the turn open
 - A prompt of yours without a turn says so above its bubble: "Waiting for the
   agent" while the running turn holds it, "Not processed" once nothing will
   take it. That includes queued prompts Stop moved into the transcript
-  ([021](021-stop-active-tasks.md)) and prompts left by a crash.
+  ([021](021-stop-active-tasks.md)) and prompts left by a crash, but not the
+  copies a task opened from a thread starts with ([092](092-threads.md)):
+  they ran in the thread, and are older than the task.
 - A prompt that reaches the turn just as it stops taking prompts starts the
   next turn: Send waits up to 30 seconds for the turn to end, and Send now
   claims the turn's release, as Force send does, without cutting it short.

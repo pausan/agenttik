@@ -81,7 +81,9 @@ resume the thread's own provider session.
 **Open as task** (`POST /api/sessions/:id/spawn`, refused while the thread is
 working) creates an ordinary task in the same project with the thread's
 title and choices, `origin_id` naming the thread, and a copy of the thread's
-messages without its turns, so cost stays where it was spent. Its first turn
+messages without its turns, so cost stays where it was spent. The copies keep
+their times, older than the task, which is what keeps their prompts from
+reading as unprocessed ([083](083-background-tasks.md)). Its first turn
 inherits as a thread does, from the thread: a fork of the thread's provider
 session, or else the conversation, the passage and the thread as text. The
 thread stays under its message. The task's transcript starts with

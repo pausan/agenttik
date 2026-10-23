@@ -180,6 +180,11 @@ test("the codec is the best both ends have", async () => {
   strictEqual(await chooseCodec(["vp9", "vp8", "jpeg"], decoder), "vp8");
   strictEqual(await chooseCodec(["vp9", "vp8", "jpeg"], undefined), "jpeg");
   strictEqual(await chooseCodec(["jpeg"], decoder), "jpeg");
+  // Full colour where the browser decodes VP9 profile 1, else profile 0.
+  const vp9 = (profiles) => ({ isConfigSupported: async ({ codec }) => ({ supported: profiles.includes(codec) }) });
+  const all = ["vp9-444", "vp9", "vp8", "jpeg"];
+  strictEqual(await chooseCodec(all, vp9(["vp09.01.10.08", "vp09.00.10.08"])), "vp9-444");
+  strictEqual(await chooseCodec(all, vp9(["vp09.00.10.08"])), "vp9");
 });
 
 test("base64 decodes to bytes", () => {

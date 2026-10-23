@@ -86,7 +86,7 @@ const report = (q) => fetch('/result?' + new URLSearchParams(q));
 try {
   const info = await (await fetch('/api/screen')).json();
   if (!info.same_machine) throw new Error('the local desktop must not offer its own Screen button');
-  const codec = await chooseCodec(['vp9', 'vp8', 'jpeg']);
+  const codec = await chooseCodec(info.codecs);
   const canvas = document.getElementById('c');
   const stream = new ScreenStream(canvas, codec, {});
   let red = false;

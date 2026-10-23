@@ -80,10 +80,11 @@ func (m *Manager) Info() Info {
 	return info
 }
 
-// Codecs lists what this build can send, best first.
+// Codecs lists what this build can send, best first. vp9-444 is VP9 with
+// colour at full resolution (profile 1), for browsers that decode it.
 func Codecs() []string {
 	if vpx.Load() == nil {
-		return []string{"vp9", "vp8", "jpeg"}
+		return []string{"vp9-444", "vp9", "vp8", "jpeg"}
 	}
 	return []string{"jpeg"}
 }
@@ -175,6 +176,8 @@ const (
 	frameRate     = 30
 	frameInterval = time.Second / frameRate
 	ackTimeout    = 2 * time.Second
+	// A screen still for this long is encoded once more at higher quality.
+	settleDelay = 300 * time.Millisecond
 )
 
 // Watch starts a viewer. codec is the client's preference; the hello
@@ -184,7 +187,9 @@ func (m *Manager) Watch(codec string) (*Viewer, error) {
 	if err != nil {
 		return nil, err
 	}
-	if codec != "vp8" && codec != "jpeg" {
+	switch codec {
+	case "vp9-444", "vp8", "jpeg":
+	default:
 		codec = "vp9"
 	}
 	if codec != "jpeg" && vpx.Load() != nil {
@@ -345,6 +350,7 @@ func (v *Viewer) run(ctx context.Context) {
 		shapeKnown bool
 		last       time.Time // when the last frame was grabbed
 		pacing     bool      // waiting out the frame interval
+		refine     bool      // the last frame has not been refined yet
 	)
 	defer func() {
 		if enc != nil {
@@ -357,6 +363,11 @@ func (v *Viewer) run(ctx context.Context) {
 	pace := time.NewTimer(frameInterval)
 	pace.Stop()
 	defer pace.Stop()
+	// What moved was encoded for motion. Once the screen stops, it is
+	// encoded once more at higher quality, as remote desktops do.
+	settle := time.NewTimer(settleDelay)
+	settle.Stop()
+	defer settle.Stop()
 	for {
 		// A frame is grabbed when the screen changes, not on a clock: a clock
 		// at the same rate as an animation lands just before half its changes
@@ -377,6 +388,29 @@ func (v *Viewer) run(ctx context.Context) {
 			continue
 		case <-pointer.C:
 			if !v.sendPointer(ctx, &cx, &cy, &serial, &shapeKnown) {
+				return
+			}
+			continue
+		case <-settle.C:
+			if !refine || v.d.Changes() != changes {
+				continue
+			}
+			if !v.ready() {
+				settle.Reset(settleDelay)
+				continue
+			}
+			refine = false
+			v.mu.Lock()
+			kbps := int(v.rate.kbps)
+			v.mu.Unlock()
+			ms := int(time.Since(last).Milliseconds())
+			last = time.Now()
+			msg, size, err := enc.Refine(prev, ms, kbps)
+			if err != nil || size == 0 {
+				continue
+			}
+			msg.SW, msg.SH = enc.Size()[0], enc.Size()[1]
+			if !v.sendFrame(ctx, msg, size, kbps) {
 				return
 			}
 			continue
@@ -439,15 +473,25 @@ func (v *Viewer) run(ctx context.Context) {
 			continue
 		}
 		v.mu.Lock()
-		v.sent++
 		v.wantKey = false
-		msg.Seq, msg.SW, msg.SH, msg.Codec, msg.Cap = v.sent, w, h, v.codec, kbps
-		v.inFlight = append(v.inFlight, sentFrame{seq: v.sent, bytes: size, at: time.Now()})
 		v.mu.Unlock()
-		if !v.send(ctx, msg) {
+		msg.SW, msg.SH = w, h
+		if !v.sendFrame(ctx, msg, size, kbps) {
 			return
 		}
+		refine = true
+		settle.Reset(settleDelay)
 	}
+}
+
+// sendFrame numbers a frame and counts it in flight until acknowledged.
+func (v *Viewer) sendFrame(ctx context.Context, msg Message, size, kbps int) bool {
+	v.mu.Lock()
+	v.sent++
+	msg.Seq, msg.Codec, msg.Cap = v.sent, v.codec, kbps
+	v.inFlight = append(v.inFlight, sentFrame{seq: v.sent, bytes: size, at: time.Now()})
+	v.mu.Unlock()
+	return v.send(ctx, msg)
 }
 
 // sendPointer tells the viewer where the pointer is and, when it changed,
@@ -492,6 +536,9 @@ type frameEncoder interface {
 	Encode(pix, prev []byte, ms int, key bool) (msg Message, size int, err error)
 	// SetKbps holds the stream to about kbps; JPEG does it with quality.
 	SetKbps(kbps int)
+	// Refine encodes the last screen again at higher quality, within what
+	// kbps allows; size 0 when the encoder has nothing to add.
+	Refine(pix []byte, ms, kbps int) (msg Message, size int, err error)
 	Close()
 }
 
@@ -503,11 +550,12 @@ func newFrameEncoder(codec string, w, h int) (frameEncoder, error) {
 	if codec == "vp8" {
 		c = vpx.VP8
 	}
+	i444 := codec == "vp9-444"
 	scale := 1
 	if w > 2560 || h > 1600 {
 		scale = 2
 	}
-	enc, err := vpx.NewEncoder(w, h, vpx.Options{Codec: c, Scale: scale})
+	enc, err := vpx.NewEncoder(w, h, vpx.Options{Codec: c, Scale: scale, I444: i444})
 	if err != nil {
 		return nil, err
 	}
@@ -542,6 +590,31 @@ func (e *vpxEncoder) Close() { e.enc.Close() }
 
 func (e *vpxEncoder) Encode(pix, _ []byte, ms int, key bool) (Message, int, error) {
 	frame, isKey, err := e.enc.Encode(pix, e.w*4, ms, key)
+	return e.message(frame, isKey, err)
+}
+
+func (e *vpxEncoder) Refine(pix []byte, ms, kbps int) (Message, int, error) {
+	frame, err := e.enc.Refine(pix, e.w*4, ms, refineQ(kbps))
+	return e.message(frame, false, err)
+}
+
+// refineQ is the quantizer a still screen is refined to: a whole 1080p
+// screen just scrolled costs about 130 KB at 4, 40-60 KB at 10 and 45 KB at
+// 16 on a 1 Mbit/s cap, so each stays near half a second of the link.
+func refineQ(kbps int) int {
+	switch {
+	case kbps >= 4000:
+		return 4
+	case kbps >= 1500:
+		return 10
+	case kbps >= 600:
+		return 16
+	default:
+		return 24
+	}
+}
+
+func (e *vpxEncoder) message(frame []byte, isKey bool, err error) (Message, int, error) {
 	if err != nil || len(frame) == 0 {
 		return Message{}, 0, err
 	}

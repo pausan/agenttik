@@ -77,13 +77,28 @@ async function at(page, x, y) {
   return [box.x + (x / 800) * box.width, box.y + (y / 600) * box.height];
 }
 
-for (const codec of ["vp9", "jpeg"]) {
+/* Each codec as the browser that gets it: Chromium decodes VP9 with full
+   colour; one that cannot decode profile 1 gets 4:2:0; one without WebCodecs
+   gets JPEG bands. */
+const browsers = {
+  "vp9-444": undefined,
+  vp9: () => {
+    const supported = VideoDecoder.isConfigSupported.bind(VideoDecoder);
+    VideoDecoder.isConfigSupported = async (config) =>
+      config.codec.startsWith("vp09.01") ? { supported: false, config } : supported(config);
+  },
+  jpeg: () => {
+    delete window.VideoDecoder;
+  },
+};
+
+for (const [codec, setup] of Object.entries(browsers)) {
+  const label = codec.toUpperCase().replace("-444", " 4:4:4");
   test(`screen tab shows and drives another machine (${codec})`, async ({ browser }) => {
     test.skip(!haveX, "needs Xvfb, xev and xsel");
     const x = await startDisplay();
     const server = await startServer({ env: { DISPLAY: x.env.DISPLAY, WAYLAND_DISPLAY: "" } });
-    // A browser without WebCodecs gets JPEG bands.
-    const { page, context, errors } = await remotePage(browser, server, codec === "jpeg" ? () => { delete window.VideoDecoder; } : undefined);
+    const { page, context, errors } = await remotePage(browser, server, setup);
     const feedback = [];
     page.on("request", (request) => {
       if (request.method() === "POST" && request.url().includes("/api/screen/input")) {
@@ -103,7 +118,7 @@ for (const codec of ["vp9", "jpeg"]) {
         await page.getByRole("button", { name: "Turn on screen sharing" }).click();
       }
 
-      await expect(page.getByTestId("screen-summary")).toContainText(`${codec.toUpperCase()} ·`);
+      await expect(page.getByTestId("screen-summary")).toContainText(`${label} ·`);
       await expect(page.getByTestId("screen-summary")).toContainText("800×600");
       await expect.poll(async () => {
         const inside = await pixel(page, 600, 450);

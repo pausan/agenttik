@@ -57,7 +57,7 @@ const cmdIsCtrl = computed(() => MACOS && S.screen?.os !== "darwin");
 const ctrlIsCmd = computed(() => !MACOS && S.screen?.os === "darwin");
 const summary = computed(() => {
   if (status.value !== "live") return "";
-  const parts = [state.codec.toUpperCase(), `${state.fps} fps`];
+  const parts = [state.codec.toUpperCase().replace("-444", " 4:4:4"), `${state.fps} fps`];
   if (state.kbps) parts.push(state.kbps >= 1000 ? `${(state.kbps / 1000).toFixed(1)} Mbps` : `${state.kbps} kbps`);
   if (state.sw) parts.push(`${state.sw}×${state.sh}`);
   return parts.join(" · ");

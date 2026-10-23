@@ -12,8 +12,10 @@ import { apiURL } from "./api.js";
 import { openEventStream } from "./eventStream.js";
 
 /* WebCodecs names for what the server sends. Profile 0, level 1.0, 8 bits:
-   a decoder that accepts this accepts any 8-bit 4:2:0 stream. */
-const WEBCODECS = { vp9: "vp09.00.10.08", vp8: "vp8" };
+   a decoder that accepts this accepts any 8-bit 4:2:0 stream. Profile 1 is
+   the same with colour at full resolution (4:4:4), which not every browser
+   decodes. */
+const WEBCODECS = { "vp9-444": "vp09.01.10.08", vp9: "vp09.00.10.08", vp8: "vp8" };
 
 /* chooseCodec picks the best codec both ends have: the server's list is
    best first, and a browser without WebCodecs (or without that decoder)

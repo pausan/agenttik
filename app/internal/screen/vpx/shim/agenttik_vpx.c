@@ -24,6 +24,7 @@ typedef struct {
   vpx_codec_enc_cfg_t cfg;
   vpx_image_t img;
   int scale; // 1, or 2 to halve each side of the source
+  int i444;  // full-resolution colour (VP9 profile 1) rather than 4:2:0
   int src_w, src_h;
   int64_t pts;
   uint8_t *out;
@@ -34,14 +35,23 @@ static const char *last_error = "";
 
 EXPORT const char *avx_error(void) { return last_error; }
 
+// avx_abi numbers the calls below. Go checks it before calling anything, so a
+// library built from an older shim is refused rather than called wrongly.
+EXPORT int avx_abi(void) { return 2; }
+
 // avx_open starts an encoder for a src_w x src_h screen, encoded at that size
 // divided by scale. codec is 8 or 9. crf is the constant quality level and
-// kbps its cap; speed is libvpx's cpu-used.
+// kbps its cap; speed is libvpx's cpu-used. i444 keeps colour at full
+// resolution, which only VP9 (profile 1) can.
 EXPORT avx *avx_open(int codec, int src_w, int src_h, int scale, int threads,
-                     int kbps, int crf, int speed) {
+                     int kbps, int crf, int speed, int i444) {
   vpx_codec_iface_t *iface =
       codec == 9 ? vpx_codec_vp9_cx() : vpx_codec_vp8_cx();
   if (scale != 2) scale = 1;
+  if (i444 && codec != 9) {
+    last_error = "4:4:4 needs VP9";
+    return NULL;
+  }
   int w = src_w / scale, h = src_h / scale;
   if (w < 16 || h < 16) {
     last_error = "screen too small";
@@ -54,6 +64,7 @@ EXPORT avx *avx_open(int codec, int src_w, int src_h, int scale, int threads,
   }
   cfg.g_w = w;
   cfg.g_h = h;
+  cfg.g_profile = i444 ? 1 : 0;
   // Milliseconds: frames come when the screen changes, not on a clock.
   cfg.g_timebase.num = 1;
   cfg.g_timebase.den = 1000;
@@ -94,7 +105,8 @@ EXPORT avx *avx_open(int codec, int src_w, int src_h, int scale, int threads,
   } else {
     vpx_codec_control(&e->codec, VP8E_SET_STATIC_THRESHOLD, 100);
   }
-  if (!vpx_img_alloc(&e->img, VPX_IMG_FMT_I420, w, h, 32)) {
+  if (!vpx_img_alloc(&e->img, i444 ? VPX_IMG_FMT_I444 : VPX_IMG_FMT_I420, w,
+                     h, 32)) {
     vpx_codec_destroy(&e->codec);
     free(e);
     last_error = "out of memory";
@@ -102,6 +114,7 @@ EXPORT avx *avx_open(int codec, int src_w, int src_h, int scale, int threads,
   }
   e->cfg = cfg;
   e->scale = scale;
+  e->i444 = i444;
   e->src_w = src_w;
   e->src_h = src_h;
   return e;
@@ -111,6 +124,41 @@ EXPORT avx *avx_open(int codec, int src_w, int src_h, int scale, int threads,
 // is decoded as.
 static inline uint8_t luma(int r, int g, int b) {
   return (uint8_t)(((66 * r + 129 * g + 25 * b + 128) >> 8) + 16);
+}
+static inline uint8_t chroma_u(int r, int g, int b) {
+  return (uint8_t)(((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128);
+}
+static inline uint8_t chroma_v(int r, int g, int b) {
+  return (uint8_t)(((112 * r - 94 * g - 18 * b + 128) >> 8) + 128);
+}
+
+// to_i444 converts a BGRA screen with colour for every encoded pixel,
+// averaging each scale x scale block.
+static void to_i444(avx *e, const uint8_t *bgra, int stride) {
+  vpx_image_t *img = &e->img;
+  int w = img->d_w, h = img->d_h, s = e->scale;
+  for (int y = 0; y < h; y++) {
+    const uint8_t *r0 = bgra + (size_t)(s * y) * stride;
+    const uint8_t *r1 = r0 + (s == 2 ? stride : 0);
+    uint8_t *yo = img->planes[0] + (size_t)y * img->stride[0];
+    uint8_t *uo = img->planes[1] + (size_t)y * img->stride[1];
+    uint8_t *vo = img->planes[2] + (size_t)y * img->stride[2];
+    for (int x = 0; x < w; x++) {
+      int bl, gr, rd;
+      if (s == 1) {
+        const uint8_t *p = r0 + 4 * x;
+        bl = p[0], gr = p[1], rd = p[2];
+      } else {
+        const uint8_t *a = r0 + 8 * x, *b = r1 + 8 * x;
+        bl = (a[0] + a[4] + b[0] + b[4] + 2) >> 2;
+        gr = (a[1] + a[5] + b[1] + b[5] + 2) >> 2;
+        rd = (a[2] + a[6] + b[2] + b[6] + 2) >> 2;
+      }
+      yo[x] = luma(rd, gr, bl);
+      uo[x] = chroma_u(rd, gr, bl);
+      vo[x] = chroma_v(rd, gr, bl);
+    }
+  }
 }
 
 // to_i420 converts a BGRA screen into the encoder's image, averaging each
@@ -167,16 +215,34 @@ static void to_i420(avx *e, const uint8_t *bgra, int stride) {
 }
 
 // avx_encode compresses one screen taken ms after the previous one (0 for
-// the first). It answers the frame's length, 0 when the encoder produced
-// nothing, or -1 on failure; the bytes stay at *out until the next call.
-// *key says whether the frame can be decoded on its own.
+// the first). max_q above 0 holds this frame alone to that quantizer
+// (0-63): encoding a screen that has stopped changing again this way sharpens
+// what motion left blurred. It answers the frame's length, 0 when the
+// encoder produced nothing, or -1 on failure; the bytes stay at *out until
+// the next call. *key says whether the frame can be decoded on its own.
 EXPORT int avx_encode(avx *e, const uint8_t *bgra, int stride, int ms,
-                      int force_key, uint8_t **out, int *key) {
-  to_i420(e, bgra, stride);
+                      int force_key, int max_q, uint8_t **out, int *key) {
+  if (e->i444)
+    to_i444(e, bgra, stride);
+  else
+    to_i420(e, bgra, stride);
   if (ms < 1) ms = 1;
   vpx_enc_frame_flags_t flags = force_key ? VPX_EFLAG_FORCE_KF : 0;
-  if (vpx_codec_encode(&e->codec, &e->img, e->pts, ms, flags,
-                       VPX_DL_REALTIME)) {
+  int held = max_q > 0 && max_q < (int)e->cfg.rc_max_quantizer;
+  if (held) {
+    vpx_codec_enc_cfg_t cfg = e->cfg;
+    cfg.rc_max_quantizer = max_q;
+    if ((int)cfg.rc_min_quantizer > max_q) cfg.rc_min_quantizer = max_q;
+    if (vpx_codec_enc_config_set(&e->codec, &cfg)) {
+      last_error = vpx_codec_error(&e->codec);
+      return -1;
+    }
+  }
+  vpx_codec_err_t err = vpx_codec_encode(&e->codec, &e->img, e->pts, ms,
+                                         flags, VPX_DL_REALTIME);
+  if (held && vpx_codec_enc_config_set(&e->codec, &e->cfg) && !err)
+    err = VPX_CODEC_ERROR;
+  if (err) {
     last_error = vpx_codec_error(&e->codec);
     return -1;
   }

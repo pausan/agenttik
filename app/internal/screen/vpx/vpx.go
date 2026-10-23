@@ -38,14 +38,16 @@ const (
 	// frame the bits its duration buys at the cap; a first frame of 1 ms
 	// starved VP9 to 31 dB where 250 ms gives 51 dB at any cap.
 	keyMs = 250
+
+	shimABI = 2 // avx_abi in shim/agenttik_vpx.c
 )
 
 var (
 	loadOnce sync.Once
 	loadErr  error
 
-	avxOpen   func(codec, w, h, scale, threads, kbps, crf, speed int32) uintptr
-	avxEncode func(e uintptr, bgra unsafe.Pointer, stride, ms, forceKey int32, out *unsafe.Pointer, key *int32) int32
+	avxOpen   func(codec, w, h, scale, threads, kbps, crf, speed, i444 int32) uintptr
+	avxEncode func(e uintptr, bgra unsafe.Pointer, stride, ms, forceKey, maxQ int32, out *unsafe.Pointer, key *int32) int32
 	avxClose  func(e uintptr)
 	avxKbps   func(e uintptr, kbps int32) int32
 	avxError  func() string
@@ -70,6 +72,14 @@ func load() error {
 	handle, err := openLibrary(path)
 	if err != nil {
 		return fmt.Errorf("load screen encoder: %w", err)
+	}
+	// A library built from another shim takes other arguments.
+	var abi func() int32
+	if sym, err := findSymbol(handle, "avx_abi"); err == nil {
+		purego.RegisterFunc(&abi, sym)
+	}
+	if abi == nil || abi() != shimABI {
+		return errors.New("screen encoder library is out of date; rebuild it with make vpx")
 	}
 	purego.RegisterLibFunc(&avxOpen, handle, "avx_open")
 	purego.RegisterLibFunc(&avxEncode, handle, "avx_encode")
@@ -119,6 +129,7 @@ type Encoder struct {
 	Codec  int
 	Width  int // encoded size
 	Height int
+	I444   bool
 }
 
 // Options shape an encoder. Zero values take the measured defaults.
@@ -127,6 +138,9 @@ type Options struct {
 	Scale   int // 1, or 2 to halve each side
 	Threads int
 	Kbps    int // cap on the constant-quality bitrate
+	// I444 keeps colour at full resolution (VP9 profile 1), so coloured text
+	// stays sharp.
+	I444 bool
 }
 
 // NewEncoder opens an encoder for w x h BGRA screens.
@@ -150,16 +164,36 @@ func NewEncoder(w, h int, opts Options) (*Encoder, error) {
 	if opts.Codec == VP8 {
 		crf, speed = crfVP8, speedVP8
 	}
-	h0 := avxOpen(int32(opts.Codec), int32(w), int32(h), int32(opts.Scale), int32(opts.Threads), int32(opts.Kbps), int32(crf), int32(speed))
+	i444 := int32(0)
+	if opts.I444 {
+		i444 = 1
+	}
+	h0 := avxOpen(int32(opts.Codec), int32(w), int32(h), int32(opts.Scale), int32(opts.Threads), int32(opts.Kbps), int32(crf), int32(speed), i444)
 	if h0 == 0 {
 		return nil, fmt.Errorf("open VP%d encoder: %s", opts.Codec, avxError())
 	}
-	return &Encoder{handle: h0, Codec: opts.Codec, Width: w / opts.Scale, Height: h / opts.Scale}, nil
+	return &Encoder{handle: h0, Codec: opts.Codec, Width: w / opts.Scale, Height: h / opts.Scale, I444: opts.I444}, nil
 }
 
 // Encode compresses one BGRA screen taken ms after the previous one. The
 // returned bytes are a copy; nil means the encoder had nothing to say.
 func (e *Encoder) Encode(bgra []byte, stride, ms int, forceKey bool) (frame []byte, key bool, err error) {
+	return e.encode(bgra, stride, ms, forceKey, 0)
+}
+
+// Refine encodes the screen last given to Encode again, no worse than
+// quantizer maxQ (0-63), sharpening what was blurred while it moved. Only
+// VP9 can: VP8 refuses a new quantizer range mid-stream, and its static
+// threshold skips blocks whose source did not change.
+func (e *Encoder) Refine(bgra []byte, stride, ms, maxQ int) (frame []byte, err error) {
+	if e.Codec != VP9 {
+		return nil, nil
+	}
+	frame, _, err = e.encode(bgra, stride, ms, false, maxQ)
+	return frame, err
+}
+
+func (e *Encoder) encode(bgra []byte, stride, ms int, forceKey bool, maxQ int) (frame []byte, key bool, err error) {
 	if len(bgra) == 0 {
 		return nil, false, errors.New("empty screen")
 	}
@@ -170,7 +204,7 @@ func (e *Encoder) Encode(bgra []byte, stride, ms int, forceKey bool) (frame []by
 	}
 	var out unsafe.Pointer
 	var isKey int32
-	n := avxEncode(e.handle, unsafe.Pointer(&bgra[0]), int32(stride), int32(ms), force, &out, &isKey)
+	n := avxEncode(e.handle, unsafe.Pointer(&bgra[0]), int32(stride), int32(ms), force, int32(maxQ), &out, &isKey)
 	runtime.KeepAlive(bgra)
 	if n < 0 {
 		return nil, false, fmt.Errorf("encode: %s", avxError())

@@ -117,6 +117,47 @@ func TestChangeBitrateWhileEncoding(t *testing.T) {
 	}
 }
 
+// Refining a still screen adds detail once, then the stream is back to its
+// own quality: an unchanged screen costs next to nothing again.
+func TestRefineAddsDetailThenSettles(t *testing.T) {
+	needLibrary(t)
+	for _, i444 := range []bool{false, true} {
+		enc, err := NewEncoder(640, 360, Options{Codec: VP9, Kbps: 500, I444: i444})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var screen []byte
+		for i := 0; i < 5; i++ {
+			screen = screenBGRA(640, 360, i*4)
+			if _, _, err := enc.Encode(screen, 640*4, 33, i == 0); err != nil {
+				t.Fatal(err)
+			}
+		}
+		plain, _, _ := enc.Encode(screen, 640*4, 33, false)
+		refined, err := enc.Refine(screen, 640*4, 300, 4)
+		if err != nil || len(refined) <= 2*len(plain) {
+			t.Fatalf("444 %v: refined %d bytes against %d unrefined, %v", i444, len(refined), len(plain), err)
+		}
+		after, _, _ := enc.Encode(screen, 640*4, 33, false)
+		if len(after) > len(refined)/4 {
+			t.Fatalf("444 %v: %d bytes after refining, %d refining", i444, len(after), len(refined))
+		}
+		enc.Close()
+	}
+}
+
+func TestFullColourIsVP9Only(t *testing.T) {
+	needLibrary(t)
+	enc, err := NewEncoder(640, 360, Options{Codec: VP9, I444: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	enc.Close()
+	if _, err := NewEncoder(640, 360, Options{Codec: VP8, I444: true}); err == nil {
+		t.Fatal("VP8 opened with 4:4:4")
+	}
+}
+
 // BenchmarkScroll1080p is the worst common case: the whole screen moving.
 func BenchmarkScroll1080p(b *testing.B) {
 	needLibrary(b)

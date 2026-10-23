@@ -34,6 +34,9 @@ func (e *jpegEncoder) SetKbps(kbps int) {
 	e.quality = max(25, min(jpegQuality, 20+kbps/50))
 }
 
+// Refine adds nothing: JPEG bands are sent once, at the cap's quality.
+func (e *jpegEncoder) Refine([]byte, int, int) (Message, int, error) { return Message{}, 0, nil }
+
 func (e *jpegEncoder) Encode(pix, prev []byte, _ int, key bool) (Message, int, error) {
 	stride := e.w * 4
 	var changed []int

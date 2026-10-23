@@ -92,6 +92,37 @@ func TestViewerSendsFramesOnlyWhenTheScreenChanges(t *testing.T) {
 	}
 }
 
+// A screen that stops changing is encoded once more at higher quality, and
+// then nothing more is sent. VP8 and JPEG have nothing to add.
+func TestViewerRefinesAStillScreenOnce(t *testing.T) {
+	for _, codec := range Codecs() {
+		t.Run(codec, func(t *testing.T) {
+			m, f := fakeManager(t, 320, 200)
+			v, err := m.Watch(codec)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer v.Close()
+			next(t, v, "hello")
+			v.Ack(next(t, v, "frame").Seq)
+			f.Fill(10, 70, 200, 100, 255, 0, 0)
+			moved := next(t, v, "frame")
+			v.Ack(moved.Seq)
+			if codec == "vp8" || codec == "jpeg" {
+				quiet(t, v, 2*settleDelay)
+				return
+			}
+			quiet(t, v, settleDelay*2/3)
+			refined := next(t, v, "frame")
+			if refined.Key || refined.Seq != moved.Seq+1 || refined.SW != 320 || refined.Codec != codec {
+				t.Fatalf("refined frame %+v", refined)
+			}
+			v.Ack(refined.Seq)
+			quiet(t, v, 2*settleDelay)
+		})
+	}
+}
+
 func TestViewerWaitsForAcknowledgements(t *testing.T) {
 	m, f := fakeManager(t, 160, 120)
 	v, err := m.Watch("jpeg")

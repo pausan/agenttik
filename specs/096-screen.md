@@ -5,8 +5,8 @@ for a person, in a Screen tab, and for an agent, through an HTTP API.
 
 ## The encoder
 
-Screens travel as VP9, or VP8 for browsers that cannot decode VP9, encoded by
-libvpx. Nothing is installed on the machine and nothing goes through cgo:
+Screens travel as VP9 with colour at full resolution (4:4:4, profile 1)
+where the browser decodes it, else VP9 4:2:0, else VP8, encoded by libvpx. Nothing is installed on the machine and nothing goes through cgo:
 
 - `scripts/build-vpx.sh [goos] [goarch]` builds a static libvpx (pinned
   version, VP8/VP9 encoders only, realtime only) and links it with
@@ -15,18 +15,22 @@ libvpx. Nothing is installed on the machine and nothing goes through cgo:
   `make build-web` run it when the library is missing or the shim changes
   (`make vpx`). CI builds it natively on Linux and macOS and cross-builds
   the Windows DLL on Linux with MinGW; `make build-windows-amd64` and
-  `make build-macos-arm64` build theirs when missing.
+  `make build-macos-arm64` build theirs when missing or older than the shim.
 - The release binary embeds its platform's library (about 1.8 MB). On first
   use it is written to the user cache directory, named by its hash, and loaded
   with purego, which works with `CGO_ENABLED=0` (web and Windows builds).
 - A build without the library still works. `vpx.Load` gives the reason and
-  the screen is sent as JPEG instead.
+  the screen is sent as JPEG instead. The same happens when the library's
+  `avx_abi` is not the one the Go code calls, as with one built from an
+  older shim.
 
-The shim is the whole API agenttik uses: `avx_open`, `avx_encode`,
+The shim is the whole API agenttik uses: `avx_abi`, `avx_open`, `avx_encode`,
 `avx_set_kbps`, `avx_close`, `avx_error`, with plain integers and pointers.
 libvpx's own API takes structs whose layout changes between versions and a variadic control
 call that cannot be made portably from Go. The shim also converts BGRA to
-I420 (BT.601), optionally halving each side by averaging.
+I420 or I444 (BT.601), optionally halving each side by averaging.
+`avx_encode` can hold one frame to a lower quantizer ceiling, then restores
+the stream's own.
 
 Settings come from measurements of 1080p desktop video (scrolling and typing):
 
@@ -35,6 +39,8 @@ Settings come from measurements of 1080p desktop video (scrolling and typing):
 | Constant quality with an adaptive bitrate cap | A fixed bitrate spends its whole budget on an unchanged screen; CQ halved typing traffic |
 | VP9 quality level 28 | Against 40: scrolling text at 42.6 dB PSNR instead of 37.5, for about 25% more bits and the same time |
 | Keyframes cover at least 250 ms | libvpx budgets a frame by its duration; a first frame of 1 ms came out at 31 dB, 250 ms gives 51 dB at any cap |
+| 4:4:4 when the browser decodes it | 4:2:0 alone caps a desktop near 36 dB in RGB; 4:4:4 scrolled at 44.8 dB against 35.7, for 18% more time (10.3 against 8.7 ms) and 13% more bits |
+| A still screen refined once (VP9) | After a full-screen scroll at 8 Mbps, one frame at quantizer 4 lifts 44.9 dB to 50.0 for about 130 KB; a second pass adds 0.3 dB |
 | VP9 speed 8, screen tuning, `aq-mode 3`, row multithreading | About 30% smaller than VP8 when scrolling, at equal SSIM |
 | VP8 speed 12, static threshold 100 | Above 12, quality falls apart in motion and bitrate doubles |
 | No lookahead, keyframes only on request | Lowest latency; a keyframe costs 10–30× a delta |
@@ -208,6 +214,15 @@ and still uses acknowledgement pacing.
 **Keyframes** are sent first, after a size change (a new encoder) and when
 the viewer asks (`RequestKey`, after a decode error).
 
+**Refinement.** Frames in motion are encoded at the stream's quality. When
+the screen has not changed for 300 ms after a frame, VP9 encodes the same
+screen once more with the quantizer held low, as remote desktops "top off"
+a still picture. The ceiling follows the cap, keeping the frame near half a
+second of the link: 4 from 4 Mbps, 10 from 1.5, 16 from 600 kbit/s, else
+24. It waits for the acknowledgement window like any frame, and only one is
+sent per still period. VP8 refuses a new quantizer range mid-stream and its
+static threshold skips unchanged blocks, so it and JPEG are not refined.
+
 **JPEG fallback.** With no VP8/VP9 library, or for a client without
 WebCodecs, frames are 64-row bands; only the bands that differ from the last
 frame are sent. Each is encoded on its own core at quality 25–75, following
@@ -246,20 +261,22 @@ orchestrator not to turn sharing on unless the user asks.
 draws on a 1080p Xvfb 30 times a second and reports what a viewer acknowledging
 at once receives. On a Ryzen AI 9 365:
 
-| Scene | VP9 | VP8 | JPEG |
-|-------|-----|-----|------|
-| Scrolling page of word-sized blocks | 29.0 fps, 0.94 Mbps | 28.8 fps, 0.53 Mbps | 28.8 fps, 76 Mbps |
-| One word added per frame | 28.8 fps, 0.06 Mbps | 28.6 fps, 0.08 Mbps | 28.4 fps, 3.4 Mbps |
+| Scene | VP9 4:4:4 | VP9 | VP8 | JPEG |
+|-------|-----------|-----|-----|------|
+| Scrolling page of word-sized blocks | 28.8 fps, 0.88 Mbps | 28.6 fps, 0.92 Mbps | 28.6 fps, 0.54 Mbps | 28.6 fps, 75 Mbps |
+| One word added per frame | 28.4 fps, 0.07 Mbps | 28.6 fps, 0.06 Mbps | 28.4 fps, 0.08 Mbps | 28.4 fps, 3.4 Mbps |
 
 Grabbing a 1080p screen over MIT-SHM takes 0.9 ms, comparing it with the last
 0.2 ms, and VP9-encoding an unchanged one 3.6 ms.
 
 Tests use `screen.Fake`: frames only on change, changed bands only, keyframes
-on request, pacing by acknowledgement, input order and release on close,
+on request, one refinement of a still VP9 screen and none for VP8 or JPEG,
+pacing by acknowledgement, input order and release on close,
 clipboard forwarding, screenshot scaling and action coordinates. Rate tests
 cover growth, congestion, recovery, bounded history and a busy VP9 screen
 through a simulated 1 Mbps link with 50 ms delay each way. Encoder tests
-change the bitrate without resetting the stream and check JPEG quality.
+change the bitrate without resetting the stream, refine and then settle back
+in 4:2:0 and 4:4:4, refuse 4:4:4 for VP8, and check JPEG quality.
 
 ## HTTP
 
@@ -323,8 +340,10 @@ why and offers **Check again**.
 Settings › Server has the same switch, on by default, in desktop and web launches.
 
 **Drawing** (`web/src/screen.js`, `ScreenView.vue`). `chooseCodec` takes the
-server's first codec that `VideoDecoder.isConfigSupported` accepts (VP9, then
-VP8), else JPEG. VP8/VP9 frames go through WebCodecs with
+server's first codec that `VideoDecoder.isConfigSupported` accepts
+(`vp9-444` as `vp09.01.10.08`, `vp9` as `vp09.00.10.08`, then VP8), else
+JPEG. Chromium (Chrome, Edge, WebView2) decodes profile 1; WebKitGTK 2.52
+does not, in any form of the codec string, and gets 4:2:0. VP8/VP9 frames go through WebCodecs with
 `optimizeForLatency` and are drawn onto a canvas. Delta frames before the
 first keyframe are acknowledged but not decoded. A decoder error closes the
 decoder and asks for a keyframe. JPEG bands are decoded with
@@ -377,7 +396,7 @@ startup and idle, key translation (text against keys, Cmd as Ctrl, AltGr,
 Option, released typed keys), pointer, fit and wheel
 arithmetic, every trackpad gesture, and codec choice.
 `e2e/tests/screen.spec.js` runs an Xvfb with an `xev` window per test. With
-VP9 and with JPEG it turns sharing on from the tab and checks drawn pixels,
+VP9 4:4:4, VP9 4:2:0 (a browser refusing profile 1) and JPEG it turns sharing on from the tab and checks drawn pixels,
 arrival feedback, a right click and a key reaching xev, clipboard both ways,
 full screen in and out with its toolbar dragged against an edge, and 0 fps on a still screen. It also checks a tablet
 tap clicking where it lands and the touch keyboard button, and that the machine itself is not
@@ -386,5 +405,5 @@ offered its own screen.
 `make test-desktop-screen` runs the real `screen.js` in a real Wails/WebKitGTK
 window, through the same loopback proxy the app uses, against a fake screen.
 It checks the screen is drawn and input comes back, and logs the codec the
-window picked. WebKitGTK 2.52 picks VP9: the window is a secure context, so
-WebCodecs and the clipboard API are there.
+window picked from the server's list. WebKitGTK 2.52 picks VP9 4:2:0: the
+window is a secure context, so WebCodecs and the clipboard API are there.

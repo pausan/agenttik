@@ -1,0 +1,183 @@
+// Package vpx encodes screens as VP8 or VP9 through libvpx, without cgo and
+// without anything installed: the release binary embeds a shared library for
+// its own platform (scripts/build-vpx.sh), writes it to the user cache once,
+// and loads it with purego. A build without that library says so through
+// Load, and the screen falls back to JPEG. See specs/096-screen.md.
+package vpx
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
+	"sync"
+	"unsafe"
+
+	"github.com/ebitengine/purego"
+)
+
+// Settings measured on 1080p desktop video, scrolling and typing: constant
+// quality with a bitrate cap keeps a still screen almost free, VP9's screen
+// tuning is about 30% smaller than VP8 at the same quality, and VP8 above
+// speed 12 loses visible quality for little time.
+const (
+	VP8 = 8
+	VP9 = 9
+
+	defaultKbps = 3000
+	crfVP9      = 40
+	crfVP8      = 30
+	speedVP9    = 8
+	speedVP8    = 12
+)
+
+var (
+	loadOnce sync.Once
+	loadErr  error
+
+	avxOpen   func(codec, w, h, scale, threads, kbps, crf, speed int32) uintptr
+	avxEncode func(e uintptr, bgra unsafe.Pointer, stride, ms, forceKey int32, out *unsafe.Pointer, key *int32) int32
+	avxClose  func(e uintptr)
+	avxError  func() string
+)
+
+// Load makes the library ready, once. Its error is the reason there is no
+// VP8/VP9 on this build or machine.
+func Load() error {
+	loadOnce.Do(func() { loadErr = load() })
+	return loadErr
+}
+
+func load() error {
+	data, err := embedded.ReadFile(libDir + "/" + libName)
+	if err != nil {
+		return fmt.Errorf("no screen encoder in this build for %s/%s", runtime.GOOS, runtime.GOARCH)
+	}
+	path, err := extract(data)
+	if err != nil {
+		return err
+	}
+	handle, err := openLibrary(path)
+	if err != nil {
+		return fmt.Errorf("load screen encoder: %w", err)
+	}
+	purego.RegisterLibFunc(&avxOpen, handle, "avx_open")
+	purego.RegisterLibFunc(&avxEncode, handle, "avx_encode")
+	purego.RegisterLibFunc(&avxClose, handle, "avx_close")
+	purego.RegisterLibFunc(&avxError, handle, "avx_error")
+	return nil
+}
+
+// extract writes the library under the user cache, named by its hash, so a
+// new build never loads an old copy and an unchanged one is written once.
+func extract(data []byte) (string, error) {
+	sum := sha256.Sum256(data)
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		dir = os.TempDir()
+	}
+	dir = filepath.Join(dir, "agenttik")
+	path := filepath.Join(dir, hex.EncodeToString(sum[:8])+"-"+libName)
+	if existing, err := os.ReadFile(path); err == nil && sha256.Sum256(existing) == sum {
+		return path, nil
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	tmp, err := os.CreateTemp(dir, "vpx-*")
+	if err != nil {
+		return "", err
+	}
+	_, werr := tmp.Write(data)
+	cerr := tmp.Close()
+	if werr != nil || cerr != nil {
+		os.Remove(tmp.Name())
+		return "", errors.Join(werr, cerr)
+	}
+	if err := os.Rename(tmp.Name(), path); err != nil {
+		os.Remove(tmp.Name())
+		return "", err
+	}
+	return path, nil
+}
+
+// Encoder turns screens of one size into one VP8 or VP9 stream. It is not
+// safe for concurrent use.
+type Encoder struct {
+	handle uintptr
+	Codec  int
+	Width  int // encoded size
+	Height int
+}
+
+// Options shape an encoder. Zero values take the measured defaults.
+type Options struct {
+	Codec   int // VP8 or VP9
+	Scale   int // 1, or 2 to halve each side
+	Threads int
+	Kbps    int // cap on the constant-quality bitrate
+}
+
+// NewEncoder opens an encoder for w x h BGRA screens.
+func NewEncoder(w, h int, opts Options) (*Encoder, error) {
+	if err := Load(); err != nil {
+		return nil, err
+	}
+	if opts.Codec != VP8 {
+		opts.Codec = VP9
+	}
+	if opts.Scale != 2 {
+		opts.Scale = 1
+	}
+	if opts.Threads <= 0 {
+		opts.Threads = min(4, max(1, runtime.NumCPU()/2))
+	}
+	if opts.Kbps <= 0 {
+		opts.Kbps = defaultKbps
+	}
+	crf, speed := crfVP9, speedVP9
+	if opts.Codec == VP8 {
+		crf, speed = crfVP8, speedVP8
+	}
+	h0 := avxOpen(int32(opts.Codec), int32(w), int32(h), int32(opts.Scale), int32(opts.Threads), int32(opts.Kbps), int32(crf), int32(speed))
+	if h0 == 0 {
+		return nil, fmt.Errorf("open VP%d encoder: %s", opts.Codec, avxError())
+	}
+	return &Encoder{handle: h0, Codec: opts.Codec, Width: w / opts.Scale, Height: h / opts.Scale}, nil
+}
+
+// Encode compresses one BGRA screen taken ms after the previous one. The
+// returned bytes are a copy; nil means the encoder had nothing to say.
+func (e *Encoder) Encode(bgra []byte, stride, ms int, forceKey bool) (frame []byte, key bool, err error) {
+	if len(bgra) == 0 {
+		return nil, false, errors.New("empty screen")
+	}
+	force := int32(0)
+	if forceKey {
+		force = 1
+	}
+	var out unsafe.Pointer
+	var isKey int32
+	n := avxEncode(e.handle, unsafe.Pointer(&bgra[0]), int32(stride), int32(ms), force, &out, &isKey)
+	runtime.KeepAlive(bgra)
+	if n < 0 {
+		return nil, false, fmt.Errorf("encode: %s", avxError())
+	}
+	if n == 0 {
+		return nil, false, nil
+	}
+	frame = make([]byte, n)
+	copy(frame, unsafe.Slice((*byte)(out), n))
+	return frame, isKey != 0, nil
+}
+
+// Close frees the encoder.
+func (e *Encoder) Close() {
+	if e.handle != 0 {
+		avxClose(e.handle)
+		e.handle = 0
+	}
+}

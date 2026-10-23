@@ -128,7 +128,13 @@ jobs:
         if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install --yes build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
+          sudo apt-get install --yes build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev nasm
+
+      # The screen viewer's VP8/VP9 encoder, embedded in the binary. Screen
+      # capture is Linux-only so far, so only Linux builds carry it.
+      - name: Build screen encoder
+        if: matrix.platform == 'linux'
+        run: scripts/build-vpx.sh linux ${{ matrix.goarch }}
 
       - name: Build embedded UI
         run: |

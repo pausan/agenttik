@@ -25,7 +25,11 @@ VERSION := $(shell git rev-parse --short=12 HEAD 2>/dev/null || echo dev)
 endif
 VERSION_LDFLAGS := -X main.version=$(VERSION)
 
-.PHONY: all build build-web build-windows-amd64 build-macos-arm64 run run-web test test-startup e2e vet fmt clean deps hooks ui ui-dev
+# VPX_LIB is the screen encoder library the binary embeds, built from source by
+# scripts/build-vpx.sh (needs git, a C compiler and nasm). See specs/096-screen.md.
+VPX_LIB := $(firstword $(wildcard app/internal/screen/vpx/lib/$(shell go env GOOS)_$(shell go env GOARCH)/*agenttikvpx*))
+
+.PHONY: all build build-web vpx build-windows-amd64 build-macos-arm64 run run-web test test-startup e2e vet fmt clean deps hooks ui ui-dev
 
 all: build
 
@@ -37,15 +41,21 @@ ui:
 ui-dev:
 	cd $(UI) && npm install --no-audit --no-fund && npm run dev
 
+## vpx: build the embedded screen encoder for this machine, once
+vpx:
+ifeq ($(VPX_LIB),)
+	scripts/build-vpx.sh
+endif
+
 ## build: desktop app (needs node, libwebkit2gtk-4.1-dev, libgtk-3-dev, gcc)
-build: ui
+build: ui vpx
 	go build -ldflags "$(VERSION_LDFLAGS)" -tags "$(DESKTOP_TAGS)" -o $(BIN) $(PKG)
 ifeq ($(shell uname -s),Darwin)
 	bash scripts/package-macos.sh $(BIN) $(BIN).app "$(VERSION)" $(BIN)_darwin.app.zip $(BIN)_darwin.dmg
 endif
 
 ## build-web: web server only, no cgo and no system dependencies beyond node
-build-web: ui
+build-web: ui vpx
 	CGO_ENABLED=0 go build -ldflags "$(VERSION_LDFLAGS)" -o $(BIN)-web $(PKG)
 
 ## build-windows-amd64: Windows x64 desktop binary and ZIP (needs Python 3.11+)

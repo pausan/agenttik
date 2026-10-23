@@ -13,6 +13,7 @@
 import { computed, nextTick, ref } from "vue";
 
 import { S, copyText, editMessage, setModel } from "../store";
+import { messageDate, messageTime } from "../message-time";
 import { promptImages, promptText } from "../prompt-images";
 import ConversationImage from "./ConversationImage.vue";
 import MarkdownContent from "./MarkdownContent.vue";
@@ -105,8 +106,16 @@ function onKey(e) {
       class="mb-0.5 flex items-center gap-1.5"
       :class="message.role === 'user' ? 'flex-row-reverse' : ''"
     >
-      <span class="text-[11px] font-medium tracking-wider text-dimmed uppercase">
-        {{ WHO[message.role] || message.role }}
+      <span class="text-[11px] text-dimmed">
+        <span class="font-medium tracking-wider uppercase">{{ WHO[message.role] || message.role }}</span>
+        <template v-if="message.created_at">
+          ·
+          <time
+            class="tabular-nums"
+            :datetime="new Date(message.created_at).toISOString()"
+            :title="messageDate(message.created_at)"
+          >{{ messageTime(message.created_at) }}</time>
+        </template>
       </span>
       <!-- The actions stay in the layout and only appear on hover, so a
            bubble does not shift when the pointer reaches it. -->

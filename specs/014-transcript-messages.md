@@ -25,6 +25,12 @@ Task switches reset this dismissal. The overlay does not shift transcript rows
 or saved scroll positions. Human nodes are cached when rows change; scrolling
 uses a binary search, and resize observations handle wrapping and growing output.
 
+Every message's role label is followed by the time it was written, as a
+24-hour clock with seconds (`YOU · 12:32:44`, `TOOL · 12:38:53`). Hovering the
+time shows the full date. It comes from the message's `created_at`; a message
+still streaming uses the time its first text arrived. One shared formatter
+serves every bubble, so long transcripts do not build one per message.
+
 Every message in a transcript can be copied. Hovering a bubble reveals the
 actions beside its role label; they occupy the layout at all times, so nothing
 shifts when the pointer arrives. The copy icon becomes a tick for a moment so

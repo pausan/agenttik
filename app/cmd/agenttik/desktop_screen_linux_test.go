@@ -6,7 +6,6 @@ import (
 	"context"
 	"net"
 	"net/http"
-	"net/http/httputil"
 	"net/url"
 	"os"
 	"os/exec"
@@ -76,8 +75,7 @@ func TestDesktopScreen(t *testing.T) {
 	go srv.Listener(ln)
 	defer srv.Shutdown()
 	target, _ := url.Parse("http://" + ln.Addr().String())
-	proxy := httputil.NewSingleHostReverseProxy(target)
-	proxy.FlushInterval = -1
+	proxy := localDesktopProxy(target, "", "")
 
 	sources := webModules(t, "screen.js", "eventStream.js")
 	sources["index.html"] = &fstest.MapFile{Data: []byte(`<canvas id="c"></canvas>
@@ -86,6 +84,8 @@ func TestDesktopScreen(t *testing.T) {
 import { chooseCodec, ScreenStream } from '/screen.js';
 const report = (q) => fetch('/result?' + new URLSearchParams(q));
 try {
+  const info = await (await fetch('/api/screen')).json();
+  if (!info.same_machine) throw new Error('the local desktop must not offer its own Screen button');
   const codec = await chooseCodec(['vp9', 'vp8', 'jpeg']);
   const canvas = document.getElementById('c');
   const stream = new ScreenStream(canvas, codec, {});

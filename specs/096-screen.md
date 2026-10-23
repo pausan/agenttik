@@ -216,10 +216,13 @@ connection's address is the client's. A loopback client is this machine. A
 remote connection can also use loopback. The UI recognizes remote profiles
 from the `remote` query and `--remote` connections from the
 `X-Agenttik-Remote` response header, independently of `same_machine`.
+The local desktop proxy omits `X-Forwarded-For`: Wails uses a placeholder
+client IP, so the server uses the proxy's real loopback address instead.
 
 Tests cover the switch, screenshots, actions, the clipboard, same-machine
 detection, and a viewer's stream, input and acknowledgements through a remote
-profile to a second instance.
+profile to a second instance. The native desktop test checks that the local
+window is recognized as the same machine, keeping Screen out of its prompt.
 
 ## The Screen tab
 

@@ -134,6 +134,11 @@ Keys use xdotool names (`ctrl+shift+t`, `Return`, `super`). The first failing
 action stops the list, and the answer names it. Waits are capped at 30
 seconds. The answer is the pointer's position in the request's space.
 
+The orchestrator's built-in prompt ([054](054-orchestrator-project.md))
+documents `GET /api/screen`, the screenshot and the actions through
+`agenttik --api`, which writes the PNG to stdout unchanged. It also tells the
+orchestrator not to turn sharing on unless the user asks.
+
 Tests use `screen.Fake`: frames only on change, changed bands only, keyframes
 on request, pacing by acknowledgement, input order and release on close,
 clipboard forwarding, screenshot scaling and action coordinates.

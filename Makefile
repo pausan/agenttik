@@ -61,14 +61,16 @@ endif
 build-web: ui vpx
 	CGO_ENABLED=0 go build -ldflags "$(VERSION_LDFLAGS)" -o $(BIN)-web $(PKG)
 
-## build-windows-amd64: Windows x64 desktop binary and ZIP (needs Python 3.11+)
+## build-windows-amd64: Windows x64 desktop binary and ZIP (needs Python 3.11+, MinGW and nasm)
 build-windows-amd64: ui
+	test -f app/internal/screen/vpx/lib/windows_amd64/agenttikvpx.dll || scripts/build-vpx.sh windows amd64
 	mkdir -p $(DIST)
 	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-H=windowsgui $(VERSION_LDFLAGS)" -tags "desktop production" -o $(DIST)/agenttik_windows_amd64.exe $(PKG)
 	python3 scripts/package-windows.py $(DIST)/agenttik_windows_amd64.exe
 
 ## build-macos-arm64: macOS ARM64 binary, signed .app, ZIP and DMG (run on macOS)
 build-macos-arm64: ui
+	test -f app/internal/screen/vpx/lib/darwin_arm64/libagenttikvpx.dylib || scripts/build-vpx.sh darwin arm64
 	mkdir -p $(DIST)
 	GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 go build -trimpath -ldflags "$(VERSION_LDFLAGS)" -tags "desktop production" -o $(DIST)/agenttik_darwin_arm64 $(PKG)
 	bash scripts/package-macos.sh $(DIST)/agenttik_darwin_arm64 $(DIST)/agenttik.app "$(VERSION)" $(DIST)/agenttik_darwin_arm64.app.zip $(DIST)/agenttik_darwin_arm64.dmg

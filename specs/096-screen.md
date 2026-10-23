@@ -13,7 +13,9 @@ libvpx. Nothing is installed on the machine and nothing goes through cgo:
   `app/internal/screen/vpx/shim/agenttik_vpx.c` into one shared library,
   `app/internal/screen/vpx/lib/<goos>_<goarch>/`. `make build` and
   `make build-web` run it when the library is missing or the shim changes
-  (`make vpx`). CI builds it for Linux, the only platform with screen capture so far.
+  (`make vpx`). CI builds it natively on Linux and macOS and cross-builds
+  the Windows DLL on Linux with MinGW; `make build-windows-amd64` and
+  `make build-macos-arm64` build theirs when missing.
 - The release binary embeds its platform's library (about 1.8 MB). On first
   use it is written to the user cache directory, named by its hash, and loaded
   with purego, which works with `CGO_ENABLED=0` (web and Windows builds).
@@ -119,6 +121,41 @@ Every Objective-C call runs in an autorelease pool on a locked thread.
 the Mac's real screen: a grab, the cursor's image, the layout, the clipboard
 with `pbcopy` and `pbpaste`, and, with Accessibility, a pointer move and
 Shift reaching the system. Without the variable only the pure parts run.
+
+### Windows
+
+`gdi_windows.go` shows the primary monitor through user32 and gdi32 with
+`golang.org/x/sys/windows`, no cgo:
+
+- **DPI:** the process asks to be per-monitor DPI aware first (it fails
+  harmlessly when already chosen), so sizes, the pointer and the picture are
+  real pixels.
+- **Capture:** `BitBlt` from the screen DC into a top-down 32-bit DIB
+  section, which is BGRX. Without `CAPTUREBLT`, which makes the pointer
+  flicker; the composited desktop includes layered windows anyway. A new
+  screen size makes a new DIB. GDI cannot tell when the screen changes, so
+  every grab counts as a change and the viewer's frame comparison skips
+  unchanged ones. The secure desktop (UAC prompts, the lock screen) cannot
+  be read, and a service has no desktop.
+- **Pointer:** `SendInput` with absolute coordinates, mapped so each lands
+  on its pixel, buttons and wheel notches of 120. Windows counts double
+  clicks itself. The shape's serial is its `HCURSOR`; the image is drawn with
+  `DrawIconEx` over black and over white, and the difference gives alpha,
+  which covers color, masked and monochrome cursors alike.
+- **Keys:** keysyms map to virtual keys, with scan codes and the extended
+  flag (right Ctrl and Alt, arrows, the Windows key). Characters use
+  `VkKeyScanW` in the current layout; `Type` adds or lifts Shift, allowing
+  for Caps Lock. A character that needs AltGr, or is on no key, goes as
+  `KEYEVENTF_UNICODE`. Windows ignores input aimed at an elevated window
+  from a process that is not; `SendInput` then reports it refused.
+- **Clipboard:** `CF_UNICODETEXT`, opened with no owner window and retried
+  for 100 ms while another program holds it. Changes come from
+  `GetClipboardSequenceNumber`, read twice a second like on macOS.
+
+`INPUT` layouts are checked at compile time. Tests for alpha recovery,
+coordinate mapping and key coverage run with `go test` on Windows;
+`AGENTTIK_SCREEN_LIVE=1` adds a grab, the cursor, the clipboard against
+PowerShell's `Set-Clipboard`, and a pointer move.
 
 ## Viewers
 

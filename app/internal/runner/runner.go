@@ -313,7 +313,9 @@ func (r *Runner) AcceptsPrompts(sessionID string) bool {
 // and a turn that ends first would otherwise take it along. stored is a prompt
 // the transcript holds already, one the agent never processed, and 0 for a new
 // one. It moves to the end once the provider has it, where a prompt sent now
-// goes.
+// goes. A queued prompt, one queued describes by its row's id, is stored by
+// its row until then, and leaves the queue for the transcript once the
+// provider has it.
 func (r *Runner) followUp(queued store.QueuedMessage, stored int64, anyChoice bool) (turn *store.Turn, joined *store.Message, ending <-chan struct{}, err error) {
 	sessionID, prompt := queued.SessionID, queued.Prompt
 	r.mu.Lock()
@@ -332,7 +334,8 @@ func (r *Runner) followUp(queued store.QueuedMessage, stored int64, anyChoice bo
 		return nil, nil, nil, &ChoiceError{Running: open.choice, Wanted: want}
 	}
 	var message *store.Message
-	if stored != 0 {
+	switch {
+	case stored != 0:
 		// Checked again under the lock queueing it takes as well: it may have
 		// just been queued, or sent from another click.
 		if message, err = r.store.GetMessage(stored); err != nil {
@@ -341,19 +344,36 @@ func (r *Runner) followUp(queued store.QueuedMessage, stored int64, anyChoice bo
 		if message.TurnID != 0 || slices.Contains(open.pending, stored) {
 			return nil, nil, nil, ErrNotUnprocessed
 		}
-	} else if message, err = r.store.AddMessage(sessionID, 0, store.RoleUser, prompt); err != nil {
-		return nil, nil, nil, err
+	case queued.ID != 0:
+		// Looked for under this lock, so of two Send nows for one row the
+		// second finds it gone instead of handing it over again.
+		if _, err := r.store.GetQueuedMessage(queued.ID); err != nil {
+			return nil, nil, nil, err
+		}
+	default:
+		if message, err = r.store.AddMessage(sessionID, 0, store.RoleUser, prompt); err != nil {
+			return nil, nil, nil, err
+		}
 	}
 	if err := open.followUp.Send(attachments.Resolve(prompt, r.store.Dir())); err != nil {
-		if stored == 0 {
+		if stored == 0 && queued.ID == 0 {
 			_ = r.store.DeleteMessage(message.ID)
 		}
 		open.followUp = nil
 		return nil, nil, open.released, nil
 	}
-	if stored != 0 {
+	switch {
+	case stored != 0:
 		if moved, _, err := r.store.MoveMessageToEnd(stored, 0); err == nil {
 			message = moved
+		}
+	case queued.ID != 0:
+		// A row deleted from the queue meanwhile is stored all the same:
+		// the provider has the prompt.
+		if message, err = r.store.QueuedToMessage(queued.ID); err != nil {
+			if message, err = r.store.AddMessage(sessionID, 0, store.RoleUser, prompt); err != nil {
+				return nil, nil, nil, err
+			}
 		}
 	}
 	open.pending = append(open.pending, message.ID)
@@ -792,7 +812,7 @@ func (r *Runner) ForceQueued(sessionID string, queuedID int64, mismatch Mismatch
 		return nil, err
 	}
 	if message != nil {
-		return message, r.store.RemoveQueuedMessage(queuedID)
+		return message, nil
 	}
 
 	r.mu.Lock()

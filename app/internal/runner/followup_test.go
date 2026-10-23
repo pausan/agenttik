@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -364,6 +365,66 @@ func TestProjectHearsBackgroundWork(t *testing.T) {
 	p.events <- agent.BackgroundEvent(task)
 	if ev := next(); ev.BackgroundTasks != 0 || !ev.AcceptsPrompts {
 		t.Fatalf("task ended: %+v", ev)
+	}
+	close(p.events)
+	waitFor(t, func() bool { return !r.Running(sess.ID) }, "the turn to end")
+}
+
+// Two Send nows on one queued prompt — two windows, a retry — hand it to the
+// turn once: the row is taken under the turn's lock, and the second finds it
+// gone.
+func TestSendNowTwiceHandsThePromptOverOnce(t *testing.T) {
+	p := newOpenProvider()
+	r, st, sess := setup(t, p)
+	openOn(t, p, r, sess.ID)
+	queued, err := r.Enqueue(sess.ID, "deploy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	errs := make(chan error, 2)
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			_, err := r.ForceQueued(sess.ID, queued[0].ID, Refuse)
+			errs <- err
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	var failed []error
+	for err := range errs {
+		if err != nil {
+			failed = append(failed, err)
+		}
+	}
+	if len(failed) != 1 || !errors.Is(failed[0], store.ErrNotFound) {
+		t.Fatalf("errors = %v, want one not found", failed)
+	}
+	got := 0
+	for done := false; !done; {
+		select {
+		case <-p.prompts:
+			got++
+		case <-time.After(200 * time.Millisecond):
+			done = true
+		}
+	}
+	stored := 0
+	for _, m := range mustMessages(t, st, sess.ID) {
+		if m.Content == "deploy" {
+			stored++
+		}
+	}
+	if got != 1 || stored != 1 {
+		t.Fatalf("provider handed %d copies, %d messages stored; want 1 and 1", got, stored)
+	}
+	if left, _ := st.ListQueuedMessages(sess.ID); len(left) != 0 {
+		t.Fatalf("still queued: %+v", left)
 	}
 	close(p.events)
 	waitFor(t, func() bool { return !r.Running(sess.ID) }, "the turn to end")

@@ -117,6 +117,39 @@ func (s *Store) MessageToQueue(id int64, provider string, accountID int64, model
 	return nil
 }
 
+// QueuedToMessage takes a waiting prompt out of its session's queue into the
+// transcript, as a user message without a turn, in one transaction: the
+// reverse of MessageToQueue, keeping the time it was accepted. It is never in
+// both, and of two callers after the same row, the second finds it gone.
+func (s *Store) QueuedToMessage(id int64) (*Message, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("unqueue message %d: %w", id, err)
+	}
+	defer tx.Rollback()
+	m := Message{Role: RoleUser}
+	if err := tx.QueryRow(`SELECT session_id, prompt, created_at FROM queued_messages WHERE id = ?`, id).
+		Scan(&m.SessionID, &m.Content, &m.CreatedAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("unqueue message %d: %w", id, err)
+	}
+	res, err := tx.Exec(`INSERT INTO messages (session_id, turn_id, role, content, created_at) VALUES (?, NULL, ?, ?, ?)`,
+		m.SessionID, m.Role, m.Content, m.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("unqueue message %d: %w", id, err)
+	}
+	m.ID, _ = res.LastInsertId()
+	if _, err := tx.Exec(`DELETE FROM queued_messages WHERE id = ?`, id); err != nil {
+		return nil, fmt.Errorf("unqueue message %d: %w", id, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("unqueue message %d: %w", id, err)
+	}
+	return &m, nil
+}
+
 // SetMessageContent updates a task's state without changing its transcript position.
 func (s *Store) SetMessageContent(id int64, content string) error {
 	_, err := s.db.Exec(`UPDATE messages SET content = ? WHERE id = ?`, content, id)

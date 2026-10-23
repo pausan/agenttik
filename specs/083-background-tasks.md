@@ -31,8 +31,10 @@ A reply that ends with background tasks still running leaves the turn open
 - Send hands the prompt to the turn instead of refusing it, and answers with
   the running turn. Send now on a queued prompt does the same instead of
   cancelling the turn (Force send), and answers `joined` with the stored
-  prompt and the remaining queue; its queue row goes only once the provider
-  has the prompt. The browser then updates only the queue: reading the
+  prompt and the remaining queue. Its queue row stays until the provider has
+  the prompt, then becomes the stored prompt in one transaction, so it is never
+  in both. The row is looked for under the turn's lock: of two Send nows for
+  one row, the second gets 404. The browser then updates only the queue: reading the
   transcript back would land after rows streamed meanwhile and replace them,
   the prompt included. Enqueue still waits for the turn to end, and the
   project's queue still waits for it too.

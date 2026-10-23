@@ -241,3 +241,9 @@ right click and a key reaching xev, clipboard both ways, full screen in and
 out, and 0 fps on a still screen. It also checks a tablet tap clicking where
 it lands and the touch keyboard button, and that the machine itself is not
 offered its own screen.
+
+`make test-desktop-screen` runs the real `screen.js` in a real Wails/WebKitGTK
+window, through the same loopback proxy the app uses, against a fake screen.
+It checks the screen is drawn and input comes back, and logs the codec the
+window picked. WebKitGTK 2.52 picks VP9: the window is a secure context, so
+WebCodecs and the clipboard API are there.

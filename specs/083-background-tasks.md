@@ -66,6 +66,12 @@ A reply that ends with background tasks still running leaves the turn open
   prompt then joins the turn, below the reply it waited behind: when rows were
   stored after it, it moves under a new id, and the event carries the old one
   in `replaces`. The browser swaps it, or the bubble drawn on send, in place.
+- Ids are the transcript's order, so a prompt without a turn changes id
+  whenever it moves below rows stored after it: as a turn takes it, as it is
+  sent again unprocessed, or as a turn ends without taking it. The first two
+  say so with `replaces`, on `follow_up` and `started`; the last is read back
+  with the transcript at the end of the turn. An id held for such a prompt is
+  only good until then.
 - A turn that ends before the agent starts on an accepted prompt — Stop,
   quitting the app, the CLI dying — moves it to the end of the transcript,
   still without a turn. After a provider outage that agenttik retries by

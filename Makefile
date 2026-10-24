@@ -33,6 +33,11 @@ VPX_LIB := $(firstword $(wildcard app/internal/screen/vpx/lib/$(shell go env GOO
 
 all: build
 
+.PHONY: speech
+## speech: build the native Whisper helper; speech weights download on first use
+speech:
+	bash scripts/build-speech.sh
+
 ## ui: compile the Vue UI into web/dist, which the binary embeds (needs node)
 ui:
 	cd $(UI) && npm install --no-audit --no-fund && npm run build
@@ -51,18 +56,19 @@ $(VPX_LIB): app/internal/screen/vpx/shim/agenttik_vpx.c scripts/build-vpx.sh
 endif
 
 ## build: desktop app (needs node, libwebkit2gtk-4.1-dev, libgtk-3-dev, gcc)
-build: ui vpx
+build: ui vpx speech
 	go build -ldflags "$(VERSION_LDFLAGS)" -tags "$(DESKTOP_TAGS)" -o $(BIN) $(PKG)
 ifeq ($(shell uname -s),Darwin)
 	bash scripts/package-macos.sh $(BIN) $(BIN).app "$(VERSION)" $(BIN)_darwin.app.zip $(BIN)_darwin.dmg
 endif
 
-## build-web: web server only, no cgo and no system dependencies beyond node
-build-web: ui vpx
+## build-web: web server without cgo; builds the native speech helper with CMake
+build-web: ui vpx speech
 	CGO_ENABLED=0 go build -ldflags "$(VERSION_LDFLAGS)" -o $(BIN)-web $(PKG)
 
 ## build-windows-amd64: Windows x64 desktop binary and ZIP (needs Python 3.11+, MinGW and nasm)
 build-windows-amd64: ui
+	bash scripts/build-speech.sh windows amd64
 	test app/internal/screen/vpx/lib/windows_amd64/agenttikvpx.dll -nt app/internal/screen/vpx/shim/agenttik_vpx.c || scripts/build-vpx.sh windows amd64
 	mkdir -p $(DIST)
 	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-H=windowsgui $(VERSION_LDFLAGS)" -tags "desktop production" -o $(DIST)/agenttik_windows_amd64.exe $(PKG)
@@ -70,6 +76,7 @@ build-windows-amd64: ui
 
 ## build-macos-arm64: macOS ARM64 binary, signed .app, ZIP and DMG (run on macOS)
 build-macos-arm64: ui
+	bash scripts/build-speech.sh darwin arm64
 	test app/internal/screen/vpx/lib/darwin_arm64/libagenttikvpx.dylib -nt app/internal/screen/vpx/shim/agenttik_vpx.c || scripts/build-vpx.sh darwin arm64
 	mkdir -p $(DIST)
 	GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 go build -trimpath -ldflags "$(VERSION_LDFLAGS)" -tags "desktop production" -o $(DIST)/agenttik_darwin_arm64 $(PKG)
@@ -94,6 +101,11 @@ test-desktop-remote:
 .PHONY: test-desktop-images
 test-desktop-images:
 	xvfb-run -a go test -tags "$(DESKTOP_TAGS)" $(PKG) -run '^TestDesktopImageUpload$$' -count=1
+
+## test-desktop-speech: native microphone API availability, without using hardware
+.PHONY: test-desktop-speech
+test-desktop-speech:
+	xvfb-run -a go test -tags "$(DESKTOP_TAGS)" $(PKG) -run '^TestDesktopMicrophoneAPI$$' -count=1
 
 ## test-desktop-html: native Wails/WebKit sandboxed HTML asset regression (needs Xvfb)
 .PHONY: test-desktop-html
@@ -148,4 +160,4 @@ hooks:
 ## deps: system packages the desktop build needs on Debian/Ubuntu. The UI
 ## build needs node 20 or newer, which is not installed from here.
 deps:
-	sudo apt-get install -y build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
+	sudo apt-get install -y build-essential cmake pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev

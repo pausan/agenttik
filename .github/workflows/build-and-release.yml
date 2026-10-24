@@ -72,19 +72,25 @@ jobs:
   # The Windows screen encoder is cross-built with MinGW, which Linux has
   # ready; the Windows build downloads it.
   screen-encoder-windows:
-    name: Screen encoder for Windows
+    name: Native helpers for Windows
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-      - run: sudo apt-get update && sudo apt-get install --yes mingw-w64 nasm
+      - run: sudo apt-get update && sudo apt-get install --yes mingw-w64 nasm cmake
       - run: scripts/build-vpx.sh windows amd64
+      - run: bash scripts/build-speech.sh windows amd64
       - uses: actions/upload-artifact@v7
         with:
           name: screen-encoder-windows-amd64
           path: app/internal/screen/vpx/lib/windows_amd64/agenttikvpx.dll
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          name: speech-helper-windows-amd64
+          path: app/internal/speech/bin/whisper-windows-amd64.exe
           if-no-files-found: error
 
   build:
@@ -146,12 +152,23 @@ jobs:
         if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install --yes build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev nasm
+          sudo apt-get install --yes build-essential cmake pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev nasm
 
       # The screen viewer's VP8/VP9 and Opus encoders, embedded in the binary.
       - name: Build screen encoder
         if: matrix.platform != 'windows'
         run: scripts/build-vpx.sh ${{ matrix.platform }} ${{ matrix.goarch }}
+
+      - name: Build speech helper
+        if: matrix.platform != 'windows'
+        run: bash scripts/build-speech.sh ${{ matrix.platform }} ${{ matrix.goarch }}
+
+      - name: Fetch speech helper
+        if: matrix.platform == 'windows'
+        uses: actions/download-artifact@v7
+        with:
+          name: speech-helper-windows-amd64
+          path: app/internal/speech/bin
 
       - name: Fetch screen encoder
         if: matrix.platform == 'windows'

@@ -43,6 +43,7 @@ func (s *Store) ResetPreferences() error {
 		`UPDATE desktop_config SET close_to_tray = 0, toggle_shortcut = 'Ctrl+Shift+A' WHERE id = 1`,
 		`DELETE FROM starred_models`,
 		`DELETE FROM action_models`,
+		`UPDATE speech_config SET model = 'whistle', correct = 0 WHERE id = 1`,
 		`DELETE FROM hidden_model_choices`,
 		`UPDATE provider_accounts SET is_default = 0`,
 	} {

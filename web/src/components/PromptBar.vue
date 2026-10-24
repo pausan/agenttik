@@ -6,6 +6,8 @@ import { ago } from "../api";
 import Chord from "./Chord.vue";
 import ContextPane from "./ContextPane.vue";
 import ModelSelection from "./ModelSelection.vue";
+import MicrophoneButton from "./MicrophoneButton.vue";
+import { dictation, dictationLabel } from "../dictation";
 import { useTextHistory } from "../text-history";
 import { isMobile } from "../ui";
 import { clipboardImages, promptImages, promptText, readClipboardImages, uploadImage, withImages } from "../prompt-images";
@@ -302,6 +304,7 @@ function runMenuAction(action) {
           <span class="text-dimmed">{{ S.detail.session.permission === 'full' ? 'Commands run on the Agenttik host.' : 'Full access enables shell and Python.' }}</span>
         </div>
         <div class="prompt-controls flex items-center gap-1.5">
+          <MicrophoneButton />
           <div class="prompt-model-controls contents">
             <ModelSelection
               :provider="S.detail.session.provider"
@@ -313,6 +316,7 @@ function runMenuAction(action) {
               @change="chooseModel"
             />
           </div>
+          <span v-if="dictation.phase !== 'idle'" role="status" class="min-w-0 truncate text-xs text-muted">{{ dictationLabel }}</span>
           <span class="flex-1 max-md:hidden" />
           <div class="prompt-action-controls contents">
             <UPopover :content="{ side: 'top', sideOffset: 8 }">

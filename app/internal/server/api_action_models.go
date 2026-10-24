@@ -12,6 +12,7 @@ import (
 var automaticActions = []struct{ ID, Label, Description string }{
 	{"merge", "Merge and rebase conflicts", "Astra High or Opus High resolves conflicts. Git completes clean operations without a model."},
 	{"commit_message", "Commit messages", "A lightweight model drafts a message from staged changes."},
+	{"transcription", "Transcription correction", "Luna or Haiku corrects dictated text when enabled in General settings."},
 }
 
 func (s *Server) defaultActionModel(action string) store.ActionModel {
@@ -34,7 +35,7 @@ func (s *Server) defaultActionModel(action string) store.ActionModel {
 			continue
 		}
 		var model, effort string
-		if action == "commit_message" {
+		if action == "commit_message" || action == "transcription" {
 			if small, ok := p.(agent.SmallModel); ok {
 				model, effort = small.SmallModel()
 			}

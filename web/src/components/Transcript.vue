@@ -21,6 +21,8 @@ import ApprovalCard from "./ApprovalCard.vue";
 import ModelSelection from "./ModelSelection.vue";
 import StickyPrompt from "./StickyPrompt.vue";
 import TranscriptRows from "./TranscriptRows.vue";
+import MicrophoneButton from "./MicrophoneButton.vue";
+import { dictation, dictationLabel } from "../dictation";
 
 defineProps({ findOpen: Boolean });
 const emit = defineEmits(["start-tour"]);
@@ -462,6 +464,11 @@ watch(
       @mouseup="readSelection"
       @keyup.shift="readSelection"
     >
+      <div v-if="!S.detail.messages?.length && !S.detail.running" class="flex min-h-[45dvh] flex-col items-center justify-center gap-4 text-center" data-find-ignore>
+        <MicrophoneButton large />
+        <p role="status" class="text-sm text-muted">{{ dictation.phase === 'idle' ? 'Tap to dictate a prompt' : dictationLabel }}</p>
+        <p class="text-xs text-dimmed">Stop when you finish. Review the text before sending.</p>
+      </div>
       <UButton
         v-if="picked"
         class="absolute z-20 shadow"

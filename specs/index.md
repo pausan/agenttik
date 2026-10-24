@@ -14,6 +14,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [085](085-remote-profiles.md) | Remote profiles, live activity, sign-in, discovery and finding a moved machine |
 | [094](094-trusted-machines.md) | Machine keys, automatic sign-in to remotes, and the trusted list in Server settings |
 | [096](096-screen.md) | Screen viewing, sound and control, adaptive bitrate, VP8/VP9 and Opus encoding, and the agent screen API |
+| [097](097-speech-input.md) | Microphone dictation, first-use models, Whisper choices and optional transcript correction |
 | [066](066-private-mode.md) | Temporary instances and cleanup on exit |
 | [065](065-opencode-subscription.md) | OpenCode Go, optional CLI, direct coding turns and provider policy review |
 | [064](064-remote-connections.md) | Remote connections, server names, discovery and login |

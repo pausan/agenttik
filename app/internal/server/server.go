@@ -37,6 +37,7 @@ import (
 	"github.com/pausan/agenttik/app/internal/runner"
 	"github.com/pausan/agenttik/app/internal/screen"
 	"github.com/pausan/agenttik/app/internal/smartsearch"
+	"github.com/pausan/agenttik/app/internal/speech"
 	"github.com/pausan/agenttik/app/internal/store"
 	"github.com/pausan/agenttik/app/internal/terminals"
 	"github.com/pausan/agenttik/app/internal/update"
@@ -59,6 +60,7 @@ type Server struct {
 	gitLocks sync.Map // canonical checkout path -> *sync.Mutex
 	watchers *watchers
 	search   *smartsearch.Service
+	speech   speechEngine
 
 	// terminals are the shells behind the terminal tabs, held here rather
 	// than in the store because a shell only exists while this process does.
@@ -157,6 +159,7 @@ func New(s *store.Store, reg *agent.Registry, r *runner.Runner) *Server {
 		return s.ListSessions(store.SessionFilter{})
 	})
 	srv.remotes = newRemoteManager(s.Dir(), s.MachineID, s.ServerName)
+	srv.speech = speech.New(filepath.Join(s.Dir(), "speech"))
 	app.Use(routeHTMLScope)
 	app.Use(srv.routeRemote)
 	app.Use(srv.routeProfile)
@@ -262,6 +265,10 @@ func (s *Server) routes() {
 	api.Get("/action-models", s.getActionModels)
 	api.Put("/action-models/:action", s.putActionModel)
 	api.Get("/general", s.getGeneralConfig)
+	api.Get("/speech", s.getSpeech)
+	api.Put("/speech", s.putSpeech)
+	api.Post("/speech/prepare", s.prepareSpeech)
+	api.Post("/speech/transcribe", s.transcribeSpeech)
 	api.Put("/general", s.putGeneralConfig)
 	api.Post("/general/reset", s.resetPreferences)
 	api.Get("/server", s.getServerConfig)
@@ -383,6 +390,9 @@ func (s *Server) Listener(ln net.Listener) error { return s.app.Listener(retryAc
 // remaining connections. The timeout is a backstop: a stuck client must never
 // keep the app alive after the window is closed.
 func (s *Server) Shutdown() error {
+	if s.apiRoot == nil {
+		s.speech.Close()
+	}
 	if s.tunnel != nil {
 		s.tunnel.Stop() // tell the edge first, while the backend still answers
 	}

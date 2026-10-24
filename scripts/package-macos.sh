@@ -44,6 +44,7 @@ cat > "$bundle/Contents/Info.plist" <<PLIST
   <key>CFBundleGetInfoString</key><string>agenttik $version</string>
   <key>CFBundleIconFile</key><string>agenttik</string>
   <key>NSHighResolutionCapable</key><true/>
+  <key>NSMicrophoneUsageDescription</key><string>Dictate a prompt into Agenttik.</string>
 </dict>
 </plist>
 PLIST

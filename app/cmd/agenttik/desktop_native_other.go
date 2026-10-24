@@ -1,6 +1,6 @@
-//go:build desktop && !darwin
+//go:build desktop && !darwin && !linux
 
 package main
 
-// Only macOS needs native hooks once the window exists.
+// Windows needs no additional hooks once the window exists.
 func startNative(*window) {}

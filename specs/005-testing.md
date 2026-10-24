@@ -9,6 +9,7 @@ Tests cover logic, browser flows and the native desktop transport.
 | Startup budget | `e2e/tests/startup.spec.js` | `make test-startup` |
 | Browser tests | `e2e/tests/*.spec.js` (Playwright) | `make e2e` |
 | Linux desktop image uploads | `app/cmd/agenttik/desktop_images_linux_test.go` | `make test-desktop-images` |
+| Linux desktop microphone API | `app/cmd/agenttik/desktop_microphone_linux_test.go` | `make test-desktop-speech` |
 | Linux desktop terminal input | `app/cmd/agenttik/desktop_terminal_linux_test.go` | `make test-desktop-terminal` |
 | Linux desktop video playback | `app/cmd/agenttik/desktop_video_linux_test.go` | `make test-desktop-video` |
 | Linux desktop scrollbar layers | `app/cmd/agenttik/desktop_scrollbars_linux_test.go` | `make test-desktop-scrollbars` |

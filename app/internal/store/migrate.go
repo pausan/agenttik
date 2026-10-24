@@ -415,6 +415,12 @@ CREATE INDEX idx_sessions_parent ON sessions(parent_id) WHERE parent_id != '';`,
 	// use the same default when any server setting creates the config row.
 	`ALTER TABLE server_config DROP COLUMN screen_enabled;
 ALTER TABLE server_config ADD COLUMN screen_enabled INTEGER NOT NULL DEFAULT 1;`,
+	`CREATE TABLE speech_config (
+    id INTEGER PRIMARY KEY CHECK(id = 1),
+    model TEXT NOT NULL DEFAULT 'whistle',
+    correct INTEGER NOT NULL DEFAULT 0
+);
+INSERT INTO speech_config(id) VALUES (1);`,
 }
 
 // migrate reports whether it created the schema in an empty database.

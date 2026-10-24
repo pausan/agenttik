@@ -83,3 +83,48 @@ func BenchmarkArchivedSessions(b *testing.B) {
 		})
 	}
 }
+
+func TestFlaggedArchivedSessionsComeFirst(t *testing.T) {
+	s := testStore(t)
+	p, err := s.CreateProject("flags", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 4; i++ {
+		v := &Session{ID: fmt.Sprint(i), ProjectID: p.ID}
+		if err := s.CreateSession(v); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.db.Exec("UPDATE sessions SET done_at = 1, last_active_at = ? WHERE id = ?", i, v.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.SetSessionFlag("0", "danger"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetSessionFlag("2", "star"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetSessionFlag("1", "bogus"); err == nil {
+		t.Fatal("accepted an unknown flag")
+	}
+	rows, err := s.ListSessions(SessionFilter{ProjectID: p.ID, OnlyDone: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, row := range rows {
+		got = append(got, row.ID+row.Flag)
+	}
+	if fmt.Sprint(got) != "[2star 0danger 3 1]" {
+		t.Fatalf("order: %v", got)
+	}
+	// The mark survives unarchiving and comes back on the sidebar row.
+	if err := s.SetSessionDone("0", false); err != nil {
+		t.Fatal(err)
+	}
+	refs, err := s.recentSessions(p.ID, 0)
+	if err != nil || len(refs) != 1 || refs[0].Flag != "danger" {
+		t.Fatalf("sidebar: %v, %v", refs, err)
+	}
+}

@@ -2061,6 +2061,23 @@ export async function renameTask(session, title) {
   }
 }
 
+/* The mark shows on the row at once; the lists refresh behind it so the
+   archived list moves a newly flagged task to its top. */
+export async function setTaskFlag(session, flag) {
+  const previous = session.flag || "";
+  session.flag = flag;
+  try {
+    const updated = await api("PATCH", "/api/sessions/" + session.id, { flag });
+    const tab = S.tabs.find((t) => t.kind === "session" && t.sessionID === session.id);
+    if (tab) tab.detail.session = updated;
+    await Promise.all([refreshProjects(), refreshSessions()]);
+    reloadProjects();
+  } catch (e) {
+    session.flag = previous;
+    fail(e);
+  }
+}
+
 /* A default session with no history, queued work, or local draft is just an
    abandoned placeholder. Drop it rather than making it an archived row the
    user has to find later. Checking the detail also keeps a titled or used

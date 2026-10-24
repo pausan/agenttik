@@ -18,6 +18,7 @@ import {
   setScheduleArchived,
   setSchedulePaused,
   setTaskArchived,
+  setTaskFlag,
   toggleTaskUnread,
   setProjectHidden,
   setProjectQueuePaused,
@@ -359,6 +360,8 @@ function onTaskDrop(e, projectID, overID) {
               :status="s.status"
               :unread="!!S.unreadTasks[s.id]"
               @toggle-unread="toggleTaskUnread(s.id)"
+              :flag="s.flag"
+              @flag="setTaskFlag(s, $event)"
               :queued="s.queue_count"
               :approval="!!S.approvals[s.id]"
               :active="S.detail?.session.id === s.id"

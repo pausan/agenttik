@@ -19,6 +19,7 @@ import {
   setScheduleArchived,
   setSchedulePaused,
   setTaskArchived,
+  setTaskFlag,
   toggleTaskUnread,
   setTaskPageSize,
   startTask,
@@ -351,6 +352,8 @@ async function doDelete() {
             :status="row.task.status"
             :unread="!!S.unreadTasks[row.task.id]"
             @toggle-unread="toggleTaskUnread(row.task.id)"
+            :flag="row.task.flag"
+            @flag="setTaskFlag(row.task, $event)"
             :queued="row.task.queue_count"
             :approval="!!S.approvals[row.task.id]"
             :sub="subtitle(row.task)"

@@ -230,7 +230,6 @@ test("a provider outage queues the prompt instead of losing it", async ({ page }
 
   await expect(page.getByText("waiting", { exact: true })).toBeVisible();
   await expect(page.getByText("Waiting for Fake")).toBeVisible();
-  await expect(sidebar(page).locator(".task-row").first().getByRole("button", { name: "Mark unread", exact: true })).toBeDisabled();
 
   // Scoped to the queued bubble itself: the task is also titled from this
   // same raw prompt, and that sidebar/tab label matches the text too.
@@ -581,29 +580,33 @@ test("task context menus rename and persist unread without opening the task", as
 });
 
 
-test("task dots toggle read without selecting and preserve automatic reading", async ({ page }) => {
+test("task menus toggle read without selecting and preserve automatic reading", async ({ page }) => {
   await addProject(page);
   await openProject(page);
   await newTask(page);
   const row = sidebar(page).locator(".task-row").first();
   const title = row.locator(".task-title");
+  const menu = async (target, name) => {
+    await target.click({ button: "right" });
+    await page.getByRole("menuitem", { name, exact: true }).click();
+  };
 
   // A manual unread mark on the current transcript lasts for this visit.
-  await row.getByRole("button", { name: "Mark unread", exact: true }).click();
+  await menu(row, "Mark unread");
   await expect(title).toHaveClass(/font-bold/);
   await page.waitForTimeout(3200);
   await expect(title).toHaveClass(/font-bold/);
-  await row.getByRole("button", { name: "Mark read", exact: true }).click();
+  await menu(row, "Mark read");
   await expect(title).not.toHaveClass(/font-bold/);
 
   await openProject(page);
-  await row.getByRole("button", { name: "Mark unread", exact: true }).click();
+  await menu(row, "Mark unread");
   await expect(title).toHaveClass(/font-bold/);
   await expect(page.getByPlaceholder("Ask the agent…")).toBeHidden();
   const projectRow = page.locator(".task-row").last();
-  await projectRow.getByRole("button", { name: "Mark read", exact: true }).click();
+  await menu(projectRow, "Mark read");
   await expect(title).not.toHaveClass(/font-bold/);
-  await projectRow.getByRole("button", { name: "Mark unread", exact: true }).click();
+  await menu(projectRow, "Mark unread");
   await expect(page.getByPlaceholder("Ask the agent…")).toBeHidden();
 
   await row.locator(".task-select").click();
@@ -612,16 +615,54 @@ test("task dots toggle read without selecting and preserve automatic reading", a
   await expect(title).not.toHaveClass(/font-bold/, { timeout: 5000 });
 });
 
-test("running task dots cannot toggle read until work finishes", async ({ page }) => {
+test("task dots cycle marks, even while running, and marks lead the archive", async ({ page }) => {
   await addProject(page);
   await openProject(page);
   await newTask(page);
   await pickModel(page);
   await sendPrompt(page, "@wait 60000");
-  const row = sidebar(page).locator(".task-row").first();
   await expect(page.getByText("running", { exact: true })).toBeVisible();
-  await expect(row.getByRole("button", { name: "Mark unread", exact: true })).toBeDisabled();
+  const row = sidebar(page).locator(".task-row").first();
+  const flag = row.locator(".task-flag");
+  await expect(flag).toHaveCount(0);
+  const saved = page.waitForRequest((r) => r.method() === "PATCH" && r.postDataJSON()?.flag === "star");
+  await row.getByRole("button", { name: "Mark star", exact: true }).click();
+  await saved;
+  await expect(flag).toHaveAttribute("data-flag", "star");
+  await expect(page.getByPlaceholder("Ask the agent…")).toBeVisible();
+  await row.getByRole("button", { name: "Mark warning", exact: true }).click();
+  await expect(flag).toHaveAttribute("data-flag", "warn");
+  await row.getByRole("button", { name: "Mark danger", exact: true }).click();
+  await expect(flag).toHaveAttribute("data-flag", "danger");
+  await row.getByRole("button", { name: "Clear mark", exact: true }).click();
+  await expect(flag).toHaveCount(0);
   await page.getByRole("button", { name: "Stop", exact: true }).click();
   await expect(page.getByText("idle", { exact: true })).toBeVisible();
-  await expect(row.getByRole("button", { name: /^Mark (unread|read)$/ })).toBeEnabled();
+
+  // The right-click menu sets a mark directly; reload shows it was saved.
+  await row.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Mark", exact: true }).hover();
+  await page.getByRole("menuitemcheckbox", { name: "Warning", exact: true }).click();
+  await expect(flag).toHaveAttribute("data-flag", "warn");
+  await page.reload();
+  await expect(flag).toHaveAttribute("data-flag", "warn");
+
+  // A newer unmarked archived task still sorts below the marked one, and an
+  // unread mark keeps the bold title.
+  await row.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Mark unread", exact: true }).click();
+  await row.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Archive task", exact: true }).click();
+  await newTask(page);
+  await pickModel(page);
+  await sendPrompt(page, "second task");
+  await expect(page.getByText("idle", { exact: true })).toBeVisible();
+  await sidebar(page).locator(".task-row").first().click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Archive task", exact: true }).click();
+  await openProject(page);
+  const archived = page.getByRole("region", { name: "Archived tasks" }).locator(".task-row");
+  await expect(archived).toHaveCount(2);
+  await expect(archived.first().locator(".task-flag")).toHaveAttribute("data-flag", "warn");
+  await expect(archived.first().locator(".task-title")).toHaveClass(/font-bold/);
+  await expect(archived.last().locator(".task-flag")).toHaveCount(0);
 });

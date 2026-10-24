@@ -20,7 +20,7 @@ const firstPromptCol = `COALESCE(
 
 const sessionCols = `s.id, s.project_id, s.title, s.provider, s.account_id, s.provider_session_id,
 	s.model, s.effort, s.permission, s.source, s.status,
-	s.created_at, s.updated_at, s.last_active_at, s.done_at, s.position,
+	s.created_at, s.updated_at, s.last_active_at, s.done_at, s.position, s.flag,
 	(SELECT COUNT(*) FROM queued_messages q WHERE q.session_id = s.id),
 	s.schedule_id, s.project_prompt, s.summary,
 	s.parent_id, s.anchor_message_id, s.anchor_quote, s.origin_id, p.name, p.path, p.kind, ` + firstPromptCol
@@ -29,7 +29,7 @@ func scanSession(sc interface{ Scan(...any) error }) (*Session, error) {
 	var v Session
 	err := sc.Scan(&v.ID, &v.ProjectID, &v.Title, &v.Provider, &v.AccountID, &v.ProviderSessionID,
 		&v.Model, &v.Effort, &v.Permission, &v.Source, &v.Status,
-		&v.CreatedAt, &v.UpdatedAt, &v.LastActiveAt, &v.DoneAt, &v.Position,
+		&v.CreatedAt, &v.UpdatedAt, &v.LastActiveAt, &v.DoneAt, &v.Position, &v.Flag,
 		&v.QueueCount, &v.ScheduleID, &v.ProjectPrompt, &v.Summary,
 		&v.ParentID, &v.AnchorMessageID, &v.AnchorQuote, &v.OriginID,
 		&v.ProjectName, &v.ProjectPath, &v.ProjectKind, &v.Prompt)
@@ -95,7 +95,8 @@ type SessionFilter struct {
 // ListSessions orders one project's sessions by the order they were dragged
 // into, and every other listing by running first, then recency. An
 // archived-only listing is history rather than a list anyone arranged, so it
-// comes back newest first whether or not it is scoped to a project.
+// comes back flagged first, then newest first, whether or not it is scoped to
+// a project.
 func (s *Store) ListSessions(f SessionFilter) ([]Session, error) {
 	// Threads are drawn under their message, never in a list of tasks.
 	where := []string{"s.parent_id = ''"}
@@ -125,7 +126,7 @@ func (s *Store) ListSessions(f SessionFilter) ([]Session, error) {
 	if f.Newest {
 		sqlStr += ` ORDER BY s.created_at DESC, s.id DESC`
 	} else if f.OnlyDone {
-		sqlStr += ` ORDER BY s.last_active_at DESC, s.id DESC`
+		sqlStr += ` ORDER BY (s.flag <> '') DESC, s.last_active_at DESC, s.id DESC`
 	} else if f.ProjectID > 0 {
 		sqlStr += ` ORDER BY s.position, s.last_active_at DESC`
 	} else {
@@ -183,6 +184,23 @@ func (s *Store) SetSessionTitle(id, title string) error {
 		title, nowMillis(), id)
 	if err != nil {
 		return fmt.Errorf("set session title: %w", err)
+	}
+	return nil
+}
+
+// SetSessionFlag marks a session with a star, a warning or a danger sign, or
+// clears the mark. Like archiving, it is not activity.
+func (s *Store) SetSessionFlag(id, flag string) error {
+	if !ValidFlag(flag) {
+		return fmt.Errorf("unknown flag %q", flag)
+	}
+	res, err := s.db.Exec(`UPDATE sessions SET flag = ?, updated_at = ? WHERE id = ?`,
+		flag, nowMillis(), id)
+	if err != nil {
+		return fmt.Errorf("set session flag: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
 	}
 	return nil
 }

@@ -20,10 +20,9 @@ bold title and returns the dot to its normal status.
 The store records final persisted `done` stream events, including tasks with
 no open tab. A new turn clears the previous unread result. One Vue watcher
 owns one timeout for the selected transcript; row count adds no timers.
-Clicking the task's status dot toggles read/unread without selecting the task.
-The dot is a separate keyboard-accessible button, disabled while the task is
-running or has queued prompts. This applies to sidebar and project task rows,
-including archived tasks. The automatic reading timer is unchanged.
+The task's status dot cycles its mark rather than its read state; see
+[098](098-task-flags.md). A marked task shows its mark in place of the dot and
+keeps the bold title while unread.
 Right-clicking a sidebar or project task row opens actions for opening, renaming,
 and marking read or unread, plus stop, archive/unarchive, scheduled job, and
 project-list deletion when those controls are available. Right-clicking does
@@ -49,7 +48,7 @@ Read state is local to this client.
 
 `task-attention.test.js` checks interrupted visits, hidden windows, new results,
 completion during viewing, missed completions, and persistent error coloring.
-Browser tests cover dot toggles, disabled dots for running and queued tasks,
-and automatic reading after opening a task. They also switch profiles during
+Browser tests cover menu toggles without selecting the task and automatic
+reading after opening a task. They also switch profiles during
 selected and unselected tasks, check unread persistence on return and reload,
 then read and reload the result.

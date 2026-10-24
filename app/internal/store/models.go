@@ -79,9 +79,17 @@ type SessionRef struct {
 	// came from without opening it. See 028-scheduled-jobs.md.
 	ScheduleID int64 `json:"schedule_id"`
 
+	// Flag is the user's mark, as on Session.
+	Flag string `json:"flag"`
+
 	// Prompt is what the session was opened with, capped; the sidebar shows it
 	// when a row is hovered. See firstPromptCol.
 	Prompt string `json:"prompt,omitempty"`
+}
+
+// ValidFlag reports whether flag is a task mark, or "" for none.
+func ValidFlag(flag string) bool {
+	return flag == "" || flag == "star" || flag == "warn" || flag == "danger"
 }
 
 type Session struct {
@@ -111,6 +119,10 @@ type Session struct {
 	DoneAt     int64 `json:"done_at"`
 	Position   int64 `json:"position"`
 	QueueCount int64 `json:"queue_count"`
+
+	// Flag is the user's mark: "", "star", "warn" or "danger". Flagged tasks
+	// lead the archived list. See 098-task-flags.md.
+	Flag string `json:"flag"`
 
 	// ScheduleID is the schedule that spawned this session, or 0 for one
 	// started by hand. It is the job's number on screen, drawn on the run so

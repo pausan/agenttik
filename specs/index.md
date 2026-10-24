@@ -54,6 +54,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [053](053-workspace-repositories.md) | Right Workspace header and repository selection within the current project |
 | [049](049-project-creation-modes.md) | Adding a project on a folder, or on a base folder of repositories cloned into it |
 | [051](051-task-outcomes.md) | What an archived task came to, written from its last reply and drawn under its row |
+| [098](098-task-flags.md) | Star, warning and danger marks on tasks, cycled from the dot, leading the archive |
 | [061](061-hidden-projects.md) | Temporarily hiding projects and restoring them to their saved sidebar position |
 | [062](062-pinned-prompts.md) | Saved prompts, manual runs and explicit editing |
 

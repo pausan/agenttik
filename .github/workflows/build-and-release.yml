@@ -295,23 +295,14 @@ jobs:
           npm test
           npx cap sync android
 
-      # Signed with the ANDROID_KEYSTORE_* secrets when they are set, so a
-      # release installs over the last one. Without them the APK carries a
-      # throwaway debug key.
+      # Signed with the runner's debug key, for adb install. Each run has a
+      # new key, so a newer APK only installs after removing the old one.
       - name: Build APK
         working-directory: mobileapp/android
         env:
           TAG: ${{ needs.release-tag.outputs.tag }}
           VERSION: ${{ needs.release-tag.outputs.version }}
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          if [[ -n "$ANDROID_KEYSTORE_BASE64" ]]; then
-            echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
-            export ANDROID_KEYSTORE_FILE="$RUNNER_TEMP/release.jks"
-          fi
           TAG=${TAG##*/}
           code=1
           if [[ -n "$VERSION" ]]; then

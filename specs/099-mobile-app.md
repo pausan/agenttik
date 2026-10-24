@@ -80,10 +80,19 @@ attaches with the desktop binaries. `versionName` is the release version and
 `versionCode` is `major·1000000 + minor·1000 + patch`. Local builds are
 `0.0.0`, code 1.
 
-The APK is signed with the keystore in the `ANDROID_KEYSTORE_BASE64`,
-`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`
-secrets. Without them it falls back to that runner's debug key, which
-installs but cannot update an APK signed by another key.
+There is no release key yet. The release build is signed with the building
+machine's Android debug key, so it is not debuggable but is meant to be
+installed by hand:
+
+```
+adb install agenttik_<tag>_android.apk
+```
+
+Every CI run has a new debug key, so a newer APK will not install over an
+older one (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`). Run `adb uninstall
+com.pausan.agenttik` first. That removes the saved servers and the phone's
+key: the next sign-in asks for the password again, and the server's trusted
+list keeps the old entry until it is removed in Settings → Server.
 
 iOS is not built in CI. On a Mac: `npm ci && npx cap sync ios`, then open
 `ios/App/App.xcodeproj` and sign it.

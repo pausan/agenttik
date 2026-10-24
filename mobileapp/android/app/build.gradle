@@ -17,23 +17,11 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
-    // A release is signed with the keystore CI is given. Without one it falls
-    // back to the debug key, which installs but cannot update a build signed
-    // by another machine.
-    signingConfigs {
-        release {
-            def keystore = System.getenv('ANDROID_KEYSTORE_FILE')
-            if (keystore) {
-                storeFile file(keystore)
-                storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
-                keyAlias System.getenv('ANDROID_KEY_ALIAS')
-                keyPassword System.getenv('ANDROID_KEY_PASSWORD')
-            }
-        }
-    }
     buildTypes {
         release {
-            signingConfig System.getenv('ANDROID_KEYSTORE_FILE') ? signingConfigs.release : signingConfigs.debug
+            // No release key yet: the APK carries the building machine's
+            // debug key and is meant for adb install.
+            signingConfig signingConfigs.debug
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

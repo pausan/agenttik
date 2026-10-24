@@ -268,8 +268,72 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  # The mobile app in mobileapp/: a Capacitor shell that connects to a remote
+  # agenttik. Only Android is built here; iOS needs a Mac and signing.
+  android:
+    needs: release-tag
+    name: Android app
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobileapp/package-lock.json
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Test and sync the connect page
+        working-directory: mobileapp
+        run: |
+          npm ci
+          npm test
+          npx cap sync android
+
+      # Signed with the ANDROID_KEYSTORE_* secrets when they are set, so a
+      # release installs over the last one. Without them the APK carries a
+      # throwaway debug key.
+      - name: Build APK
+        working-directory: mobileapp/android
+        env:
+          TAG: ${{ needs.release-tag.outputs.tag }}
+          VERSION: ${{ needs.release-tag.outputs.version }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [[ -n "$ANDROID_KEYSTORE_BASE64" ]]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
+            export ANDROID_KEYSTORE_FILE="$RUNNER_TEMP/release.jks"
+          fi
+          TAG=${TAG##*/}
+          code=1
+          if [[ -n "$VERSION" ]]; then
+            IFS=. read -r major minor patch <<< "$VERSION"
+            code=$((major * 1000000 + minor * 1000 + patch))
+            code=$((code > 0 ? code : 1))
+          fi
+          ./gradlew assembleRelease --no-daemon \
+            -PversionName="${VERSION:-${GITHUB_SHA::12}}" -PversionCode="$code"
+          mkdir -p dist
+          cp app/build/outputs/apk/release/app-release.apk "dist/agenttik_${TAG:-${GITHUB_SHA::12}}_android.apk"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ needs.release-tag.outputs.is_release == 'true' && 'agenttik-release-android' || 'agenttik-android' }}
+          path: mobileapp/android/dist/agenttik_*.apk
+          if-no-files-found: error
+          retention-days: ${{ needs.release-tag.outputs.is_release == 'true' && 1 || 7 }}
+
   release:
-    needs: [release-tag, build, startup-budget, database-upgrades]
+    needs: [release-tag, build, android, startup-budget, database-upgrades]
     if: needs.release-tag.outputs.is_release == 'true'
     runs-on: ubuntu-24.04
     permissions:

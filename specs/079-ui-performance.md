@@ -53,7 +53,45 @@ Searching mounts all panes so result counts cover every section. Modal and
 slideover transitions and menu entrance/exit animations are disabled. Profile
 switching retains a full page navigation and its existing storage isolation.
 
+The Linux desktop window paints in software (`WebviewGpuPolicyNever`), so
+whatever changes on screen costs CPU on every frame it changes. A smooth
+looping animation redraws at 60 fps: one 6 px pulsing dot cost 5–8% of a core
+in WebKit's web process and 3–5% in the window's. Looping animations are
+therefore stepped. Status dots pulse in four steps per keyframe gap (4 fps,
+like the tray pulse), the streaming cursor blinks twice a second, and
+`animate-spin` turns in eight steps a second, Nuxt UI's spinners included.
+
+A streaming reply arrives a word or two per event, dozens of times a second.
+Its markdown is redrawn at most every 100 ms (`STREAM_RENDER_MS` in
+`Message.vue`); the end of the stream and any other change draw at once.
+Following the output scrolls the transcript, which repaints all of it, so the
+redraw rate sets most of the cost. Two other ideas measured no gain and were
+dropped: redrawing only the changed markdown blocks, and handling stream
+events in 50 ms batches. A 200 ms redraw saved another 5 points.
+
 ## Reproducing measurements
+
+The desktop window's CPU is measured in WebKitGTK under Xvfb, with hardware
+acceleration off as in the app, over 20 seconds per state. The fixture is this
+repository with three running fake tasks, and a fourth task streaming a
+16 KB markdown reply at one word per 15 ms:
+
+```
+make build-web
+scripts/webkit-cpu/run.sh [binary]
+```
+
+On the development Linux host against baseline commit `ade7bb2` (web process
+and window process, percent of one core):
+
+| State | Baseline | Changed |
+| --- | ---: | ---: |
+| Three running tasks in the sidebar | 9.6 / 4.1 | 1.6 / 0.6 |
+| A running task open | 14.8 / 4.6 | 7.7 / 2.1 |
+| A long reply streaming | 101 / 13 | 29 / 3.9 |
+
+With a task open, about 3 points of what remains is the working clock's 4 fps
+tick ([010](010-working-indicator.md)).
 
 Terminal output batches queued frames instead of waiting for a write timer
 for each frame. Batches stop at reset/replay boundaries and combine at most

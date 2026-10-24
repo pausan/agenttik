@@ -10,7 +10,7 @@
    Every message can be copied. Only your own prompts can be edited, and only
    once they have been stored: a message still arriving over the stream has no
    id to rewrite. */
-import { computed, nextTick, ref } from "vue";
+import { computed, nextTick, onUnmounted, ref, watch } from "vue";
 
 import { S, copyText, editMessage, setModel } from "../store";
 import { messageDate, messageTime } from "../message-time";
@@ -45,6 +45,30 @@ const BUBBLE = {
 };
 
 const rendered = computed(() => !!RENDERED[props.message.role]);
+
+/* A streaming reply grows by a word every few milliseconds, and every delta
+   would parse the whole reply as markdown and rebuild its DOM. While it
+   streams, the rendered copy catches up at most every STREAM_RENDER_MS; any
+   other change, the end of the stream included, shows at once. */
+const STREAM_RENDER_MS = 100;
+const markdownText = ref(props.message.content);
+let renderTimer = 0;
+watch(
+  () => [props.message.content, props.message.streaming],
+  ([content, streaming]) => {
+    if (streaming) {
+      renderTimer ||= window.setTimeout(() => {
+        renderTimer = 0;
+        markdownText.value = props.message.content;
+      }, STREAM_RENDER_MS);
+      return;
+    }
+    window.clearTimeout(renderTimer);
+    renderTimer = 0;
+    markdownText.value = content;
+  },
+);
+onUnmounted(() => window.clearTimeout(renderTimer));
 const images = computed(() => props.message.role === "user" ? promptImages(props.message.content) : []);
 const text = computed(() => images.value.length ? promptText(props.message.content) : props.message.content);
 const preview = ref(null);
@@ -190,7 +214,7 @@ function onKey(e) {
     </form>
 
     <template v-else>
-      <MarkdownContent v-if="rendered" :class="classes" :text="message.content" />
+      <MarkdownContent v-if="rendered" :class="classes" :text="markdownText" />
       <div v-else :class="classes">
         <span v-if="text">{{ text }}</span>
         <div v-if="images.length" class="mt-2 flex flex-wrap gap-2" aria-label="Message images">

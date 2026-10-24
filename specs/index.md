@@ -31,7 +31,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [005](005-testing.md) | The three test layers and how they are isolated |
 | [080](080-analytics.md) | Usage cost estimates, provider/model/effort breakdowns, date windows |
 | [081](081-macos-integration.md) | macOS menu bar, dark appearance, About, runtime icon, Dock reopen and Quit |
-| [079](079-ui-performance.md) | Interaction benchmarks, archive memory, editor rendering, long Changed lists and Go to file |
+| [079](079-ui-performance.md) | Interaction benchmarks, archive memory, editor rendering, long Changed lists, Go to file and desktop idle/streaming CPU |
 | [052](052-launch-budget.md) | One-second cold/warm UI gate, concurrent reads, and deferred data |
 
 ## Projects and tasks

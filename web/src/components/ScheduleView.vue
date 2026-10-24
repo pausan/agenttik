@@ -225,6 +225,7 @@ function runTime(run) {
         <UTextarea
           v-model="prompt"
           :rows="3"
+          :maxrows="20"
           autoresize
           class="w-full"
           aria-label="Prompt"
@@ -237,6 +238,7 @@ function runTime(run) {
           <UTextarea
             v-model="condition"
             :rows="1"
+            :maxrows="5"
             autoresize
             class="w-full"
             placeholder="No condition. For example: the file does not exist or is empty"

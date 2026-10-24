@@ -255,7 +255,9 @@ Under it sit the prompt, the model, the
 spawned, newest first, each with its timestamp as `YYYY-MM-DD HH:mm:ss`.
 
 **The prompt and the model are as editable as the clock.** The prompt is a
-text box that commits when it is left, and the model is the shared picker with
+text box that commits when it is left. It grows with its text up to 20 lines
+and scrolls past that; the finish condition box starts at one line and grows
+to five. Both can be dragged taller by hand. The model is the shared picker with
 its separate effort select. It includes ordered favourites but not the main
 prompt's favourite button. Nothing about what a schedule repeats is a
 decision made once: a typo, or a model that turned out to be the wrong one,

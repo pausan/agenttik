@@ -90,6 +90,7 @@ function submit() {
             type="number"
             min="1"
             class="mt-1 w-full font-normal"
+            :ui="{ base: 'resize-y' }"
           />
         </label>
       </div>
@@ -100,7 +101,8 @@ function submit() {
           Finish condition
           <UTextarea
             v-model="finishCondition"
-            :rows="2"
+            :rows="1"
+            :maxrows="5"
             autoresize
             placeholder="Stop when the file does not exist or is empty"
             aria-label="Finish condition"

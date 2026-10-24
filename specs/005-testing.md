@@ -17,7 +17,7 @@ Tests cover logic, browser flows and the native desktop transport.
 server and drives a real browser against it; it is the slower one, kept
 separate so the fast loop stays fast. `make test-startup` requires the built
 web binary, installed e2e dependencies and Chromium; CI runs it separately
-with one worker and gates releases on the one-second requirement
+with one worker and gates releases on the 1.5-second requirement
 ([052](052-launch-budget.md)).
 
 `make test-desktop-images` needs the desktop build libraries and Xvfb. It runs

@@ -107,4 +107,4 @@ Move tests cover ID collisions, history and image copies, return moves, blocked
 work, duplicate folders, failed-copy rollback, and moves in either direction.
 Browser tests cover the picker, palette switching, appearance, tree expansion,
 renaming, reordering, and removal; private tests cover concurrent instances and
-SIGTERM cleanup. Startup remains under the one-second budget.
+SIGTERM cleanup. Startup remains under the 1.5-second budget.

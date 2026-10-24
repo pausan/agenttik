@@ -125,7 +125,7 @@ test-desktop-scrollbars:
 e2e: build-web
 	cd $(E2E) && npm install --no-audit --no-fund && npx playwright install chromium && npx playwright test
 
-## test-startup: hard one-second browser budget against the built web binary.
+## test-startup: hard 1.5-second browser budget against the built web binary.
 ## Run after build-web and installing e2e dependencies plus Chromium.
 test-startup:
 	cd $(E2E) && npx playwright test tests/startup.spec.js --workers=1

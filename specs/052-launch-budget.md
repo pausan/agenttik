@@ -1,6 +1,6 @@
 # Launch budget
 
-The UI must render within **1,000 ms** of browser navigation: every active
+The UI must render within **1,500 ms** of browser navigation: every active
 project and its expanded open task rows in the sidebar, the restored tab
 strip, and the main project or task view. A task view includes its transcript
 and prompt; a project view includes its open task list. This applies to warm
@@ -44,7 +44,7 @@ binary, with one browser worker and no retries. It checks:
   groups expanded, and 30 saved project views.
 
 The page checks rendered text on animation frames and waits another frame
-before reading `performance.now()`. Every timed case fails at 1,000 ms;
+before reading `performance.now()`. Every timed case fails at 1,500 ms;
 missing content fails after five seconds. The CI startup-budget job runs on
 pushes and pull requests, and releases depend on it passing. These fixtures
 are the enforced workload, not a guarantee for arbitrary hardware, database

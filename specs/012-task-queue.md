@@ -106,7 +106,8 @@ A queued prompt has not started, so its text is as editable as its model
 choice: a pencil on its dashed bubble opens it in place, the same shape as
 editing an already-sent prompt ([014](014-transcript-messages.md)), minus that
 editor's warnings about rewinding the agent or the disk — nothing has run yet,
-so there is nothing to undo.
+so there is nothing to undo. It has only Save, so both of the prompt bar's
+chords, Send's and Enqueue's, save it; Escape cancels.
 
 `Ctrl+E` opens the last of them without reaching for the pencil, from the
 prompt box or from the transcript above it: the prompt just enqueued is where

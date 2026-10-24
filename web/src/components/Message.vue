@@ -12,7 +12,7 @@
    id to rewrite. */
 import { computed, nextTick, onUnmounted, ref, watch } from "vue";
 
-import { S, copyText, editMessage, setModel } from "../store";
+import { S, copyText, editMessage, hit, setModel } from "../store";
 import { messageDate, messageTime } from "../message-time";
 import { promptImages, promptText } from "../prompt-images";
 import ConversationImage from "./ConversationImage.vue";
@@ -119,10 +119,21 @@ async function submit(enqueue = false) {
   if (sent) draft.value = null;
 }
 
+/* Send and Enqueue answer the same chords as in the prompt bar, so a
+   rebinding in Settings reaches the editor too. Anything else, plain Enter
+   included when it is bound to neither, types into the box. */
 function onKey(e) {
-  if (e.key !== "Escape") return;
-  e.preventDefault();
-  draft.value = null;
+  if (e.isComposing) return;
+  if (e.key === "Escape") {
+    e.preventDefault();
+    draft.value = null;
+  } else if (hit(e, "prompt.send")) {
+    e.preventDefault();
+    if (draft.value.trim()) submit();
+  } else if (hit(e, "prompt.enqueue")) {
+    e.preventDefault();
+    if (draft.value.trim()) submit(true);
+  }
 }
 </script>
 
@@ -181,7 +192,6 @@ function onKey(e) {
         autoresize
         class="w-full"
         @keydown="onKey"
-        @keydown.enter.exact.prevent="submit()"
       />
       <div class="mt-1.5 flex flex-wrap items-center gap-2">
         <ModelSelection

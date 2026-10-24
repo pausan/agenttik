@@ -5,6 +5,7 @@ import {
   deleteQueued,
   focusPrompt,
   forceQueued,
+  hit,
   openProjectPrompt,
   openTask,
   openThread,
@@ -287,10 +288,17 @@ function cancelEdit() {
   focusPrompt();
 }
 
-function onEditKey(e) {
-  if (e.key !== "Escape") return;
-  e.preventDefault();
-  cancelEdit();
+/* A queued prompt only has Save, so both of the prompt bar's chords, Send's
+   and Enqueue's, save it. */
+function onEditKey(e, q) {
+  if (e.isComposing) return;
+  if (e.key === "Escape") {
+    e.preventDefault();
+    cancelEdit();
+  } else if (hit(e, "prompt.send") || hit(e, "prompt.enqueue")) {
+    e.preventDefault();
+    saveEdit(q);
+  }
 }
 
 async function saveEdit(q) {
@@ -567,8 +575,7 @@ watch(
             :rows="3"
             autoresize
             class="w-full"
-            @keydown="onEditKey"
-            @keydown.enter.exact.prevent="saveEdit(q)"
+            @keydown="onEditKey($event, q)"
           />
           <div class="mt-1.5 flex items-center gap-2">
             <UButton type="submit" size="xs" :loading="saving" :disabled="!editDraft.trim()" label="Save" />

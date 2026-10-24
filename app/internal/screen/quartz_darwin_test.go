@@ -195,3 +195,11 @@ func flagsState() uint64 {
 	purego.RegisterLibFunc(&state, lib, "CGEventSourceFlagsState")
 	return state(1) // kCGEventSourceStateHIDSystemState
 }
+
+func TestSoundSamplesClampTo16Bits(t *testing.T) {
+	for in, want := range map[float32]int16{0: 0, 1: 32767, -1: -32767, 2: 32767, -3: -32767, 0.5: 16384} {
+		if got := toInt16(in); got != want {
+			t.Errorf("toInt16(%v) = %d, want %d", in, got, want)
+		}
+	}
+}

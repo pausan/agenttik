@@ -185,8 +185,24 @@ mode, 20 ms packets) and stops them when it no longer wants sound or closes.
   speaks. `PULSE_SOURCE` names another source, as for libpulse;
   `PULSE_SERVER` another server. The server asks for 20 ms fragments. What
   arrives is buffered; a reader more than a second behind loses the oldest.
-- **macOS and Windows:** not yet. `GET /api/screen` says `audio: false` and the
-  Screen tab shows no sound button.
+- **Windows:** `audio_windows.go` uses WASAPI loopback on the default
+  output, through COM vtables with `syscall`, no cgo, on a thread of its own
+  with COM initialised. The audio engine converts its mix to 48 kHz 16-bit
+  stereo (`AUTOCONVERTPCM`). Packets are polled every 10 ms. When the device
+  fails (unplugged, or the default changes and the old one goes), the
+  default is opened again a second later.
+- **macOS 13+:** `audio_darwin.go` runs a ScreenCaptureKit stream of the
+  main display with `capturesAudio`, 48 kHz stereo, through purego. Its
+  picture is 64×64 and dropped. It needs the same Screen & System Audio
+  Recording permission as the screen. agenttik's own sound is excluded, so a
+  Mac viewing another machine does not send that sound back. Float samples,
+  planar or interleaved, become 16-bit. Earlier macOS reports the reason.
+
+Loopback and ScreenCaptureKit deliver nothing while nothing plays, where a
+monitor source delivers zeros. The capture buffer turns a gap of three
+packets or more into silence, whole packets at a time. That way the packet
+count keeps pace with the clock on every system, and the viewer sees silence
+as a gap rather than as running dry.
 
 Exact silence (all-zero samples, which an idle output's monitor gives) is not
 encoded or sent, so a quiet machine costs nothing. Packets are numbered by
@@ -196,9 +212,13 @@ that fails sends one `audio` message with the reason in `text` and stops.
 
 `AGENTTIK_SCREEN_LIVE=1 go test ./app/internal/screen -run PulseLive` loads a
 null sink of its own, plays a tone into it with `paplay`, records it, and
-checks that closing wakes a waiting read. Tests with `screen.FakeAudio`
+checks that closing wakes a waiting read. On a Mac or Windows,
+`AGENTTIK_SCREEN_LIVE=1 go test ./app/internal/screen -run SoundLive -v`
+records the real output, with or without sound playing, and checks the
+same. CI runs neither. Tests with `screen.FakeAudio`
 check numbering across silence, flushing, stopping, closing a viewer while
-sound plays, the error message and `Info.audio`.
+sound plays, the error message and `Info.audio`; buffer tests check silence
+filling.
 
 ## Viewers
 

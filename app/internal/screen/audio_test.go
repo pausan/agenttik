@@ -121,3 +121,35 @@ func TestPCMBufferKeepsTheNewestSecond(t *testing.T) {
 		t.Fatalf("short read after fail: %v", err)
 	}
 }
+
+func TestPCMBufferFillsWhatCaptureLeavesOut(t *testing.T) {
+	b := newPCMBuffer()
+	start := time.Now()
+	b.fillSilence(start) // starts the clock
+	b.fillSilence(start.Add(50 * time.Millisecond))
+	if len(b.buf) != 0 {
+		t.Fatalf("two packets late is jitter, not silence: %d samples", len(b.buf))
+	}
+	b.fillSilence(start.Add(70 * time.Millisecond))
+	if len(b.buf) != 3*2*vpx.OpusFrame {
+		t.Fatalf("70 ms of nothing became %d samples, want 3 packets", len(b.buf))
+	}
+	b.fillSilence(start.Add(110 * time.Millisecond))
+	if len(b.buf) != 3*2*vpx.OpusFrame {
+		t.Fatal("silence was added twice")
+	}
+
+	// A capture that sends nothing still gives the reader packets, one per
+	// 20 ms or so.
+	b = newPCMBuffer()
+	pcm := make([]int16, 2*vpx.OpusFrame)
+	begin := time.Now()
+	for range 5 {
+		if err := b.read(pcm, nil); err != nil || !silent(pcm) {
+			t.Fatalf("read %v", err)
+		}
+	}
+	if d := time.Since(begin); d > 400*time.Millisecond {
+		t.Fatalf("five packets of silence took %v", d)
+	}
+}

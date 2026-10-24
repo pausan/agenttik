@@ -146,19 +146,29 @@ func silent(pcm []int16) bool {
 // pcmBuffer joins what a capture callback delivers into the frames Read
 // asks for. It keeps at most a second: a reader that falls behind loses the
 // oldest sound rather than hearing it late.
+//
+// A monitor source delivers zeros while nothing plays; WASAPI loopback and
+// ScreenCaptureKit deliver nothing. The buffer turns a gap of three packets
+// or more into silence, whole packets at a time, so the reader's packet
+// count keeps pace with the clock either way and the viewer sees the gap.
 type pcmBuffer struct {
-	mu     sync.Mutex
-	buf    []int16
-	err    error
-	notify chan struct{}
+	mu        sync.Mutex
+	buf       []int16
+	err       error
+	notify    chan struct{}
+	lastWrite time.Time // where the sound written so far ends, in time
 }
 
-const pcmKeep = 2 * 48000 // one second of stereo
+const (
+	pcmKeep    = 2 * 48000 // one second of stereo
+	packetTime = 20 * time.Millisecond
+)
 
 func newPCMBuffer() *pcmBuffer { return &pcmBuffer{notify: make(chan struct{}, 1)} }
 
 func (b *pcmBuffer) write(pcm []int16) {
 	b.mu.Lock()
+	b.lastWrite = time.Now()
 	b.buf = append(b.buf, pcm...)
 	if over := len(b.buf) - pcmKeep; over > 0 {
 		b.buf = b.buf[over+over%2:]
@@ -184,11 +194,28 @@ func (b *pcmBuffer) wake() {
 	}
 }
 
+// fillSilence adds the packets of silence a capture left out up to now.
+func (b *pcmBuffer) fillSilence(now time.Time) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.lastWrite.IsZero() {
+		b.lastWrite = now
+		return
+	}
+	n := int(now.Sub(b.lastWrite) / packetTime)
+	if n < 3 {
+		return
+	}
+	b.buf = append(b.buf, make([]int16, n*2*vpx.OpusFrame)...)
+	b.lastWrite = b.lastWrite.Add(time.Duration(n) * packetTime)
+}
+
 // read fills pcm. check is called every second while it waits, for a
 // capture that can end without saying so.
 func (b *pcmBuffer) read(pcm []int16, check func() error) error {
-	tick := time.NewTicker(time.Second)
+	tick := time.NewTicker(packetTime)
 	defer tick.Stop()
+	ticks := 0
 	for {
 		b.mu.Lock()
 		if len(b.buf) >= len(pcm) {
@@ -204,8 +231,9 @@ func (b *pcmBuffer) read(pcm []int16, check func() error) error {
 		}
 		select {
 		case <-b.notify:
-		case <-tick.C:
-			if check != nil {
+		case now := <-tick.C:
+			b.fillSilence(now)
+			if ticks++; check != nil && ticks%50 == 0 {
 				if err := check(); err != nil {
 					b.fail(err)
 				}

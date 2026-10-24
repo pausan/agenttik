@@ -6,8 +6,9 @@ signs in again by itself, with its own key, from any address: LAN, the public
 tunnel, or a new IP. The server's owner can remove it in Settings → Server;
 its next request then asks for the password again.
 
-This covers remote profiles ([085](085-remote-profiles.md)). `agenttik
---remote` and browsers have no key and always use the password form.
+This covers remote profiles ([085](085-remote-profiles.md)) and the mobile
+app ([099](099-mobile-app.md)). `agenttik --remote` and browsers have no key
+and always use the password form.
 
 ## Keys
 

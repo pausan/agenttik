@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">agenttik</string>
+    <string name="title_activity_main">agenttik</string>
+    <string name="package_name">com.pausan.agenttik</string>
+    <string name="custom_url_scheme">com.pausan.agenttik</string>
+</resources>

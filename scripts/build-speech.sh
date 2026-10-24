@@ -26,7 +26,10 @@ case "$speech_os/$speech_arch" in
   windows/amd64)
     suffix=.exe
     output=$output$suffix
-    cmake_flags+=(-DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=x86_64 -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc
+    # Ubuntu's MinGW headers lack THREAD_POWER_THROTTLING_STATE; targeting
+    # Windows 7 skips ggml's throttling hint, which only matters past 4 threads.
+    cmake_flags+=(-DCMAKE_C_FLAGS=-D_WIN32_WINNT=0x0601
+      -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=x86_64 -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc
       -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ -DCMAKE_EXE_LINKER_FLAGS=-static) ;;
   *) echo "Unsupported speech platform: $speech_os/$speech_arch" >&2; exit 1 ;;
 esac

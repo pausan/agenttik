@@ -103,3 +103,30 @@ func TestCalendarScheduleValidation(t *testing.T) {
 		t.Fatalf("invalid update changed recurrence: %+v, %v", saved, err)
 	}
 }
+
+func TestScheduleFinishCondition(t *testing.T) {
+	s, st := newTestServer(t)
+	s.registry = agent.NewRegistry(singleLoginProvider{name: "condition-test"})
+	p, err := st.CreateProject("condition", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp := do(t, s, "POST", "/api/schedules", map[string]any{"project_id": p.ID, "provider": "condition-test",
+		"prompt": "Process one line", "title": "Lines", "every": store.EveryInterval, "interval_minutes": 15,
+		"remaining": -1, "finish_condition": "  Stop when the file is empty  "})
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("create = %d", resp.StatusCode)
+	}
+	job := decode[scheduleDetail](t, resp).Schedule
+	if job.FinishCondition != "Stop when the file is empty" {
+		t.Fatalf("created condition = %q", job.FinishCondition)
+	}
+	path := fmt.Sprintf("/api/schedules/%d", job.ID)
+	resp = do(t, s, "PATCH", path, map[string]any{"finish_condition": ""})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("clear = %d", resp.StatusCode)
+	}
+	if updated := decode[store.Schedule](t, resp); updated.FinishCondition != "" || updated.Prompt != "Process one line" {
+		t.Fatalf("cleared = %+v", updated)
+	}
+}

@@ -423,6 +423,9 @@ ALTER TABLE server_config ADD COLUMN screen_enabled INTEGER NOT NULL DEFAULT 1;`
 INSERT INTO speech_config(id) VALUES (1);`,
 	// A task's star, warning or danger mark. See specs/098-task-flags.md.
 	`ALTER TABLE sessions ADD COLUMN flag TEXT NOT NULL DEFAULT '';`,
+	// A job's finish condition, checked at the start of every run. See
+	// specs/028-scheduled-jobs.md.
+	`ALTER TABLE schedules ADD COLUMN finish_condition TEXT NOT NULL DEFAULT '';`,
 }
 
 // migrate reports whether it created the schema in an empty database.

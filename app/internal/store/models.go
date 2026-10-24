@@ -195,6 +195,10 @@ type Schedule struct {
 	Effort     string `json:"effort"`
 	Permission string `json:"permission"`
 
+	// FinishCondition, when set, is put before the prompt of every run. A
+	// run that finds it true pauses the job. Empty means none.
+	FinishCondition string `json:"finish_condition"`
+
 	// Every is how the next run is worked out. IntervalMinutes carries the
 	// whole X hours Y minutes for EveryInterval; AtMinute is minutes past
 	// local midnight for the calendar forms. AnchorAt fixes the starting date,
@@ -452,7 +456,9 @@ const (
 	RunDone        = "done"
 	RunError       = "error"
 	RunInterrupted = "interrupted"
-	RunSkipped     = "skipped"
+	// RunFinished is a run that found the job's finish condition true.
+	RunFinished = "finished"
+	RunSkipped  = "skipped"
 )
 
 // Message roles.

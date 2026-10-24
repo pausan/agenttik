@@ -106,6 +106,32 @@ Neither does a run forced from the schedule's own view
 ([below](#running-one-now)): asking for it by hand is not the recurrence
 asking for it.
 
+## The finish condition
+
+A job can carry a **finish condition** besides its counter: a sentence such
+as *Stop when todo.txt does not exist or is empty*. It suits a job that eats a
+list one item per run, where nobody knows the count in advance.
+
+When set, the condition is the very first thing in each run's prompt. The
+agent is told to check it before anything else and, if it is true, to do
+nothing more and reply with only `AGENTTIK_JOB_FINISHED`. Otherwise it carries
+on with the prompt below. `runner.schedulePrompt` builds the text, so a timed
+run and a forced run send the same prompt. The run's task shows the prompt as
+sent, condition included.
+
+When the run's turn ends, its last reply is read. If a line of it is the
+marker alone (Markdown backticks or bold around it are allowed), the run
+closes as `finished` and the job **pauses itself**. That holds for forced runs
+too. A reply that only quotes the instruction does not count. The run still
+spends the counter the way a `done` one does. Resuming the job by hand starts
+it again, and the next run checks the condition again.
+
+The dialog has a **Stop when a condition is met** switch that reveals the
+field. It cannot submit an empty condition. The condition is not remembered
+for the next dialog. The job view shows it as **Finish when**. The field
+commits when it is left, and an empty field turns the check off. Pinned
+prompts have no condition.
+
 ## Skipping
 
 If a run comes due while this schedule's previous prompt is queued, running,
@@ -272,7 +298,7 @@ the repository; the schedule page already carries everything its clock knows.
 Schedules use two tables and link each spawned session through `schedule_id`:
 
 - **schedules** — `id, project_id, title, prompt, provider, model, effort,
-  permission, every, interval_minutes, at_minute, day_interval, weekday_mask,
+  permission, finish_condition, every, interval_minutes, at_minute, day_interval, weekday_mask,
   anchor_at, remaining, paused, next_run_at, created_at, done_at, position`.
   `every` is `interval`, `day`,
   `days`, `weekdays`, `week` or `month` for repeating jobs (`pinned` for manual-only
@@ -284,11 +310,13 @@ Schedules use two tables and link each spawned session through `schedule_id`:
   was chosen — the creation time until
   the recurrence is edited into a different form — which is what fixes the
   N-day starting date, weekday and day of the month. Changing N-day spacing
-  also moves this anchor. `done_at` and `position` mean what they mean on a
+  also moves this anchor. `finish_condition` is empty when the job has none.
+  `done_at` and `position` mean what they mean on a
   session row: archived-at, and the order the sidebar was dragged into.
 - **schedule_runs** — `id, schedule_id, session_id, status, started_at,
-  ended_at, count`. `status` is `running`, `done`, `error`, `interrupted` or
-  `skipped`. A skipped run has no `session_id`. This is the list the view
+  ended_at, count`. `status` is `running`, `done`, `finished`, `error`,
+  `interrupted` or `skipped`. `finished` is a run that found the finish
+  condition true. A skipped run has no `session_id`. This is the list the view
   draws, and it is why skips can be shown at all: they never become sessions.
 
   `count` is how many fires one row stands for — 1 for everything except a
@@ -330,9 +358,9 @@ idle cost of the feature is a query every quarter minute.
 | Method | Path | Purpose |
 |--------|------|---------|
 | GET | `/api/schedules` | `?window=&q=&project_id=&include_done=` — the sidebar list, and with `include_done` the project page's Jobs tab, which draws both states |
-| POST | `/api/schedules` | `{project_id, prompt, provider, model, effort, permission, every, interval_minutes, at_minute, remaining, title}` — `title` optional; without it the job names itself ([above](#the-name)) |
+| POST | `/api/schedules` | `{project_id, prompt, provider, model, effort, permission, every, interval_minutes, at_minute, remaining, finish_condition, title}` — `title` and `finish_condition` optional; without it the job names itself ([above](#the-name)) |
 | GET | `/api/schedules/:id` | the schedule and its runs |
-| PATCH | `/api/schedules/:id` | `{title, prompt, provider, model, effort, remaining, paused, done, every, interval_minutes, at_minute}` — any subset |
+| PATCH | `/api/schedules/:id` | `{title, prompt, finish_condition, provider, model, effort, remaining, paused, done, every, interval_minutes, at_minute}` — any subset |
 | DELETE | `/api/schedules/:id` | drops the schedule and its run history; the sessions it spawned stay |
 | POST | `/api/schedules/:id/run` | `{enqueue}` — force one run now; see [Running one now](#running-one-now) |
 

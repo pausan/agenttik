@@ -1578,8 +1578,11 @@ export async function createSchedule(form) {
       permission: s.permission,
       ...scheduleRecurrence(form),
       remaining: form.remaining,
+      finish_condition: form.finishCondition || "",
     });
-    if (form.every !== "pinned") rememberScheduleDefaults(form);
+    // The condition belongs to this prompt, so the next dialog opens without it.
+    const { finishCondition, ...defaults } = form;
+    if (form.every !== "pinned") rememberScheduleDefaults(defaults);
     await Promise.all([refreshProjects(), refreshSchedules()]).catch(() => {});
     openSchedule(created.schedule.id);
   } catch (e) {
@@ -1695,6 +1698,13 @@ export function setSchedulePrompt(schedule, prompt) {
   prompt = prompt.trim();
   if (!prompt || prompt === schedule.prompt) return;
   return patchSchedule(schedule, { prompt });
+}
+
+/* Nor the finish condition. Empty turns it off. */
+export function setScheduleFinishCondition(schedule, condition) {
+  condition = condition.trim();
+  if (condition === (schedule.finish_condition || "")) return;
+  return patchSchedule(schedule, { finish_condition: condition });
 }
 
 /* Nor the model. Provider, model and effort travel together, since an effort

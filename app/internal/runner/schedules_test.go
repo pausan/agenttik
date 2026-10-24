@@ -3,9 +3,11 @@ package runner
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/pausan/agenttik/app/internal/agent"
 	"github.com/pausan/agenttik/app/internal/store"
 )
 
@@ -414,5 +416,69 @@ func TestFinishedScheduledRunStaysOpen(t *testing.T) {
 				t.Fatalf("running = %v, remaining = %d; want false, %d", job.Running, job.Remaining, wantRemaining)
 			}
 		})
+	}
+}
+
+func TestFinishConditionGoesFirstAndPausesTheJob(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		reply  string
+		status string
+		paused bool
+	}{
+		{"condition false", "processed one line", store.RunDone, false},
+		{"condition true", finishMarker, store.RunFinished, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fp := &fakeProvider{script: []agent.Event{{Type: agent.EventText, Text: tc.reply}}}
+			r, st, original := setup(t, fp)
+			t.Cleanup(r.Shutdown)
+			now := time.Now()
+			s := &store.Schedule{ProjectID: original.ProjectID, Title: "lines", Prompt: "process one line",
+				Provider: "fake", FinishCondition: "the file is empty", Every: store.EveryInterval,
+				IntervalMinutes: 15, Remaining: -1, NextRunAt: now.UnixMilli()}
+			if err := st.CreateSchedule(s); err != nil {
+				t.Fatal(err)
+			}
+			r.tickSchedules(now)
+			runs, err := st.ListScheduleRuns(s.ID, 0)
+			if err != nil || len(runs) != 1 {
+				t.Fatalf("runs = %+v, %v", runs, err)
+			}
+			waitFor(t, func() bool { return !r.Running(runs[0].SessionID) }, "scheduled run to finish")
+
+			if !strings.HasPrefix(fp.lastReq.Prompt, "Before anything else, check this finish condition:\n\nthe file is empty") ||
+				!strings.HasSuffix(fp.lastReq.Prompt, "process one line") {
+				t.Fatalf("prompt = %q", fp.lastReq.Prompt)
+			}
+			job, err := st.GetSchedule(s.ID)
+			if err != nil || job.Paused != tc.paused {
+				t.Fatalf("job = %+v, %v; want paused %v", job, err, tc.paused)
+			}
+			runs, _ = st.ListScheduleRuns(s.ID, 0)
+			if runs[0].Status != tc.status {
+				t.Fatalf("run status = %q, want %q", runs[0].Status, tc.status)
+			}
+		})
+	}
+}
+
+func TestSchedulePromptWithoutConditionIsUnchanged(t *testing.T) {
+	if got := schedulePrompt(&store.Schedule{Prompt: "do it", FinishCondition: "  "}); got != "do it" {
+		t.Fatalf("prompt = %q", got)
+	}
+}
+
+func TestSaysFinishedNeedsTheMarkerOnItsOwnLine(t *testing.T) {
+	for reply, want := range map[string]bool{
+		finishMarker:             true,
+		"`" + finishMarker + "`": true,
+		"The file is empty.\n\n**" + finishMarker + "**":        true,
+		"I will reply with only " + finishMarker + " when done": false,
+		"processed line 3": false,
+	} {
+		if got := saysFinished(reply); got != want {
+			t.Errorf("saysFinished(%q) = %v, want %v", reply, got, want)
+		}
 	}
 }

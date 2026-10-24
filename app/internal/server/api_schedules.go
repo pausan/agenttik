@@ -91,6 +91,7 @@ func (s *Server) createSchedule(c *fiber.Ctx) error {
 		DayInterval     int64  `json:"day_interval"`
 		WeekdayMask     int64  `json:"weekday_mask"`
 		Remaining       int64  `json:"remaining"`
+		FinishCondition string `json:"finish_condition"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return badRequest("invalid body: %v", err)
@@ -144,6 +145,7 @@ func (s *Server) createSchedule(c *fiber.Ctx) error {
 		Model:           body.Model,
 		Effort:          body.Effort,
 		Permission:      string(agent.Permission(body.Permission).Valid()),
+		FinishCondition: strings.TrimSpace(body.FinishCondition),
 		Every:           body.Every,
 		IntervalMinutes: body.IntervalMinutes,
 		AtMinute:        body.AtMinute,
@@ -153,7 +155,7 @@ func (s *Server) createSchedule(c *fiber.Ctx) error {
 		Remaining:       body.Remaining,
 	}
 	if sched.Every == store.EveryPinned {
-		sched.Remaining, sched.IntervalMinutes, sched.AtMinute = 0, 0, 0
+		sched.Remaining, sched.IntervalMinutes, sched.AtMinute, sched.FinishCondition = 0, 0, 0, ""
 	} else {
 		sched.NextRunAt = runner.FirstRun(sched, time.Now()).UnixMilli()
 	}
@@ -211,11 +213,12 @@ func (s *Server) updateSchedule(c *fiber.Ctx) error {
 		// The prompt and the model are as changeable as the clock: a
 		// schedule worth keeping is rarely worth remaking over a typo or a
 		// model that turned out to be the wrong one.
-		Prompt    *string `json:"prompt"`
-		Provider  *string `json:"provider"`
-		AccountID *int64  `json:"account_id"`
-		Model     string  `json:"model"`
-		Effort    string  `json:"effort"`
+		Prompt          *string `json:"prompt"`
+		FinishCondition *string `json:"finish_condition"`
+		Provider        *string `json:"provider"`
+		AccountID       *int64  `json:"account_id"`
+		Model           string  `json:"model"`
+		Effort          string  `json:"effort"`
 
 		// The recurrence fields move together: every names the form, and
 		// the remaining fields carry its clock and calendar choices.
@@ -236,7 +239,7 @@ func (s *Server) updateSchedule(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	if sched.Every == store.EveryPinned && (body.Every != nil || body.Paused != nil || body.Remaining != nil) {
+	if sched.Every == store.EveryPinned && (body.Every != nil || body.Paused != nil || body.Remaining != nil || body.FinishCondition != nil) {
 		return badRequest("pinned prompts have no recurrence")
 	}
 	if body.Title != nil {
@@ -252,6 +255,11 @@ func (s *Server) updateSchedule(c *fiber.Ctx) error {
 			return badRequest("prompt is required")
 		}
 		if err := s.store.SetSchedulePrompt(sched.ID, prompt); err != nil {
+			return err
+		}
+	}
+	if body.FinishCondition != nil {
+		if err := s.store.SetScheduleFinishCondition(sched.ID, strings.TrimSpace(*body.FinishCondition)); err != nil {
 			return err
 		}
 	}

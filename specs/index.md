@@ -70,7 +70,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [083](083-background-tasks.md) | Background shells and subagents kept in conversation order with status and running time |
 | [020](020-task-titles.md) | Instant first-line title, refined by an isolated small model |
 | [024](024-instant-prompt-echo.md) | Drawing sent and queued prompts on the keypress |
-| [028](028-scheduled-jobs.md) | Interval and calendar schedules, queued runs, and duplicate guards |
+| [028](028-scheduled-jobs.md) | Interval and calendar schedules, queued runs, duplicate guards and finish conditions |
 | [033](033-prompt-model-picker.md) | Model picker groups, search and favourites settings shortcut |
 | [045](045-provider-outage-retry.md) | Provider retries that keep the current task first and hold its project queue |
 | [047](047-project-prompt.md) | The standing prompt a project puts in front of every conversation's first |

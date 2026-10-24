@@ -98,3 +98,27 @@ for (const kind of ["Every N days", "Selected weekdays"]) {
     await expect(main.getByLabel("Time of day", { exact: true })).toHaveValue("09:30");
   });
 }
+
+test("a finish condition is set in the dialog and edited on the job page", async ({ page }) => {
+  await addProject(page);
+  await openProject(page);
+  await newTask(page);
+  await pickModel(page);
+  await page.getByPlaceholder("Ask the agent…").fill("Process the first line of todo.txt");
+  await page.getByRole("button", { name: "More prompt actions" }).click();
+  await page.getByRole("button", { name: "Schedule…" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("switch", { name: "Stop when a condition is met" }).click();
+  // An empty condition cannot be scheduled.
+  await expect(dialog.getByRole("button", { name: "Schedule", exact: true })).toBeDisabled();
+  await dialog.getByLabel("Finish condition").fill("todo.txt does not exist or is empty");
+  await dialog.getByRole("button", { name: "Schedule", exact: true }).click();
+
+  const main = page.locator("main");
+  const condition = main.getByLabel("Finish condition");
+  await expect(condition).toHaveValue("todo.txt does not exist or is empty");
+  await condition.fill("todo.txt is empty");
+  await condition.blur();
+  await page.reload();
+  await expect(main.getByLabel("Finish condition")).toHaveValue("todo.txt is empty");
+});

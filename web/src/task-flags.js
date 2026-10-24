@@ -15,3 +15,11 @@ export function nextFlag(flag) {
   const i = TASK_FLAGS.findIndex((f) => f.value === flag);
   return i + 1 < TASK_FLAGS.length ? TASK_FLAGS[i + 1].value : "";
 }
+
+// Where a click on the dot goes: a read, unmarked task turns unread first,
+// then the marks follow, and clearing the last mark reads it again.
+export function nextDot(flag, unread) {
+  if (!taskFlag(flag) && !unread) return { flag: "", unread: true };
+  const next = nextFlag(flag);
+  return { flag: next, unread: !!next };
+}

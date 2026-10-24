@@ -625,6 +625,9 @@ test("task dots cycle marks, even while running, and marks lead the archive", as
   const row = sidebar(page).locator(".task-row").first();
   const flag = row.locator(".task-flag");
   await expect(flag).toHaveCount(0);
+  // A read, unmarked task turns unread first, then the marks follow.
+  await row.getByRole("button", { name: "Mark unread", exact: true }).click();
+  await expect(row.locator(".task-title")).toHaveClass(/font-bold/);
   const saved = page.waitForRequest((r) => r.method() === "PATCH" && r.postDataJSON()?.flag === "star");
   await row.getByRole("button", { name: "Mark star", exact: true }).click();
   await saved;
@@ -636,6 +639,7 @@ test("task dots cycle marks, even while running, and marks lead the archive", as
   await expect(flag).toHaveAttribute("data-flag", "danger");
   await row.getByRole("button", { name: "Clear mark", exact: true }).click();
   await expect(flag).toHaveCount(0);
+  await expect(row.locator(".task-title")).not.toHaveClass(/font-bold/);
   await page.getByRole("button", { name: "Stop", exact: true }).click();
   await expect(page.getByText("idle", { exact: true })).toBeVisible();
 

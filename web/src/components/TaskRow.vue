@@ -12,7 +12,7 @@ import { computed, nextTick, ref } from "vue";
 
 import { S, projectQueueActions, setProjectQueuePaused } from "../store";
 import { taskDot } from "../task-attention.js";
-import { TASK_FLAGS, nextFlag, taskFlag } from "../task-flags.js";
+import { TASK_FLAGS, nextDot, taskFlag } from "../task-flags.js";
 import StatusDot from "./StatusDot.vue";
 
 defineOptions({ inheritAttrs: false });
@@ -55,7 +55,15 @@ const emit = defineEmits(["select", "stop", "toggle-archive", "delete", "rename"
 const project = computed(() => S.projects.find((p) => p.id === props.projectId));
 const queueAction = computed(() => projectQueueActions.value.get(props.projectId));
 const mark = computed(() => taskFlag(props.flag));
-const next = computed(() => taskFlag(nextFlag(props.flag)));
+const step = computed(() => nextDot(props.flag, props.unread));
+const stepLabel = computed(() => step.value.flag ? `Mark ${taskFlag(step.value.flag).label.toLowerCase()}`
+  : step.value.unread ? "Mark unread" : "Clear mark");
+
+function cycle() {
+  const { flag, unread } = step.value;
+  if (flag !== (props.flag || "")) emit("flag", flag);
+  if (unread !== props.unread) emit("toggle-unread");
+}
 
 const menu = computed(() => [
   { label: "Open task", icon: "i-lucide-message-square", onSelect: () => emit("select") },
@@ -143,14 +151,15 @@ defineExpose({ edit });
             class="w-3 shrink-0 font-mono text-[10px] text-dimmed tabular-nums"
             aria-hidden="true"
           >{{ number || "" }}</span>
-          <!-- Each click moves to the next mark. A mark pulses while the task
-               runs, so running stays visible on a marked row. -->
+          <!-- Each click moves to the next step: unread, then each mark. A
+               mark pulses while the task runs, so running stays visible on a
+               marked row. -->
           <button
             type="button"
             class="-m-1 flex size-5 shrink-0 cursor-pointer items-center justify-center rounded hover:bg-elevated focus-visible:outline-primary"
-            :aria-label="next ? `Mark ${next.label.toLowerCase()}` : 'Clear mark'"
-            :title="next ? `Mark ${next.label.toLowerCase()}` : 'Clear mark'"
-            @click.stop="$emit('flag', next?.value || '')"
+            :aria-label="stepLabel"
+            :title="stepLabel"
+            @click.stop="cycle"
           >
             <UIcon
               v-if="mark"

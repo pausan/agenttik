@@ -20,8 +20,8 @@ bold title and returns the dot to its normal status.
 The store records final persisted `done` stream events, including tasks with
 no open tab. A new turn clears the previous unread result. One Vue watcher
 owns one timeout for the selected transcript; row count adds no timers.
-The task's status dot cycles its mark rather than its read state; see
-[098](098-task-flags.md). A marked task shows its mark in place of the dot and
+The task's status dot marks a read, unmarked task unread, then cycles its
+mark; see [098](098-task-flags.md). A marked task shows its mark in place of the dot and
 keeps the bold title while unread.
 Right-clicking a sidebar or project task row opens actions for opening, renaming,
 and marking read or unread, plus stop, archive/unarchive, scheduled job, and

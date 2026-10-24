@@ -14,7 +14,8 @@ the final stats always clears the progress line.
 Project, task, and profile activity dots pulse in opacity and size together over
 two seconds: full opacity at their existing size, fading to half opacity at 60%
 size, then growing again. Scaling does not change layout. Waiting dots use the
-same animation over 2.5 seconds.
+same animation over 2.5 seconds. The pulse moves in steps, about four a
+second, rather than every frame (see [079](079-ui-performance.md)).
 
 ## Turn summary
 

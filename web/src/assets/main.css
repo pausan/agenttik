@@ -22,6 +22,13 @@
   --color-agenttik-950: #052e16;
 }
 
+/* Spinners, Nuxt UI's own included, turn in eight steps rather than every
+   frame: the desktop window paints in software, where a smooth turn costs
+   several percent of a core. See specs/079-ui-performance.md. */
+@theme {
+  --animate-spin: spin 1s steps(8) infinite;
+}
+
 html, body, #app { height: 100%; }
 html { color-scheme: light; }
 html.dark { color-scheme: dark; }
@@ -252,12 +259,13 @@ button[draggable="true"]:active { cursor: grabbing; }
 
 /* The bubble taking streamed text carries a cursor until the turn ends. In a
    rendered reply the text sits inside blocks, so the cursor goes at the end of
-   the last one rather than on a line of its own beneath them. */
+   the last one rather than on a line of its own beneath them. It blinks
+   rather than fades, so it is drawn twice a second instead of every frame. */
 .streaming:not(.markdown)::after,
 .markdown.streaming > :last-child::after {
   content: "▍";
   color: var(--ui-primary);
-  animation: agenttik-pulse 1s infinite;
+  animation: agenttik-pulse 1s steps(1) infinite;
 }
 @keyframes agenttik-pulse {
   50% { opacity: 0.3; }

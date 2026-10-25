@@ -21,7 +21,8 @@ the views and the native calls, made through `Capacitor.nativePromise`.
 - **Saved.** Every server reached is saved in `localStorage`, newest first,
   with its name, machine ID and whether this phone is trusted there. A cold
   start reconnects to the newest one; Cancel stops it. Coming back to the
-  page in the same run does not reconnect.
+  page in the same run does not reconnect. Scan results that are also saved
+  get an accent border and say `saved` or `remembered`.
 
 ## Signing in
 
@@ -59,14 +60,30 @@ then leaves. The connect page's entry is often missing from the history
 because WebView skips entries a page left without a user gesture, as the
 automatic reconnect does. When a session ends while the remote is open, the
 remote shows its own password form; Back and a tap on the saved server signs
-in with the key instead. iOS has no Back; reopening the app reconnects.
+in with the key instead. On the connect page Back always leaves, even with
+the remote's pages behind it. iOS has no Back; reopening the app reconnects.
+
+## Logging out
+
+Inside the app, the remote's Settings has **Log out** in its footer. The web
+UI shows it only when the `agenttikApp` channel exists, so browsers and the
+desktop app never see it. It requests `/__auth/logout`, which ends the
+session on a locked server, then posts `disconnect` on the channel. The
+native side takes `disconnect` only from the allowed origin's main frame. It
+forgets that origin and loads the connect page with `#signed-out`.
+
+The page stores that origin as `agenttik.signedOut` and drops the hash.
+While the key is set, cold starts stay on the connect page, and that saved
+server says `signed out`. Opening any server clears it. The phone's key and
+trust are kept, so tapping the server again signs in by key.
 
 ## Native parts
 
 The plugin lives in the app itself, registered by `MainActivity` on Android
 and by `BridgeViewController` (`AgenttikNativePlugin.swift`) on iOS. It has
-two methods, `addresses` (up, non-loopback IPv4) and `allow`, and the
-microphone below.
+two methods, `addresses` (up, non-loopback IPv4) and `allow`, the
+`agenttikApp` channel above (a web message listener on Android, a script
+message handler on iOS), and the microphone below.
 
 Android allows cleartext HTTP (`usesCleartextTraffic`), since LAN servers
 speak plain HTTP. iOS sets `NSAllowsArbitraryLoads` and

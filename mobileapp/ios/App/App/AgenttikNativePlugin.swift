@@ -6,7 +6,8 @@ import WebKit
 // The little the connect page cannot do from JavaScript: list this phone's
 // IPv4 addresses for the scan, and keep the chosen agenttik inside the
 // WebView instead of handing it to the system browser. It also gives that
-// agenttik a microphone (see Microphone).
+// agenttik a microphone (see Microphone) and a way back to the connect page
+// (see AppChannel).
 @objc(AgenttikNativePlugin)
 public class AgenttikNativePlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "AgenttikNativePlugin"
@@ -21,6 +22,7 @@ public class AgenttikNativePlugin: CAPPlugin, CAPBridgedPlugin {
     override public func load() {
         webView?.configuration.userContentController.addScriptMessageHandler(
             Microphone(plugin: self), contentWorld: .page, name: "agenttikMicrophone")
+        webView?.configuration.userContentController.add(AppChannel(plugin: self), contentWorld: .page, name: "agenttikApp")
     }
 
     @objc func addresses(_ call: CAPPluginCall) {
@@ -67,6 +69,16 @@ public class AgenttikNativePlugin: CAPPlugin, CAPBridgedPlugin {
         return origin.protocol == allowed.scheme && origin.host == allowed.host && port == self.port(allowed)
     }
 
+    // disconnect forgets the remote and loads the connect page with
+    // #signed-out, which it reads as "do not reconnect".
+    func disconnect() {
+        allowed = nil
+        guard let start = bridge?.config.appStartServerURL,
+              var parts = URLComponents(url: start, resolvingAgainstBaseURL: false) else { return }
+        parts.fragment = "signed-out"
+        if let url = parts.url { webView?.load(URLRequest(url: url)) }
+    }
+
     private func port(_ url: URL) -> Int {
         url.port ?? (url.scheme == "https" ? 443 : 80)
     }
@@ -75,6 +87,22 @@ public class AgenttikNativePlugin: CAPPlugin, CAPBridgedPlugin {
 class BridgeViewController: CAPBridgeViewController {
     override open func capacitorDidLoad() {
         bridge?.registerPluginInstance(AgenttikNativePlugin())
+    }
+}
+
+// Log out in the remote's Settings posts "disconnect" once it has signed out.
+// Only the allowed origin's main frame is heard.
+class AppChannel: NSObject, WKScriptMessageHandler {
+    private weak var plugin: AgenttikNativePlugin?
+
+    init(plugin: AgenttikNativePlugin) {
+        self.plugin = plugin
+    }
+
+    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.frameInfo.isMainFrame, message.body as? String == "disconnect",
+              let plugin = plugin, plugin.isAllowed(message.frameInfo.securityOrigin) else { return }
+        plugin.disconnect()
     }
 }
 

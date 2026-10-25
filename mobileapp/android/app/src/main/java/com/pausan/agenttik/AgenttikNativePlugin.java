@@ -7,6 +7,8 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import androidx.webkit.WebViewCompat;
+import androidx.webkit.WebViewFeature;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
@@ -15,7 +17,7 @@ import java.util.Collections;
 // The little the connect page cannot do from JavaScript: list this phone's
 // IPv4 addresses for the scan, and keep the chosen agenttik inside the
 // WebView instead of handing it to the system browser. It also gives that
-// agenttik a microphone (see Microphone).
+// agenttik a microphone (see Microphone) and a way back to the connect page.
 @CapacitorPlugin(name = "AgenttikNative")
 public class AgenttikNativePlugin extends Plugin {
 
@@ -24,6 +26,15 @@ public class AgenttikNativePlugin extends Plugin {
     @Override
     public void load() {
         new Microphone(getActivity(), bridge.getWebView(), this::same);
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return;
+        // Log out in the remote's Settings posts "disconnect" once it has
+        // signed out. The connect page reads #signed-out as "do not reconnect".
+        WebViewCompat.addWebMessageListener(bridge.getWebView(), "agenttikApp", Collections.singleton("*"),
+            (view, message, origin, isMainFrame, reply) -> {
+                if (!isMainFrame || !same(origin) || !"disconnect".equals(message.getData())) return;
+                allowed = null;
+                view.loadUrl(bridge.getLocalUrl() + "/#signed-out");
+            });
     }
 
     @PluginMethod

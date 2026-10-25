@@ -22,6 +22,7 @@ import SubscriptionSettings from "./settings/SubscriptionSettings.vue";
 import AboutSettings from "./settings/AboutSettings.vue";
 import HelpSettings from "./settings/HelpSettings.vue";
 import { isMobile } from "../ui";
+import { mobileApp } from "../mobile-app";
 import { SETTINGS_SECTIONS, visibleSettings } from "../settings-navigation";
 import APIProviderSettings from "./settings/APIProviderSettings.vue";
 
@@ -29,6 +30,7 @@ const open = defineModel("open", { type: Boolean, default: false });
 defineProps({ tourActive: Boolean });
 const emit = defineEmits(["start-tour"]);
 const section = defineModel("section", { type: String, default: "general" });
+const app = mobileApp();
 
 const filter = ref("");
 const visited = reactive(new Set());
@@ -195,7 +197,8 @@ async function showOrchestrator() {
       </div>
     </template>
     <template #footer>
-      <div class="flex w-full justify-end">
+      <div class="flex w-full justify-end gap-2">
+        <UButton v-if="app" label="Log out" icon="i-lucide-log-out" color="neutral" variant="outline" class="mr-auto" @click="app.logout()" />
         <UButton label="Done" @click="open = false" />
       </div>
     </template>

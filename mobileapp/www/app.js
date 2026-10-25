@@ -12,6 +12,9 @@ const platform = cap?.getPlatform?.() || 'web';
 const $ = (id) => document.getElementById(id);
 const SERVERS = 'agenttik.servers';
 const DEVICE = 'agenttik.device';
+// SIGNED_OUT holds the origin this phone last logged out of. While it is set,
+// a cold start stays on this page instead of reconnecting.
+const SIGNED_OUT = 'agenttik.signedOut';
 
 // Requests go through the native HTTP stack: it is not bound by CORS, and
 // on both platforms it stores the session cookie a sign-in sets where the
@@ -195,6 +198,7 @@ async function passwordSignIn(password, code) {
 // origin inside the app; every other link still opens in the system browser.
 async function open(entry) {
   saveServer(entry);
+  localStorage.removeItem(SIGNED_OUT);
   // The session cookie came back on a native request; reading it back makes
   // sure the WebView's store holds it before navigating.
   await native('CapacitorCookies', 'getCookies', { url: entry.origin }).catch(() => {});
@@ -210,6 +214,7 @@ async function scan() {
   $('scan').disabled = true;
   $('scan-status').textContent = 'Looking on this network…';
   let found = 0;
+  const saved = new Map(servers().map((s) => [s.origin, s]));
   try {
     const { addresses } = await native('AgenttikNative', 'addresses');
     const hosts = scanHosts(addresses);
@@ -221,7 +226,7 @@ async function scan() {
         const info = identify(res.status, res.data);
         if (!info) return;
         found++;
-        list.append(serverButton({ origin, name: info.name, version: info.version }));
+        list.append(serverButton({ ...saved.get(origin), origin, name: info.name, version: info.version }, { known: saved.has(origin) }));
       } catch {}
     });
     $('scan-status').textContent = found ? '' : `No agenttik found on port ${PORT}.`;
@@ -234,13 +239,18 @@ async function scan() {
 
 // ---- views ----
 
-function serverButton(s, { removable = false } = {}) {
+// serverButton shows one server. known marks a scan result that is also
+// saved; the server this phone logged out of says so.
+function serverButton(s, { removable = false, known = false } = {}) {
   const li = document.createElement('li');
   const b = document.createElement('button');
-  b.className = 'server';
+  b.className = known ? 'server known' : 'server';
   b.innerHTML = '<strong></strong><span></span>';
   b.querySelector('strong').textContent = s.name || s.origin;
-  b.querySelector('span').textContent = [s.origin, s.version, s.trusted ? 'remembered' : ''].filter(Boolean).join(' · ');
+  const signedOut = localStorage.getItem(SIGNED_OUT) === s.origin;
+  b.querySelector('span').textContent = [
+    s.origin, s.version, signedOut ? 'signed out' : '', s.trusted ? 'remembered' : known ? 'saved' : '',
+  ].filter(Boolean).join(' · ');
   b.onclick = () => connect(s.origin);
   li.append(b);
   if (removable) {
@@ -315,9 +325,16 @@ $('cancel').onclick = () => {
 };
 $('back').onclick = () => showHome();
 
-// A cold start goes straight back to the last server. Coming back to this
-// page from the remote, within the same run, does not.
+// Log out in the remote's Settings comes back here with #signed-out.
+if (location.hash === '#signed-out') {
+  localStorage.setItem(SIGNED_OUT, servers()[0]?.origin || '');
+  history.replaceState(null, '', location.pathname);
+}
+
+// A cold start goes straight back to the last server, unless this phone
+// logged out. Coming back to this page from the remote, within the same run,
+// does not.
 showHome();
 const last = servers()[0];
-if (last && !sessionStorage.getItem('started')) connect(last.origin);
+if (last && !sessionStorage.getItem('started') && localStorage.getItem(SIGNED_OUT) === null) connect(last.origin);
 sessionStorage.setItem('started', '1');

@@ -54,3 +54,4 @@ button.forget { background: transparent; color: var(--muted); border-color: var(
 .bad { color: var(--bad); min-height: 1em; margin: .5rem 0 0; }
 .bad:empty { display: none; }
 #busy { text-align: center; padding-top: 3rem; }
+button.server.known { border-color: var(--accent); }

@@ -35,7 +35,8 @@ const props = defineProps({
   // this is a run of. See specs/028-scheduled-jobs.md.
   job: { type: Number, default: 0 },
   unread: Boolean,
-  // "", "star", "warn" or "danger". A mark replaces the status dot.
+  // "", "star", "warn" or "danger". A mark replaces the status dot, except
+  // while the task runs.
   flag: { type: String, default: "" },
   active: Boolean,
   archived: Boolean,
@@ -152,8 +153,8 @@ defineExpose({ edit });
             aria-hidden="true"
           >{{ number || "" }}</span>
           <!-- Each click moves to the next step: unread, then each mark. A
-               mark pulses while the task runs, so running stays visible on a
-               marked row. -->
+               running task shows its pulsing dot instead of its mark, so
+               running stays visible on a marked row. -->
           <button
             type="button"
             class="-m-1 flex size-5 shrink-0 cursor-pointer items-center justify-center rounded hover:bg-elevated focus-visible:outline-primary"
@@ -162,10 +163,10 @@ defineExpose({ edit });
             @click.stop="cycle"
           >
             <UIcon
-              v-if="mark"
+              v-if="mark && status !== 'running'"
               :name="mark.icon"
               class="task-flag block size-3"
-              :class="[mark.color, { 'flag-pulse': status === 'running' }]"
+              :class="mark.color"
               :data-flag="mark.value"
             />
             <StatusDot v-else class="block" :status="taskDot(status, unread)" />
@@ -264,13 +265,3 @@ defineExpose({ edit });
   </UContextMenu>
 </template>
 
-<style scoped>
-/* Stepped like StatusDot's pulse; see specs/079-ui-performance.md. */
-.flag-pulse {
-  animation: flag-pulse 2s steps(4) infinite;
-}
-@keyframes flag-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
-</style>

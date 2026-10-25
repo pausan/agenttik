@@ -71,6 +71,16 @@ Android allows cleartext HTTP (`usesCleartextTraffic`), since LAN servers
 speak plain HTTP. iOS sets `NSAllowsArbitraryLoads` and
 `NSLocalNetworkUsageDescription`.
 
+## Icon
+
+The app icon is the desktop one, `web/public/agenttik.svg`.
+`scripts/mobile-icons.py` renders it with headless Chrome and ImageMagick
+into every Android mipmap and the iOS 1024px icon; rerun it when the SVG
+changes. Android gets an adaptive icon (plate as background, sparkles as
+foreground, the 64-unit plate filling the 72dp visible area) plus legacy
+square and round PNGs. iOS gets a full-bleed opaque square, since iOS rounds
+the corners itself.
+
 ## Builds
 
 The `android` job in `.github/workflows/build-and-release.yml` runs the page

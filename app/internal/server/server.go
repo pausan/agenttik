@@ -110,6 +110,10 @@ type Server struct {
 	// previewKey signs HTML preview tokens. It lives as long as the process;
 	// a preview opened again after a restart fetches a fresh one.
 	previewKey []byte
+
+	// flat is what the flat view has learned about where tasks and terminals
+	// live. See flat.go.
+	flat flatState
 }
 
 func New(s *store.Store, reg *agent.Registry, r *runner.Runner) *Server {
@@ -161,6 +165,7 @@ func New(s *store.Store, reg *agent.Registry, r *runner.Runner) *Server {
 	srv.remotes = newRemoteManager(s.Dir(), s.MachineID, s.ServerName)
 	srv.speech = speech.New(filepath.Join(s.Dir(), "speech"))
 	app.Use(routeHTMLScope)
+	app.Use(srv.routeFlat)
 	app.Use(srv.routeRemote)
 	app.Use(srv.routeProfile)
 	srv.routes()

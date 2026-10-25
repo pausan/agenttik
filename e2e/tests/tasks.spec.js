@@ -631,27 +631,25 @@ test("task dots cycle marks, even while running, and marks lead the archive", as
   const saved = page.waitForRequest((r) => r.method() === "PATCH" && r.postDataJSON()?.flag === "star");
   await row.getByRole("button", { name: "Mark star", exact: true }).click();
   await saved;
-  // A running task keeps its pulsing dot; the mark waits for the turn to end.
-  await expect(flag).toHaveCount(0);
-  await expect(row.locator(".status-pulse")).toHaveCount(1);
+  await expect(flag).toHaveAttribute("data-flag", "star");
+  await expect(flag).toHaveClass(/flag-pulse/);
   await expect(page.getByPlaceholder("Ask the agent…")).toBeVisible();
   await row.getByRole("button", { name: "Mark warning", exact: true }).click();
+  await expect(flag).toHaveAttribute("data-flag", "warn");
   await row.getByRole("button", { name: "Mark danger", exact: true }).click();
+  await expect(flag).toHaveAttribute("data-flag", "danger");
   await row.getByRole("button", { name: "Clear mark", exact: true }).click();
-  await expect(row.getByRole("button", { name: "Mark unread", exact: true })).toBeVisible();
-  await expect(row.locator(".task-title")).not.toHaveClass(/font-bold/);
-  await row.getByRole("button", { name: "Mark unread", exact: true }).click();
-  await row.getByRole("button", { name: "Mark star", exact: true }).click();
   await expect(flag).toHaveCount(0);
+  await expect(row.locator(".task-title")).not.toHaveClass(/font-bold/);
   await page.getByRole("button", { name: "Stop", exact: true }).click();
   await expect(page.getByText("idle", { exact: true })).toBeVisible();
-  await expect(flag).toHaveAttribute("data-flag", "star");
 
   // The right-click menu sets a mark directly; reload shows it was saved.
   await row.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Mark", exact: true }).hover();
   await page.getByRole("menuitemcheckbox", { name: "Warning", exact: true }).click();
   await expect(flag).toHaveAttribute("data-flag", "warn");
+  await expect(flag).not.toHaveClass(/flag-pulse/);
   await page.reload();
   await expect(flag).toHaveAttribute("data-flag", "warn");
 

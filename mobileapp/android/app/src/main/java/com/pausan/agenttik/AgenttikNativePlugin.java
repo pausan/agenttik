@@ -1,6 +1,11 @@
 package com.pausan.agenttik;
 
 import android.net.Uri;
+import android.util.Log;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebView;
+import com.getcapacitor.BridgeWebViewClient;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -25,6 +30,20 @@ public class AgenttikNativePlugin extends Plugin {
 
     @Override
     public void load() {
+        bridge.setWebViewClient(new BridgeWebViewClient(bridge) {
+            @Override
+            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                super.onReceivedError(view, request, error);
+                // A failed document replaces the remote UI with WebView's
+                // error page, which has no reconnect code. Subresource errors
+                // leave the UI alive and must not take it away.
+                if (!request.isForMainFrame() || !same(request.getUrl())) return;
+                String origin = allowed;
+                allowed = null;
+                Log.w("Agenttik", "Connection lost to " + origin + ": " + error.getErrorCode() + " " + error.getDescription());
+                view.post(() -> view.loadUrl(bridge.getLocalUrl() + "/#connection-lost=" + Uri.encode(origin)));
+            }
+        });
         new Microphone(getActivity(), bridge.getWebView(), this::same);
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return;
         // Log out in the remote's Settings posts "disconnect" once it has

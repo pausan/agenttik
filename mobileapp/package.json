@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test test/*.test.js",
+    "test:android": "node --test test/android.test.mjs",
     "sync": "cap sync"
   },
   "dependencies": {

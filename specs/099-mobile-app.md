@@ -8,8 +8,9 @@ phone runs no agenttik of its own.
 ## The page
 
 `www/` is plain HTML, CSS and ES modules with no bundler. `lib.js` holds the
-pure logic and is tested with `npm test` (Node's test runner); `app.js` holds
-the views and the native calls, made through `Capacitor.nativePromise`.
+pure logic; `app.js` holds the views and the native calls, made through
+`Capacitor.nativePromise`. `npm test` uses Node's test runner for both the
+helpers and connection flows, with a fake DOM, native bridge and timers.
 
 - **Address.** Same rules as `--remote` ([064](064-remote-connections.md)):
   a bare `host:port` means HTTP, and paths, queries, fragments and
@@ -62,6 +63,36 @@ automatic reconnect does. When a session ends while the remote is open, the
 remote shows its own password form; Back and a tap on the saved server signs
 in with the key instead. On the connect page Back always leaves, even with
 the remote's pages behind it. iOS has no Back; reopening the app reconnects.
+
+## Connection loss on Android
+
+The loaded UI's event streams reconnect themselves after a network loss.
+Failed images, frames and other subresources leave that UI in place. A failed
+main-frame navigation or reload is different: WebView replaces the document
+with its built-in error page, which cannot run agenttik's reconnect code.
+
+The native `BridgeWebViewClient` handles network errors for the allowed
+origin's main frame. It clears the allowed origin, logs the WebView error
+under `Agenttik`, and loads the bundled page with
+`#connection-lost=<encoded origin>`. The page removes the fragment and retries
+that server after three seconds, repeating after each failed attempt. This
+delay also applies when native HTTP works but WebView navigation keeps
+failing. It checks discovery and the front page again, signs in by key when
+needed, or asks for credentials if the session and trust are no longer valid.
+Non-200 front pages are failures, not successful connections.
+
+Cancel stops scheduled retries and prevents an in-flight attempt from
+navigating later. A new attempt also invalidates the old one. Saved servers,
+trust and cookies survive connection loss. Recovery does not set the
+signed-out flag. Cold-start and explicit connection failures still return
+to the address page without repeated retries.
+
+`npm run test:android` exercises the actual native WebView against an isolated
+HTTP fixture. Install a debug APK in a running emulator and set
+`ANDROID_SERIAL=emulator-<port>`; the test refuses physical devices. It checks
+plain HTTP navigation, bridge isolation, subresource failure, a failed reload
+after a successful connection, automatic recovery, Cancel and logout. It uses
+`adb reverse` and WebView's debug protocol, with no running agenttik service.
 
 ## Logging out
 

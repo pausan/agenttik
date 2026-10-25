@@ -106,7 +106,13 @@ async function deviceKey() {
 // ---- connecting ----
 
 let target; // { origin, info, totp } while signing in
-let cancelled = false;
+let attempt = 0;
+let retry;
+
+function retryConnection(origin) {
+  showBusy(`Connection lost. Retrying ${origin} in 3 seconds…`);
+  retry = setTimeout(() => connect(origin, true), 3000);
+}
 
 async function check(origin) {
   let res;
@@ -124,28 +130,36 @@ async function check(origin) {
 // session or no lock answers with the app; a lock answers with its form.
 async function state(origin) {
   const res = await http(origin + '/', { headers: { Accept: 'text/html' }, responseType: 'text' });
+  if (res.status !== 200) throw new Error(`Could not load ${origin} (HTTP ${res.status}).`);
   return loginState(res.data);
 }
 
-async function connect(origin) {
-  cancelled = false;
-  showBusy(`Connecting to ${origin}…`);
+async function connect(origin, reconnect = false) {
+  clearTimeout(retry);
+  const current = ++attempt;
+  showBusy(`${reconnect ? 'Reconnecting' : 'Connecting'} to ${origin}…`);
   try {
     const info = await check(origin);
+    if (current !== attempt) return;
     const known = servers().find((s) => s.origin === origin);
     const entry = { origin, name: info.name, id: info.id, trusted: !!(known?.trusted && known.id === info.id) };
     const s = await state(origin);
-    if (cancelled) return;
-    if (!s.locked) return open(entry);
+    if (current !== attempt) return;
+    if (!s.locked) return await open(entry, current);
     const signedIn = entry.trusted && (await keySignIn(origin, info.id));
-    if (cancelled) return;
-    if (signedIn) return open(entry);
+    if (current !== attempt) return;
+    if (signedIn) return await open(entry, current);
     entry.trusted = false;
     saveServer(entry);
     target = { origin, info, totp: s.totp };
     showLogin();
   } catch (err) {
-    if (!cancelled) showHome(err.message);
+    if (current !== attempt) return;
+    if (reconnect) {
+      retryConnection(origin);
+    } else {
+      showHome(err.message);
+    }
   }
 }
 
@@ -172,6 +186,7 @@ async function keySignIn(origin, serverID) {
 }
 
 async function passwordSignIn(password, code) {
+  const current = attempt;
   const { origin, info } = target;
   const me = device();
   const form = new URLSearchParams({ password, code, next: '/', id: me.id, name: me.name });
@@ -191,18 +206,20 @@ async function passwordSignIn(password, code) {
   });
   if (res.status !== 303) throw new Error(loginError(res.data));
   if (keyError) alert(`Signed in, but this phone will ask again next time: ${keyError}`);
-  return open({ origin, name: info.name, id: info.id, trusted: !!info.id && !keyError });
+  return open({ origin, name: info.name, id: info.id, trusted: !!info.id && !keyError }, current);
 }
 
 // open hands the WebView over to the remote. The native side keeps that one
 // origin inside the app; every other link still opens in the system browser.
-async function open(entry) {
-  saveServer(entry);
-  localStorage.removeItem(SIGNED_OUT);
+async function open(entry, current) {
   // The session cookie came back on a native request; reading it back makes
   // sure the WebView's store holds it before navigating.
   await native('CapacitorCookies', 'getCookies', { url: entry.origin }).catch(() => {});
+  if (current !== attempt) return;
   await native('AgenttikNative', 'allow', { origin: entry.origin });
+  if (current !== attempt) return;
+  saveServer(entry);
+  localStorage.removeItem(SIGNED_OUT);
   location.href = entry.origin + '/';
 }
 
@@ -320,10 +337,14 @@ $('login-form').onsubmit = async (e) => {
 
 $('scan').onclick = scan;
 $('cancel').onclick = () => {
-  cancelled = true;
+  clearTimeout(retry);
+  attempt++;
   showHome();
 };
-$('back').onclick = () => showHome();
+$('back').onclick = () => {
+  attempt++;
+  showHome();
+};
 
 // Log out in the remote's Settings comes back here with #signed-out.
 if (location.hash === '#signed-out') {
@@ -334,7 +355,17 @@ if (location.hash === '#signed-out') {
 // A cold start goes straight back to the last server, unless this phone
 // logged out. Coming back to this page from the remote, within the same run,
 // does not.
+// A failed remote document has lost all of its JavaScript, including SSE's
+// reconnect. Android brings it here so retries work even while LAN is down.
+let lostOrigin;
+if (location.hash.startsWith('#connection-lost=')) {
+  try {
+    lostOrigin = parseAddress(decodeURIComponent(location.hash.slice('#connection-lost='.length)));
+  } catch {}
+  history.replaceState(null, '', location.pathname);
+}
 showHome();
 const last = servers()[0];
-if (last && !sessionStorage.getItem('started') && localStorage.getItem(SIGNED_OUT) === null) connect(last.origin);
+if (lostOrigin) retryConnection(lostOrigin);
+else if (last && !sessionStorage.getItem('started') && localStorage.getItem(SIGNED_OUT) === null) connect(last.origin);
 sessionStorage.setItem('started', '1');

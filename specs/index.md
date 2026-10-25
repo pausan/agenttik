@@ -12,7 +12,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [068](068-quick-start-tour.md) | Quick Start Tour, first agent, practice repo, queues and local commits |
 | [067](067-local-profiles.md) | Local profiles, project moves, local models, shared providers, profile switching |
 | [085](085-remote-profiles.md) | Remote profiles, live activity, sign-in, discovery and finding a moved machine |
-| [099](099-mobile-app.md) | Android and iOS app that finds a remote agenttik, signs in, remembers its key and opens it |
+| [099](099-mobile-app.md) | Android and iOS remote client: discovery, sign-in, trusted keys and Android reconnect |
 | [094](094-trusted-machines.md) | Machine keys, automatic sign-in to remotes, and the trusted list in Server settings |
 | [096](096-screen.md) | Screen viewing, sound and control, adaptive bitrate, VP8/VP9 and Opus encoding, and the agent screen API |
 | [097](097-speech-input.md) | Microphone dictation, first-use models, Whisper choices and optional transcript correction |

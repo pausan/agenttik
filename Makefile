@@ -2,6 +2,7 @@ BIN      := bin/agenttik
 PKG      := ./app/cmd/agenttik
 UI       := web
 E2E      := e2e
+MOBILE   := mobileapp
 DIST     := dist
 
 # Wails needs to know which webkit2gtk is installed. 4.1 is the current one;
@@ -29,7 +30,7 @@ VERSION_LDFLAGS := -X main.version=$(VERSION)
 # scripts/build-vpx.sh (needs git, curl, a C compiler and nasm). See specs/096-screen.md.
 VPX_LIB := $(firstword $(wildcard app/internal/screen/vpx/lib/$(shell go env GOOS)_$(shell go env GOARCH)/*agenttikvpx*))
 
-.PHONY: all build build-web vpx build-windows-amd64 build-macos-arm64 run run-web test test-startup e2e vet fmt clean deps hooks ui ui-dev
+.PHONY: all build build-web android ios vpx build-windows-amd64 build-macos-arm64 run run-web test test-startup e2e vet fmt clean deps hooks ui ui-dev
 
 all: build
 
@@ -61,6 +62,22 @@ build: ui vpx speech
 ifeq ($(shell uname -s),Darwin)
 	bash scripts/package-macos.sh $(BIN) $(BIN).app "$(VERSION)" $(BIN)_darwin.app.zip $(BIN)_darwin.dmg
 endif
+
+## android: Android APK in bin/, signed with this machine's debug key (needs node, JDK 21, Android SDK)
+android:
+	cd $(MOBILE) && npm ci --no-audit --no-fund && npm test && npx cap sync android
+	cd $(MOBILE)/android && ./gradlew assembleRelease -PversionName="$(VERSION)"
+	mkdir -p bin && cp $(MOBILE)/android/app/build/outputs/apk/release/app-release.apk $(BIN)_android.apk
+
+## ios: unsigned iOS Simulator build in bin/ (needs macOS and Xcode). Device
+## builds need signing: run `npx cap open ios` in mobileapp and use Xcode.
+ios:
+	cd $(MOBILE) && npm ci --no-audit --no-fund && npm test && npx cap sync ios
+	xcodebuild -project $(MOBILE)/ios/App/App.xcodeproj -scheme App -configuration Release \
+		-sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+		-derivedDataPath $(MOBILE)/ios/App/build MARKETING_VERSION="$(VERSION)" build
+	mkdir -p bin && rm -rf $(BIN)_ios-simulator.app && \
+		cp -R $(MOBILE)/ios/App/build/Build/Products/Release-iphonesimulator/App.app $(BIN)_ios-simulator.app
 
 ## build-web: web server without cgo; builds the native speech helper with CMake
 build-web: ui vpx speech

@@ -104,8 +104,11 @@ com.pausan.agenttik` first. That removes the saved servers and the phone's
 key: the next sign-in asks for the password again, and the server's trusted
 list keeps the old entry until it is removed in Settings → Server.
 
-iOS is not built in CI. On a Mac: `npm ci && npx cap sync ios`, then open
-`ios/App/App.xcodeproj` and sign it.
+Locally, `make android` runs the page tests, syncs and builds the same
+release APK with this machine's debug key, version name `$(VERSION)` and code
+1, and copies it to `bin/agenttik_android.apk`.
 
-Locally: `npm ci && npx cap sync android && (cd android && ./gradlew
-assembleDebug)`.
+iOS is not built in CI. On a Mac with Xcode, `make ios` runs the page tests,
+syncs and builds an unsigned Release app for the iOS Simulator into
+`bin/agenttik_ios-simulator.app`. A phone needs a signed build: run `npx cap
+open ios` in `mobileapp/` and sign it in Xcode.

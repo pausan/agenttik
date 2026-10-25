@@ -59,13 +59,26 @@ test.describe("phone", () => {
 
     await page.getByRole("button", { name: "New task", exact: true }).tap();
     await expect(prompt(page)).toBeVisible();
-    await expect(prompt(page)).not.toBeFocused();
+    await expect(prompt(page)).toBeFocused();
+    await expect(page.getByRole("button", { name: "Minimize prompt" })).toHaveCount(0);
     await modelButton(page).tap();
     await page.getByRole("option", { name: "Fake Quick" }).tap();
     await prompt(page).fill("Hello from my phone");
     await page.getByRole("button", { name: "More prompt actions" }).tap();
     await page.getByRole("button", { name: "Send", exact: true }).tap();
     await expect(page.locator(".markdown")).toContainText("Hello from my phone");
+
+    // Sending folds the bar to one line so the reply has the screen.
+    await expect(modelButton(page)).toBeHidden();
+    await expect(prompt(page)).not.toBeFocused();
+    expect((await prompt(page).boundingBox()).height).toBeLessThanOrEqual(48);
+    await page.getByRole("button", { name: "Expand prompt" }).tap();
+    await expect(prompt(page)).toBeFocused();
+    await expect(modelButton(page)).toBeVisible();
+    await page.getByRole("button", { name: "Minimize prompt" }).tap();
+    await expect(modelButton(page)).toBeHidden();
+    await prompt(page).tap();
+    await expect(modelButton(page)).toBeVisible();
 
     const sessions = await (await page.request.get(`${agenttik.url}/api/sessions`)).json();
     expect(sessions).toHaveLength(1);
@@ -78,6 +91,14 @@ test.describe("phone", () => {
     await page.getByRole("button", { name: "Stop", exact: true }).tap();
     await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeHidden();
     await expectPageFits(page);
+
+    // A task that already has a conversation opens with the bar folded.
+    await page.reload();
+    await expect(page.locator(".markdown").first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Expand prompt" })).toBeVisible();
+    await expect(modelButton(page)).toBeHidden();
+    await expect(prompt(page)).not.toBeFocused();
+    await page.screenshot({ path: "test-results/compact-prompt.png" });
   });
 
   test("task selections dismiss the drawer and preserve each project's draft", async ({ page, agenttik }) => {

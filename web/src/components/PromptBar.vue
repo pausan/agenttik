@@ -79,13 +79,34 @@ function removeImage(index) {
   S.owner.draft = withImages(text.value, images.value.filter((_, i) => i !== index));
 }
 
+/* On a phone the bar folds to one line over a conversation, so the replies
+   keep the screen. A new task opens it whole; typing, a draft or the expand
+   button open it too. The class only has an effect below the mobile
+   breakpoint. See specs/055-mobile-layout.md. */
+const fresh = computed(() => !S.detail?.messages?.length);
+const compact = ref(false);
+watch(() => S.detail?.session?.id, () => (compact.value = !fresh.value && empty.value), { immediate: true });
+watch(empty, (isEmpty) => { if (!isEmpty) compact.value = false; });
+
+function minimize() {
+  compact.value = true;
+  prompt.value?.textareaRef?.blur();
+}
+
+function expand() {
+  compact.value = false;
+  prompt.value?.textareaRef?.focus();
+}
+
 /* New sessions can be made while another prompt bar is still mounted, so an
-   explicit focus request is more reliable than the component's autofocus. */
+   explicit focus request is more reliable than the component's autofocus.
+   A phone only takes it for a new, empty task: anywhere else the keyboard
+   would cover the conversation being opened. */
 watch(
   () => S.promptFocus,
   async () => {
-    if (isMobile()) return;
     await nextTick();
+    if (isMobile() && !(fresh.value && empty.value)) return;
     prompt.value?.textareaRef?.focus();
   },
 );
@@ -206,7 +227,9 @@ watch(
 
 /* send clears the draft itself, and only when it really sends. */
 function submit() {
-  if (!empty.value && !uploading.value) send(S.owner?.draft || "");
+  if (empty.value || uploading.value) return;
+  send(S.owner?.draft || "");
+  if (isMobile()) minimize();
 }
 
 function onPromptInput(e) {
@@ -214,7 +237,9 @@ function onPromptInput(e) {
 }
 
 function enqueuePrompt() {
-  if (!empty.value && !uploading.value) enqueue(S.owner?.draft || "");
+  if (empty.value || uploading.value) return;
+  enqueue(S.owner?.draft || "");
+  if (isMobile()) minimize();
 }
 
 /* Send and enqueue are bindings, so the box answers whatever Settings says.
@@ -273,31 +298,54 @@ function runMenuAction(action) {
 </script>
 
 <template>
-  <form class="prompt-bar shrink-0 p-3" @submit.prevent="primary.run()">
+  <form class="prompt-bar shrink-0 p-3" :class="{ 'prompt-compact': compact }" @submit.prevent="primary.run()">
     <div class="relative mx-auto max-w-[860px] pr-8">
       <div
         class="rounded-[var(--ui-radius-lg,10px)] bg-default p-2 shadow-xs inset-ring inset-ring-accented focus-within:inset-ring-2 focus-within:inset-ring-primary"
       >
-        <UTextarea
-          ref="prompt"
-          v-model="text"
-          :rows="3"
-          variant="none"
-          placeholder="Ask the agent…"
-          class="w-full"
-          :ui="{ base: 'resize-y' }"
-          @input="onPromptInput"
-          @keydown="onPromptKey"
-          @paste="onPaste"
-        />
-        <div v-if="images.length || uploading" class="flex flex-wrap gap-2 p-2" aria-label="Attached images">
+        <div class="flex items-start">
+          <UTextarea
+            ref="prompt"
+            v-model="text"
+            :rows="3"
+            variant="none"
+            placeholder="Ask the agent…"
+            class="min-w-0 flex-1"
+            :ui="{ base: 'resize-y' }"
+            @focus="compact = false"
+            @input="onPromptInput"
+            @keydown="onPromptKey"
+            @paste="onPaste"
+          />
+          <UButton
+            v-if="compact && S.detail.running"
+            color="neutral"
+            variant="outline"
+            label="Stop"
+            class="prompt-toggle md:hidden"
+            :loading="stopping"
+            @click="stop"
+          />
+          <UButton
+            v-if="compact || !fresh"
+            type="button"
+            :icon="compact ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+            color="neutral"
+            variant="ghost"
+            class="prompt-toggle md:hidden"
+            :aria-label="compact ? 'Expand prompt' : 'Minimize prompt'"
+            :title="compact ? 'Expand prompt' : 'Minimize prompt'"
+            @click="compact ? expand() : minimize()"
+          />
+        </div>
+        <div v-if="images.length || uploading" class="prompt-extra flex flex-wrap gap-2 p-2" aria-label="Attached images">
           <div v-for="(image, i) in images" :key="i" class="relative">
             <a :href="image.url" target="_blank" rel="noopener"><img :src="image.url" :alt="`Attached image ${i + 1}`" class="h-20 w-24 rounded object-contain" /></a>
             <UButton type="button" size="xs" color="neutral" icon="i-lucide-x" :aria-label="`Remove image ${i + 1}`" class="absolute top-0 right-0" @click="removeImage(i)" />
           </div>
           <span v-if="uploading" role="status" class="text-sm text-muted">Saving images…</span>
         </div>
-        <div v-if="providerOf(S.detail.session.provider)?.kind === 'api'" class="mb-2 flex flex-wrap items-center gap-2 px-2 text-xs text-muted">
+        <div v-if="providerOf(S.detail.session.provider)?.kind === 'api'" class="prompt-extra mb-2 flex flex-wrap items-center gap-2 px-2 text-xs text-muted">
           <span>Tool access</span>
           <USelect :model-value="S.detail.session.permission" :items="toolPermissions" size="xs" aria-label="Tool access"
             :disabled="S.detail.running || savingPermission" @update:model-value="choosePermission" />

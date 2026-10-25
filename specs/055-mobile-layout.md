@@ -34,8 +34,16 @@ Schedule behaviour is shared with desktop. Keyboard hints are hidden. Model
 popovers fit the screen, and usage details stack vertically and scroll.
 Transcript copy and edit controls remain visible without hovering.
 
+Over a task that already has messages, the phone composer folds to one line:
+the text field and an expand button, plus Stop while a turn runs. It opens
+folded, and folds again after Send or Enqueue, which also dismisses the
+keyboard. Tapping the field, the expand button, or any draft text opens it
+whole; a minimize button folds it again. A new task with no messages always
+shows the full composer.
+
 Navigation does not automatically focus a prompt or filter on phones; tapping
-a field starts editing. Desktop focus behaviour is unchanged. Phone fields
+a field starts editing. The exception is a new, empty task, whose prompt takes
+focus. Desktop focus behaviour is unchanged. Phone fields
 use 16px text to avoid focus zoom. Dynamic viewport height, the visual viewport
 resize event, and safe-area padding keep the composer within the available
 screen as browser chrome and the software keyboard change its height. That
@@ -45,8 +53,8 @@ teleported overlays such as the model picker are bounded by it too.
 ## Verification
 
 `e2e/tests/mobile.spec.js` exercises touch project switching, task creation,
-sending and stopping, draft preservation, drawer dismissal and focus, file
-opening, adding a project, and Settings. It checks controls and popovers at
-320, 390 and 767px, with a shortened viewport, and checks the desktop panels
-and saved widths at 768, 1024 and 1440px. Browser emulation does not test a real
+sending and stopping, folding and opening the composer, draft preservation,
+drawer dismissal and focus, file opening, adding a project, and Settings. It
+checks controls and popovers at 320, 390 and 767px, with a shortened viewport,
+and checks the desktop panels and saved widths at 768, 1024 and 1440px. Browser emulation does not test a real
 iOS or Android software keyboard.

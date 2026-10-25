@@ -211,6 +211,9 @@ button[draggable="true"]:active { cursor: grabbing; }
     padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
   }
   .prompt-bar textarea { height: 4.5rem; max-height: 25dvh; resize: none; }
+  .prompt-compact textarea { height: 2.75rem; }
+  .prompt-compact .prompt-controls, .prompt-compact .prompt-extra { display: none; }
+  .prompt-toggle { min-height: 44px; min-width: 44px; justify-content: center; }
   .prompt-controls { flex-wrap: wrap; gap: 0.25rem; }
   .prompt-model-controls, .prompt-action-controls {
     display: flex;

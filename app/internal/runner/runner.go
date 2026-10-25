@@ -102,6 +102,10 @@ type Runner struct {
 	// listener cannot be handed the two edges out of order.
 	onBusy  func(bool)
 	wasBusy bool
+
+	// flatProject numbers the orchestrator's project for the flat view, and
+	// says false when there is no flat view to give it. Set by the server.
+	flatProject func(int64) (int64, bool)
 }
 
 func New(s *store.Store, reg *agent.Registry, hub *Hub) *Runner {
@@ -135,6 +139,10 @@ func (r *Runner) OnBusy(fn func(busy bool)) {
 	r.wasBusy = false
 	r.busyChanged()
 }
+
+// SetFlatProject registers how the orchestrator's project is numbered in the
+// flat view. Its turns then act on every profile and machine.
+func (r *Runner) SetFlatProject(fn func(int64) (int64, bool)) { r.flatProject = fn }
 
 // Busy reports whether any turn is in flight.
 func (r *Runner) Busy() bool {
@@ -346,7 +354,13 @@ func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage) (*store.Turn
 		if err != nil {
 			return nil, err
 		}
-		providerPrompt = orchestrator.Context(executable, dataDir, sess.ID, sess.ProjectID) + "\n\n" + providerPrompt
+		var flatID int64
+		if r.flatProject != nil {
+			if id, ok := r.flatProject(sess.ProjectID); ok {
+				flatID = id
+			}
+		}
+		providerPrompt = orchestrator.Context(executable, dataDir, sess.ID, sess.ProjectID, flatID) + "\n\n" + providerPrompt
 	}
 
 	r.mu.Lock()

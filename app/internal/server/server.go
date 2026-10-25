@@ -163,6 +163,7 @@ func New(s *store.Store, reg *agent.Registry, r *runner.Runner) *Server {
 		return s.ListSessions(store.SessionFilter{})
 	})
 	srv.remotes = newRemoteManager(s.Dir(), s.MachineID, s.ServerName)
+	r.SetFlatProject(srv.FlatProjectID)
 	srv.speech = speech.New(filepath.Join(s.Dir(), "speech"))
 	app.Use(routeHTMLScope)
 	app.Use(srv.routeFlat)

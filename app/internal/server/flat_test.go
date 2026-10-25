@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pausan/agenttik/app/internal/orchestrator"
 	"github.com/pausan/agenttik/app/internal/store"
 )
 
@@ -243,5 +244,29 @@ func TestFlatCodesAreStableAndDistinct(t *testing.T) {
 	// Removing sources only frees codes; a few that had collided may move.
 	if moved > 20 {
 		t.Fatalf("%d of %d codes moved", moved, len(again))
+	}
+}
+
+func TestFlatOrchestratorNeedsSomethingToFlatten(t *testing.T) {
+	s := profileServer(t)
+	if _, ok := s.FlatProjectID(5); ok {
+		t.Fatal("one profile has no flat view")
+	}
+	decode[Profile](t, do(t, s, "POST", "/api/profiles", map[string]string{"name": "Work"}))
+	id, ok := s.FlatProjectID(5)
+	if !ok || id>>flatBits != 5 {
+		t.Fatalf("flat orchestrator ID %d %v", id, ok)
+	}
+	// Added profiles keep their orchestrators to themselves.
+	for _, rt := range s.profiles.running {
+		if _, ok := rt.server.FlatProjectID(5); ok {
+			t.Fatal("an added profile's orchestrator was given the flat view")
+		}
+	}
+	if text := orchestrator.Context("agenttik", "/data", "task", 5, id); !strings.Contains(text, "profile=all") || !strings.Contains(text, fmt.Sprintf("Orchestrator project ID: %d", id)) {
+		t.Fatalf("flat context: %s", text)
+	}
+	if text := orchestrator.Context("agenttik", "/data", "task", 5, 0); strings.Contains(text, "profile=all") {
+		t.Fatalf("plain context mentions the flat view: %s", text)
 	}
 }

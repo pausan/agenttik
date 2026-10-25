@@ -27,9 +27,45 @@ export function base64PCM(bytes) {
   return btoa(text);
 }
 
+// The mobile app's WebView hides getUserMedia from plain-HTTP servers, so the
+// app records natively and returns the same 16 kHz PCM16 base64. iOS replies
+// through a promise; Android replies by message, matched by id.
+export function nativeMicrophone(scope = globalThis) {
+  const ios = scope.webkit?.messageHandlers?.agenttikMicrophone;
+  const android = scope.agenttikMicrophone;
+  let send;
+  if (ios) send = (command) => ios.postMessage({ command });
+  else if (android?.postMessage) {
+    const pending = new Map();
+    let next = 0;
+    android.onmessage = (event) => {
+      const reply = JSON.parse(event.data), settle = pending.get(reply.id);
+      pending.delete(reply.id);
+      if (reply.error) settle?.reject(new Error(reply.error)); else settle?.resolve(reply.data ?? "");
+    };
+    send = (command) => new Promise((resolve, reject) => {
+      const id = ++next;
+      pending.set(id, { resolve, reject });
+      android.postMessage(JSON.stringify({ id, command }));
+    });
+  } else return null;
+  return async () => {
+    await send("permission");
+    let timer;
+    return {
+      start(onLimit) { void send("start").catch(() => {}); timer = setTimeout(onLimit, 120000); },
+      stop() { clearTimeout(timer); return send("stop"); },
+      cancel() { clearTimeout(timer); void send("cancel").catch(() => {}); },
+    };
+  };
+}
+
+let native;
 export async function microphone() {
   const AudioContext = globalThis.AudioContext || globalThis.webkitAudioContext;
   if (!navigator.mediaDevices?.getUserMedia || !AudioContext) {
+    native ??= nativeMicrophone();
+    if (native) return native();
     throw new Error("Microphone access is unavailable. Use the desktop app, localhost, or an HTTPS connection.");
   }
   // Resume in the click gesture, before permissions or a first-use download.
@@ -88,7 +124,9 @@ export function createDictation({ state, request, capture, deliver, onError, onW
     const token = generation, destination = target;
     state.phase = "transcribing";
     try {
-      const pcm = recorder.stop(); recorder = null;
+      const mic = recorder; recorder = null;
+      const pcm = await mic.stop();
+      if (token !== generation) return;
       if (!pcm) throw new Error("No audio was recorded. Try speaking for a little longer.");
       const result = await request("POST", "/api/speech/transcribe", { model, pcm });
       if (token !== generation) return;

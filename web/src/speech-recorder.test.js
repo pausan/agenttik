@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { base64PCM, createDictation, pcm16 } from "./speech-recorder.js";
+import { base64PCM, createDictation, nativeMicrophone, pcm16 } from "./speech-recorder.js";
 
 test("PCM averages downsampled audio, clamps and writes little endian", () => {
   const samples = pcm16([new Float32Array([1, 1, 1, -1, -1, -1, 2, 2, 2])], 48000);
@@ -82,4 +82,38 @@ test("silence does not insert text, and correction failure retains original tran
     if (text) { assert.equal(f.delivered[0].text, text); assert.equal(f.warnings.length, 1); }
     else { assert.equal(f.delivered.length, 0); assert.match(f.errors[0], /No speech detected/); }
   }
+});
+
+test("native microphone is absent outside the mobile app", () => {
+  assert.equal(nativeMicrophone({}), null);
+});
+
+test("Android native microphone matches replies by id and reports errors", async () => {
+  const sent = [];
+  const bridge = { postMessage: (text) => sent.push(JSON.parse(text)) };
+  const reply = (id, body) => bridge.onmessage({ data: JSON.stringify({ id, ...body }) });
+  const opening = nativeMicrophone({ agenttikMicrophone: bridge })();
+  await Promise.resolve();
+  assert.deepEqual(sent, [{ id: 1, command: "permission" }]);
+  reply(1, {});
+  const mic = await opening;
+  mic.start(() => {});
+  const stopping = mic.stop();
+  assert.deepEqual(sent.slice(1).map((m) => m.command), ["start", "stop"]);
+  reply(3, { data: "AAA=" }); reply(2, {});
+  assert.equal(await stopping, "AAA=");
+
+  const denied = nativeMicrophone({ agenttikMicrophone: bridge })();
+  await Promise.resolve();
+  reply(sent.at(-1).id, { error: "Allow microphone access" });
+  await assert.rejects(denied, /Allow microphone access/);
+});
+
+test("iOS native microphone uses the handler's promise", async () => {
+  const commands = [];
+  const handler = { postMessage: async ({ command }) => { commands.push(command); return command === "stop" ? "AAA=" : null; } };
+  const mic = await nativeMicrophone({ webkit: { messageHandlers: { agenttikMicrophone: handler } } })();
+  mic.start(() => {});
+  assert.equal(await mic.stop(), "AAA=");
+  assert.deepEqual(commands, ["permission", "start", "stop"]);
 });

@@ -65,11 +65,33 @@ in with the key instead. iOS has no Back; reopening the app reconnects.
 
 The plugin lives in the app itself, registered by `MainActivity` on Android
 and by `BridgeViewController` (`AgenttikNativePlugin.swift`) on iOS. It has
-two methods: `addresses` (up, non-loopback IPv4) and `allow`.
+two methods, `addresses` (up, non-loopback IPv4) and `allow`, and the
+microphone below.
 
 Android allows cleartext HTTP (`usesCleartextTraffic`), since LAN servers
 speak plain HTTP. iOS sets `NSAllowsArbitraryLoads` and
 `NSLocalNetworkUsageDescription`.
+
+## Microphone
+
+A plain-HTTP page is not a secure context, so the WebView hides
+`getUserMedia` and dictation ([097](097-speech-input.md)) would fail. The app
+records natively instead, through a channel named `agenttikMicrophone`: on
+Android a `WebViewCompat` web message listener (`Microphone.java`), on iOS a
+`WKScriptMessageHandlerWithReply` in the page world. Only the allowed
+origin's main frame gets answers; other origins get none (Android) or an
+error (iOS).
+
+Commands are `permission` (asks once, through the system dialog), `start`,
+`stop` and `cancel`. `stop` returns up to two minutes of 16 kHz mono PCM16,
+base64, the same body the web recorder builds, so the server sees no
+difference. Android records with `AudioRecord` (voice recognition source);
+iOS taps `AVAudioEngine` and converts to 16 kHz. The web recorder uses this
+only when `getUserMedia` is missing, so HTTPS servers keep the browser path.
+
+Android declares `RECORD_AUDIO` and `MODIFY_AUDIO_SETTINGS`; the second, with
+the first, lets Capacitor grant `getUserMedia` on HTTPS servers. iOS sets
+`NSMicrophoneUsageDescription`.
 
 ## Icon
 

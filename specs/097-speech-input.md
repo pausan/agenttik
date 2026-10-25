@@ -19,7 +19,8 @@ are per profile and General → Reset defaults restores Whistle and no correctio
 Whistle supports English, Spanish, French, Italian, German, Dutch and Polish.
 Whisper supports additional languages. The microphone tooltip links the choice
 to Settings → General. Microphone capture needs the desktop app, localhost, or
-HTTPS when accessed remotely. Linux WebKit registers the app scheme as secure
+HTTPS when accessed remotely, except in the mobile app, which records
+natively when `getUserMedia` is missing ([099](099-mobile-app.md)). Linux WebKit registers the app scheme as secure
 and allows audio-only capture; macOS packaging includes the microphone usage
 description. Camera capture is not enabled by the Linux microphone hook.
 

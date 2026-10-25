@@ -14,11 +14,17 @@ import java.util.Collections;
 
 // The little the connect page cannot do from JavaScript: list this phone's
 // IPv4 addresses for the scan, and keep the chosen agenttik inside the
-// WebView instead of handing it to the system browser.
+// WebView instead of handing it to the system browser. It also gives that
+// agenttik a microphone (see Microphone).
 @CapacitorPlugin(name = "AgenttikNative")
 public class AgenttikNativePlugin extends Plugin {
 
     private volatile String allowed;
+
+    @Override
+    public void load() {
+        new Microphone(getActivity(), bridge.getWebView(), this::same);
+    }
 
     @PluginMethod
     public void addresses(PluginCall call) {
@@ -52,11 +58,14 @@ public class AgenttikNativePlugin extends Plugin {
 
     @Override
     public Boolean shouldOverrideLoad(Uri url) {
+        return same(url) ? Boolean.FALSE : null;
+    }
+
+    private boolean same(Uri url) {
         String origin = allowed;
-        if (origin == null || url.getScheme() == null || url.getHost() == null) return null;
+        if (origin == null || url.getScheme() == null || url.getHost() == null) return false;
         Uri o = Uri.parse(origin);
-        boolean same = url.getScheme().equals(o.getScheme()) && url.getHost().equals(o.getHost()) && port(url) == port(o);
-        return same ? Boolean.FALSE : null;
+        return url.getScheme().equals(o.getScheme()) && url.getHost().equals(o.getHost()) && port(url) == port(o);
     }
 
     private static int port(Uri u) {

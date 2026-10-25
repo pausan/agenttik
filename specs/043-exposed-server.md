@@ -77,6 +77,13 @@ be bypassed by forging one: it is the only thing in front of that socket.
 new address first and only shuts the previous `*http.Server` down once the
 new one is already serving. A bad host or a taken port therefore leaves
 whatever was working exactly as it was, both live and in `Status()`.
+The one exception is a move that keeps the port, e.g. 127.0.0.1:7717 to
+0.0.0.0:7717, or the same address saved again: the kernel refuses a second
+bind on a port this process already listens on, even on another host. So
+`Start` closes only the old socket first, binds, and then shuts the old server
+down as usual; connections already open, SSE included, stay on the old server
+until then. If the bind fails, the old server gets a fresh socket on its old
+address; if even that fails, the manager reads as stopped.
 
 **The saved setting is the source of truth; live status is a separate
 read.** `store.ServerConfig` is one row (`server_config`, id fixed at 1).

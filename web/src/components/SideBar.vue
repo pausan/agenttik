@@ -29,6 +29,7 @@ import {
 import { isMobile, SEGMENTED } from "../ui";
 import { beginDrag, showDropPosition } from "../drag";
 import { projectDot } from "../task-attention";
+import { sourceLabel } from "../profiles";
 import FileTree from "./FileTree.vue";
 import ProfilePicker from "./ProfilePicker.vue";
 import HiddenProjectsMenu from "./HiddenProjectsMenu.vue";
@@ -304,7 +305,9 @@ function onTaskDrop(e, projectID, overID) {
                   />
                   <StatusDot v-if="projectDots.get(p.id)" :status="projectDots.get(p.id)" />
                 </span>
-                <span class="block truncate pl-4 text-xs text-dimmed">{{ p.path }}</span>
+                <span class="block truncate pl-4 text-xs text-dimmed"
+                  ><span v-if="p.source" class="text-muted" data-project-source>{{ sourceLabel(p.source) }} · </span
+                  >{{ p.path }}</span>
               </button>
               <UButton
                 v-if="projectQueueActions.get(p.id)"

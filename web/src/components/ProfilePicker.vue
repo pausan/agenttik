@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted } from "vue";
 import { remoteID } from "../api";
-import { allProfiles, hasProfileWork, isCurrentProfile, profiles, loadProfiles, switchProfile } from "../profiles";
+import { allProfiles, FLAT_PROFILE, hasProfileWork, isCurrentProfile, isFlatView, profiles, loadProfiles, switchProfile } from "../profiles";
 
 import ProfileIcon from "./ProfileIcon.vue";
 import StatusDot from "./StatusDot.vue";
@@ -9,11 +9,14 @@ import StatusDot from "./StatusDot.vue";
 function item(p, remote = "") {
   return { label: p.name, busy: p.busy, slot: "profile", remote, current: isCurrentProfile(p.id, remote), onSelect: () => switchProfile(p.id, remote) };
 }
-// With remote machines saved, each machine heads its own profiles.
+// The flat view comes first. With remote machines saved, each machine heads
+// its own profiles.
 const items = computed(() => {
+  const flat = [{ ...item({ id: FLAT_PROFILE, name: "Flat view" }), flat: true }];
   const local = profiles.items.map(p => item(p));
-  if (!profiles.remotes.length) return local;
+  if (!profiles.remotes.length) return [flat, local];
   return [
+    flat,
     [{ type: "label", label: profiles.name || "This computer" }, ...local],
     ...profiles.remotes.map(r => [{ type: "label", label: r.name }, ...r.profiles.map(p => item(p, r.id))]),
   ];
@@ -42,7 +45,8 @@ onUnmounted(() => { disposed = true; clearTimeout(timer); });
   <UDropdownMenu v-if="allProfiles().length > 1" :items="items" :content="{ side: 'top', align: 'end' }">
     <UButton color="neutral" variant="ghost" :label="name" class="max-w-28" :ui="{ label: 'truncate' }" :title="title" :aria-label="title">
       <template #leading>
-        <ProfileIcon :remote="!!remoteID" />
+        <UIcon v-if="isFlatView" name="i-lucide-layers" class="size-5 shrink-0" />
+        <ProfileIcon v-else :remote="!!remoteID" />
       </template>
       <template #trailing>
         <StatusDot v-if="profileBusy" status="running" title="Profiles are working" aria-label="Profiles are working" />
@@ -50,6 +54,7 @@ onUnmounted(() => { disposed = true; clearTimeout(timer); });
     </UButton>
     <template #profile-leading="{ item }">
       <UIcon v-if="item.current" name="i-lucide-check" class="size-5 shrink-0" />
+      <UIcon v-else-if="item.flat" name="i-lucide-layers" class="size-5 shrink-0" />
       <ProfileIcon v-else :remote="!!item.remote" />
     </template>
     <template #profile-trailing="{ item }">

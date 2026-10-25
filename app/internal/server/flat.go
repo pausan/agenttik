@@ -631,7 +631,7 @@ func (s *Server) flatWalk(v any, src flatSource, shape flatShape, top bool) any 
 			x[k] = s.flatWalk(val, src, flatPlain, false)
 		}
 		if top && shape == flatProjectsShape {
-			x["source"] = map[string]any{"machine": src.Machine, "profile": src.Name, "remote": src.Remote != ""}
+			x["source"] = map[string]any{"id": src.key(), "machine": src.Machine, "profile": src.Name, "remote": src.Remote != ""}
 		}
 	}
 	return v

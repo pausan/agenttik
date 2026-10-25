@@ -65,7 +65,9 @@ write files. As with every project prompt, an existing conversation keeps the
 copy it started with; changes apply to new conversations.
 
 Every orchestrator turn additionally receives current executable, data
-directory, project and task details. These are separate from the saved prompt
+directory, project and task details. When the instance has more than one
+profile or a saved remote, the Default profile's orchestrator is also told to
+work through the flat view ([100](100-flat-view.md)). These are separate from the saved prompt
 and user transcript and are refreshed even on resumed turns. Ordinary tasks
 and isolated title/summary requests do not receive them.
 

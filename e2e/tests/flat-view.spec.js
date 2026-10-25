@@ -1,0 +1,65 @@
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { expect, newTask, pickModel, sendPrompt, sidebar, startServer, test } from "../fixtures.js";
+
+test("the flat view shows every profile's projects and runs work where each lives", async ({ page, agenttik }) => {
+  const other = await startServer();
+  try {
+    await page.request.put(`${other.url}/api/server/name`, { data: { name: "Laptop" } });
+    await page.request.put(`${agenttik.url}/api/server/name`, { data: { name: "Desk" } });
+    const far = await mkdtemp(join(tmpdir(), "agenttik-flat-far-"));
+    await page.request.post(`${other.url}/api/projects`, { data: { path: far, name: "Far side" } });
+    const shared = await mkdtemp(join(tmpdir(), "agenttik-flat-shared-"));
+    const work = await (await page.request.post(`${agenttik.url}/api/profiles`, { data: { name: "Work" } })).json();
+    await page.request.post(`${agenttik.url}/api/projects`, { data: { path: shared, name: "Shared" } });
+    await page.request.post(`${agenttik.url}/api/projects?profile=${work.id}`, { data: { path: shared, name: "Shared" } });
+    await page.request.post(`${agenttik.url}/api/remotes`, { data: { address: other.url } });
+    await page.reload();
+
+    await page.getByRole("button", { name: "Profile: Default", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Flat view", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Profile: Flat view", exact: true })).toBeVisible();
+
+    // The same project in two profiles is two rows, each naming its place.
+    // Default's orchestrator leads, the only one the flat view keeps.
+    const side = sidebar(page);
+    await expect(side.getByText("Shared", { exact: true })).toHaveCount(2);
+    const sources = side.locator("[data-project-source]");
+    await expect(sources).toHaveText(["Desk › Default ·", "Desk › Default ·", "Desk › Work ·", "Laptop › Default ·"].map(s => s + " "), { useInnerText: true });
+
+    // A task started on the remote's project runs on that machine.
+    await side.getByText("Far side", { exact: true }).click();
+    await newTask(page);
+    await pickModel(page);
+    await sendPrompt(page, "check the far side");
+    await expect(page.getByText("Agent", { exact: true })).toBeVisible();
+    await expect(page.getByText("idle")).toBeVisible();
+    const remoteTasks = await (await page.request.get(`${other.url}/api/sessions?window=all`)).json();
+    expect(remoteTasks.map(t => t.status)).toEqual(["idle"]);
+    const localTasks = await (await page.request.get(`${agenttik.url}/api/sessions?window=all`)).json();
+    expect(localTasks).toEqual([]);
+    await page.screenshot({ path: "test-results/flat-view.png" });
+  } finally {
+    await other.stop();
+  }
+});
+
+test("on a phone the flat view names each project's place in the drawer", async ({ page, agenttik }) => {
+  const other = await startServer();
+  try {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.request.put(`${other.url}/api/server/name`, { data: { name: "Laptop" } });
+    const far = await mkdtemp(join(tmpdir(), "agenttik-flat-far-"));
+    await page.request.post(`${other.url}/api/projects`, { data: { path: far, name: "Far side" } });
+    await page.request.post(`${agenttik.url}/api/remotes`, { data: { address: other.url } });
+    await page.goto(`${agenttik.url}/?profile=all`);
+    await page.getByRole("button", { name: "Projects and tasks", exact: true }).click();
+    const drawer = page.getByRole("dialog", { name: "Projects and tasks", exact: true });
+    await expect(drawer.getByText("Far side", { exact: true })).toBeVisible();
+    await expect(drawer.locator("[data-project-source]").last()).toHaveText("Laptop › Default ·");
+    await page.screenshot({ path: "test-results/flat-view-phone.png" });
+  } finally {
+    await other.stop();
+  }
+});

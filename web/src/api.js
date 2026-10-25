@@ -19,9 +19,20 @@ export function isRemoteConnection() {
   return !!(remoteID || remoteInstance);
 }
 
+// The flat view reads models, favourites and subscriptions from the profile
+// of the project in front, as that profile's own window would. The server
+// sends a request carrying project_id to that project's profile.
+const PROJECT_SCOPED = ["/api/providers", "/api/stars", "/api/model-visibility"];
+let flatScope = () => 0;
+export function setFlatScope(fn) { flatScope = fn; }
+
 export function apiURL(path) {
   if (!path.startsWith("/api/")) return path;
   const query = [];
+  if (profileID === "all" && !remoteID && PROJECT_SCOPED.some(p => path === p || path.startsWith(p + "/") || path.startsWith(p + "?"))) {
+    const id = flatScope();
+    if (id) query.push(`project_id=${encodeURIComponent(id)}`);
+  }
   if (remoteID) query.push(`remote=${encodeURIComponent(remoteID)}`);
   if (profileID !== "default") query.push(`profile=${encodeURIComponent(profileID)}`);
   if (!query.length) return path;

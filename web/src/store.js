@@ -18,7 +18,8 @@ import { createTaskSounds, TASK_SOUNDS_KEY } from "./task-sounds.js";
 import { trackTaskAttention, reconcileTaskCompletions } from "./task-attention.js";
 import { upsertBackgroundMessage } from "./background-tasks.js";
 import { recordError } from "./diagnostics.js";
-import { api, apiURL, storage, clientStorage, diagnosticStorage, isRemoteConnection } from "./api";
+import { api, apiURL, storage, clientStorage, diagnosticStorage, isRemoteConnection, setFlatScope } from "./api";
+import { isFlatView } from "./profiles.js";
 import { debounce } from "./debounce";
 import { ACCENTS, DEFAULT_COLORS, NEUTRALS, applyColors } from "./theme";
 import { ACTIONS, matches } from "./shortcuts";
@@ -1031,6 +1032,16 @@ export function currentProjectID() {
   if (S.detail) return S.detail.session.project_id;
   if (S.project) return S.project.project.id;
   return S.activeProjectID;
+}
+
+/* In the flat view the model picker and Settings follow the profile of the
+   project in front, so moving to a project on another profile or machine
+   reads that profile's models. See specs/100-flat-view.md. */
+if (isFlatView) {
+  setFlatScope(currentProjectID);
+  watch(() => S.projects.find((p) => p.id === currentProjectID())?.source?.id, (now, before) => {
+    if (initialized && now && now !== before) loadProviders().catch(() => {});
+  });
 }
 
 /* -------------------------------------------------------------- terminals */

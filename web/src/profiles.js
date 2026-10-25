@@ -16,12 +16,26 @@ export async function loadProfiles() {
   setPrivateMode(data.private);
 }
 
-// Every profile in picker order: this machine's, then each remote's.
+// The flat view shows every profile below at once. See specs/100-flat-view.md.
+export const FLAT_PROFILE = "all";
+export const isFlatView = profileID === FLAT_PROFILE && !remoteID;
+
+// Every profile in picker order: the flat view when there is more than one
+// profile to show, this machine's, then each remote's.
 export function allProfiles() {
-  return [
+  const list = [
     ...profiles.items.map(p => ({ ...p, remote: "" })),
     ...profiles.remotes.flatMap(r => r.profiles.map(p => ({ ...p, remote: r.id, machine: r.name }))),
   ];
+  if (list.length < 2) return list;
+  return [{ id: FLAT_PROFILE, name: "Flat view", remote: "", flat: true }, ...list];
+}
+
+// Where a flat-view project lives, as its sidebar row names it. The machine
+// is named only once there is more than one machine.
+export function sourceLabel(source) {
+  if (!source) return "";
+  return profiles.remotes.length ? `${source.machine} › ${source.profile}` : source.profile;
 }
 
 export function isCurrentProfile(id, remote = "") {
@@ -31,6 +45,8 @@ export function isCurrentProfile(id, remote = "") {
 // The current local task already shows its status in the workspace. Remote
 // work remains visible here, including work in the remote profile on screen.
 export function hasProfileWork() {
+  // The flat view already shows every profile's work in the workspace.
+  if (isFlatView) return false;
   return profiles.items.some(p => !isCurrentProfile(p.id) && p.busy)
     || profiles.remotes.some(r => r.profiles.some(p => p.busy));
 }

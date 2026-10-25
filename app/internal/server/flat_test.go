@@ -111,6 +111,18 @@ func TestFlatViewListsAndRoutesEveryLocalProfile(t *testing.T) {
 		t.Fatalf("unknown source: %d", resp.StatusCode)
 	}
 
+	// Favourites follow the profile of the project they are asked for.
+	star := map[string]any{"provider": "fake", "model": "fake-quick"}
+	if resp := do(t, s, "POST", fmt.Sprintf("/api/stars?profile=all&project_id=%d", b.ID), star); resp.StatusCode != 204 {
+		t.Fatalf("star: %d", resp.StatusCode)
+	}
+	if got := decode[[]map[string]any](t, do(t, s, "GET", "/api/stars?profile="+work.ID, nil)); len(got) != 1 {
+		t.Fatalf("Work's favourites: %+v", got)
+	}
+	if got := decode[[]map[string]any](t, do(t, s, "GET", fmt.Sprintf("/api/stars?profile=all&project_id=%d", a.ID), nil)); len(got) != 0 {
+		t.Fatalf("Default's favourites: %+v", got)
+	}
+
 	// A dragged order is saved on each profile for its own projects.
 	other := decode[store.Project](t, do(t, s, "POST", "/api/projects", map[string]string{"path": t.TempDir(), "name": "Other"}))
 	list = flatProjects(t, s)

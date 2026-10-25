@@ -11,14 +11,16 @@ open profile remain unchanged. A pencil button beside each name opens the inline
 editor.
 
 The sidebar footer shows a profile picker immediately before Shortcuts only when
-more than one profile exists. A pulsing dot on the picker means another profile
+more than one profile exists. Its first entry is the flat view of every
+profile ([100](100-flat-view.md)). A pulsing dot on the picker means another profile
 is working; each working profile also has a dot in the menu. The profile list
 includes a live `busy` flag from each runner, including scheduled turns. The
 picker refreshes every three seconds while the document is visible, and stops
 polling on unmount. Activity is transient and is not saved in the catalog. The command palette offers `Switch to profile: <name>`
 for every other profile and refreshes the list when opened. Switching reloads the window. Other profiles keep
 running tasks and schedules. `Ctrl+Alt+P` selects the next profile and
-`Ctrl+Alt+Shift+P` the previous one, wrapping in saved order. Both are editable
+`Ctrl+Alt+Shift+P` the previous one, wrapping in saved order after the flat
+view. Both are editable
 in Shortcuts and ignore key repeats. Unsaved file edits use the existing browser unload
 warning. A profile in the window URL scopes each API request, stream, image, and
 saved tab; windows can use different profiles concurrently.

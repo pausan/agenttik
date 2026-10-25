@@ -40,9 +40,10 @@ test("profile shortcuts follow saved order, wrap, and preserve URL state", async
   strictEqual(assigned, "http://localhost/?debug=x&profile=personal#task");
   switchAdjacentProfile(-1);
   strictEqual(assigned, "http://localhost/?debug=x&profile=work#task");
+  // The flat view leads the list once there is more than one profile.
   profiles.items = [{ id: "default" }, { id: "work" }, { id: "personal" }];
   switchAdjacentProfile(-1);
-  strictEqual(assigned, "http://localhost/?debug=x&profile=personal#task");
+  strictEqual(assigned, "http://localhost/?debug=x&profile=all#task");
   assigned = undefined;
   profiles.items = [{ id: "default" }];
   switchAdjacentProfile(1);
@@ -71,12 +72,12 @@ test("profile shortcuts continue into remote machines and back", async () => {
   const { profiles, switchAdjacentProfile, allProfiles } = await import("./profiles.js?remote-cycle");
   profiles.items = [{ id: "default", name: "Default" }];
   profiles.remotes = [{ id: "m1", name: "Office", profiles: [{ id: "default", name: "Default" }, { id: "p2", name: "Work" }] }];
-  deepEqual(allProfiles().map(p => [p.remote, p.id]), [["", "default"], ["m1", "default"], ["m1", "p2"]]);
-  // From the local Default, the previous profile is the last remote one, which
-  // is opened only after its machine answers.
-  switchAdjacentProfile(-1);
+  deepEqual(allProfiles().map(p => [p.remote, p.id]), [["", "all"], ["", "default"], ["m1", "default"], ["m1", "p2"]]);
+  // From the local Default, the next profile is the remote's first, which is
+  // opened only after its machine answers.
+  switchAdjacentProfile(1);
   strictEqual(profiles.connecting.remote, "m1");
-  strictEqual(profiles.connecting.profile, "p2");
+  strictEqual(profiles.connecting.profile, "default");
   deepEqual(assigned, []);
   profiles.connecting = null;
   delete globalThis.location;
@@ -96,4 +97,34 @@ test("profile activity includes remote work and keeps the current local task in 
   strictEqual(hasProfileWork(), true);
   profiles.items = [];
   profiles.remotes = [];
+});
+
+test("the flat view leads the list only when there is more than one profile", async () => {
+  const { profiles, allProfiles, sourceLabel } = await import("./profiles.js");
+  profiles.items = [{ id: "default", name: "Default" }];
+  profiles.remotes = [];
+  deepEqual(allProfiles().map(p => p.id), ["default"]);
+  profiles.items = [{ id: "default", name: "Default" }, { id: "work", name: "Work" }];
+  deepEqual(allProfiles().map(p => p.id), ["all", "default", "work"]);
+  strictEqual(allProfiles()[0].flat, true);
+  // Machines are named once there is more than one.
+  strictEqual(sourceLabel({ machine: "Desk", profile: "Work", remote: false }), "Work");
+  profiles.remotes = [{ id: "m1", name: "Laptop", profiles: [{ id: "default", name: "Default" }] }];
+  strictEqual(sourceLabel({ machine: "Laptop", profile: "Default", remote: true }), "Laptop › Default");
+  strictEqual(sourceLabel(undefined), "");
+  profiles.items = [];
+  profiles.remotes = [];
+});
+
+test("the flat view asks for models from the profile of the project in front", async () => {
+  globalThis.location = { search: "?profile=all" };
+  const { apiURL, setFlatScope } = await import("./api.js?flat-scope");
+  setFlatScope(() => 0);
+  strictEqual(apiURL("/api/providers"), "/api/providers?profile=all");
+  setFlatScope(() => 65539);
+  strictEqual(apiURL("/api/providers"), "/api/providers?project_id=65539&profile=all");
+  strictEqual(apiURL("/api/stars/order"), "/api/stars/order?project_id=65539&profile=all");
+  strictEqual(apiURL("/api/model-visibility"), "/api/model-visibility?project_id=65539&profile=all");
+  strictEqual(apiURL("/api/projects"), "/api/projects?profile=all");
+  delete globalThis.location;
 });

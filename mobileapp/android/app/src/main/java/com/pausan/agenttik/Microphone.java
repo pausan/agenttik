@@ -26,7 +26,8 @@ import org.json.JSONObject;
 
 // WebView hides getUserMedia from plain-HTTP pages, which is how LAN servers
 // are reached. The remote page records through this instead: commands
-// "permission", "start", "stop" and "cancel" arrive as {id, command}; "stop"
+// "permission", "start", "level", "stop" and "cancel" arrive as {id, command};
+// "level" replies with the RMS (0..1) of the latest read, for the meter; "stop"
 // replies with two minutes at most of 16 kHz mono PCM16, base64, which is
 // what the web recorder sends to the server. Only the allowed origin's main
 // frame is answered. Everything runs on the UI thread except the reader.
@@ -41,6 +42,7 @@ class Microphone {
     private AudioRecord record;
     private Thread reader;
     private ByteArrayOutputStream pcm;
+    private volatile float level;
 
     Microphone(ComponentActivity activity, WebView webView, Predicate<Uri> allowed) {
         this.activity = activity;
@@ -78,6 +80,9 @@ class Microphone {
             case "start":
                 send(reply, id, null, start());
                 return;
+            case "level":
+                send(reply, id, String.valueOf(record == null ? 0 : level), null);
+                return;
             case "stop":
                 byte[] data = stop();
                 if (data == null) send(reply, id, null, "The microphone did not start.");
@@ -108,12 +113,19 @@ class Microphone {
             return "The microphone could not start.";
         }
         ByteArrayOutputStream out = new ByteArrayOutputStream();
+        level = 0;
         r.startRecording();
         Thread t = new Thread(() -> {
             byte[] buf = new byte[4096];
             while (true) {
                 int n = r.read(buf, 0, buf.length);
                 if (n <= 0) break;
+                double sum = 0;
+                for (int i = 0; i + 1 < n; i += 2) {
+                    double v = (short) ((buf[i] & 0xff) | (buf[i + 1] << 8)) / 32768.0;
+                    sum += v * v;
+                }
+                level = (float) Math.sqrt(sum / Math.max(1, n / 2));
                 synchronized (out) {
                     out.write(buf, 0, Math.min(n, LIMIT - out.size()));
                 }

@@ -21,6 +21,18 @@ export function pcm16(chunks, sampleRate) {
   return bytes;
 }
 
+// Root mean square of samples in [-1, 1].
+export function rms(samples) {
+  let sum = 0;
+  for (let i = 0; i < samples.length; i++) sum += samples[i] * samples[i];
+  return samples.length ? Math.sqrt(sum / samples.length) : 0;
+}
+
+// Map RMS to 0..1 on a decibel scale: -55 dBFS (room noise) to -10 dBFS (loud speech).
+export function loudness(value) {
+  return value > 0 ? Math.max(0, Math.min(1, (20 * Math.log10(value) + 55) / 45)) : 0;
+}
+
 export function base64PCM(bytes) {
   let text = "";
   for (let i = 0; i < bytes.length; i += 8192) text += String.fromCharCode(...bytes.subarray(i, i + 8192));
@@ -29,7 +41,8 @@ export function base64PCM(bytes) {
 
 // The mobile app's WebView hides getUserMedia from plain-HTTP servers, so the
 // app records natively and returns the same 16 kHz PCM16 base64. iOS replies
-// through a promise; Android replies by message, matched by id.
+// through a promise; Android replies by message, matched by id. While recording,
+// "level" is polled for the RMS of the latest audio so the UI can show a meter.
 export function nativeMicrophone(scope = globalThis) {
   const ios = scope.webkit?.messageHandlers?.agenttikMicrophone;
   const android = scope.agenttikMicrophone;
@@ -51,11 +64,21 @@ export function nativeMicrophone(scope = globalThis) {
   } else return null;
   return async () => {
     await send("permission");
-    let timer;
+    let timer, poll, polling = false;
+    const end = () => { clearTimeout(timer); clearInterval(poll); };
     return {
-      start(onLimit) { void send("start").catch(() => {}); timer = setTimeout(onLimit, 120000); },
-      stop() { clearTimeout(timer); return send("stop"); },
-      cancel() { clearTimeout(timer); void send("cancel").catch(() => {}); },
+      start(onLimit, onLevel) {
+        void send("start").catch(() => {});
+        timer = setTimeout(onLimit, 120000);
+        if (onLevel) poll = setInterval(() => {
+          if (polling) return;
+          polling = true;
+          send("level").then((value) => { if (polling) onLevel(loudness(Number(value) || 0)); })
+            .catch(() => {}).finally(() => { polling = false; });
+        }, 100);
+      },
+      stop() { end(); polling = false; return send("stop"); },
+      cancel() { end(); polling = false; void send("cancel").catch(() => {}); },
     };
   };
 }
@@ -92,7 +115,7 @@ export async function microphone() {
     throw error;
   }
   return {
-    start(onLimit) {
+    start(onLimit, onLevel) {
       if (closed) return;
       source = context.createMediaStreamSource(stream);
       processor = context.createScriptProcessor(4096, 1, 1);
@@ -101,6 +124,7 @@ export async function microphone() {
         const input = event.inputBuffer.getChannelData(0);
         const left = Math.max(0, Math.floor(context.sampleRate * 120) - frames);
         if (left) { const chunk = input.slice(0, left); chunks.push(chunk); frames += chunk.length; }
+        onLevel?.(loudness(rms(input)));
       };
       source.connect(processor); processor.connect(mute); mute.connect(context.destination);
       timer = setTimeout(onLimit, 120000);
@@ -110,8 +134,11 @@ export async function microphone() {
   };
 }
 
+export const LEVELS = 16;
+
 // Shared by the small and large buttons. Capture the destination when recording
 // starts so a late transcript cannot overwrite another conversation's draft.
+// state.levels holds the latest loudness values, oldest first, for the meter.
 export function createDictation({ state, request, capture, deliver, onError, onWarning }) {
   let generation = 0, recorder = null, target = null, model = "whistle";
   function cancel() {
@@ -153,7 +180,10 @@ export function createDictation({ state, request, capture, deliver, onError, onW
       state.phase = config.ready ? "preparing" : "downloading";
       await request("POST", "/api/speech/prepare", { model });
       if (token !== generation) return;
-      recorder.start(stop);
+      state.levels = [];
+      recorder.start(stop, (level) => {
+        if (token === generation && state.phase === "recording") state.levels = [...state.levels.slice(1 - LEVELS), level];
+      });
       state.phase = "recording";
     } catch (error) {
       if (token === generation) { cancel(); onError(error); }

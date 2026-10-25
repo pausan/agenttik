@@ -100,7 +100,8 @@ origin's main frame gets answers; other origins get none (Android) or an
 error (iOS).
 
 Commands are `permission` (asks once, through the system dialog), `start`,
-`stop` and `cancel`. `stop` returns up to two minutes of 16 kHz mono PCM16,
+`level`, `stop` and `cancel`. `level` returns the RMS (0..1) of the latest
+audio; the web recorder polls it every 100 ms for the voice meter. `stop` returns up to two minutes of 16 kHz mono PCM16,
 base64, the same body the web recorder builds, so the server sees no
 difference. Android records with `AudioRecord` (voice recognition source);
 iOS taps `AVAudioEngine` and converts to 16 kHz. The web recorder uses this

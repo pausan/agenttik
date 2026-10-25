@@ -108,9 +108,10 @@ class AppChannel: NSObject, WKScriptMessageHandler {
 
 // WKWebView hides getUserMedia from plain-HTTP pages, which is how LAN servers
 // are reached. The remote page records through this instead: it posts
-// {command} with "permission", "start", "stop" or "cancel"; "stop" replies
-// with two minutes at most of 16 kHz mono PCM16, base64, which is what the
-// web recorder sends to the server. Only the allowed origin's main frame is
+// {command} with "permission", "start", "level", "stop" or "cancel"; "level"
+// replies with the RMS (0..1) of the latest buffer, for the meter; "stop"
+// replies with two minutes at most of 16 kHz mono PCM16, base64, which is
+// what the web recorder sends to the server. Only the allowed origin's main frame is
 // answered.
 class Microphone: NSObject, WKScriptMessageHandlerWithReply {
     private static let limit = 16000 * 2 * 120
@@ -120,6 +121,7 @@ class Microphone: NSObject, WKScriptMessageHandlerWithReply {
     private var engine: AVAudioEngine?
     private let lock = NSLock()
     private var pcm = Data()
+    private var level: Float = 0
 
     init(plugin: AgenttikNativePlugin) {
         self.plugin = plugin
@@ -140,6 +142,11 @@ class Microphone: NSObject, WKScriptMessageHandlerWithReply {
             }
         case "start":
             replyHandler(nil, start())
+        case "level":
+            lock.lock()
+            let value = engine == nil ? 0 : level
+            lock.unlock()
+            replyHandler(Double(value), nil)
         case "stop":
             if let data = stop() {
                 replyHandler(data.base64EncodedString(), nil)
@@ -167,7 +174,7 @@ class Microphone: NSObject, WKScriptMessageHandlerWithReply {
                   let converter = AVAudioConverter(from: source, to: target) else {
                 return "The microphone could not start."
             }
-            lock.lock(); pcm = Data(); lock.unlock()
+            lock.lock(); pcm = Data(); level = 0; lock.unlock()
             input.installTap(onBus: 0, bufferSize: 4096, format: source) { [weak self] buffer, _ in
                 let capacity = AVAudioFrameCount(Double(buffer.frameLength) * 16000 / source.sampleRate) + 1
                 guard let self = self, let out = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: capacity) else { return }
@@ -182,7 +189,14 @@ class Microphone: NSObject, WKScriptMessageHandlerWithReply {
                     return buffer
                 }
                 guard let samples = out.int16ChannelData else { return }
+                var sum: Float = 0
+                for i in 0..<Int(out.frameLength) {
+                    let v = Float(samples[0][i]) / 32768
+                    sum += v * v
+                }
+                let rms = out.frameLength > 0 ? (sum / Float(out.frameLength)).squareRoot() : 0
                 self.lock.lock()
+                self.level = rms
                 let count = min(Int(out.frameLength) * 2, Microphone.limit - self.pcm.count)
                 if count > 0 { self.pcm.append(Data(bytes: samples[0], count: count)) }
                 self.lock.unlock()

@@ -4,7 +4,7 @@ import { S, fail } from "./store";
 import { promptImages, promptText, withImages } from "./prompt-images";
 import { createDictation, microphone } from "./speech-recorder";
 
-export const dictation = reactive({ phase: "idle" });
+export const dictation = reactive({ phase: "idle", levels: [] });
 export const dictationLabel = computed(() => ({
   idle: "Dictate a prompt", permission: "Opening microphone…", preparing: "Preparing speech recognition…",
   downloading: "Downloading speech model…", recording: "Stop recording", transcribing: "Transcribing…",

@@ -32,6 +32,13 @@ base64 PCM to the host, avoiding Wails/WebKit Blob upload crashes. Capture nodes
 tracks and the audio context are released on stop, cancel or error. No audio is
 retained in task history. Remote clients send audio to their selected host.
 
+While recording, both microphones show a blue voice meter: bars scaled by the
+loudness of recent audio (RMS on a -55 to -10 dBFS scale), newest on the right.
+The small one shows five bars beside the prompt-bar button; the large one shows
+sixteen under its button and keeps that space when idle, so the button does
+not move under the finger. The browser reports a level per audio buffer
+(about 12 per second); the mobile app polls the native recorder.
+
 `speech.Service` serializes downloads/transcription across local profiles.
 First-use artifacts are pinned by revision, size and SHA-256; downloads use
 temporary files and atomic rename. Models live in `<data-dir>/speech`.

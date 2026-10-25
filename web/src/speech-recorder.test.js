@@ -1,6 +1,6 @@
-import test from "node:test";
+import test, { mock } from "node:test";
 import assert from "node:assert/strict";
-import { base64PCM, createDictation, nativeMicrophone, pcm16 } from "./speech-recorder.js";
+import { LEVELS, base64PCM, createDictation, loudness, nativeMicrophone, pcm16, rms } from "./speech-recorder.js";
 
 test("PCM averages downsampled audio, clamps and writes little endian", () => {
   const samples = pcm16([new Float32Array([1, 1, 1, -1, -1, -1, 2, 2, 2])], 48000);
@@ -11,9 +11,15 @@ test("PCM averages downsampled audio, clamps and writes little endian", () => {
   assert.equal(pcm16([], 44100).length, 0);
 });
 
+test("loudness maps RMS to 0..1 on a decibel scale", () => {
+  assert.equal(rms(new Float32Array([0.5, -0.5])), 0.5);
+  assert.equal(rms(new Float32Array()), 0);
+  assert.deepEqual([0, 0.001, 0.0178, 0.316, 1].map((v) => Math.round(loudness(v) * 100) / 100), [0, 0, 0.44, 1, 1]);
+});
+
 function fixture(overrides = {}) {
   const state = { phase: "idle" }, calls = [], delivered = [], errors = [], warnings = [];
-  const mic = { started: false, cancelled: false, start() { this.started = true; }, stop() { return "AAA="; }, cancel() { this.cancelled = true; } };
+  const mic = { started: false, cancelled: false, start(_onLimit, onLevel) { this.started = true; this.onLevel = onLevel; }, stop() { return "AAA="; }, cancel() { this.cancelled = true; } };
   const controller = createDictation({
     state, capture: async () => mic,
     request: async (method, path, body) => {
@@ -38,6 +44,19 @@ test("first use prepares once, records, then transcribes in one request to the c
   assert.deepEqual(f.calls.map((c) => c.path), ["/api/speech", "/api/speech/prepare", "/api/speech/transcribe"]);
   assert.deepEqual(f.calls[2].body, { model: "whistle", pcm: "AAA=" });
   assert.deepEqual(f.delivered, [{ owner, text: "Hola mundo." }]);
+});
+
+test("recording keeps the latest levels for the meter and ignores late ones", async () => {
+  const f = fixture();
+  await f.controller.toggle({});
+  assert.deepEqual(f.state.levels, []);
+  for (let i = 0; i < LEVELS + 2; i++) f.mic.onLevel(i);
+  assert.equal(f.state.levels.length, LEVELS);
+  assert.equal(f.state.levels[0], 2);
+  assert.equal(f.state.levels.at(-1), LEVELS + 1);
+  await f.controller.stop();
+  f.mic.onLevel(99);
+  assert.notEqual(f.state.levels.at(-1), 99);
 });
 
 test("download spinner remains visible; cancelling prevents recording or late insertion", async () => {
@@ -116,4 +135,21 @@ test("iOS native microphone uses the handler's promise", async () => {
   mic.start(() => {});
   assert.equal(await mic.stop(), "AAA=");
   assert.deepEqual(commands, ["permission", "start", "stop"]);
+});
+
+test("native microphone polls the level while recording only", async () => {
+  mock.timers.enable({ apis: ["setInterval", "setTimeout"] });
+  try {
+    const commands = [], levels = [];
+    const handler = { postMessage: async ({ command }) => { commands.push(command); return command === "level" ? 0.316 : null; } };
+    const mic = await nativeMicrophone({ webkit: { messageHandlers: { agenttikMicrophone: handler } } })();
+    mic.start(() => {}, (level) => levels.push(level));
+    mock.timers.tick(100);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(levels.length, 1);
+    assert.ok(levels[0] > 0.99);
+    mic.cancel();
+    mock.timers.tick(500);
+    assert.deepEqual(commands, ["permission", "start", "level", "cancel"]);
+  } finally { mock.timers.reset(); }
 });

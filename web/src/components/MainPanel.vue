@@ -137,10 +137,12 @@ const retainedHTML = computed(() => {
 });
 const running = computed(() => !!S.detail?.running);
 
-/* An expanded conversation hides both sidebars but keeps this strip, which
-   holds its Restore button. Escape restores too, unless something else
-   spent it: an open popover or menu, or a prompt or thread being edited. */
+/* An expanded conversation or terminal hides both sidebars but keeps this
+   strip, which holds its Restore button. For a conversation Escape restores
+   too, unless something else spent it: an open popover or menu, or a prompt
+   or thread being edited. A terminal's Escape belongs to the shell. */
 const conversation = computed(() => !!S.detail && (!current.value || current.value.kind === "session"));
+const terminal = computed(() => current.value?.kind === "terminal");
 function onExpandKey(e) {
   if (e.key !== "Escape" || e.defaultPrevented || !expanded.value || !conversation.value) return;
   if (document.querySelector("[data-dismissable-layer]")) return;
@@ -170,7 +172,7 @@ const badge = computed(() => {
 
 <template>
   <main class="flex min-h-0 min-w-0 flex-col">
-    <div v-show="!expanded || conversation" class="main-tab-bar flex shrink-0 items-center gap-2.5 border-b border-default pr-3">
+    <div v-show="!expanded || conversation || terminal" class="main-tab-bar flex shrink-0 items-center gap-2.5 border-b border-default pr-3">
       <UContextMenu :items="tabMenu">
         <div role="tablist" class="flex min-w-0 flex-1 items-center overflow-x-auto" @contextmenu="aimTab">
           <div
@@ -280,6 +282,18 @@ const badge = computed(() => {
             @click="expanded = !expanded"
           />
         </template>
+        <UButton
+          v-else-if="terminal"
+          :icon="expanded ? 'i-lucide-minimize' : 'i-lucide-maximize'"
+          color="neutral"
+          variant="ghost"
+          size="xs"
+          class="max-md:hidden"
+          :aria-label="expanded ? 'Restore terminal' : 'Expand terminal'"
+          :title="expanded ? 'Restore terminal' : 'Expand terminal'"
+          :aria-pressed="expanded"
+          @click="expanded = !expanded"
+        />
       </div>
     </div>
 

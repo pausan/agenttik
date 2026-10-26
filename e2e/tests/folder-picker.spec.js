@@ -1,8 +1,25 @@
-import { dirname } from "node:path";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import { REPO, expect, test } from "../fixtures.js";
+import { expect, test } from "../fixtures.js";
 
-const PARENT = dirname(REPO);
+/* A folder tree of its own, so what the listing holds does not depend on
+   what sits next to this checkout: a fuzzy filter can match a neighbour. */
+let ROOT, PARENT, REPO;
+
+test.beforeAll(async () => {
+  ROOT = await mkdtemp(join(tmpdir(), "agenttik-folder-picker-"));
+  PARENT = join(ROOT, "github");
+  REPO = join(PARENT, "agenttik");
+  for (const dir of [join(REPO, ".git"), join(REPO, "app"), join(PARENT, "docs"), join(PARENT, "other")]) {
+    await mkdir(dir, { recursive: true });
+  }
+});
+
+test.afterAll(async () => {
+  await rm(ROOT, { recursive: true, force: true });
+});
 
 /* The picker walks one directory at a time. What is typed after the last "/"
    never reaches the server: it fuzzy-filters the listing already in hand. */

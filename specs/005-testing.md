@@ -81,11 +81,20 @@ The `page` fixture also fails a test on any error the page logs. Failed
 requests are excluded: the browser logs one for every 4xx, and a test types a
 path that cannot resolve on purpose, to check the picker shrugs it off.
 
-Tests use the agenttik checkout itself as the project under test, so the tree,
-the git status and the folder picker all read something real.
+Tests use the agenttik checkout itself as the project under test, so the tree
+and the git status read something real. The folder picker tests build a folder
+tree of their own instead: its fuzzy filter would also match whatever sits
+next to the checkout.
 
-Tests are grouped by area: `folder-picker` (the fuzzy walk over real
-directories), `inspector` (which panes the right-hand strip offers a project
+Tests that hold the app to a time budget (`*performance`, `*speed`,
+`large-files` and `startup` specs) form the `timed` project, one test at a
+time; the rest form `chromium` and run in parallel. Under a full parallel run,
+frame and load times measure the contention rather than the app, so
+`make e2e` runs `chromium` first and `timed` after it, and fails if either
+does.
+
+Tests are grouped by area: `folder-picker` (the fuzzy walk over a
+folder tree), `inspector` (which panes the right-hand strip offers a project
 versus a task, and that the one in use survives switching), `projects` (add,
 rename, delete, archive, the per-project task list, its filter, and the outcome
 an archived row grows — [051](051-task-outcomes.md)),

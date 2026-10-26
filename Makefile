@@ -150,9 +150,11 @@ test-desktop-scrollbars:
 	xvfb-run -a go test -tags "$(DESKTOP_TAGS)" $(PKG) -run '^TestDesktopScrollbarLayers$$' -count=1
 
 ## e2e: browser tests against a real server. The first run downloads a
-## chromium into ~/.cache/ms-playwright.
+## chromium into ~/.cache/ms-playwright. Tests with time budgets run after the
+## rest, one at a time (see e2e/playwright.config.js).
 e2e: build-web
-	cd $(E2E) && npm install --no-audit --no-fund && npx playwright install chromium && npx playwright test
+	cd $(E2E) && npm install --no-audit --no-fund && npx playwright install chromium && \
+		{ npx playwright test --project=chromium; status=$$?; npx playwright test --project=timed && exit $$status; }
 
 ## test-startup: hard 1.5-second browser budget against the built web binary.
 ## Run after build-web and installing e2e dependencies plus Chromium.

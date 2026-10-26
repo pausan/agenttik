@@ -170,7 +170,7 @@ func TestUnprocessedRefusesOtherMessages(t *testing.T) {
 	// A task is spawned from a thread after the messages it copies, as a click
 	// after them is.
 	time.Sleep(5 * time.Millisecond)
-	spawned :=&store.Session{ID: "spawned", ProjectID: sess.ProjectID, Provider: "fake", Model: "m1", OriginID: "thread"}
+	spawned := &store.Session{ID: "spawned", ProjectID: sess.ProjectID, Provider: "fake", Model: "m1", OriginID: "thread"}
 	if err := st.CreateSession(spawned); err != nil {
 		t.Fatal(err)
 	}

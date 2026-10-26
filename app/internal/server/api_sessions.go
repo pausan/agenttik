@@ -190,10 +190,10 @@ func (s *Server) getSession(c *fiber.Ctx) error {
 		Turns: turns, Stats: stats, Running: s.runner.Running(id),
 		AcceptsPrompts: s.runner.AcceptsPrompts(id), PendingFollowUps: pendingIDs(s.runner.PendingFollowUps(id)),
 		RunningChoice: s.runner.RunningChoice(id),
-		Queued:     queued,
-		Background: s.runner.BackgroundTasks(id),
-		Outputs:    turnOutputs(sess.ProjectPath, turns, messages),
-		Threads:    threads, Origin: s.origin(sess)})
+		Queued:        queued,
+		Background:    s.runner.BackgroundTasks(id),
+		Outputs:       turnOutputs(sess.ProjectPath, turns, messages),
+		Threads:       threads, Origin: s.origin(sess)})
 }
 
 // updateSession changes the model, effort or title mid-session.

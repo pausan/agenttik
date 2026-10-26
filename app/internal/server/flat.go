@@ -226,6 +226,7 @@ type flatRequest struct {
 	query  url.Values
 	body   []byte
 	header http.Header
+	client string // the browser's address, for this machine's own sources
 }
 
 func newFlatRequest(c *fiber.Ctx) flatRequest {
@@ -241,7 +242,7 @@ func newFlatRequest(c *fiber.Ctx) flatRequest {
 			header.Set(name, v)
 		}
 	}
-	return flatRequest{method: c.Method(), path: c.Path(), query: query, body: append([]byte(nil), c.Body()...), header: header}
+	return flatRequest{method: c.Method(), path: c.Path(), query: query, body: append([]byte(nil), c.Body()...), header: header, client: clientAddr(c)}
 }
 
 // routeFlat serves `?profile=all`. Only this instance's own server has one:
@@ -446,7 +447,16 @@ func (s *Server) flatDo(ctx context.Context, src flatSource, req flatRequest) (*
 		target += "?" + query.Encode()
 	}
 	if src.Remote == "" {
-		return s.flatLocal(req.method, target, req.body, req.header), nil
+		// In process, every request would come from loopback; the screen
+		// asks where the browser really is.
+		header := req.header
+		if req.client != "" {
+			header = http.Header{fiber.HeaderXForwardedFor: {req.client}}
+			for k, v := range req.header {
+				header[k] = v
+			}
+		}
+		return s.flatLocal(req.method, target, req.body, header), nil
 	}
 	if s.flat.isDown(src.Remote) {
 		return nil, errors.New(src.Machine + " is not answering")

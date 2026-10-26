@@ -1041,13 +1041,20 @@ export function currentProjectID() {
   return S.activeProjectID;
 }
 
-/* In the flat view the model picker and Settings follow the profile of the
-   project in front, so moving to a project on another profile or machine
-   reads that profile's models. See specs/100-flat-view.md. */
+/* In the flat view the model picker, Settings and the screen follow the
+   profile of the project in front, so moving to a project on another profile
+   or machine reads that profile's models and that machine's screen. See
+   specs/100-flat-view.md. */
+function frontSource() {
+  return S.projects.find((p) => p.id === currentProjectID())?.source;
+}
+
 if (isFlatView) {
   setFlatScope(currentProjectID);
-  watch(() => S.projects.find((p) => p.id === currentProjectID())?.source?.id, (now, before) => {
-    if (initialized && now && now !== before) loadProviders().catch(() => {});
+  watch(() => frontSource()?.id, (now, before) => {
+    if (!now || now === before) return;
+    loadScreenInfo();
+    if (initialized) loadProviders().catch(() => {});
   });
 }
 
@@ -1148,7 +1155,7 @@ export async function loadScreenInfo() {
 /* The button is offered where it would show another machine: on this one it
    would only show itself. */
 export function screenOffered() {
-  return !!S.screen && (isRemoteConnection() || S.screen.same_machine === false);
+  return !!S.screen && (isRemoteConnection() || !!frontSource()?.remote || S.screen.same_machine === false);
 }
 
 export function openScreen() {
@@ -1163,8 +1170,13 @@ export function openScreen() {
     id: "screen",
     kind: "screen",
     projectID,
-    label: S.instanceInfo?.name ? `Screen · ${S.instanceInfo.name}` : "Screen",
+    label: screenLabel(),
   });
+}
+
+function screenLabel() {
+  const machine = frontSource()?.remote ? frontSource().machine : S.instanceInfo?.name;
+  return machine ? `Screen · ${machine}` : "Screen";
 }
 
 export async function setScreenEnabled(enabled) {

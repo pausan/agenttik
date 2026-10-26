@@ -387,8 +387,9 @@ window is recognized as the same machine, keeping Screen out of its prompt.
 
 **Where it is offered.** A **Screen** button sits beside **Terminal** under
 the prompt, and the command palette has **Screen**. Both appear only when the
-window is connected to another machine: a remote profile, `--remote`, or a
-browser or tablet using the exposed listener or the tunnel (`!same_machine`).
+window is connected to another machine: a remote profile, `--remote`, a
+remote's project in the flat view ([100](100-flat-view.md)), or a browser or
+tablet using the exposed listener or the tunnel (`!same_machine`).
 Local windows hide both even when sharing is enabled. A remote machine with
 no usable display still offers Screen; opening it explains why no screen is
 available. There is one Screen tab per machine. Opening it from another

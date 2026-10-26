@@ -386,3 +386,30 @@ func TestFlatTerminalStreamFindsItsProfile(t *testing.T) {
 		t.Errorf("closing from the flat view answered %d", code)
 	}
 }
+
+// The flat view asks for the screen of the project in front, and the screen
+// still sees where the browser is, though this machine's profiles are reached
+// in process.
+func TestFlatScreenKnowsTheBrowser(t *testing.T) {
+	s := profileServer(t)
+	fakeScreen(t, s)
+	work := decode[Profile](t, do(t, s, "POST", "/api/profiles", map[string]string{"name": "Work"}))
+	do(t, s, "POST", "/api/projects?profile="+work.ID, map[string]string{"path": t.TempDir(), "name": "Away"})
+	away := flatNamed(t, flatProjects(t, s), "Away", "Work")
+
+	get := func(forwarded string) screenInfo {
+		req := httptest.NewRequest("GET", fmt.Sprintf("/api/screen?profile=all&project_id=%d", away.ID), nil)
+		req.Header.Set("X-Forwarded-For", forwarded)
+		resp, err := s.app.Test(req, 5000)
+		if err != nil || resp.StatusCode != 200 {
+			t.Fatalf("screen: %v %v", resp.StatusCode, err)
+		}
+		return decode[screenInfo](t, resp)
+	}
+	if get("192.168.1.20").SameMachine {
+		t.Error("a phone on the network is another machine")
+	}
+	if !get("127.0.0.1").SameMachine {
+		t.Error("a browser on this machine is this machine")
+	}
+}

@@ -71,17 +71,22 @@ func (s *Server) putScreen(c *fiber.Ctx) error {
 }
 
 // sameMachine says whether the request comes from a browser on this
-// machine. A proxy of agenttik's own (the exposed listener, the tunnel)
-// appends the client's address to X-Forwarded-For, so its last entry is the
-// one to trust; with none, the connection's own address is the client's.
+// machine.
 func sameMachine(c *fiber.Ctx) bool {
-	addr := c.IP()
+	ip := net.ParseIP(clientAddr(c))
+	return ip != nil && ip.IsLoopback()
+}
+
+// clientAddr is the browser's address. A proxy of agenttik's own (the
+// exposed listener, the tunnel) appends the client's address to
+// X-Forwarded-For, so its last entry is the one to trust; with none, the
+// connection's own address is the client's.
+func clientAddr(c *fiber.Ctx) string {
 	if fwd := c.Get(fiber.HeaderXForwardedFor); fwd != "" {
 		parts := strings.Split(fwd, ",")
-		addr = strings.TrimSpace(parts[len(parts)-1])
+		return strings.TrimSpace(parts[len(parts)-1])
 	}
-	ip := net.ParseIP(addr)
-	return ip != nil && ip.IsLoopback()
+	return c.IP()
 }
 
 // screenManager is the machine's screen once sharing is on.

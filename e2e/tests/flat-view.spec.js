@@ -110,3 +110,45 @@ test("the flat view keeps its own order and hidden projects", async ({ page, age
   await page.getByRole("option", { name: /Beta/ }).click();
   await expect.poll(names).toEqual(mixed);
 });
+
+test("the flat view shows terminals and the screen of each project's machine", async ({ page, agenttik }) => {
+  const other = await startServer({ env: { DISPLAY: "invalid-display", WAYLAND_DISPLAY: "" } });
+  try {
+    await page.request.put(`${other.url}/api/server/name`, { data: { name: "Laptop" } });
+    const far = await mkdtemp(join(tmpdir(), "agenttik-flat-far-"));
+    await page.request.post(`${other.url}/api/projects`, { data: { path: far, name: "Far side" } });
+    const work = await (await page.request.post(`${agenttik.url}/api/profiles`, { data: { name: "Work" } })).json();
+    const near = await mkdtemp(join(tmpdir(), "agenttik-flat-near-"));
+    await page.request.post(`${agenttik.url}/api/projects?profile=${work.id}`, { data: { path: near, name: "Near side" } });
+    await page.request.post(`${agenttik.url}/api/remotes`, { data: { address: other.url } });
+    await page.goto(`${agenttik.url}/?profile=all`);
+
+    const side = sidebar(page);
+    const screenButton = page.getByRole("button", { name: "View and control this machine's screen" });
+    for (const [name, folder] of [["Near side", near], ["Far side", far]]) {
+      await side.getByText(name, { exact: true }).click();
+      await newTask(page);
+      await page.getByRole("button", { name: "Open a terminal in the project folder" }).click();
+      const pane = page.locator(".terminal-pane");
+      await pane.locator(".xterm-screen").click();
+      await page.keyboard.type("pwd");
+      await page.keyboard.press("Enter");
+      await expect(async () => {
+        expect(await pane.innerText()).toContain(folder);
+      }).toPass({ timeout: 15_000 });
+    }
+
+    // Only the remote's project is on another machine.
+    await page.getByRole("tab", { name: "New task" }).click();
+    await expect(screenButton).toBeVisible();
+    await screenButton.click();
+    await expect(page.getByRole("tab", { name: "Screen · Laptop" })).toBeVisible();
+    await expect(page.getByText("No screen to show", { exact: true })).toBeVisible();
+    await side.getByText("Near side", { exact: true }).click();
+    await newTask(page);
+    await expect(page.getByRole("button", { name: "Open a terminal in the project folder" })).toBeVisible();
+    await expect(screenButton).toBeHidden();
+  } finally {
+    await other.stop();
+  }
+});

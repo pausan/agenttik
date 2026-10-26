@@ -32,10 +32,12 @@ Projects the flat view has not placed yet, such as a new one, go on top, or at
 the bottom when Settings puts new items there. The orchestrator stays first. The footer's busy dot stays off, since all work is on
 screen already.
 
-The model picker, favourites, model visibility and Settings' subscriptions
-follow the profile of the project in front. Moving to a project on another
-profile or machine reads its models again. New projects are added on this
-machine's Default. Everything else in Settings is this machine's Default,
+The model picker, favourites, model visibility, Settings' subscriptions and
+the Screen tab ([096](096-screen.md)) follow the profile of the project in
+front. Moving to a project on another profile or machine reads its models and
+its screen again. Screen is offered on a remote's projects, named
+`Screen · <machine>`, and on this machine's only from another device. New
+projects are added on this machine's Default. Everything else in Settings is this machine's Default,
 including the orchestrator settings.
 
 ## The orchestrator
@@ -71,7 +73,9 @@ session, as `routeRemote` does).
 - **Routing.** `/api/projects/:id/…` and `/api/schedules/:id/…` decode the
   path. `/api/sessions/:id/…` uses the remembered source, or asks every source
   at once on a miss. `/api/terminals/:id` and `/api/stream/terminals` use the
-  terminal's source. Otherwise a `project_id` in the query or the JSON body
+  terminal's source; the stream's `ids` are `id:bytes drawn`, and the first
+  one's source carries them all, since the window shows one terminal at a
+  time. Otherwise a `project_id` in the query or the JSON body
   picks the source. Anything else goes to this machine's Default.
 - **Merged lists.** `GET /api/projects` (also `?hidden`, `?archived`), and
   `GET /api/sessions`, `GET /api/schedules` without `project_id`, and
@@ -99,6 +103,9 @@ session, as `routeRemote` does).
   list. A remote that wants sign-in answers 503, telling the user to sign in
   from Settings → Profiles, rather than 401: the flat view cannot open one
   machine's sign-in dialog for another.
+- **Where the browser is.** A request for this machine's own profiles runs
+  in process, from loopback, so it carries the browser's address in
+  `X-Forwarded-For` for the screen's `same_machine`.
 - **Images.** The window uploads pasted images to this machine. Before a
   request goes to another source, every `/api/attachments/<hash>` it mentions
   is uploaded there once. Names are content hashes. `GET /api/attachments/…`
@@ -113,7 +120,8 @@ Default only.
 
 Go tests (`flat_test.go`) cover merged lists across local profiles and a
 remote, same-folder projects in two profiles, routing of project, task,
-favourite requests, a flat order that mixes profiles and leaves theirs
+favourite requests, a terminal stream to its profile, the screen seeing a
+browser on another device, a flat order that mixes profiles and leaves theirs
 alone, hiding and restoring in the flat view only, where unplaced projects
 go, an unknown source, task lookup after a restart,
 the merged stream carrying a remote's event, lists that do not wait on a
@@ -121,5 +129,7 @@ stopped remote, image copies, stable distinct codes and the orchestrator's
 flat context. `e2e/tests/flat-view.spec.js` opens the flat view from the
 picker, checks the source labels, runs a task on a remote's project and finds
 it on that machine, checks the labels in the phone drawer, drags a
-project between two profiles' projects and hides and restores one.
+project between two profiles' projects and hides and restores one, and runs a
+terminal on another profile and on a remote, with Screen offered only on the
+remote's project.
 `profiles.spec.js` checks the picker order and the shortcut cycle.

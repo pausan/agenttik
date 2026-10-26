@@ -8,12 +8,14 @@ import (
 	"image/png"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/pausan/agenttik/app/internal/orchestrator"
 	"github.com/pausan/agenttik/app/internal/store"
+	"github.com/pausan/agenttik/app/internal/terminals"
 )
 
 type flatProject struct {
@@ -357,5 +359,30 @@ func TestFlatOrchestratorNeedsSomethingToFlatten(t *testing.T) {
 	}
 	if text := orchestrator.Context("agenttik", "/data", "task", 5, 0); strings.Contains(text, "profile=all") {
 		t.Fatalf("plain context mentions the flat view: %s", text)
+	}
+}
+
+// A terminal's output stream goes to the profile that owns the shell, though
+// the window names each terminal with the bytes it has drawn.
+func TestFlatTerminalStreamFindsItsProfile(t *testing.T) {
+	s := profileServer(t)
+	work := decode[Profile](t, do(t, s, "POST", "/api/profiles", map[string]string{"name": "Work"}))
+	do(t, s, "POST", "/api/projects?profile="+work.ID, map[string]string{"path": t.TempDir(), "name": "Away"})
+	away := flatNamed(t, flatProjects(t, s), "Away", "Work")
+
+	resp := do(t, s, "POST", fmt.Sprintf("/api/projects/%d/terminals?profile=all", away.ID), map[string]int{"cols": 80, "rows": 24})
+	if resp.StatusCode != 200 {
+		t.Skipf("no pseudo-terminal available here: %d", resp.StatusCode)
+	}
+	opened := decode[terminals.Info](t, resp)
+
+	sources := s.flatSources()
+	req := flatRequest{path: "/api/stream/terminals", query: url.Values{"ids": {opened.ID + ":42"}}}
+	src, err := s.flatLocate(sources, &req, []string{"stream", "terminals"})
+	if err != nil || src.Name != "Work" {
+		t.Fatalf("stream went to %q: %v", src.Name, err)
+	}
+	if code := do(t, s, "DELETE", "/api/terminals/"+opened.ID+"?profile=all", nil).StatusCode; code != 204 {
+		t.Errorf("closing from the flat view answered %d", code)
 	}
 }

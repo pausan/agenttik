@@ -323,11 +323,13 @@ func (s *Server) flatLocate(sources []flatSource, req *flatRequest, parts []stri
 			return s.flatTerminal(sources, parts[1])
 		case "stream":
 			if parts[1] == "terminals" {
-				ids := splitList(req.query.Get("ids"))
-				if len(ids) == 0 {
+				// Each watch is `id:bytes drawn`; the window shows one
+				// terminal at a time, so the first names the source.
+				watches := parseWatches(req.query.Get("ids"))
+				if len(watches) == 0 {
 					return home, nil
 				}
-				return s.flatTerminal(sources, ids[0])
+				return s.flatTerminal(sources, watches[0].ID)
 			}
 		}
 	}

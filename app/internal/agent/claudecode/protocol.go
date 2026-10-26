@@ -24,6 +24,8 @@ type envelope struct {
 
 	// type=assistant | user
 	Message message `json:"message"`
+	// type=user: a prompt from stdin, echoed back as the CLI starts on it.
+	IsReplay bool `json:"isReplay"`
 
 	// type=rate_limit_event
 	RateLimitInfo *rateLimitInfo `json:"rate_limit_info"`
@@ -212,8 +214,35 @@ func reachedType(r rateLimitInfo) string {
 }
 
 type message struct {
-	Content []contentBlock `json:"content"`
-	Usage   usage          `json:"usage"`
+	Content contentBlocks `json:"content"`
+	Usage   usage         `json:"usage"`
+}
+
+// contentBlocks also accepts a plain string, which is how an echoed prompt
+// carries its text: it decodes to one text block.
+type contentBlocks []contentBlock
+
+func (c *contentBlocks) UnmarshalJSON(data []byte) error {
+	if len(data) > 0 && data[0] == '"' {
+		var text string
+		if err := json.Unmarshal(data, &text); err != nil {
+			return err
+		}
+		*c = contentBlocks{{Type: "text", Text: text}}
+		return nil
+	}
+	return json.Unmarshal(data, (*[]contentBlock)(c))
+}
+
+// text is the blocks' text, which for an echoed prompt is the prompt.
+func (c contentBlocks) text() string {
+	var b strings.Builder
+	for _, block := range c {
+		if block.Type == "text" {
+			b.WriteString(block.Text)
+		}
+	}
+	return b.String()
 }
 
 type contentBlock struct {

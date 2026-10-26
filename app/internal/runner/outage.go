@@ -51,7 +51,9 @@ func retryAt(now, resetAt time.Time, retries int64, atCapacity bool) time.Time {
 
 // holdForOutage puts a prompt back in the queue when its turn failed because
 // the provider was away, and reports whether it did. A failure that is the
-// request's own fault is not one of these and is left to be reported.
+// request's own fault is not one of these and is left to be reported. taken
+// is the prompt's message when it is a follow-up the turn had started on: it
+// leaves the transcript as it goes back, 0 for the turn's own prompt.
 //
 // produced says whether the turn got anywhere first. An attempt that produced
 // nothing is erased — otherwise a provider that is down for an afternoon
@@ -60,13 +62,13 @@ func retryAt(now, resetAt time.Time, retries int64, atCapacity bool) time.Time {
 // work that never happened. An attempt that did produce something is kept and
 // closed as the failure it was: whatever it did to the project is real, and
 // the retry reads in the transcript as the second try it is.
-func (r *Runner) holdForOutage(sess *store.Session, queued store.QueuedMessage, turn *store.Turn, failure string, produced bool) bool {
+func (r *Runner) holdForOutage(sess *store.Session, queued store.QueuedMessage, taken int64, turn *store.Turn, failure string, produced bool) bool {
 	away, resetAt := agent.Outage(failure)
 	if !away {
 		return false
 	}
 	at := retryAt(time.Now(), resetAt, queued.RetryCount, agent.AtCapacity(failure))
-	if _, err := r.store.RequeueMessage(queued, at.UnixMilli(), failure); err != nil {
+	if _, err := r.store.RequeueTaken(queued, at.UnixMilli(), failure, taken); err != nil {
 		// The prompt could not be put anywhere safe, so it is reported as the
 		// failure it is rather than quietly dropped.
 		return false

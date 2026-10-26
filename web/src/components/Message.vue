@@ -12,7 +12,8 @@
    id to rewrite. */
 import { computed, nextTick, onUnmounted, ref, watch } from "vue";
 
-import { S, copyText, editMessage, hit, setModel } from "../store";
+import { S, copyText, editMessage, hit, queueUnprocessed, sendUnprocessed, setModel } from "../store";
+import { promptState } from "../background-tasks";
 import { messageDate, messageTime } from "../message-time";
 import { promptImages, promptText } from "../prompt-images";
 import ConversationImage from "./ConversationImage.vue";
@@ -77,6 +78,36 @@ const classes = computed(() => [
   BUBBLE[props.message.role],
   props.message.streaming ? "streaming" : "",
 ]);
+
+/* Whether the agent has seen this prompt, said only when it has not
+   (specs/083-background-tasks.md). */
+const state = computed(() =>
+  props.inThread ? "" : promptState(props.message, S.detail?.pending_follow_ups, S.detail?.session?.created_at),
+);
+const STATE = {
+  waiting: {
+    label: "Waiting for the agent",
+    title: "The agent has this message and starts on it once it finishes what it is doing.",
+  },
+  unprocessed: {
+    label: "Not processed",
+    title: "The agent never processed this message: the task stopped before it got to it. Send or enqueue it to have it processed.",
+  },
+};
+
+/* An unprocessed prompt goes again as it is, the way the prompt bar sends
+   one: Send is out of reach while the agent is busy with something else. */
+const resending = ref(""); // "send" or "queue" while that request is out
+const busy = computed(() => !!S.detail?.running && !S.detail?.accepts_prompts);
+async function resend(how) {
+  if (resending.value) return;
+  resending.value = how;
+  try {
+    await (how === "send" ? sendUnprocessed : queueUnprocessed)(props.message);
+  } finally {
+    resending.value = "";
+  }
+}
 
 const editable = computed(
   () => !props.inThread && props.message.role === "user" && !!props.message.id && !props.message.streaming,
@@ -153,6 +184,35 @@ function onKey(e) {
             :title="messageDate(message.created_at)"
           >{{ messageTime(message.created_at) }}</time>
         </template>
+      </span>
+      <span v-if="state" class="text-[11px] text-dimmed" :class="{ 'italic': state === 'waiting' }" :title="STATE[state].title">
+        {{ STATE[state].label }}
+      </span>
+      <span v-if="state === 'unprocessed'" class="flex items-center gap-0.5">
+        <UButton
+          icon="i-lucide-send"
+          size="xs"
+          color="neutral"
+          variant="ghost"
+          label="Send"
+          :loading="resending === 'send'"
+          :disabled="!!resending || draft !== null || busy"
+          :title="busy
+            ? 'The agent is busy and takes no prompts until it finishes: enqueue this one, or send it then'
+            : 'Send it now, as if you had just typed it. It moves to the end of the conversation.'"
+          @click="resend('send')"
+        />
+        <UButton
+          icon="i-lucide-clock"
+          size="xs"
+          color="neutral"
+          variant="ghost"
+          label="Enqueue"
+          :loading="resending === 'queue'"
+          :disabled="!!resending || draft !== null"
+          title="Put it at the end of the task's queue, with the task's model. It runs when the queue reaches it."
+          @click="resend('queue')"
+        />
       </span>
       <!-- The actions stay in the layout and only appear on hover, so a
            bubble does not shift when the pointer reaches it. -->

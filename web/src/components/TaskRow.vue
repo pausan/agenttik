@@ -44,6 +44,10 @@ const props = defineProps({
   // not pass it, so nothing there grows a destructive button unasked.
   deletable: Boolean,
   queued: { type: Number, default: 0 },
+  // Background tasks the running turn still runs, and whether it takes
+  // prompts meanwhile (specs/083-background-tasks.md).
+  background: { type: Number, default: 0 },
+  acceptsPrompts: Boolean,
   // The running turn waits on the user to allow a tool call or answer.
   approval: Boolean,
   stoppable: Boolean,
@@ -53,6 +57,10 @@ const props = defineProps({
 const emit = defineEmits(["select", "stop", "toggle-archive", "delete", "rename", "editing", "open-job", "toggle-unread", "flag"]);
 
 const project = computed(() => S.projects.find((p) => p.id === props.projectId));
+const backgroundLabel = computed(() => {
+  const tasks = props.background === 1 ? "1 background task running" : `${props.background} background tasks running`;
+  return props.acceptsPrompts ? `${tasks} · you can keep writing` : tasks;
+});
 const queueAction = computed(() => projectQueueActions.value.get(props.projectId));
 const mark = computed(() => taskFlag(props.flag));
 const step = computed(() => nextDot(props.flag, props.unread));
@@ -189,6 +197,14 @@ defineExpose({ edit });
                 aria-label="Waiting for you"
               />
               <span v-if="queued" class="shrink-0" title="Queued prompt">🕒</span>
+              <span
+                v-if="background"
+                class="flex shrink-0 items-center gap-0.5 text-xs text-dimmed tabular-nums"
+                :title="backgroundLabel"
+                :aria-label="backgroundLabel"
+              >
+                <UIcon name="i-lucide-layers" class="size-3.5" aria-hidden="true" />{{ background }}
+              </span>
               <span class="task-title truncate" :class="{ 'font-bold': unread }">{{ title || "Untitled task" }}</span>
             </span>
             <!-- The outcome reads in the same lighter voice the transcript

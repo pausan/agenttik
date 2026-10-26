@@ -96,7 +96,8 @@ func buildArgs(req agent.TurnRequest) []string {
 		// Task turns take their prompt and approval answers as JSON lines, and
 		// the CLI asks over stdout about any tool call the permission mode
 		// does not settle. See 082-tool-approvals.md.
-		args = append(args, "--input-format", "stream-json", "--permission-prompt-tool", "stdio")
+		args = append(args, "--input-format", "stream-json", "--permission-prompt-tool", "stdio",
+			"--replay-user-messages")
 	}
 	if req.Isolated {
 		args = append(args, "--no-session-persistence", "--safe-mode", "--setting-sources", "user")
@@ -281,6 +282,8 @@ type streamParser struct {
 	subagents     map[string]struct{}
 	contextTokens int64
 	hasBreakdown  bool
+	// followUp is offered on every reply that leaves the turn open.
+	followUp *agent.FollowUp
 }
 
 // readLine reads one line of any length, which matters because tool results
@@ -370,10 +373,16 @@ func (p *streamParser) handleLine(line []byte, out chan<- agent.Event) {
 		for _, b := range env.Message.Content {
 			if b.Type == "tool_use" {
 				out <- agent.Event{Type: agent.EventToolUse, Tool: &agent.ToolEvent{
-					ID: b.ID, Name: b.Name, Input: string(b.Input)}}
+					ID: b.ID, Name: b.Name, Input: string(b.Input), Subagent: env.ParentToolUseID != ""}}
 			}
 		}
 	case "user":
+		if env.IsReplay {
+			if p.host != nil && p.host.took(env.Message.Content.text()) {
+				out <- agent.Event{Type: agent.EventFollowUp}
+			}
+			return
+		}
 		for _, b := range env.Message.Content {
 			if b.Type == "tool_result" {
 				out <- agent.Event{Type: agent.EventToolResult, Tool: &agent.ToolEvent{
@@ -410,14 +419,19 @@ func (p *streamParser) handleLine(line []byte, out chan<- agent.Event) {
 			SubagentCount:            int64(len(p.subagents)),
 			UsageBreakdown:           p.hasBreakdown,
 		}
-		out <- agent.Event{Type: agent.EventDone, Usage: &usage}
+		done := agent.Event{Type: agent.EventDone, Usage: &usage}
 		// Closing stdin is what lets a stream-json CLI exit instead of
 		// waiting for another prompt. It also kills the background tasks the
 		// agent said it would wait for, so stdin stays open until a reply
-		// ends with none running.
-		if p.host != nil && !p.hasBackgroundTasks() {
-			p.host.close()
+		// ends with none running and no prompt waiting. Meanwhile the turn
+		// takes the user's prompts.
+		if p.host != nil && (p.hasBackgroundTasks() || !p.host.closeIfTaken()) {
+			if p.followUp == nil {
+				p.followUp = agent.NewFollowUp(p.host.sendUser)
+			}
+			done.FollowUp = p.followUp
 		}
+		out <- done
 	}
 }
 

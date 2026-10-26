@@ -366,6 +366,8 @@ function onTaskDrop(e, projectID, overID) {
               :flag="s.flag"
               @flag="setTaskFlag(s, $event)"
               :queued="s.queue_count"
+              :background="s.background_tasks || 0"
+              :accepts-prompts="!!s.accepts_prompts"
               :approval="!!S.approvals[s.id]"
               :active="S.detail?.session.id === s.id"
               :number="taskNumber(p, s)"

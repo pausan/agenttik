@@ -16,6 +16,7 @@ import {
   updateQueuedPrompt,
 } from "../store";
 import { turnSummaries } from "../api";
+import { otherChoice, runningTaskCount, waitingLabel } from "../background-tasks";
 import { messageTime } from "../message-time";
 import { tabScroll, vTabScroll } from "../tab-scroll";
 import ApprovalCard from "./ApprovalCard.vue";
@@ -46,6 +47,16 @@ const elapsed = computed(() =>
 );
 const elapsedLabel = computed(() => `${elapsed.value} ${elapsed.value === 1 ? "second" : "seconds"}`);
 const clockFace = computed(() => CLOCK_FACES[Math.floor(now.value / 250) % CLOCK_FACES.length]);
+/* Between replies of a turn that waits on background tasks, the agent is not
+   working and the prompt bar sends into the turn (specs/083). */
+const runningTasks = computed(() => (S.detail?.accepts_prompts ? runningTaskCount(S.detail.messages) : 0));
+const workingLabel = computed(() => {
+  if (approvals.value.length) {
+    return approvals.value.some((a) => a.questions?.length) ? "Waiting for your answer" : "Waiting for approval";
+  }
+  if (S.detail?.accepts_prompts) return waitingLabel(S.detail.waiting, runningTasks.value);
+  return "Working";
+});
 
 /* A run of consecutive tool calls is handed to one ToolGroup, which shows
    only its latest until asked for the rest. Grouping reads role and nothing
@@ -221,13 +232,25 @@ const saving = ref(false);
 /* A prompt waiting behind *another* session starts beside it and interrupts
    nothing, so it says "Send now". One waiting behind its own session's turn
    cannot: a provider takes one prompt at a time, that turn is cancelled to
-   make room, and the stronger word says so. */
-const sendNowLabel = computed(() => (S.detail?.running ? "Force send" : "Send now"));
+   make room, and the stronger word says so. A turn that only waits on
+   background tasks takes the prompt as it is, so that is "Send now" too. */
+const forceStops = computed(() => !!S.detail?.running && !S.detail?.accepts_prompts);
+const sendNowLabel = computed(() => (forceStops.value ? "Force send" : "Send now"));
 const sendNowHint = computed(() =>
-  S.detail?.running
+  forceStops.value
     ? "Stop this task's turn and send this queued prompt next"
-    : "Send this prompt now, beside whatever else the project is running",
+    : S.detail?.running
+      ? "Send this prompt into the running turn; its background tasks keep running"
+      : "Send this prompt now, beside whatever else the project is running",
 );
+/* A turn that takes prompts on another model than a queued prompt's asks
+   before taking it (specs/083-background-tasks.md), and the row says so
+   before the button is pressed. */
+const sendNowText = (q) => (otherChoice(S.detail, q) ? `${sendNowLabel.value}…` : sendNowLabel.value);
+const sendNowTitle = (q) =>
+  otherChoice(S.detail, q)
+    ? "The running turn uses another model than this prompt's: asks whether to send it on that one, or stop the turn to run it on its own"
+    : sendNowHint.value;
 
 function waitLabel(since) {
   const secs = Math.max(0, Math.floor((now.value - Number(since || 0)) / 1000));
@@ -548,7 +571,7 @@ watch(
       <ApprovalCard v-for="a in approvals" :key="a.id" :session-id="S.detail.session.id" :approval="a" />
       <div v-if="S.detail.running" class="mb-3 flex items-center gap-2 text-xs text-dimmed" aria-label="Agent working" data-find-ignore>
         <span aria-hidden="true">{{ clockFace }}</span>
-        <span>{{ !approvals.length ? "Working" : approvals.some((a) => a.questions?.length) ? "Waiting for your answer" : "Waiting for approval" }} ({{ elapsedLabel }})</span>
+        <span>{{ workingLabel }} ({{ elapsedLabel }})</span>
       </div>
 
       <!-- A prompt that is only waiting is still shown where it will run, so
@@ -623,10 +646,10 @@ watch(
               color="warning"
               variant="ghost"
               size="xs"
-              :label="forcing === q.id ? forcingLabel : sendNowLabel"
+              :label="forcing === q.id ? forcingLabel : sendNowText(q)"
               :loading="forcing === q.id"
               :disabled="q.pending || forcing !== 0 || changing !== 0 || deleting !== 0 || editing !== 0"
-              :title="sendNowHint"
+              :title="sendNowTitle(q)"
               @click="force(q)"
             />
             <UButton

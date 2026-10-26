@@ -16,7 +16,7 @@ import { projectQueueAction } from "./project-queue.js";
 import { DEFAULT_SCHEDULE, scheduleRecurrence } from "./schedules.js";
 import { createTaskSounds, TASK_SOUNDS_KEY } from "./task-sounds.js";
 import { trackTaskAttention, reconcileTaskCompletions } from "./task-attention.js";
-import { upsertBackgroundMessage } from "./background-tasks.js";
+import { choiceOf, otherChoice, takeFollowUp, upsertBackgroundMessage, wakesAgent } from "./background-tasks.js";
 import { recordError } from "./diagnostics.js";
 import { api, apiURL, storage, clientStorage, diagnosticStorage, isRemoteConnection, setFlatScope } from "./api";
 import { isFlatView } from "./profiles.js";
@@ -134,6 +134,7 @@ export const S = reactive({
   diffContext: "changes",
   diffView: "unified", // "unified" or "split", likewise
   closing: null, // a close waiting on what to do with unsaved edits
+  mismatch: null, // a prompt waiting on whether to go into a turn on another model
   promptFocus: 0,
   queuedEdit: 0, // counter the transcript watches, to open its last queued prompt
   taskStatsOpen: false,
@@ -1344,6 +1345,17 @@ const reloadLists = debounce(() => {
   refreshSessions().catch(() => {});
 }, 150);
 
+/* reloadBackgroundWork re-reads what draws a running task's background work
+   (specs/083): the sidebar's listing, and the task lists of the project tabs
+   it happened in. Changes are collected per project, so two projects do not
+   collapse into one reload. */
+const backgroundProjects = new Set();
+const reloadBackgroundWork = debounce(() => {
+  refreshProjects().catch(() => {});
+  for (const t of S.tabs) if (t.kind === "project" && backgroundProjects.has(t.projectID)) reloadProjectTab(t);
+  backgroundProjects.clear();
+}, 150);
+
 export async function addProject(path, name) {
   await api("POST", "/api/projects", { path, name });
   await refreshProjects();
@@ -2038,6 +2050,8 @@ async function loadTaskTab(id, silent = false) {
     if (!silent) fail(e);
     return null;
   }
+  // A turn that takes prompts was last seen between replies.
+  detail.waiting = detail.accepts_prompts;
   return () => {
     rememberUsed(detail.session);
     setContextTab({
@@ -3274,6 +3288,13 @@ function onEvent(msg) {
     reloadProjects();
     return;
   }
+  // A running turn's background tasks started or ended, or it began taking
+  // prompts: the sidebar row says so (specs/083-background-tasks.md).
+  if (msg.event?.type === "session_background") {
+    backgroundProjects.add(msg.project_id);
+    reloadBackgroundWork();
+    return;
+  }
   // A background request has written what an archived task came to. Only the
   // project's task list draws it, and only the archived half of it, so the
   // lists that hold open tasks are left alone. See specs/051-task-outcomes.md.
@@ -3298,7 +3319,9 @@ function onEvent(msg) {
     }
     return;
   }
-  const turnMoved = ["started", "done"].includes(msg.event?.type);
+  // A turn that waits on background tasks ends one reply after another; only
+  // its last done, which carries the stats, moves the turn.
+  const turnMoved = msg.event?.type === "started" || (msg.event?.type === "done" && !!msg.stats);
   if (turnMoved) {
     const stage = msg.event.type === "done" && msg.stats ? "final" : "event";
     const seen = `${stage}:${msg.event.type}:${msg.session_id}:${msg.turn_id}`;
@@ -3336,11 +3359,31 @@ function onEvent(msg) {
 
 function onSessionEvent(tab, msg) {
   const ev = msg.event;
+  // Between replies of a turn that waits on background tasks, until the agent
+  // starts on something again.
+  if (wakesAgent(ev)) tab.detail.waiting = false;
   switch (ev.type) {
     case "started":
+      // A prompt sent again unprocessed comes as stored: the row moves
+      // instead of a bubble being drawn for it (specs/083-background-tasks.md).
+      if (msg.message) takeFollowUp(tab.detail.messages, msg.message, msg.replaces);
       startLocal(tab, msg.prompt, msg.turn);
       if (msg.session) tab.detail.session = msg.session;
-      takeQueued(tab, msg.prompt);
+      // The session as the turn starts is what the turn runs on, whatever
+      // the picker says later.
+      tab.detail.running_choice = msg.session ? choiceOf(msg.session) : null;
+      if (!msg.message) takeQueued(tab, msg.prompt);
+      tab.detail.accepts_prompts = tab.detail.waiting = false;
+      tab.detail.pending_follow_ups = [];
+      break;
+    case "follow_up":
+      if (msg.message) takeFollowUp(tab.detail.messages, msg.message, msg.replaces);
+      tab.detail.pending_follow_ups = (tab.detail.pending_follow_ups || [])
+        .filter((id) => id !== msg.replaces && id !== msg.message?.id);
+      // The agent can start on a prompt before Send now's answer arrives,
+      // and that answer must not add it back as still waiting.
+      tab.takenFollowUps ??= new Set();
+      for (const id of [msg.replaces, msg.message?.id]) if (id) tab.takenFollowUps.add(id);
       break;
     case "text":
       appendLive(tab, "assistant", ev.text);
@@ -3383,6 +3426,11 @@ function onSessionEvent(tab, msg) {
       break;
     case "done":
       endLive(tab);
+      // A reply that failed while the turn goes on leaves the follow-up it
+      // interrupted unprocessed, in place (specs/083-background-tasks.md).
+      if (msg.message) takeFollowUp(tab.detail.messages, msg.message);
+      // A reply that leaves the turn open lets the prompt bar send into it.
+      tab.detail.accepts_prompts = tab.detail.waiting = !msg.stats && !!msg.accepts_prompts;
       if (msg.stats) {
         tab.detail.stats = msg.stats;
         tab.detail.liveUsage = null;
@@ -3481,6 +3529,11 @@ async function syncMessages(tab, preserveLive = false) {
     // it. See specs/045-provider-outage-retry.md.
     tab.detail.session.status = detail.session.status;
     tab.detail.running = detail.running;
+    if (tab.detail.accepts_prompts !== detail.accepts_prompts) {
+      tab.detail.accepts_prompts = tab.detail.waiting = detail.accepts_prompts;
+    }
+    tab.detail.pending_follow_ups = detail.pending_follow_ups || [];
+    tab.detail.running_choice = detail.running_choice || null;
     if (keepLive) return;
     tab.detail.messages = detail.messages;
     tab.detail.turns = detail.turns;
@@ -3592,12 +3645,18 @@ function releaseProjectPrompt(tab, claimed) {
 
    Nothing draws it twice: the reply contributes only the turn, and the started
    event's startLocal skips a prompt that is already the last message. A
-   failure takes the bubble back out and returns the text to the box. */
-export async function send(prompt) {
+   failure takes the bubble back out and returns the text to the box.
+
+   A running turn that takes prompts, but runs on another model than the
+   task's, asks first, with the text still in the box: onMismatch is the
+   answer (specs/083-background-tasks.md). */
+export async function send(prompt, onMismatch = "") {
   const tab = S.owner;
   if (tab?.kind !== "session") return;
   prompt = prompt.trim();
   if (!prompt) return;
+  const running = onMismatch ? null : otherChoice(tab.detail, tab.detail.session);
+  if (running && !(onMismatch = await askMismatch(running, choiceOf(tab.detail.session)))) return;
 
   const typed = tab.draft;
   const wasRunning = tab.detail.running;
@@ -3608,7 +3667,13 @@ export async function send(prompt) {
   tab.detail.running = true;
 
   try {
-    const turn = await api("POST", `/api/sessions/${tab.sessionID}/messages`, { prompt });
+    const turn = await api("POST", `/api/sessions/${tab.sessionID}/messages`, { prompt, on_mismatch: onMismatch });
+    // Answered with the turn already running: the prompt joined it, and
+    // waits there until the agent starts on it (specs/083).
+    if (wasRunning && tab.detail.turns.some((t) => t.id === turn.id)) {
+      const at = tab.detail.messages.indexOf(echo);
+      if (at >= 0) tab.detail.messages[at].waiting = true;
+    }
     tab.detail.session.done_at = 0;
     startLocal(tab, "", turn);
     refreshSessions();
@@ -3623,6 +3688,12 @@ export async function send(prompt) {
     if (!tab.draft) tab.draft = typed;
     // A refusal because the session is busy leaves that turn running.
     tab.detail.running = wasRunning;
+    // The model changed elsewhere since this window last looked.
+    if (e.data?.running && !onMismatch) {
+      const answer = await askMismatch(e.data.running, e.data.wanted);
+      if (answer) await send(prompt, answer);
+      return;
+    }
     fail(e);
   }
 }
@@ -3745,15 +3816,162 @@ export function editLastQueued() {
 // back before returning, so the button stays busy until the new turn is on
 // screen: over a slow link the stream's started event can come seconds after
 // the answer, and an idle "Force send" in between reads as a failure.
-export async function forceQueued(queuedID) {
+//
+// A running turn that takes prompts on another model than the prompt's saved
+// one asks first, offering to stop it as well: onMismatch is the answer
+// (specs/083-background-tasks.md).
+export async function forceQueued(queuedID, onMismatch = "") {
   const tab = S.owner;
   if (tab?.kind !== "session" || !queuedID) return;
+  const queued = tab.detail.queued?.find((q) => q.id === queuedID);
+  const running = onMismatch || !queued ? null : otherChoice(tab.detail, queued);
+  if (running && !(onMismatch = await askMismatch(running, choiceOf(queued), true))) return;
   try {
-    await api("POST", `/api/sessions/${tab.sessionID}/queue/force`, { queued_id: queuedID });
-    if (tab.detail) await syncMessages(tab);
+    const result = await api("POST", `/api/sessions/${tab.sessionID}/queue/force`,
+      { queued_id: queuedID, on_mismatch: onMismatch });
+    if (!tab.detail) return;
+    // A prompt that joined the running turn changes only the queue. Reading
+    // the whole transcript back would replace rows streamed meanwhile,
+    // including this prompt itself (specs/083-background-tasks.md).
+    if (result?.joined) {
+      tab.detail.queued = result.queued;
+      tab.detail.session.queue_count = result.queue_count + (tab.detail.pendingQueued?.length || 0);
+      if (result.message) holdFollowUp(tab, result.message);
+      return;
+    }
+    await syncMessages(tab);
   } catch (e) {
+    if (e.data?.running && !onMismatch) {
+      const answer = await askMismatch(e.data.running, e.data.wanted, true);
+      if (answer) await forceQueued(queuedID, answer);
+      return;
+    }
     fail(e);
     throw e;
+  }
+}
+
+/* askMismatch asks what to do with a prompt the running turn takes only on
+   its own model, effort, subscription and provider — not the ones the prompt
+   is meant for. "join" sends it on the turn's, "stop", offered for a queued
+   prompt, stops the turn to run it on its own, and "" leaves it where it is.
+   The question is ChoiceMismatchModal.vue (specs/083-background-tasks.md). */
+function askMismatch(running, wanted, queued = false) {
+  S.mismatch?.resolve("");
+  return new Promise((resolve) => {
+    S.mismatch = { running, wanted, queued, resolve };
+  });
+}
+
+export function resolveMismatch(answer) {
+  const pending = S.mismatch;
+  if (!pending) return;
+  S.mismatch = null;
+  pending.resolve(answer);
+}
+
+/* holdFollowUp shows a prompt the running turn has accepted, stored and held
+   until the agent starts on it, from the answer to the request that sent it.
+   The agent can start on it before that answer arrives, and the prompt is
+   then already where it belongs, not waiting any more. */
+function holdFollowUp(tab, message) {
+  if (tab.takenFollowUps?.has(message.id)) return;
+  if (tab.detail.messages.some((m) => m.id === message.id && m.turn_id)) return;
+  takeFollowUp(tab.detail.messages, message);
+  const pending = tab.detail.pending_follow_ups || [];
+  if (!pending.includes(message.id)) tab.detail.pending_follow_ups = [...pending, message.id];
+}
+
+function dropMessage(tab, id) {
+  const at = tab.detail.messages.findIndex((m) => m.id === id);
+  if (at >= 0) tab.detail.messages.splice(at, 1);
+}
+
+/* sendUnprocessed sends a prompt the agent never processed, as Send sends a
+   typed one: into the running turn when that turn takes prompts, otherwise
+   as a turn of its own. The server moves the message itself to the end of
+   the transcript rather than storing a copy, so the window places it from
+   what the server says — the started event, or the answer when the prompt
+   joined the turn. Unlike editing it, nothing below it goes. A running turn
+   on another model than the task's asks first, as Send does
+   (specs/083-background-tasks.md). */
+export async function sendUnprocessed(message, onMismatch = "") {
+  const tab = S.owner;
+  if (tab?.kind !== "session" || !message?.id) return false;
+  const running = onMismatch ? null : otherChoice(tab.detail, tab.detail.session);
+  if (running && !(onMismatch = await askMismatch(running, choiceOf(tab.detail.session)))) return false;
+  try {
+    const result = await api("POST", `/api/sessions/${tab.sessionID}/messages/${message.id}/send`,
+      { on_mismatch: onMismatch });
+    if (!tab.detail) return true;
+    if (result.joined) {
+      // Moved below what was stored after it, under a new id.
+      if (result.message.id !== message.id) dropMessage(tab, message.id);
+      holdFollowUp(tab, result.message);
+    } else {
+      startLocal(tab, "", result.turn);
+    }
+    tab.detail.session.done_at = 0;
+    refreshSessions();
+    refreshProjects();
+    reloadProjects();
+    return true;
+  } catch (e) {
+    if (e.data?.running && !onMismatch) {
+      const answer = await askMismatch(e.data.running, e.data.wanted);
+      return answer ? sendUnprocessed(message, answer) : false;
+    }
+    fail(e);
+    return false;
+  }
+}
+
+/* queueUnprocessed puts a prompt the agent never processed at the end of the
+   task's queue, with the task's model, as Enqueue queues a typed one. It
+   leaves the transcript before the request does, for a queue that runs it at
+   once: that turn's started event draws it at the end, where it then goes.
+   A refusal puts it back. */
+export async function queueUnprocessed(message) {
+  const tab = S.owner;
+  if (tab?.kind !== "session" || !message?.id) return false;
+  dropMessage(tab, message.id);
+  const pendingQueued = tab.detail.pendingQueued || (tab.detail.pendingQueued = []);
+  const pending = {
+    id: `pending:${tab.sessionID}:${message.id}`,
+    session_id: tab.sessionID,
+    prompt: message.content,
+    provider: tab.detail.session.provider,
+    model: tab.detail.session.model,
+    effort: tab.detail.session.effort || "",
+    created_at: Date.now(),
+    pending: true,
+  };
+  pendingQueued.push(pending);
+  const settle = () => {
+    const at = pendingQueued.indexOf(pending);
+    if (at >= 0) pendingQueued.splice(at, 1);
+  };
+  try {
+    const result = await api("POST", `/api/sessions/${tab.sessionID}/messages/${message.id}/queue`);
+    settle();
+    // A transcript read while the request was out can have brought it back.
+    dropMessage(tab, message.id);
+    tab.detail.queued = result.queued;
+    tab.detail.session.queue_count = result.queue_count + pendingQueued.length;
+    tab.detail.session.done_at = 0;
+    refreshSessions();
+    refreshProjects();
+    reloadProjects();
+    return true;
+  } catch (e) {
+    settle();
+    const messages = tab.detail.messages;
+    if (!messages.some((m) => m.id === message.id)) {
+      const at = messages.findIndex((m) => !m.id || m.id > message.id);
+      messages.splice(at < 0 ? messages.length : at, 0, message);
+    }
+    fail(e);
+    return false;
   }
 }
 

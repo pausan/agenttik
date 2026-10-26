@@ -340,6 +340,8 @@ func (s *Server) routes() {
 	api.Post("/sessions/:id/threads", s.createThread)
 	api.Post("/sessions/:id/spawn", s.spawnThread)
 	api.Post("/sessions/:id/messages/:message/edit", s.editMessage)
+	api.Post("/sessions/:id/messages/:message/send", s.sendUnprocessed)
+	api.Post("/sessions/:id/messages/:message/queue", s.queueUnprocessed)
 	api.Post("/sessions/:id/queue", s.enqueueMessage)
 	api.Patch("/sessions/:id/queue/:queuedID", s.updateQueuedMessage)
 	api.Delete("/sessions/:id/queue/:queuedID", s.deleteQueuedMessage)
@@ -515,7 +517,20 @@ type apiError struct {
 	Error string `json:"error"`
 }
 
+// choiceConflict is the body of a prompt refused because the running turn
+// takes prompts only on another choice than the prompt's.
+type choiceConflict struct {
+	Error   string        `json:"error"`
+	Running runner.Choice `json:"running"`
+	Wanted  runner.Choice `json:"wanted"`
+}
+
 func errorHandler(c *fiber.Ctx, err error) error {
+	// The window asks what to do from the two choices, so they come along.
+	if mismatch := (*runner.ChoiceError)(nil); errors.As(err, &mismatch) {
+		return c.Status(fiber.StatusConflict).JSON(choiceConflict{Error: err.Error(),
+			Running: mismatch.Running, Wanted: mismatch.Wanted})
+	}
 	code := fiber.StatusInternalServerError
 	switch {
 	case errors.Is(err, store.ErrNotFound):
@@ -527,6 +542,8 @@ func errorHandler(c *fiber.Ctx, err error) error {
 	case errors.Is(err, runner.ErrNotRunning):
 		code = fiber.StatusConflict
 	case errors.Is(err, runner.ErrForcePending):
+		code = fiber.StatusConflict
+	case errors.Is(err, runner.ErrNotUnprocessed):
 		code = fiber.StatusConflict
 	case errors.Is(err, runner.ErrApprovalGone):
 		code = fiber.StatusConflict

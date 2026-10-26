@@ -58,7 +58,19 @@ type Event struct {
 	Turn    *store.Turn    `json:"turn,omitempty"`
 	Session *store.Session `json:"session,omitempty"`
 	Prompt  string         `json:"prompt,omitempty"`
+	// Message is the row an event stored. On started it is set only when
+	// the turn's prompt is one the transcript held, sent again unprocessed;
+	// on done, only when a failed reply left a follow-up unprocessed.
 	Message *store.Message `json:"message,omitempty"`
+	// Replaces is set when a prompt the transcript held moved below rows
+	// stored after it — on follow_up, below the reply it waited behind, and
+	// on started, sent again — and is the id it was stored under before.
+	Replaces int64 `json:"replaces,omitempty"`
+	// AcceptsPrompts is set on a reply's done event when the turn stays open
+	// and takes prompts, and on session_background.
+	AcceptsPrompts bool `json:"accepts_prompts,omitempty"`
+	// BackgroundTasks is set on session_background: how many tasks still run.
+	BackgroundTasks int `json:"background_tasks,omitempty"`
 }
 
 // activeTurn is a turn in flight. It carries the project so scanning for
@@ -66,6 +78,29 @@ type Event struct {
 type activeTurn struct {
 	projectID int64
 	cancel    context.CancelFunc
+	open      *openTurn
+}
+
+// openTurn is how a turn that outlives its reply takes more prompts: the
+// reply ended while background tasks it started still run, and the provider
+// waits on them. See specs/083-background-tasks.md.
+type openTurn struct {
+	// choice is what the turn runs on, set as it starts and never changed.
+	choice Choice
+
+	mu   sync.Mutex
+	turn store.Turn
+	// followUp is set while the turn takes prompts.
+	followUp *agent.FollowUp
+	// closing is set once its last reply is out: the turn is ending by
+	// itself, so a prompt waits for it rather than being refused as busy.
+	closing bool
+	// pending are the stored messages of prompts handed over and not yet
+	// taken, oldest first. Each is stored when accepted, without a turn, and
+	// joins the turn when the provider starts on it, below the reply it was
+	// waiting behind.
+	pending  []int64
+	released chan struct{} // closed once the turn has ended
 }
 
 type Runner struct {
@@ -246,6 +281,140 @@ func (r *Runner) Running(sessionID string) bool {
 	return ok
 }
 
+// BackgroundWork reports how many of the session's background tasks still run,
+// and whether its turn takes prompts meanwhile.
+func (r *Runner) BackgroundWork(sessionID string) (running int, acceptsPrompts bool) {
+	for _, t := range r.BackgroundTasks(sessionID) {
+		if t.Status == "running" {
+			running++
+		}
+	}
+	return running, r.AcceptsPrompts(sessionID)
+}
+
+// EventSessionBackground says a running turn's background work changed: tasks
+// started or ended, or it began or stopped taking prompts. It travels on the
+// project topic, for the sidebar's task rows.
+const EventSessionBackground agent.EventType = "session_background"
+
+// AcceptsPrompts reports whether the session's running turn takes prompts
+// now, because its reply ended with background tasks still running.
+func (r *Runner) AcceptsPrompts(sessionID string) bool {
+	r.mu.Lock()
+	active, ok := r.active[sessionID]
+	r.mu.Unlock()
+	if !ok {
+		return false
+	}
+	active.open.mu.Lock()
+	defer active.open.mu.Unlock()
+	return active.open.followUp != nil
+}
+
+// followUp hands the prompt queued describes to the session's running turn
+// when that turn takes prompts. joined is the prompt as stored when it did. A
+// turn that has just stopped taking them, or whose last reply is out, is
+// ending by itself: ending is then closed once it has, so the prompt can start
+// the next turn instead. A turn still replying is busy, and gets neither.
+//
+// The turn runs on the choice its process was started on, and a prompt meant
+// for another one is refused with a ChoiceError rather than run on it behind
+// the user's back, unless anyChoice says to (083-background-tasks.md).
+//
+// The prompt is stored before the provider has it, without a turn: until the
+// provider starts on it, it lives only in the CLI's memory and this runner's,
+// and a turn that ends first would otherwise take it along. stored is a prompt
+// the transcript holds already, one the agent never processed, and 0 for a new
+// one. It moves to the end once the provider has it, where a prompt sent now
+// goes. A queued prompt, one queued describes by its row's id, is stored by
+// its row until then, and leaves the queue for the transcript once the
+// provider has it.
+func (r *Runner) followUp(queued store.QueuedMessage, stored int64, anyChoice bool) (turn *store.Turn, joined *store.Message, ending <-chan struct{}, err error) {
+	sessionID, prompt := queued.SessionID, queued.Prompt
+	r.mu.Lock()
+	active, ok := r.active[sessionID]
+	r.mu.Unlock()
+	if !ok {
+		return nil, nil, nil, nil
+	}
+	open := active.open
+	open.mu.Lock()
+	defer open.mu.Unlock()
+	if open.followUp == nil {
+		if open.closing {
+			return nil, nil, open.released, nil
+		}
+		return nil, nil, nil, nil
+	}
+	if queued.ID != 0 {
+		// The row as it stands, read under this lock: of two Send nows for
+		// one row the second finds it gone instead of handing it over again,
+		// and an edit made meanwhile, to its text or its model, is what goes.
+		row, err := r.store.GetQueuedMessage(queued.ID)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		queued, prompt = *row, row.Prompt
+	}
+	if want := choiceOf(queued); !anyChoice && want != open.choice {
+		return nil, nil, nil, &ChoiceError{Running: open.choice, Wanted: want}
+	}
+	var message *store.Message
+	switch {
+	case stored != 0:
+		// Checked again under the lock queueing it takes as well: it may have
+		// just been queued, or sent from another click.
+		if message, err = r.store.GetMessage(stored); err != nil {
+			return nil, nil, nil, err
+		}
+		if message.TurnID != 0 || slices.Contains(open.pending, stored) {
+			return nil, nil, nil, ErrNotUnprocessed
+		}
+	case queued.ID == 0:
+		if message, err = r.store.AddMessage(sessionID, 0, store.RoleUser, prompt); err != nil {
+			return nil, nil, nil, err
+		}
+	}
+	if err := open.followUp.Send(attachments.Resolve(prompt, r.store.Dir())); err != nil {
+		if stored == 0 && queued.ID == 0 {
+			_ = r.store.DeleteMessage(message.ID)
+		}
+		open.followUp = nil
+		return nil, nil, open.released, nil
+	}
+	switch {
+	case stored != 0:
+		if moved, _, err := r.store.MoveMessageToEnd(stored, 0); err == nil {
+			message = moved
+		}
+	case queued.ID != 0:
+		// Stored as sent, whatever the row says by now. A row deleted from
+		// the queue meanwhile is stored all the same: the provider has it.
+		if message, err = r.store.QueuedToMessage(queued.ID, prompt); err != nil {
+			if message, err = r.store.AddMessage(sessionID, 0, store.RoleUser, prompt); err != nil {
+				return nil, nil, nil, err
+			}
+		}
+	}
+	open.pending = append(open.pending, message.ID)
+	snapshot := open.turn
+	return &snapshot, message, nil, nil
+}
+
+// PendingFollowUps lists the stored prompts the session's running turn has
+// accepted and not started on yet.
+func (r *Runner) PendingFollowUps(sessionID string) []int64 {
+	r.mu.Lock()
+	active, ok := r.active[sessionID]
+	r.mu.Unlock()
+	if !ok {
+		return nil
+	}
+	active.open.mu.Lock()
+	defer active.open.mu.Unlock()
+	return slices.Clone(active.open.pending)
+}
+
 // BackgroundTasks lists what the session's running turn has left working,
 // oldest first, finished ones included until the turn ends.
 func (r *Runner) BackgroundTasks(sessionID string) []agent.BackgroundTask {
@@ -259,11 +428,31 @@ func (r *Runner) BackgroundTasks(sessionID string) []agent.BackgroundTask {
 	return out
 }
 
-// Send starts a turn. It returns as soon as the provider process is up; the
-// turn continues in the background and is observed over the hub.
+// Send starts a turn, or hands the prompt to the session's running turn when
+// that turn takes prompts. It returns as soon as the provider has it; the turn
+// continues in the background and is observed over the hub. A running turn on
+// another choice than the session's refuses it with a ChoiceError.
 func (r *Runner) Send(sessionID, prompt string) (*store.Turn, error) {
-	return r.send(store.QueuedMessage{SessionID: sessionID, Prompt: prompt,
-		CreatedAt: time.Now().UnixMilli()})
+	return r.SendWith(sessionID, prompt, Refuse)
+}
+
+// SendWith is Send, saying what to do about a running turn that takes prompts
+// on another choice than the session's: the model was changed while it ran.
+// Join hands it the prompt anyway; Stop is not offered here.
+func (r *Runner) SendWith(sessionID, prompt string, mismatch Mismatch) (*store.Turn, error) {
+	sess, err := r.store.GetSession(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	turn, _, err := r.send(sessionPrompt(sess, prompt), 0, mismatch == Join)
+	return turn, err
+}
+
+// sessionPrompt describes a prompt sent straight to a session, accepted now,
+// on the session's choice.
+func sessionPrompt(sess *store.Session, prompt string) store.QueuedMessage {
+	return store.QueuedMessage{SessionID: sess.ID, Prompt: prompt, Provider: sess.Provider,
+		AccountID: sess.AccountID, Model: sess.Model, Effort: sess.Effort, CreatedAt: time.Now().UnixMilli()}
 }
 
 // send is Send's body, over the queue row shape rather than a bare prompt.
@@ -272,10 +461,27 @@ func (r *Runner) Send(sessionID, prompt string) (*store.Turn, error) {
 // then the prompt goes back where it was waiting instead of being lost. A
 // prompt sent straight to a session has no row of its own yet; it is described
 // by one here, with the time it was accepted, for the same reason.
-func (r *Runner) send(queued store.QueuedMessage) (*store.Turn, error) {
+//
+// stored and anyChoice are as followUp takes them, and joined is the prompt
+// as stored when it went into the running turn.
+func (r *Runner) send(queued store.QueuedMessage, stored int64, anyChoice bool) (*store.Turn, *store.Message, error) {
+	turn, joined, ending, err := r.followUp(queued, stored, anyChoice)
+	if err != nil {
+		return nil, nil, err
+	}
+	if joined != nil {
+		return turn, joined, nil
+	}
+	if ending != nil {
+		select {
+		case <-ending:
+		case <-time.After(forceWait):
+		}
+	}
 	r.transfer.RLock()
 	defer r.transfer.RUnlock()
-	return r.sendDuringTransferLock(queued)
+	turn, err = r.sendDuringTransferLock(queued, stored)
+	return turn, nil, err
 }
 
 // WithIdleProject prevents new turns and clock fires while project data moves.
@@ -303,7 +509,7 @@ func startID(sess *store.Session, hasRun bool) string {
 	return sess.ID
 }
 
-func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage) (*store.Turn, error) {
+func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage, stored int64) (*store.Turn, error) {
 	sessionID, prompt := queued.SessionID, queued.Prompt
 	sess, err := r.store.GetSession(sessionID)
 	if err != nil {
@@ -374,7 +580,8 @@ func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage) (*store.Turn
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	r.turns.Add(1)
-	r.active[sessionID] = activeTurn{projectID: sess.ProjectID, cancel: cancel}
+	open := &openTurn{choice: choiceOf(queued), released: make(chan struct{})}
+	r.active[sessionID] = activeTurn{projectID: sess.ProjectID, cancel: cancel, open: open}
 	r.busyChanged()
 	r.mu.Unlock()
 
@@ -392,6 +599,7 @@ func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage) (*store.Turn
 		r.busyChanged()
 		stopping := r.stopping
 		r.mu.Unlock()
+		close(open.released)
 		cancel()
 		if stopping {
 			if forced {
@@ -410,7 +618,18 @@ func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage) (*store.Turn
 		release()
 		return nil, err
 	}
-	if _, err := r.store.AddMessage(sessionID, turn.ID, store.RoleUser, prompt); err != nil {
+	// A prompt the transcript holds already is the turn's from here, moved
+	// below everything as a prompt sent now would be. One queued or edited
+	// away meanwhile leaves no turn behind.
+	var adopted *store.Message
+	var replaces int64
+	if stored != 0 {
+		adopted, replaces, err = r.store.MoveMessageToEnd(stored, turn.ID)
+	} else {
+		_, err = r.store.AddMessage(sessionID, turn.ID, store.RoleUser, prompt)
+	}
+	if err != nil {
+		_ = r.store.DiscardTurn(turn.ID)
 		release()
 		return nil, err
 	}
@@ -444,7 +663,7 @@ func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage) (*store.Turn
 	if err != nil {
 		// Nothing was produced, so an outage leaves no trace but the waiting
 		// prompt: the attempt is erased and the clock owns it from here.
-		if r.holdForOutage(sess, queued, turn, err.Error(), false) {
+		if r.holdForOutage(sess, queued, 0, turn, err.Error(), false) {
 			release()
 			return nil, ErrProviderAway
 		}
@@ -460,12 +679,16 @@ func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage) (*store.Turn
 	// so everyone else gets a frozen copy: a subscriber serialising the event
 	// must not read fields while they are being updated.
 	snapshot := *turn
+	open.mu.Lock()
+	open.turn = snapshot
+	open.mu.Unlock()
 	started := Event{SessionID: sess.ID, ProjectID: sess.ProjectID, TurnID: turn.ID,
-		Event: agent.Event{Type: "started"}, Turn: &snapshot, Session: sess, Prompt: prompt}
+		Event: agent.Event{Type: "started"}, Turn: &snapshot, Session: sess, Prompt: prompt,
+		Message: adopted, Replaces: replaces}
 	r.hub.Publish(sess.ID, started)
 	r.hub.Publish(ProjectTopic(sess.ProjectID), started)
 
-	go r.consume(sess, turn, queued, events, release)
+	go r.consume(sess, turn, queued, open, events, release)
 	return &snapshot, nil
 }
 
@@ -474,7 +697,7 @@ func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage) (*store.Turn
 // scheduler picked up straight away is already gone from that list and the
 // transcript never draws it as queued.
 func (r *Runner) Enqueue(sessionID, prompt string) ([]store.QueuedMessage, error) {
-	sess, err := r.enqueue(sessionID, prompt)
+	sess, err := r.enqueue(sessionID, prompt, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -484,7 +707,9 @@ func (r *Runner) Enqueue(sessionID, prompt string) ([]store.QueuedMessage, error
 
 // enqueue accepts a prompt without dispatching it. Schedule ticks use this
 // while holding the transfer lock, then dispatch after releasing that lock.
-func (r *Runner) enqueue(sessionID, prompt string) (*store.Session, error) {
+// stored is a prompt the transcript holds already, one the agent never
+// processed, which leaves the transcript for the queue; 0 for a new one.
+func (r *Runner) enqueue(sessionID, prompt string, stored int64) (*store.Session, error) {
 	sess, err := r.store.GetSession(sessionID)
 	if err != nil {
 		return nil, err
@@ -495,7 +720,12 @@ func (r *Runner) enqueue(sessionID, prompt string) (*store.Session, error) {
 	if hasRun, err := r.store.HasTurns(sessionID); err == nil {
 		r.claimProjectPrompt(sess, hasRun)
 	}
-	if _, err := r.store.EnqueueMessage(sessionID, prompt, sess.Provider, sess.AccountID, sess.Model, sess.Effort); err != nil {
+	if stored != 0 {
+		err = r.queueStored(sess, stored)
+	} else {
+		_, err = r.store.EnqueueMessage(sessionID, prompt, sess.Provider, sess.AccountID, sess.Model, sess.Effort)
+	}
+	if err != nil {
 		return nil, err
 	}
 	if err := r.unarchiveTask(sess); err != nil {
@@ -573,29 +803,48 @@ func (r *Runner) DeleteQueued(sessionID string, queuedID int64) error {
 // only waiting on an ordering rule, not on a process it has to share. The one
 // turn that genuinely is in the way is the session's own — a provider cannot
 // take a second prompt in place — so that one is cancelled and the prompt
-// starts as it exits. The message stays in the queue until Send has accepted
-// it, so a failed launch cannot lose it.
+// starts as it exits. A turn that takes prompts while background tasks run is
+// not in the way, and the prompt joins it — when it runs on the prompt's
+// saved choice; mismatch says what to do when it does not. The message stays
+// in the queue until Send has accepted it, so a failed launch or a refused
+// join cannot lose it.
 //
 // It returns once the prompt has started, or with why it could not, so the
 // window that asked keeps showing the request until then. A turn slower than
 // forceWait to stop is answered as accepted and the prompt starts on its own.
-func (r *Runner) ForceQueued(sessionID string, queuedID int64) error {
+// joined is the prompt as stored when it went into the running turn, and nil
+// when it started a turn of its own.
+func (r *Runner) ForceQueued(sessionID string, queuedID int64, mismatch Mismatch) (joined *store.Message, err error) {
 	queued, err := r.store.GetQueuedMessage(queuedID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if queued.SessionID != sessionID {
-		return store.ErrNotFound
+		return nil, store.ErrNotFound
 	}
 	sess, err := r.store.GetSession(sessionID)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	// A turn that takes prompts is not in the way: the prompt joins it. Its
+	// queue row goes only once the provider has it. On another choice than
+	// the prompt's own, it joins only if told to; told to stop instead, the
+	// turn is cancelled as any turn in the way is.
+	_, message, ending, err := r.followUp(*queued, 0, mismatch == Join)
+	if other := (*ChoiceError)(nil); errors.As(err, &other) && mismatch == Stop {
+		err = nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if message != nil {
+		return message, nil
 	}
 
 	r.mu.Lock()
 	if _, pending := r.forced[sessionID]; pending {
 		r.mu.Unlock()
-		return ErrForcePending
+		return nil, ErrForcePending
 	}
 	done := make(chan error, 1)
 	turn, running := r.active[sessionID]
@@ -604,18 +853,20 @@ func (r *Runner) ForceQueued(sessionID string, queuedID int64) error {
 	}
 	r.mu.Unlock()
 
-	if running {
-		turn.cancel()
-	} else {
+	if !running {
 		// Nothing of this session's own is in the way, so start it here
 		// rather than waiting for a turn that is not coming.
 		go r.runForced(sess.ProjectID, queuedID, done)
+	} else if ending == nil {
+		turn.cancel()
 	}
+	// A turn that stopped taking prompts is ending by itself, and its last
+	// moments are not cut short: the prompt starts as it releases.
 	select {
 	case err := <-done:
-		return err
+		return nil, err
 	case <-time.After(forceWait):
-		return nil
+		return nil, nil
 	}
 }
 
@@ -671,7 +922,13 @@ func (r *Runner) sendQueued(queued *store.QueuedMessage) (*store.Turn, error) {
 			return nil, err
 		}
 	}
-	return r.send(*queued)
+	turn, _, err := r.send(*queued, 0, false)
+	if other := (*ChoiceError)(nil); errors.As(err, &other) {
+		// Its session's turn takes prompts, but on another choice: the
+		// prompt waits for that turn to end, as for any turn in the way.
+		return nil, ErrBusy
+	}
+	return turn, err
 }
 
 // dispatchLock serializes queue dispatch within one project. One lock per
@@ -846,7 +1103,7 @@ func (r *Runner) background(work func()) {
 	go func() { defer r.turns.Done(); work() }()
 }
 
-func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.QueuedMessage, events <-chan agent.Event, release func()) {
+func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.QueuedMessage, open *openTurn, events <-chan agent.Event, release func()) {
 	defer release()
 
 	var text strings.Builder
@@ -858,6 +1115,14 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 	// record and requeueing it as if nothing had been tried. See
 	// 045-provider-outage-retry.md.
 	var produced bool
+	// inFlight is the input the agent is answering: the turn's prompt, then
+	// each follow-up it takes, and none once a reply ends, or while it answers
+	// a background task's notification. An outage puts back what it
+	// interrupted, and never a prompt already answered. inFlightMessage is a
+	// follow-up's message, 0 for the turn's prompt.
+	inFlight, inFlightMessage := &queued, int64(0)
+	var interrupted *store.QueuedMessage
+	var interruptedMessage int64
 
 	// flushText writes the assistant prose accumulated so far. Called before
 	// each tool call or new background task so the transcript keeps its order.
@@ -873,6 +1138,10 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 	// A task gets one row where it is first reported. Later states update that
 	// row, leaving prose and tools in their original order.
 	backgroundMessages := make(map[string]store.Message)
+	// What the project's task rows were last told about this turn's
+	// background work.
+	var shownTasks int
+	var shownAccepts bool
 	saveBackground := func(task agent.BackgroundTask) *store.Message {
 		body, err := json.Marshal(task)
 		if err != nil {
@@ -899,6 +1168,7 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 
 	for ev := range events {
 		var message *store.Message
+		var replaces int64
 		switch ev.Type {
 		case agent.EventSessionStarted:
 			if ev.ProviderSessionID != "" && ev.ProviderSessionID != sess.ProviderSessionID {
@@ -936,8 +1206,24 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 			}
 		case agent.EventDone:
 			// A turn can hold several replies, one per background task the
-			// agent waited on. Each is its own message.
+			// agent waited on and per prompt it took meanwhile. Each is its
+			// own message.
 			flushText()
+			open.mu.Lock()
+			open.followUp, open.closing = ev.FollowUp, ev.FollowUp == nil
+			open.mu.Unlock()
+			if failure != "" && ev.FollowUp != nil {
+				// The reply failed, but the turn goes on: background tasks still
+				// run and it takes prompts. The failure was the reply's, not the
+				// turn's, so it is settled here: its error row stays, a follow-up
+				// it interrupted is left as never processed, for the user to send
+				// again, and the turn ends as its last reply does.
+				if interruptedMessage != 0 {
+					message, _ = r.store.DetachMessage(interruptedMessage)
+				}
+				failure, interrupted, interruptedMessage = "", nil, 0
+			}
+			inFlight, inFlightMessage = nil, 0
 			if ev.Usage != nil {
 				turn.InputTokens = ev.Usage.InputTokens
 				turn.OutputTokens = ev.Usage.OutputTokens
@@ -965,6 +1251,7 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 			}
 		case agent.EventError:
 			failure = ev.Text
+			interrupted, interruptedMessage = inFlight, inFlightMessage
 			r.store.AddMessage(sess.ID, turn.ID, store.RoleError, ev.Text)
 		case agent.EventApproval:
 			if ev.Approval == nil {
@@ -980,6 +1267,24 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 			if ev.Approval == nil || !r.withdrawApproval(ev.Approval.ID) {
 				continue
 			}
+		case agent.EventFollowUp:
+			open.mu.Lock()
+			if len(open.pending) == 0 {
+				open.mu.Unlock()
+				continue
+			}
+			id := open.pending[0]
+			open.pending = open.pending[1:]
+			open.mu.Unlock()
+			// The prompt joins the turn below the reply it waited behind.
+			flushText()
+			message, replaces, _ = r.store.MoveMessageToEnd(id, turn.ID)
+			if message != nil {
+				inFlight = &store.QueuedMessage{SessionID: sess.ID, Prompt: message.Content,
+					Provider: open.choice.Provider, AccountID: open.choice.AccountID,
+					Model: open.choice.Model, Effort: open.choice.Effort, CreatedAt: message.CreatedAt}
+				inFlightMessage = message.ID
+			}
 		case agent.EventBackground:
 			if ev.Background == nil {
 				continue
@@ -992,8 +1297,17 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 			r.backgroundTasks[sess.ID][ev.Background.ID] = *ev.Background
 			r.mu.Unlock()
 		}
-		out := Event{SessionID: sess.ID, ProjectID: sess.ProjectID, TurnID: turn.ID, Event: ev, Message: message}
+		out := Event{SessionID: sess.ID, ProjectID: sess.ProjectID, TurnID: turn.ID, Event: ev, Message: message,
+			Replaces: replaces, AcceptsPrompts: ev.FollowUp != nil}
 		r.hub.Publish(sess.ID, out)
+		if ev.Type == agent.EventBackground || ev.Type == agent.EventDone {
+			if tasks, accepts := r.BackgroundWork(sess.ID); tasks != shownTasks || accepts != shownAccepts {
+				shownTasks, shownAccepts = tasks, accepts
+				r.hub.Publish(ProjectTopic(sess.ProjectID), Event{SessionID: sess.ID, ProjectID: sess.ProjectID,
+					TurnID: turn.ID, Event: agent.Event{Type: EventSessionBackground},
+					BackgroundTasks: tasks, AcceptsPrompts: accepts})
+			}
+		}
 		// The sidebar marks a task waiting on the user, open tab or not.
 		if ev.Type == agent.EventApproval || ev.Type == agent.EventApprovalResolved {
 			r.hub.Publish(ProjectTopic(sess.ProjectID), out)
@@ -1027,19 +1341,43 @@ func (r *Runner) consume(sess *store.Session, turn *store.Turn, queued store.Que
 	// and the session waits instead of reporting an error nobody caused — and
 	// the schedule that spawned it, if any, keeps its run open, since what it
 	// asked for has not happened yet. holdForOutage owns the turn from here.
-	if failure == "" || !r.holdForOutage(sess, queued, turn, failure, produced) {
+	// That prompt is the input the failure interrupted; one that came while
+	// the agent answered no input of the user's ends the turn as an error.
+	held := failure != "" && interrupted != nil &&
+		r.holdForOutage(sess, *interrupted, interruptedMessage, turn, failure, produced)
+	if !held {
 		r.store.FinishTurn(turn)
 		r.store.SetSessionStatus(sess.ID, sessionStatus)
 		if sess.ScheduleID != 0 {
 			r.finishScheduledRun(sess, turn.Status)
 		}
 	}
+	r.leaveUntaken(sess, queued, open, held)
 
 	stats, _ := r.store.SessionStats(sess.ID)
 	done := Event{SessionID: sess.ID, ProjectID: sess.ProjectID, TurnID: turn.ID,
 		Event: agent.Event{Type: agent.EventDone}, Stats: stats}
 	r.hub.Publish(sess.ID, done)
 	r.hub.Publish(ProjectTopic(sess.ProjectID), done)
+}
+
+// leaveUntaken settles the prompts a turn accepted and ended without starting
+// on: it was stopped, the app quit, or the provider died. Their messages move
+// to the end of the transcript, still without a turn, which is what marks them
+// unprocessed, as Stop leaves queued prompts. After a provider outage, which
+// agenttik retries by itself, they go back to the queue behind the retry.
+func (r *Runner) leaveUntaken(sess *store.Session, queued store.QueuedMessage, open *openTurn, held bool) {
+	open.mu.Lock()
+	untaken := open.pending
+	open.pending, open.followUp = nil, nil
+	open.mu.Unlock()
+	for _, id := range untaken {
+		if held {
+			_ = r.store.MessageToQueue(id, queued.Provider, queued.AccountID, queued.Model, queued.Effort)
+		} else {
+			_, _, _ = r.store.MoveMessageToEnd(id, 0)
+		}
+	}
 }
 
 // toolSummary is a one-line record of a tool call for the transcript. The full

@@ -355,6 +355,8 @@ async function doDelete() {
             :flag="row.task.flag"
             @flag="setTaskFlag(row.task, $event)"
             :queued="row.task.queue_count"
+            :background="row.task.background_tasks || 0"
+            :accepts-prompts="!!row.task.accepts_prompts"
             :approval="!!S.approvals[row.task.id]"
             :sub="subtitle(row.task)"
             :outcome="row.archived ? row.task.summary : ''"

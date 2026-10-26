@@ -155,19 +155,36 @@ Events consumed from stdout JSONL:
 | `...{"delta":{"type":"thinking_delta"}}` | `thinking` |
 | `{"type":"assistant","message":{"content":[{"type":"tool_use",...}]}}` | `tool_use` |
 | `{"type":"user","message":{"content":[{"type":"tool_result",...}]}}` | `tool_result` |
+| `{"type":"user","message":{"content":"..."},"isReplay":true}` | `follow_up` when its text is the oldest follow-up still waiting |
 | `{"type":"control_request","request":{"subtype":"can_use_tool",...}}` | `approval` |
 | `{"type":"control_cancel_request",...}` | `approval_resolved` |
 | `{"type":"system","subtype":"background_tasks_changed","tasks":[...]}` | `background` states for tasks that started or ended |
-| `{"type":"result",...}` | `done` with running turn totals; stdin is closed unless background tasks run |
+| `{"type":"result",...}` | `done` with running turn totals; stdin is closed unless background tasks run or a prompt waits |
 
 A result is one reply, not always the end of the turn. When the agent ends a
 reply with background tasks running (`run_in_background` commands, background
-agents) and says it will wait, stdin stays open. When a task finishes, the CLI
-wakes the agent itself (`task_notification`, a fresh `init`) and it replies
-again, possibly starting more background work. Stdin closes at the first
-result with no background task running, and the turn ends when the CLI exits.
-Until then the task shows as working; Stop kills the CLI and its tasks.
-Closing stdin earlier makes the CLI kill the tasks and never wake the agent.
+agents), stdin stays open. When a task finishes, the CLI wakes the agent itself
+(`task_notification`, a fresh `init`) and it replies again, possibly starting
+more background work. Meanwhile the turn takes the user's prompts: that done
+event carries a `FollowUp`, which writes each prompt to stdin as another user
+line. The CLI answers input in the order it arrives, queuing a prompt written
+while it replies, and each input gets its own `init` … `result`.
+`--replay-user-messages` echoes every prompt as the CLI starts on it. The host
+keeps the follow-ups it wrote, oldest first, as written; an echo whose text is
+the oldest one becomes `follow_up` and takes it off the list. Any other echo
+changes nothing: the first prompt's, which carries agenttik's guidance in
+front, or one the CLI adds. One that arrives while a follow-up waits is logged,
+with sizes only, since a CLI that changed how it echoes would leave every
+follow-up untaken and its turn open until Stop. A multi-line follow-up with an
+attached image, whose reference becomes a line with the file's path, echoes
+back as written (checked with the CLI). Stdin closes at the first result with no
+background task running and no follow-up waiting, so a late prompt's reply
+can still start background work. The first prompt is not waited for: its
+result is proof it was taken, so a turn without follow-ups ends at its first
+plain reply even if the CLI echoes nothing. The turn ends when the
+CLI exits; Stop kills the CLI and its tasks. Closing stdin earlier makes the
+CLI kill the tasks and never wake the agent. A prompt written after the close
+is refused and starts the next turn.
 Each result's `usage` covers its own reply and is summed; `total_cost_usd` is
 already the process total, so the last one is kept. The runner stores each
 reply as its own message.

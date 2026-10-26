@@ -30,6 +30,14 @@ func (s *Server) listProjects(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
+	for _, p := range projects {
+		for i := range p.RecentSessions {
+			ref := &p.RecentSessions[i]
+			if ref.Status == store.StatusRunning {
+				ref.BackgroundTasks, ref.AcceptsPrompts = s.runner.BackgroundWork(ref.ID)
+			}
+		}
+	}
 	return c.JSON(projects)
 }
 

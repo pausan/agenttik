@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"strings"
 	"sync"
 
@@ -15,22 +16,33 @@ import (
 // with the answers added to its input is how they reach the model.
 const askUserQuestion = "AskUserQuestion"
 
-// host is agenttik's end of the CLI's stdin during a task turn. The prompt and
+// host is agenttik's end of the CLI's stdin during a task turn. Prompts and
 // every approval answer are written through it, from different goroutines, so
 // writes are serialized and a write after close is an error, not a panic.
 type host struct {
 	mu     sync.Mutex
 	w      io.WriteCloser
 	closed bool
+	// waiting are the follow-ups written and not taken yet, oldest first, as
+	// written. The CLI echoes a prompt back (--replay-user-messages) as it
+	// starts on it. A follow-up not taken yet keeps stdin open, so its reply
+	// can still leave background work running. The first prompt is not
+	// among them: a reply to it is proof it was taken, echo or not.
+	waiting []string
 }
 
 func (h *host) send(v any) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.write(v)
+}
+
+// write is send's body, with h.mu held.
+func (h *host) write(v any) error {
 	line, err := json.Marshal(v)
 	if err != nil {
 		return err
 	}
-	h.mu.Lock()
-	defer h.mu.Unlock()
 	if h.closed {
 		return errors.New("turn has ended")
 	}
@@ -43,24 +55,80 @@ func (h *host) send(v any) error {
 func (h *host) close() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	h.closeLocked()
+}
+
+func (h *host) closeLocked() {
 	if !h.closed {
 		h.closed = true
 		h.w.Close()
 	}
 }
 
+// closeIfTaken closes the input unless a follow-up written to it has not been
+// taken yet, and reports whether it did. Checked under the same lock as
+// writes, so a prompt is either written before the close or refused.
+func (h *host) closeIfTaken() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(h.waiting) > 0 {
+		return false
+	}
+	h.closeLocked()
+	return true
+}
+
+// took matches a prompt the CLI echoed back against the oldest follow-up
+// waiting, and reports whether it was that one, which is then taken. Any
+// other echo changes nothing: the first prompt's, or one the CLI adds.
+func (h *host) took(echo string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(h.waiting) == 0 {
+		return false
+	}
+	if strings.TrimSpace(h.waiting[0]) != strings.TrimSpace(echo) {
+		// Logged because a CLI that changed how it echoes prompts would leave
+		// every follow-up untaken, and its turn open until Stop. Sizes only:
+		// prompts are the user's.
+		log.Printf("claudecode: an echo of %d bytes is not the oldest follow-up waiting (%d bytes, %d waiting)",
+			len(echo), len(h.waiting[0]), len(h.waiting))
+		return false
+	}
+	h.waiting = h.waiting[1:]
+	return true
+}
+
 // Sent with each task prompt, including resumes. CLI system-prompt snapshots
 // can otherwise keep new lifecycle guidance out of existing conversations.
-const backgroundTaskGuidance = `Agenttik keeps this turn open while background tasks are running.
+const backgroundTaskGuidance = `Agenttik keeps this turn open while background tasks are running,
+and the user can keep writing to you meanwhile. Do not wait idly for a
+background task: end your reply, and a task notification or the user's next
+message will wake you.
 Once the user's requested work is complete, stop disposable background helpers
 you started that are no longer needed, using TaskStop where available, before
 your final reply. Keep waiting for tests, builds, or agents whose results are
 still needed. Do not stop work just to end the turn, or stop processes the user
 explicitly asked to keep running.`
 
+// sendPrompt writes the turn's first prompt.
 func (h *host) sendPrompt(prompt string) error {
-	return h.send(userInput{Type: "user", Message: userMessage{Role: "user",
-		Content: backgroundTaskGuidance + "\n\n" + prompt}})
+	return h.send(userLine(backgroundTaskGuidance + "\n\n" + prompt))
+}
+
+// sendUser writes a follow-up, which waits until the CLI takes it.
+func (h *host) sendUser(prompt string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if err := h.write(userLine(prompt)); err != nil {
+		return err
+	}
+	h.waiting = append(h.waiting, prompt)
+	return nil
+}
+
+func userLine(prompt string) userInput {
+	return userInput{Type: "user", Message: userMessage{Role: "user", Content: prompt}}
 }
 
 func (h *host) answerTool(requestID string, input json.RawMessage, allow bool, message string) error {

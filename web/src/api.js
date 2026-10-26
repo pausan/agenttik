@@ -103,7 +103,10 @@ export async function api(method, path, body) {
       window.location.reload();
       throw new Error("Signed out");
     }
-    if (!res.ok) throw new Error((data && data.error) || res.statusText);
+    // The rest of the body rides along for the callers that answer a refusal
+    // with a question, such as a prompt the running turn takes only on its
+    // own model.
+    if (!res.ok) throw Object.assign(new Error((data && data.error) || res.statusText), { status: res.status, data });
     return data;
   } catch (error) {
     recordError(error, { source: "api", method, resource: path.split("?")[0].split("/")[2], status }, diagnosticStorage);

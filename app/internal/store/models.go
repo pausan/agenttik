@@ -85,6 +85,13 @@ type SessionRef struct {
 	// Prompt is what the session was opened with, capped; the sidebar shows it
 	// when a row is hovered. See firstPromptCol.
 	Prompt string `json:"prompt,omitempty"`
+
+	// BackgroundTasks and AcceptsPrompts describe the running turn: how many
+	// of its background tasks still run, and whether it takes prompts
+	// meanwhile. The server fills them from the runner; they are not stored.
+	// See specs/083-background-tasks.md.
+	BackgroundTasks int  `json:"background_tasks,omitempty"`
+	AcceptsPrompts  bool `json:"accepts_prompts,omitempty"`
 }
 
 // ValidFlag reports whether flag is a task mark, or "" for none.
@@ -119,6 +126,11 @@ type Session struct {
 	DoneAt     int64 `json:"done_at"`
 	Position   int64 `json:"position"`
 	QueueCount int64 `json:"queue_count"`
+
+	// BackgroundTasks and AcceptsPrompts describe the running turn, as on
+	// SessionRef. Only session listings fill them; they are not stored.
+	BackgroundTasks int  `json:"background_tasks,omitempty"`
+	AcceptsPrompts  bool `json:"accepts_prompts,omitempty"`
 
 	// Flag is the user's mark: "", "star", "warn" or "danger". Flagged tasks
 	// lead the archived list. See 098-task-flags.md.

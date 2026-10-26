@@ -54,6 +54,11 @@ func (s *Server) listSessions(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
+	for i := range sessions {
+		if sessions[i].Status == store.StatusRunning {
+			sessions[i].BackgroundTasks, sessions[i].AcceptsPrompts = s.runner.BackgroundWork(sessions[i].ID)
+		}
+	}
 	return c.JSON(sessions)
 }
 
@@ -121,6 +126,15 @@ type sessionDetail struct {
 	Turns    []store.Turn    `json:"turns"`
 	Stats    *store.Stats    `json:"stats"`
 	Running  bool            `json:"running"`
+	// AcceptsPrompts says the running turn takes prompts now: its reply
+	// ended with background tasks still running.
+	AcceptsPrompts bool `json:"accepts_prompts"`
+	// PendingFollowUps are the stored prompts that turn accepted and has not
+	// started on yet. Other prompts without a turn were never processed.
+	PendingFollowUps []int64 `json:"pending_follow_ups"`
+	// RunningChoice is what the running turn runs on, and so the only choice
+	// it takes prompts on: the window asks before sending on another.
+	RunningChoice *runner.Choice `json:"running_choice,omitempty"`
 
 	// Queued are the prompts waiting their turn, oldest first. The transcript
 	// draws them under the messages so a queued prompt is visible.
@@ -136,6 +150,14 @@ type sessionDetail struct {
 	// thread a spawned task came from. See specs/092-threads.md.
 	Threads []store.ThreadRef `json:"threads"`
 	Origin  *threadOrigin     `json:"origin,omitempty"`
+}
+
+// pendingIDs is never null, so the window can read it as a list.
+func pendingIDs(ids []int64) []int64 {
+	if ids == nil {
+		return []int64{}
+	}
+	return ids
 }
 
 func (s *Server) getSession(c *fiber.Ctx) error {
@@ -165,7 +187,10 @@ func (s *Server) getSession(c *fiber.Ctx) error {
 		return err
 	}
 	return c.JSON(sessionDetail{Session: sess, Messages: messages,
-		Turns: turns, Stats: stats, Running: s.runner.Running(id), Queued: queued,
+		Turns: turns, Stats: stats, Running: s.runner.Running(id),
+		AcceptsPrompts: s.runner.AcceptsPrompts(id), PendingFollowUps: pendingIDs(s.runner.PendingFollowUps(id)),
+		RunningChoice: s.runner.RunningChoice(id),
+		Queued:     queued,
 		Background: s.runner.BackgroundTasks(id),
 		Outputs:    turnOutputs(sess.ProjectPath, turns, messages),
 		Threads:    threads, Origin: s.origin(sess)})
@@ -343,7 +368,8 @@ func (s *Server) sessionQueueChanged(id string) {
 
 func (s *Server) postMessage(c *fiber.Ctx) error {
 	var body struct {
-		Prompt string `json:"prompt"`
+		Prompt     string `json:"prompt"`
+		OnMismatch string `json:"on_mismatch"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return badRequest("invalid body: %v", err)
@@ -351,11 +377,32 @@ func (s *Server) postMessage(c *fiber.Ctx) error {
 	if strings.TrimSpace(body.Prompt) == "" {
 		return badRequest("prompt is required")
 	}
-	turn, err := s.runner.Send(c.Params("id"), body.Prompt)
+	mismatch, err := mismatchOf(body.OnMismatch, false)
+	if err != nil {
+		return err
+	}
+	turn, err := s.runner.SendWith(c.Params("id"), body.Prompt, mismatch)
 	if err != nil {
 		return err
 	}
 	return c.Status(fiber.StatusAccepted).JSON(turn)
+}
+
+// mismatchOf reads on_mismatch: what a prompt does about a running turn that
+// takes prompts on another model, effort, subscription or provider than the
+// prompt's. Absent refuses with 409, "join" runs it on the turn's anyway, and
+// "stop", only where queued allows it, stops the turn to run it on its own.
+// See specs/083-background-tasks.md.
+func mismatchOf(value string, queued bool) (runner.Mismatch, error) {
+	switch mismatch := runner.Mismatch(value); mismatch {
+	case runner.Refuse, runner.Join:
+		return mismatch, nil
+	case runner.Stop:
+		if queued {
+			return mismatch, nil
+		}
+	}
+	return "", badRequest("unknown on_mismatch %q", value)
 }
 
 // editMessage rewrites one of your own prompts and carries on from there. The
@@ -430,6 +477,53 @@ func (s *Server) editMessage(c *fiber.Ctx) error {
 		return err
 	}
 	return c.Status(fiber.StatusAccepted).JSON(turn)
+}
+
+// sendUnprocessed sends one of your prompts the agent never processed, as
+// postMessage sends a typed one. Unlike an edit, it leaves the transcript
+// below it alone: the prompt itself moves to the end. A prompt that joins the
+// running turn comes back stored, for the window to show it waiting there.
+// See specs/083-background-tasks.md.
+func (s *Server) sendUnprocessed(c *fiber.Ctx) error {
+	messageID, err := strconv.ParseInt(c.Params("message"), 10, 64)
+	if err != nil {
+		return badRequest("invalid message id")
+	}
+	var body struct {
+		OnMismatch string `json:"on_mismatch"`
+	}
+	if len(c.Body()) > 0 {
+		if err := c.BodyParser(&body); err != nil {
+			return badRequest("invalid body: %v", err)
+		}
+	}
+	mismatch, err := mismatchOf(body.OnMismatch, false)
+	if err != nil {
+		return err
+	}
+	turn, joined, err := s.runner.SendUnprocessed(c.Params("id"), messageID, mismatch)
+	if err != nil {
+		return err
+	}
+	if joined != nil {
+		return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"joined": true, "turn": turn, "message": joined})
+	}
+	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"turn": turn})
+}
+
+// queueUnprocessed puts one of your prompts the agent never processed at the
+// end of the task's queue, out of the transcript.
+func (s *Server) queueUnprocessed(c *fiber.Ctx) error {
+	messageID, err := strconv.ParseInt(c.Params("message"), 10, 64)
+	if err != nil {
+		return badRequest("invalid message id")
+	}
+	queued, err := s.runner.QueueUnprocessed(c.Params("id"), messageID)
+	if err != nil {
+		return err
+	}
+	s.sessionQueueChanged(c.Params("id"))
+	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"queued": queued, "queue_count": len(queued)})
 }
 
 func (s *Server) enqueueMessage(c *fiber.Ctx) error {
@@ -528,7 +622,8 @@ func (s *Server) updateQueuedMessage(c *fiber.Ctx) error {
 // interrupts only this session's own turn, which cannot host a second prompt.
 func (s *Server) forceQueuedMessage(c *fiber.Ctx) error {
 	var body struct {
-		QueuedID int64 `json:"queued_id"`
+		QueuedID   int64  `json:"queued_id"`
+		OnMismatch string `json:"on_mismatch"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return badRequest("invalid body: %v", err)
@@ -536,8 +631,23 @@ func (s *Server) forceQueuedMessage(c *fiber.Ctx) error {
 	if body.QueuedID <= 0 {
 		return badRequest("queued_id is required")
 	}
-	if err := s.runner.ForceQueued(c.Params("id"), body.QueuedID); err != nil {
+	mismatch, err := mismatchOf(body.OnMismatch, true)
+	if err != nil {
 		return err
+	}
+	joined, err := s.runner.ForceQueued(c.Params("id"), body.QueuedID, mismatch)
+	if err != nil {
+		return err
+	}
+	if joined != nil {
+		// The prompt went into the running turn, which goes on streaming.
+		// The window adds the stored prompt and re-reads only the queue: a
+		// whole transcript read here would land after newer streamed rows.
+		queued, err := s.store.ListQueuedMessages(c.Params("id"))
+		if err != nil {
+			return err
+		}
+		return c.JSON(fiber.Map{"joined": true, "message": joined, "queued": queued, "queue_count": len(queued)})
 	}
 	return c.SendStatus(fiber.StatusAccepted)
 }

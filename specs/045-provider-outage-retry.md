@@ -33,6 +33,24 @@ millisecond so reinsertion cannot move one behind a follow-up. The waiting
 timer keeps counting from that moment too: the wait the user is being told
 about started when they sent the prompt, not when the retry was booked.
 
+## Which prompt goes back
+
+A turn that waits on background tasks answers several inputs: its own prompt,
+the follow-ups it takes ([083](083-background-tasks.md)), and the tasks'
+notifications. Only a failure in the reply that ends the turn is the turn's.
+An outage there puts back the input it interrupted — the turn's prompt, or
+the follow-up being answered, which leaves the transcript in the same
+transaction — and never one already answered, which would relaunch work it
+had done. One that arrives while the agent answers a notification, or
+between replies, interrupts no input of the user's: nothing goes back, and the
+turn ends as an error. Follow-ups accepted and not started on wait behind the
+retry when there is one, and are left unprocessed when there is not.
+
+A reply can also fail while background tasks keep its turn open, and the turn
+goes on. That failure is the reply's: its error row stays, a follow-up it
+interrupted is left unprocessed where it stands, for the user to send again,
+and nothing is retried by itself. The turn then ends as its last reply does.
+
 ## The wait
 
 The request is the probe. A failed one comes back immediately and costs no

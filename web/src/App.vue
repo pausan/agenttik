@@ -43,6 +43,7 @@ const SettingsModal = defineAsyncComponent(() => import("./components/SettingsMo
 const CommandPaletteModal = defineAsyncComponent(() => import("./components/CommandPaletteModal.vue"));
 const GoToFileModal = defineAsyncComponent(() => import("./components/GoToFileModal.vue"));
 const UnsavedModal = defineAsyncComponent(() => import("./components/UnsavedModal.vue"));
+const ChoiceMismatchModal = defineAsyncComponent(() => import("./components/ChoiceMismatchModal.vue"));
 const QuickStartTour = defineAsyncComponent(() => import("./components/QuickStartTour.vue"));
 const tour = ref({ open: false, step: "welcome" });
 function startTour() {
@@ -343,6 +344,7 @@ onUnmounted(() => {
     </div>
 
     <UnsavedModal v-if="S.closing" />
+    <ChoiceMismatchModal v-if="S.mismatch" />
     <AddProjectModal v-if="addProjectLoaded" v-model:open="addProject" :tour-active="tour.open" />
     <SettingsModal v-if="settings" v-model:open="settings" v-model:section="settingsSection" :tour-active="tour.open" @start-tour="startTour" />
     <QuickStartTour v-if="tour.open" v-model:step="tour.step" :setup-open="settings || addProject" :mobile="mobile" @close="tour.open = false" />

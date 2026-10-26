@@ -11,10 +11,12 @@ package fake
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -165,6 +167,9 @@ func nextSessionID() string {
 //	@background start <id> <description...>  a shell left running behind the
 //	                          turn, until
 //	@background end <id> <status> <summary...>  it ends with that status
+//	@open                     keep the turn open after each reply while a
+//	                          background task runs, as Claude Code does, and
+//	                          take prompts meanwhile; each is run as a script
 //
 // Any line whose leading word is not one of these is treated as reply text,
 // not a directive — so a prompt can still contain a literal "@" without being
@@ -176,10 +181,87 @@ func runScript(ctx context.Context, req agent.TurnRequest, events chan<- agent.E
 	}
 	events <- agent.Event{Type: agent.EventSessionStarted, ProviderSessionID: id}
 
+	s := &script{req: req, events: events, background: map[string]agent.BackgroundTask{}}
+	prompts := make(chan string, 8)
+	var mu sync.Mutex
+	closed := false
+	followUp := agent.NewFollowUp(func(prompt string) error {
+		mu.Lock()
+		defer mu.Unlock()
+		if closed {
+			return errors.New("turn has ended")
+		}
+		// Refused when full rather than waited on: the turn needs mu to go
+		// on, and would never get it from a sender blocked here.
+		select {
+		case prompts <- prompt:
+			return nil
+		default:
+			return errors.New("too many prompts waiting")
+		}
+	})
+	defer func() {
+		mu.Lock()
+		closed = true
+		mu.Unlock()
+	}()
+	prompt := req.Prompt
+	for {
+		if !s.reply(ctx, prompt) {
+			return
+		}
+		done := agent.Event{Type: agent.EventDone, Usage: &agent.Usage{
+			InputTokens: 42, OutputTokens: 17, CacheReadTokens: 5, CacheWriteTokens: 3,
+			CostUSD: 0.0042, ContextTokens: int64(len(req.Prompt)), ContextWindow: 128_000,
+			MainInputTokens: 42, MainOutputTokens: 17, MainCacheReadTokens: 5,
+			MainCacheWriteTokens: 3, UsageBreakdown: true,
+		}}
+		// Closed before the done goes out, so a prompt sent after the last
+		// reply is refused rather than lost.
+		mu.Lock()
+		open := (s.open && s.running()) || len(prompts) > 0
+		closed = !open
+		mu.Unlock()
+		if open {
+			done.FollowUp = followUp
+		}
+		events <- done
+		if !open {
+			return
+		}
+		select {
+		case prompt = <-prompts:
+			events <- agent.Event{Type: agent.EventFollowUp}
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// script is one turn's state across the replies it holds.
+type script struct {
+	req        agent.TurnRequest
+	events     chan<- agent.Event
+	toolSeq    int
+	background map[string]agent.BackgroundTask
+	open       bool
+}
+
+func (s *script) running() bool {
+	for _, t := range s.background {
+		if t.Status == "running" {
+			return true
+		}
+	}
+	return false
+}
+
+// reply runs one prompt's directives and streams its text. It reports false
+// when the turn ends here: an error, or Stop.
+func (s *script) reply(ctx context.Context, prompt string) bool {
+	req, events, background := s.req, s.events, s.background
 	var reply []string
-	var toolSeq int
-	background := map[string]agent.BackgroundTask{}
-	for _, line := range strings.Split(req.Prompt, "\n") {
+	for _, line := range strings.Split(prompt, "\n") {
 		name, rest, ok := cutDirective(line)
 		if !ok {
 			reply = append(reply, line)
@@ -189,15 +271,15 @@ func runScript(ctx context.Context, req agent.TurnRequest, events chan<- agent.E
 		case "wait":
 			ms, _ := strconv.Atoi(strings.TrimSpace(rest))
 			if !sleepCtx(ctx, time.Duration(ms)*time.Millisecond) {
-				return
+				return false
 			}
 		case "tool":
-			toolSeq++
-			id := fmt.Sprintf("tool-%d", toolSeq)
+			s.toolSeq++
+			id := fmt.Sprintf("tool-%d", s.toolSeq)
 			toolName, input, _ := strings.Cut(strings.TrimSpace(rest), " ")
 			events <- agent.Event{Type: agent.EventToolUse, Tool: &agent.ToolEvent{ID: id, Name: toolName, Input: input}}
 			if !sleepCtx(ctx, 20*time.Millisecond) {
-				return
+				return false
 			}
 			events <- agent.Event{Type: agent.EventToolResult, Tool: &agent.ToolEvent{ID: id, Output: toolName + " ok"}}
 		case "background":
@@ -217,7 +299,9 @@ func runScript(ctx context.Context, req agent.TurnRequest, events chan<- agent.E
 			events <- agent.BackgroundEvent(t)
 		case "error":
 			events <- agent.Event{Type: agent.EventError, Text: strings.TrimSpace(rest)}
-			return
+			return false
+		case "open":
+			s.open = true
 		case "account":
 			// What the runner resolved the task's subscription to, which is
 			// otherwise invisible from a browser. Empty is the machine's own
@@ -253,7 +337,7 @@ func runScript(ctx context.Context, req agent.TurnRequest, events chan<- agent.E
 					reply = append(reply, "denied")
 				}
 			case <-ctx.Done():
-				return
+				return false
 			}
 		case "ask":
 			id := fmt.Sprintf("approval-%d", atomic.AddInt64(&approvalCounter, 1))
@@ -276,7 +360,7 @@ func runScript(ctx context.Context, req agent.TurnRequest, events chan<- agent.E
 					reply = append(reply, "declined")
 				}
 			case <-ctx.Done():
-				return
+				return false
 			}
 		default:
 			reply = append(reply, line)
@@ -287,19 +371,14 @@ func runScript(ctx context.Context, req agent.TurnRequest, events chan<- agent.E
 	if text != "" {
 		for _, word := range strings.Fields(text) {
 			if !sleepCtx(ctx, 15*time.Millisecond) {
-				return
+				return false
 			}
 			events <- agent.Event{Type: agent.EventText, Text: word + " "}
 		}
 	}
 
 	events <- agent.Event{Type: agent.EventUsage, Usage: &agent.Usage{ContextTokens: int64(len(req.Prompt))}}
-	events <- agent.Event{Type: agent.EventDone, Usage: &agent.Usage{
-		InputTokens: 42, OutputTokens: 17, CacheReadTokens: 5, CacheWriteTokens: 3,
-		CostUSD: 0.0042, ContextTokens: int64(len(req.Prompt)), ContextWindow: 128_000,
-		MainInputTokens: 42, MainOutputTokens: 17, MainCacheReadTokens: 5,
-		MainCacheWriteTokens: 3, UsageBreakdown: true,
-	}}
+	return true
 }
 
 // cutDirective reports whether line is one of the known directives and
@@ -313,7 +392,7 @@ func cutDirective(line string) (name, rest string, ok bool) {
 	}
 	name, rest, _ = strings.Cut(trimmed[1:], " ")
 	switch name {
-	case "wait", "tool", "error", "account", "runmode", "approve", "approve-remember", "ask", "background":
+	case "wait", "tool", "error", "account", "runmode", "approve", "approve-remember", "ask", "background", "open":
 		return name, rest, true
 	default:
 		return "", "", false

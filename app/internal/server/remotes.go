@@ -352,7 +352,7 @@ func (s *Server) addRemote(c *fiber.Ctx) error {
 	if err := c.BodyParser(&body); err != nil {
 		return badRequest("invalid remote")
 	}
-	ctx, cancel := context.WithTimeout(c.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(c.UserContext(), 10*time.Second)
 	defer cancel()
 	target, info, err := remote.Check(ctx, body.Address)
 	if err != nil {
@@ -385,7 +385,7 @@ func (s *Server) addRemote(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	return c.Status(201).JSON(m.connect(c.Context(), info.ID))
+	return c.Status(201).JSON(m.connect(c.UserContext(), info.ID))
 }
 
 // remoteName falls back to the address for servers that have no name.
@@ -417,7 +417,7 @@ func (s *Server) connectRemote(c *fiber.Ctx) error {
 	if _, err := m.get(c.Params("id")); err != nil {
 		return err
 	}
-	return c.JSON(m.connect(c.Context(), c.Params("id")))
+	return c.JSON(m.connect(c.UserContext(), c.Params("id")))
 }
 
 // connect checks that the saved address still reaches the same machine and
@@ -525,7 +525,7 @@ func (s *Server) signInRemote(c *fiber.Ctx) error {
 	if name, err := m.selfName(); err == nil {
 		form.Set("name", name)
 	}
-	ctx, cancel := context.WithTimeout(c.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(c.UserContext(), 10*time.Second)
 	defer cancel()
 	res, err := m.request(ctx, r, "POST", "/__auth/login", strings.NewReader(form.Encode()),
 		http.Header{"Content-Type": {"application/x-www-form-urlencoded"}, "Accept": {"text/html"}})
@@ -544,7 +544,7 @@ func (s *Server) signInRemote(c *fiber.Ctx) error {
 	m.keyMu.Lock()
 	delete(m.keyRefused, r.ID)
 	m.keyMu.Unlock()
-	return c.JSON(m.connect(c.Context(), r.ID))
+	return c.JSON(m.connect(c.UserContext(), r.ID))
 }
 
 func (s *Server) deleteRemote(c *fiber.Ctx) error {

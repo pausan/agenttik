@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,16 +20,33 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// listen serves s on a loopback port, as a remote machine would.
+// listen serves s on a loopback port, as a remote machine would. It returns
+// once the server accepts connections: until then it is still setting up
+// state that requests made through s.app.Test read too.
 func listen(t *testing.T, s *Server) string {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	go s.Listener(ln)
+	ready := &readyListener{Listener: ln, ready: make(chan struct{})}
+	go s.Listener(ready)
+	<-ready.ready
 	t.Cleanup(func() { s.Shutdown() })
 	return ln.Addr().String()
+}
+
+// readyListener closes ready on the first Accept, which the server calls
+// only once it is set up.
+type readyListener struct {
+	net.Listener
+	once  sync.Once
+	ready chan struct{}
+}
+
+func (l *readyListener) Accept() (net.Conn, error) {
+	l.once.Do(func() { close(l.ready) })
+	return l.Listener.Accept()
 }
 
 func machineID(t *testing.T, st *store.Store) string {

@@ -186,7 +186,16 @@ func TestScreenThroughRemoteProfile(t *testing.T) {
 			}
 		}
 	}()
+	// Messages of another kind are kept for a later wait: without the
+	// encoder, the audio error can arrive while a frame is awaited.
+	var skipped []screen.Message
 	wait := func(kind string) screen.Message {
+		for i, msg := range skipped {
+			if msg.Type == kind {
+				skipped = slices.Delete(skipped, i, i+1)
+				return msg
+			}
+		}
 		for {
 			select {
 			case msg, ok := <-messages:
@@ -196,6 +205,7 @@ func TestScreenThroughRemoteProfile(t *testing.T) {
 				if msg.Type == kind {
 					return msg
 				}
+				skipped = append(skipped, msg)
 			case <-time.After(5 * time.Second):
 				t.Fatalf("no %s", kind)
 			}

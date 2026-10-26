@@ -284,7 +284,7 @@ func (s *Server) routeFlat(c *fiber.Ctx) error {
 			return err
 		}
 	}
-	res, err := s.flatDo(c.Context(), src, req)
+	res, err := s.flatDo(s.closingContext, src, req)
 	if err != nil {
 		return fiber.NewError(502, "Could not reach "+src.Machine)
 	}

@@ -77,6 +77,10 @@ type Server struct {
 	// without this the process could not quit.
 	closing   chan struct{}
 	closeOnce sync.Once
+	// closingContext is cancelled along with closing, for requests to other
+	// machines that must not outlive the app.
+	closingContext context.Context
+	cancelClosing  context.CancelFunc
 
 	// foreground raises the app's window, and says whether there was one to
 	// raise. Set by the desktop shell before serving starts; nil in web mode.
@@ -152,6 +156,7 @@ func New(s *store.Store, reg *agent.Registry, r *runner.Runner) *Server {
 	srv := &Server{app: app, store: s, runner: r, registry: reg,
 		watchers: newWatchers(r.Hub()), terminals: terminals.NewManager(), screen: screen.NewManager(screen.Open),
 		closing: make(chan struct{}), previewKey: make([]byte, 32)}
+	srv.closingContext, srv.cancelClosing = context.WithCancel(context.Background())
 	if _, err := rand.Read(srv.previewKey); err != nil {
 		panic(err)
 	}
@@ -410,7 +415,7 @@ func (s *Server) Shutdown() error {
 	}
 	s.terminals.Shutdown()
 	s.screen.Close()
-	s.closeOnce.Do(func() { close(s.closing); s.search.Close() })
+	s.closeOnce.Do(func() { close(s.closing); s.cancelClosing(); s.search.Close() })
 	return s.app.ShutdownWithTimeout(shutdownTimeout)
 }
 

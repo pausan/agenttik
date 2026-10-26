@@ -123,17 +123,94 @@ func TestFlatViewListsAndRoutesEveryLocalProfile(t *testing.T) {
 		t.Fatalf("Default's favourites: %+v", got)
 	}
 
-	// A dragged order is saved on each profile for its own projects.
-	other := decode[store.Project](t, do(t, s, "POST", "/api/projects", map[string]string{"path": t.TempDir(), "name": "Other"}))
+	// A dragged order mixes profiles and is the flat view's own: no
+	// profile's order changes.
+	do(t, s, "POST", "/api/projects", map[string]string{"path": t.TempDir(), "name": "Other"})
+	before := decode[[]store.Project](t, do(t, s, "GET", "/api/projects", nil))
 	list = flatProjects(t, s)
 	o := flatNamed(t, list, "Other", "Default")
-	resp = do(t, s, "POST", "/api/projects/order?profile=all", map[string]any{"ids": []int64{b.ID, o.ID, a.ID}})
+	resp = do(t, s, "POST", "/api/projects/order?profile=all", map[string]any{"ids": []int64{a.ID, b.ID, o.ID}})
 	if resp.StatusCode != 204 {
 		t.Fatalf("order: %d", resp.StatusCode)
 	}
+	if got := flatIDs(flatProjects(t, s)); fmt.Sprint(got) != fmt.Sprint([]int64{a.ID, b.ID, o.ID}) {
+		t.Fatalf("flat order %v, want %v", got, []int64{a.ID, b.ID, o.ID})
+	}
 	own := decode[[]store.Project](t, do(t, s, "GET", "/api/projects", nil))
-	if len(own) != 2 || own[0].ID != other.ID || own[1].ID != home.ID {
-		t.Fatalf("Default order: %+v", own)
+	if len(own) != 2 || own[0].ID != before[0].ID || own[1].ID != before[1].ID {
+		t.Fatalf("Default order changed: %+v", own)
+	}
+
+	// Hiding from the flat view leaves the project in its profile, and
+	// restoring puts it back where it was.
+	resp = do(t, s, "PATCH", fmt.Sprintf("/api/projects/%d?profile=all", b.ID), map[string]bool{"hidden": true})
+	if resp.StatusCode != 204 {
+		t.Fatalf("hide: %d", resp.StatusCode)
+	}
+	if got := flatIDs(flatProjects(t, s)); fmt.Sprint(got) != fmt.Sprint([]int64{a.ID, o.ID}) {
+		t.Fatalf("flat after hide %v", got)
+	}
+	hidden := decode[[]flatProject](t, do(t, s, "GET", "/api/projects?profile=all&hidden=true", nil))
+	if len(hidden) != 1 || hidden[0].ID != b.ID || hidden[0].Name != "Renamed" || hidden[0].Source.Profile != "Work" {
+		t.Fatalf("flat hidden: %+v", hidden)
+	}
+	if own := decode[[]store.Project](t, do(t, s, "GET", "/api/projects?profile="+work.ID, nil)); len(flatIDsOf(own)) != 1 {
+		t.Fatalf("Work lost its project: %+v", own)
+	}
+	if got := decode[[]store.HiddenProject](t, do(t, s, "GET", "/api/projects?hidden=true&profile="+work.ID, nil)); len(got) != 0 {
+		t.Fatalf("Work hid it too: %+v", got)
+	}
+	do(t, s, "PATCH", fmt.Sprintf("/api/projects/%d?profile=all", b.ID), map[string]bool{"hidden": false})
+	if got := flatIDs(flatProjects(t, s)); fmt.Sprint(got) != fmt.Sprint([]int64{a.ID, b.ID, o.ID}) {
+		t.Fatalf("flat after restore %v", got)
+	}
+}
+
+// flatIDs lists the flat view's project IDs, leaving out the orchestrator.
+func flatIDs(list []flatProject) []int64 {
+	var ids []int64
+	for _, p := range list {
+		if p.Kind != "orchestrator" {
+			ids = append(ids, p.ID)
+		}
+	}
+	return ids
+}
+
+func flatIDsOf(list []store.Project) []int64 {
+	var ids []int64
+	for _, p := range list {
+		if p.Kind != "orchestrator" {
+			ids = append(ids, p.ID)
+		}
+	}
+	return ids
+}
+
+func TestFlatArrangePlacesNewProjects(t *testing.T) {
+	entry := func(id int64, kind string) flatEntry {
+		return flatEntry{key: store.FlatProjectKey{Source: "/default", ID: id}, item: map[string]any{"id": id, "kind": kind}}
+	}
+	entries := []flatEntry{entry(1, "orchestrator"), entry(2, ""), entry(3, ""), entry(4, ""), entry(5, "")}
+	saved := map[store.FlatProjectKey]store.FlatProject{
+		{Source: "/default", ID: 2}: {Position: 2},
+		{Source: "/default", ID: 3}: {Position: 1},
+		{Source: "/default", ID: 4}: {Position: 1, HiddenAt: 9},
+	}
+	ids := func(list []flatEntry) []int64 {
+		var out []int64
+		for _, e := range list {
+			out = append(out, e.key.ID)
+		}
+		return out
+	}
+	visible, hidden := flatArrange(entries, saved, false)
+	if fmt.Sprint(ids(visible), ids(hidden)) != "[1 5 3 2] [4]" {
+		t.Fatalf("new on top: %v %v", ids(visible), ids(hidden))
+	}
+	visible, _ = flatArrange(entries, saved, true)
+	if fmt.Sprint(ids(visible)) != "[1 3 2 5]" {
+		t.Fatalf("new at the bottom: %v", ids(visible))
 	}
 }
 

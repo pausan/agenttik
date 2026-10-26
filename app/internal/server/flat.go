@@ -13,6 +13,7 @@ import (
 	"errors"
 	"hash/fnv"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -26,6 +27,8 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
+
+	"github.com/pausan/agenttik/app/internal/store"
 )
 
 const (
@@ -260,6 +263,10 @@ func (s *Server) routeFlat(c *fiber.Ctx) error {
 		return s.flatProjects(c, sources, req)
 	case req.method == "POST" && req.path == "/api/projects/order":
 		return s.flatProjectOrder(c, sources, req)
+	case req.method == "PATCH" && len(parts) == 2 && parts[0] == "projects":
+		if hide, ok := flatHiddenOnly(req.body); ok {
+			return s.flatProjectHidden(c, sources, req, parts[1], hide)
+		}
 	case req.method == "GET" && (req.path == "/api/sessions" || req.path == "/api/schedules") && req.query.Get("project_id") == "":
 		return s.flatList(c, sources, req, parts[0])
 	case req.method == "GET" && req.path == "/api/approvals":
@@ -732,21 +739,114 @@ func (s *Server) flatItems(results []flatResult, shape flatShape, keep func(flat
 	return items
 }
 
-// flatProjects lists every source's projects, this machine's Default first.
-// Each profile has its own orchestrator; the flat view keeps Default's,
-// which is the one that works across all of them.
+// flatEntry is one project in the flat view, keyed as the flat view's own
+// order and hidden set know it.
+type flatEntry struct {
+	key  store.FlatProjectKey
+	item map[string]any
+}
+
+// flatProjects lists every source's projects in the flat view's own order,
+// or, with ?hidden=true, the ones hidden from the flat view alone. Each
+// profile has its own orchestrator; the flat view keeps Default's, which is
+// the one that works across all of them.
 func (s *Server) flatProjects(c *fiber.Ctx, sources []flatSource, req flatRequest) error {
-	results, err := s.flatAll(sources, req)
+	if req.query.Get("archived") != "" && req.query.Get("hidden") == "" {
+		results, err := s.flatAll(sources, req)
+		if err != nil {
+			return err
+		}
+		return c.JSON(s.flatItems(results, flatProjectsShape, flatOwnOrchestrator))
+	}
+	visible, hidden, err := s.flatArranged(sources, req.header)
 	if err != nil {
 		return err
 	}
-	return c.JSON(s.flatItems(results, flatProjectsShape, func(src flatSource, p map[string]any) bool {
-		return src.home() || p["kind"] != "orchestrator"
-	}))
+	if c.QueryBool("hidden", false) {
+		out := make([]map[string]any, len(hidden))
+		for i, e := range hidden {
+			out[i] = map[string]any{"id": e.item["id"], "name": e.item["name"], "source": e.item["source"]}
+		}
+		return c.JSON(out)
+	}
+	out := make([]map[string]any, len(visible))
+	for i, e := range visible {
+		out[i] = e.item
+	}
+	return c.JSON(out)
 }
 
-// flatProjectOrder saves each source's part of a dragged order. Projects
-// only move among their own source's.
+// flatArranged reads every source's visible projects and splits them into
+// the flat view's visible order and its hidden set.
+func (s *Server) flatArranged(sources []flatSource, header http.Header) (visible, hidden []flatEntry, err error) {
+	results, err := s.flatAll(sources, flatRequest{method: "GET", path: "/api/projects", header: header})
+	if err != nil {
+		return nil, nil, err
+	}
+	var entries []flatEntry
+	s.flatItems(results, flatProjectsShape, func(src flatSource, p map[string]any) bool {
+		if !flatOwnOrchestrator(src, p) {
+			return false
+		}
+		id, _ := p["id"].(int64)
+		entries = append(entries, flatEntry{key: store.FlatProjectKey{Source: src.key(), ID: id >> flatBits}, item: p})
+		return true
+	})
+	saved, err := s.store.FlatProjects()
+	if err != nil {
+		return nil, nil, err
+	}
+	cfg, err := s.store.GetGeneralConfig()
+	if err != nil {
+		return nil, nil, err
+	}
+	visible, hidden = flatArrange(entries, saved, cfg.NewItemPosition == "bottom")
+	return visible, hidden, nil
+}
+
+// flatArrange orders projects as the flat view was last dragged, the
+// orchestrator first. Projects it has not placed yet keep their source order
+// and go on top, or at the bottom when new items go there. Projects hidden
+// from the flat view come back apart, most recently hidden first.
+func flatArrange(entries []flatEntry, saved map[store.FlatProjectKey]store.FlatProject, newLast bool) (visible, hidden []flatEntry) {
+	rank := map[store.FlatProjectKey]int{}
+	for _, e := range entries {
+		p, ok := saved[e.key]
+		switch {
+		case ok && p.HiddenAt != 0:
+			hidden = append(hidden, e)
+			continue
+		case e.item["kind"] == "orchestrator":
+			rank[e.key] = math.MinInt
+		case ok:
+			rank[e.key] = p.Position
+		case newLast:
+			rank[e.key] = math.MaxInt
+		default:
+			rank[e.key] = 0
+		}
+		visible = append(visible, e)
+	}
+	sort.SliceStable(visible, func(i, j int) bool { return rank[visible[i].key] < rank[visible[j].key] })
+	sort.SliceStable(hidden, func(i, j int) bool { return saved[hidden[i].key].HiddenAt > saved[hidden[j].key].HiddenAt })
+	return visible, hidden
+}
+
+// flatOwnOrchestrator drops other sources' orchestrators.
+func flatOwnOrchestrator(src flatSource, p map[string]any) bool {
+	return src.home() || p["kind"] != "orchestrator"
+}
+
+func flatKeys(entries []flatEntry) []store.FlatProjectKey {
+	keys := make([]store.FlatProjectKey, len(entries))
+	for i, e := range entries {
+		keys[i] = e.key
+	}
+	return keys
+}
+
+// flatProjectOrder saves a dragged order as the flat view's own. Projects
+// mix freely across sources; no profile's order changes.
 func (s *Server) flatProjectOrder(c *fiber.Ctx, sources []flatSource, req flatRequest) error {
 	var body struct {
 		IDs []json.Number `json:"ids"`
@@ -754,31 +854,49 @@ func (s *Server) flatProjectOrder(c *fiber.Ctx, sources []flatSource, req flatRe
 	if err := json.Unmarshal(req.body, &body); err != nil || len(body.IDs) == 0 {
 		return badRequest("ids are required")
 	}
-	groups := map[string][]int64{}
-	var order []flatSource
+	keys := make([]store.FlatProjectKey, 0, len(body.IDs))
 	for _, raw := range body.IDs {
 		src, id, err := flatDecode(sources, raw.String())
 		if err != nil {
 			return err
 		}
-		if groups[src.key()] == nil {
-			order = append(order, src)
-		}
-		groups[src.key()] = append(groups[src.key()], id)
+		keys = append(keys, store.FlatProjectKey{Source: src.key(), ID: id})
 	}
-	for _, src := range order {
-		data, _ := json.Marshal(map[string]any{"ids": groups[src.key()]})
-		ctx, cancel := context.WithTimeout(context.Background(), flatTimeout)
-		res, err := s.flatDo(ctx, src, flatRequest{method: "POST", path: req.path, body: data, header: http.Header{"Content-Type": {"application/json"}}})
-		cancel()
-		if err != nil {
-			return fiber.NewError(502, "Could not reach "+src.Machine)
-		}
-		res.Body.Close()
-		if res.StatusCode >= 300 {
-			return fiber.NewError(res.StatusCode, "Could not save the order on "+src.Machine)
-		}
+	if err := s.store.SetFlatProjectOrder(keys); err != nil {
+		return err
 	}
+	s.projectsChanged()
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// flatHiddenOnly reads a project update that only hides or restores, which
+// the flat view keeps to itself.
+func flatHiddenOnly(data []byte) (hidden, ok bool) {
+	var body map[string]json.RawMessage
+	if json.Unmarshal(data, &body) != nil || len(body) != 1 {
+		return false, false
+	}
+	if body["hidden"] == nil || json.Unmarshal(body["hidden"], &hidden) != nil {
+		return false, false
+	}
+	return hidden, true
+}
+
+// flatProjectHidden hides a project from the flat view alone, or restores
+// it where it was. Its own profile still shows it.
+func (s *Server) flatProjectHidden(c *fiber.Ctx, sources []flatSource, req flatRequest, raw string, hide bool) error {
+	src, id, err := flatDecode(sources, raw)
+	if err != nil {
+		return err
+	}
+	visible, _, err := s.flatArranged(sources, req.header)
+	if err != nil {
+		return err
+	}
+	if err := s.store.SetFlatProjectHidden(store.FlatProjectKey{Source: src.key(), ID: id}, hide, flatKeys(visible)); err != nil {
+		return err
+	}
+	s.projectsChanged()
 	return c.SendStatus(fiber.StatusNoContent)
 }
 

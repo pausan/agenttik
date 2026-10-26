@@ -30,6 +30,10 @@ All timestamps are **unix milliseconds**, so turn timings need no second table.
   [047](047-project-prompt.md). `run_mode` is `auto` (default), `guarded` or
   `manual`: whether agents ask before changes or before every command; see
   [082](082-tool-approvals.md#run-modes).
+- **flat_projects** — `source, project_id, position, hidden_at`. The flat
+  view's own project order and hidden set, on this machine's Default only.
+  `source` is `remote/profile` and `project_id` the project's ID there. See
+  [100](100-flat-view.md#order-and-hidden-projects).
 - **orchestrator_config** — singleton `id=1, name, path, prompt`. Holds the
   orchestrator's options after project deletion; its live project row remains
   authoritative while present. `projects.kind='orchestrator'` is unique and

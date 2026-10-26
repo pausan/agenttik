@@ -7,6 +7,7 @@ import { computed, ref, watch } from "vue";
 
 import { S, fail, loadHiddenProjects, setProjectHidden } from "../store";
 import { fuzzy, segments } from "../fuzzy";
+import { sourceLabel } from "../profiles";
 
 const open = ref(false);
 const query = ref("");
@@ -132,6 +133,7 @@ async function swapProjects() {
       >
         <template #item-label="{ item }">
           <span class="text-highlighted">
+            <span v-if="item.project.source" class="text-muted">{{ sourceLabel(item.project.source) }} · </span>
             <span
               v-for="(part, i) in segments(item.label, item.hits)"
               :key="i"

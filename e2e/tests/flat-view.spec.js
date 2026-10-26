@@ -63,3 +63,50 @@ test("on a phone the flat view names each project's place in the drawer", async 
     await other.stop();
   }
 });
+
+test("the flat view keeps its own order and hidden projects", async ({ page, agenttik }) => {
+  const work = await (await page.request.post(`${agenttik.url}/api/profiles`, { data: { name: "Work" } })).json();
+  for (const name of ["Alpha", "Beta"]) {
+    const path = await mkdtemp(join(tmpdir(), "agenttik-flat-order-"));
+    await page.request.post(`${agenttik.url}/api/projects`, { data: { path, name } });
+  }
+  const gamma = await mkdtemp(join(tmpdir(), "agenttik-flat-order-"));
+  await page.request.post(`${agenttik.url}/api/projects?profile=${work.id}`, { data: { path: gamma, name: "Gamma" } });
+  const ownOrder = async () => (await (await page.request.get(`${agenttik.url}/api/projects`)).json())
+    .filter((p) => p.kind !== "orchestrator").map((p) => p.name);
+  const before = await ownOrder();
+  await page.goto(`${agenttik.url}/?profile=all`);
+
+  const rows = sidebar(page).locator('[draggable="true"]').filter({ hasText: /Alpha|Beta|Gamma/ });
+  const names = async () => (await sidebar(page).locator(".sidebar-project span.font-semibold").allTextContents())
+    .filter((n) => ["Alpha", "Beta", "Gamma"].includes(n));
+  await expect(rows).toHaveCount(3);
+  const first = (await names())[0];
+
+  // Work's project moves above Default's first one.
+  const moved = rows.filter({ hasText: "Gamma" });
+  const target = rows.filter({ hasText: first });
+  const saved = page.waitForResponse((r) => r.request().method() === "POST" && r.url().includes("/api/projects/order"));
+  const from = await moved.boundingBox();
+  const to = await target.boundingBox();
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(from.x + from.width / 2 + 8, from.y + from.height / 2, { steps: 3 });
+  await page.mouse.move(to.x + to.width / 2, to.y + to.height * 0.2, { steps: 5 });
+  await page.mouse.move(to.x + to.width / 2 + 1, to.y + to.height * 0.2);
+  await page.mouse.up();
+  expect((await saved).ok()).toBe(true);
+  const mixed = ["Gamma", ...before];
+  await expect.poll(names).toEqual(mixed);
+  await page.reload();
+  await expect.poll(names).toEqual(mixed);
+  expect(await ownOrder()).toEqual(before);
+
+  // Hiding from the flat view leaves the project in its profile.
+  await sidebar(page).locator(".sidebar-project").filter({ hasText: "Beta" }).getByRole("button", { name: "Hide project" }).click();
+  await expect.poll(names).toEqual(mixed.filter((n) => n !== "Beta"));
+  expect(await ownOrder()).toEqual(before);
+  await sidebar(page).getByRole("button", { name: "Hidden projects" }).click();
+  await page.getByRole("option", { name: /Beta/ }).click();
+  await expect.poll(names).toEqual(mixed);
+});

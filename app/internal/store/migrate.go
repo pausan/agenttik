@@ -426,6 +426,16 @@ INSERT INTO speech_config(id) VALUES (1);`,
 	// A job's finish condition, checked at the start of every run. See
 	// specs/028-scheduled-jobs.md.
 	`ALTER TABLE schedules ADD COLUMN finish_condition TEXT NOT NULL DEFAULT '';`,
+	// The flat view's own project order and hidden set, kept apart from each
+	// profile's. A project is its source ("remote/profile") and its ID there.
+	// See specs/100-flat-view.md.
+	`CREATE TABLE flat_projects (
+    source     TEXT    NOT NULL,
+    project_id INTEGER NOT NULL,
+    position   INTEGER NOT NULL DEFAULT 0,
+    hidden_at  INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (source, project_id)
+);`,
 }
 
 // migrate reports whether it created the schema in an empty database.

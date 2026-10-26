@@ -14,11 +14,22 @@ own.
 Each project row names where the project lives before its folder:
 `Laptop › Work · /path`. The machine is named only when a remote is saved;
 with local profiles alone, the row names just the profile. The same folder in
-two profiles, or on two machines, is two rows. Projects keep their own
-profile's order, this machine's Default first, then its other profiles, then
-each remote's. A drag saves the new order in each profile for that profile's
-projects only. **Move to profile** is hidden: projects move from a window on
-their own profile. The footer's busy dot stays off, since all work is on
+two profiles, or on two machines, is two rows. **Move to profile** is
+hidden: projects move from a window on their own profile.
+
+## Order and hidden projects
+
+The flat view has its own project order and its own hidden projects, apart
+from every profile's. A drag can mix projects from any profile and machine;
+no profile's order changes. Hiding a project here takes it out of the flat
+view only; its profile still shows it. The hidden menu names each project's
+place and restores it at the index it was hidden from. A project hidden in its
+own profile is not in the flat view at all, and comes back from that profile.
+
+Until the first drag, projects follow their own profile's order, this
+machine's Default first, then its other profiles, then each remote's.
+Projects the flat view has not placed yet, such as a new one, go on top, or at
+the bottom when Settings puts new items there. The orchestrator stays first. The footer's busy dot stays off, since all work is on
 screen already.
 
 The model picker, favourites, model visibility and Settings' subscriptions
@@ -66,8 +77,18 @@ session, as `routeRemote` does).
   `GET /api/sessions`, `GET /api/schedules` without `project_id`, and
   `GET /api/approvals` ask every source at once. Tasks and jobs are re-sorted
   as `store.ListSessions` and `store.ListSchedules` sort them, then paged.
-  Only other sources' orchestrators are dropped. `POST /api/projects/order`
-  is split by source.
+  Only other sources' orchestrators are dropped.
+- **Own order and hidden set.** This machine's Default database keeps
+  `flat_projects`: a row per project, keyed by source (`remote/profile`) and
+  the project's ID there, with its position and when it was hidden.
+  `GET /api/projects` sorts the merged list by it and drops the hidden rows;
+  `?hidden=true` answers those rows as `{id, name, source}`, most recently
+  hidden first. `POST /api/projects/order` rewrites the visible positions and
+  drops visible rows it does not name. A `PATCH /api/projects/:id` that only
+  sets `hidden` stays here: hiding keeps the project's visible index, as
+  a profile does ([061](061-hidden-projects.md)), and restoring inserts it there.
+  Both send `projects_changed` on this machine's Default, which every flat
+  window hears.
 - **Stream.** `/api/stream` opens one stream per source, with the topics split
   by owner (a task not yet placed goes to every source, where unknown IDs never
   fire), and writes them as one SSE stream with its own heartbeat. A source
@@ -92,10 +113,13 @@ Default only.
 
 Go tests (`flat_test.go`) cover merged lists across local profiles and a
 remote, same-folder projects in two profiles, routing of project, task,
-favourite and order requests, an unknown source, task lookup after a restart,
+favourite requests, a flat order that mixes profiles and leaves theirs
+alone, hiding and restoring in the flat view only, where unplaced projects
+go, an unknown source, task lookup after a restart,
 the merged stream carrying a remote's event, lists that do not wait on a
 stopped remote, image copies, stable distinct codes and the orchestrator's
 flat context. `e2e/tests/flat-view.spec.js` opens the flat view from the
 picker, checks the source labels, runs a task on a remote's project and finds
-it on that machine, and checks the labels in the phone drawer.
+it on that machine, checks the labels in the phone drawer, drags a
+project between two profiles' projects and hides and restores one.
 `profiles.spec.js` checks the picker order and the shortcut cycle.

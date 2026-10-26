@@ -138,7 +138,7 @@ test("commit graph toggle, counts, checkout highlight and ref chips", async ({ p
   await expect(head.locator("button[aria-current=true]")).toBeVisible();
   await expect(head.getByLabel("7 files affected")).toHaveText("[7]");
   await expect(pane.getByText("aaaaaaaa", { exact: true })).toHaveCount(0);
-  await expect(head.getByText("v1.0", { exact: true })).toHaveCount(0);
+  await expect(head.getByText("v1.0", { exact: true })).toBeVisible();
   await expect(head.getByText("main", { exact: true })).toBeVisible();
   await expect(head.getByText("Merge feature", { exact: true }).locator("..")).toHaveAttribute("title", commits[0].message);
   await expect(head.locator("span.font-mono")).toHaveText("aaaaaaaa · Test Author · 2026-09-15 12:00");
@@ -159,7 +159,7 @@ test("commit graph toggle, counts, checkout highlight and ref chips", async ({ p
   await pane.getByPlaceholder("Filter commits").clear();
   await toggle.click();
   await expect(head.locator(":scope > svg")).toHaveCount(0);
-  await expect(head.getByText("v1.0", { exact: true })).toHaveCount(0);
+  await expect(head.getByText("v1.0", { exact: true })).toBeVisible();
   await expect(head.getByText("main", { exact: true })).toBeVisible();
   await expect(head.getByText("Merge feature", { exact: true }).locator("..")).toHaveAttribute("title", commits[0].message);
   await expect(head.locator("span.font-mono")).toHaveText("aaaaaaaa · Test Author · 2026-09-15 12:00");

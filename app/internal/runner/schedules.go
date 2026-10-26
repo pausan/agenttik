@@ -4,6 +4,7 @@ package runner
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -102,7 +103,7 @@ func (r *Runner) fireSchedule(s *store.Schedule, now time.Time) {
 	}
 	// The open run guards the schedule while its prompt waits in the project
 	// queue, executes, or waits for a provider retry. Only its first turn closes it.
-	if _, err := r.enqueue(sess.ID, s.Prompt, 0); err != nil {
+	if _, err := r.enqueue(sess.ID, schedulePrompt(s), 0); err != nil {
 		r.closeUnstartedScheduleRun(sess.ID, store.RunError)
 	}
 }
@@ -115,10 +116,15 @@ func (r *Runner) fireSchedule(s *store.Schedule, now time.Time) {
 // user later prompts by hand has no open run, so it spends nothing. A run
 // started by RunScheduleNow spends nothing either, forced-run marker set aside
 // for exactly this moment. The task stays open until the user archives it.
+//
+// A run whose reply has finishMarker on a line of its own found the job's finish condition
+// true. It closes as finished and pauses the job, forced or not.
 func (r *Runner) finishScheduledRun(sess *store.Session, turnStatus string) {
 	status := store.RunDone
 	if turnStatus != "ok" {
 		status = store.RunError
+	} else if reply, err := r.store.LastReply(sess.ID); err == nil && saysFinished(reply) {
+		status = store.RunFinished
 	}
 	closed, err := r.store.FinishScheduleRun(sess.ID, status)
 	if err != nil || closed == 0 {
@@ -127,7 +133,38 @@ func (r *Runner) finishScheduledRun(sess *store.Session, turnStatus string) {
 	if !r.popForcedScheduleRun(sess.ID) {
 		_ = r.store.SpendScheduleRun(sess.ScheduleID)
 	}
+	if status == store.RunFinished {
+		_ = r.store.SetSchedulePaused(sess.ScheduleID, true)
+	}
 	r.publishSchedule(sess.ProjectID)
+}
+
+// finishMarker is the reply a run gives when the finish condition is true.
+// It is odd enough that no ordinary reply carries it by chance.
+const finishMarker = "AGENTTIK_JOB_FINISHED"
+
+// saysFinished reports whether a line of the reply is the marker alone,
+// allowing for Markdown around it. A reply that only quotes the instruction
+// does not count.
+func saysFinished(reply string) bool {
+	for _, line := range strings.Split(reply, "\n") {
+		if strings.Trim(line, " \t`*.\"'") == finishMarker {
+			return true
+		}
+	}
+	return false
+}
+
+// schedulePrompt is what a run sends. A finish condition goes first, so the
+// agent checks it before it starts on the task.
+func schedulePrompt(s *store.Schedule) string {
+	condition := strings.TrimSpace(s.FinishCondition)
+	if condition == "" {
+		return s.Prompt
+	}
+	return "Before anything else, check this finish condition:\n\n" + condition +
+		"\n\nIf it is true, do nothing else and reply with only " + finishMarker +
+		". If it is false, do not mention it and carry on with the task below.\n\n---\n\n" + s.Prompt
 }
 
 // RunScheduleNow starts one run outside the schedule's own clock: a manual
@@ -172,7 +209,7 @@ func (r *Runner) RunScheduleNow(scheduleID int64, enqueue bool) error {
 	defer r.publishSchedule(s.ProjectID)
 
 	if enqueue {
-		if _, err := r.Enqueue(sess.ID, s.Prompt); err != nil {
+		if _, err := r.Enqueue(sess.ID, schedulePrompt(s)); err != nil {
 			r.closeUnstartedScheduleRun(sess.ID, store.RunError)
 			return err
 		}
@@ -181,7 +218,7 @@ func (r *Runner) RunScheduleNow(scheduleID int64, enqueue bool) error {
 	// As with the project queue, a provider away is not a
 	// failure, the prompt is already waiting for it and the run stays open
 	// for the retry to close.
-	if _, err := r.Send(sess.ID, s.Prompt); err != nil && !errors.Is(err, ErrProviderAway) {
+	if _, err := r.Send(sess.ID, schedulePrompt(s)); err != nil && !errors.Is(err, ErrProviderAway) {
 		r.closeUnstartedScheduleRun(sess.ID, store.RunError)
 		return err
 	}

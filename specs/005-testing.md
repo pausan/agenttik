@@ -9,6 +9,7 @@ Tests cover logic, browser flows and the native desktop transport.
 | Startup budget | `e2e/tests/startup.spec.js` | `make test-startup` |
 | Browser tests | `e2e/tests/*.spec.js` (Playwright) | `make e2e` |
 | Linux desktop image uploads | `app/cmd/agenttik/desktop_images_linux_test.go` | `make test-desktop-images` |
+| Linux desktop microphone API | `app/cmd/agenttik/desktop_microphone_linux_test.go` | `make test-desktop-speech` |
 | Linux desktop terminal input | `app/cmd/agenttik/desktop_terminal_linux_test.go` | `make test-desktop-terminal` |
 | Linux desktop video playback | `app/cmd/agenttik/desktop_video_linux_test.go` | `make test-desktop-video` |
 | Linux desktop scrollbar layers | `app/cmd/agenttik/desktop_scrollbars_linux_test.go` | `make test-desktop-scrollbars` |
@@ -17,7 +18,7 @@ Tests cover logic, browser flows and the native desktop transport.
 server and drives a real browser against it; it is the slower one, kept
 separate so the fast loop stays fast. `make test-startup` requires the built
 web binary, installed e2e dependencies and Chromium; CI runs it separately
-with one worker and gates releases on the one-second requirement
+with one worker and gates releases on the 1.5-second requirement
 ([052](052-launch-budget.md)).
 
 `make test-desktop-images` needs the desktop build libraries and Xvfb. It runs

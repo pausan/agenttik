@@ -21,6 +21,7 @@ release asset is also available for automatic updates.
 - **Live sessions:** stream replies, resume conversations, and queue prompts per project.
 - **Reusable work:** pin prompts and schedule recurring tasks.
 - **Model controls:** choose models, effort, permissions, and favorite combinations.
+- **Voice prompts:** dictate with Whistle or multilingual Whisper; models download on first use, with optional transcript correction.
 - **Code tools:** browse and edit files, preview Markdown/HTML, inspect Git diffs, stage changes, and write commits.
 - **Usage tracking:** view tokens, context usage, subscription allowance, and costs where reported.
 - **Local state:** SQLite history, remembered tabs, customizable shortcuts, and color themes. Use profiles for separate workspaces or private mode for a temporary one.
@@ -48,7 +49,7 @@ history, or pause it from the same view.
 
 ## Quick start
 
-Use Go 1.25+, Node.js 22.12+ with npm, and either a logged-in `claude`, `codex` or `copilot` CLI on `PATH`, or an OpenCode Go key configured in Settings → Subscriptions. The `opencode` CLI is optional.
+Use Go 1.25+, Node.js 22.12+ with npm, CMake and a C++ compiler for the speech helper, and either a logged-in `claude`, `codex` or `copilot` CLI on `PATH`, or an OpenCode Go key configured in Settings → Subscriptions. The `opencode` CLI is optional.
 
 ```sh
 make run-web

@@ -9,6 +9,11 @@ are inserted, and project task search. **Fuzzy Search** is the default;
 **Smart Search** downloads Bekko a8m and indexes tasks locally, with download
 and indexing progress in this pane. See [057](057-smart-search.md).
 
+**Speech input** selects Whistle or a multilingual Whisper model, downloaded
+automatically on first microphone use. Optional **Correct transcription**
+chooses a lightweight model and account for a single correction request.
+See [097](097-speech-input.md).
+
 ## Desktop tray
 
 Desktop launches offer **Close to tray** and a configurable global show/hide

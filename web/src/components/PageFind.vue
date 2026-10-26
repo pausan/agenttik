@@ -18,12 +18,18 @@ let selectedRange;
 let textArea;
 
 async function show() {
-  previousFocus = open.value ? previousFocus : document.activeElement;
+  const wasOpen = open.value;
+  previousFocus = wasOpen ? previousFocus : document.activeElement;
   open.value = true;
-  emit("open-change", true);
   await nextTick();
   input.value?.focus();
   input.value?.select();
+  if (wasOpen) return;
+  // Paint the bar before mounting a long history, which can take seconds.
+  await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve)));
+  if (!open.value) return;
+  emit("open-change", true);
+  await nextTick();
   search();
 }
 function clear() {
@@ -43,25 +49,28 @@ function close() {
   if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
   previousFocus = null;
 }
-function search() {
+// A refresh after the content changed keeps the current match and the
+// reader's scroll position; only a new query starts over at the first match.
+function search(refresh = false) {
   if (!open.value) return;
+  // Changes made before this search are already covered by it.
+  clearTimeout(timer);
+  observer?.takeRecords();
   textArea = props.root?.querySelector(".large-editor textarea");
   ranges = textArea ? findMatches(textArea.value, query.value) : pageRanges(props.root?.querySelector(".editor") || props.root, query.value);
   count.value = ranges.length;
-  current.value = ranges.length ? 0 : -1;
+  current.value = Math.min(refresh ? Math.max(current.value, 0) : 0, ranges.length - 1);
   clear();
   if (!textArea && globalThis.CSS?.highlights && globalThis.Highlight) {
     CSS.highlights.set("page-find", new Highlight(...ranges));
   }
-  reveal();
+  // Selecting in a text area would also move the caret of someone typing.
+  if (!refresh) reveal();
+  else if (!textArea) mark();
 }
-function reveal() {
+function mark() {
   const range = ranges[current.value];
   if (!range) return;
-  if (textArea) {
-    revealText(textArea, range.start, range.end);
-    return;
-  }
   if (globalThis.CSS?.highlights && globalThis.Highlight) {
     CSS.highlights.set("page-find-current", new Highlight(range));
   } else {
@@ -70,6 +79,15 @@ function reveal() {
     selection.addRange(range);
     selectedRange = range;
   }
+}
+function reveal() {
+  const range = ranges[current.value];
+  if (!range) return;
+  if (textArea) {
+    revealText(textArea, range.start, range.end);
+    return;
+  }
+  mark();
   // Scroll the range itself, including matches deep inside a single pre.
   const rect = range.getBoundingClientRect();
   for (let el = range.startContainer.parentElement; el && props.root.contains(el); el = el.parentElement) {
@@ -85,20 +103,22 @@ function move(direction) {
   current.value = (current.value + direction + ranges.length) % ranges.length;
   reveal();
 }
-watch(query, search);
+watch(query, () => search());
 watch(() => props.context, close);
 watch([open, () => props.root], () => {
   observer?.disconnect();
   if (!open.value || !props.root) return;
-  observer = new MutationObserver(() => {
+  // Ticking clocks are not searched, so their updates need no new search.
+  observer = new MutationObserver((records) => {
+    if (records.every(({ target }) => (target.nodeType === Node.ELEMENT_NODE ? target : target.parentElement)?.closest("[data-find-ignore]"))) return;
     clearTimeout(timer);
-    timer = setTimeout(search, 120);
+    timer = setTimeout(search, 120, true);
   });
   observer.observe(props.root, { childList: true, subtree: true, characterData: true });
 });
 function onInput() {
   clearTimeout(timer);
-  timer = setTimeout(search, 120);
+  timer = setTimeout(search, 120, true);
 }
 watch(() => props.root, (root, previous) => {
   previous?.removeEventListener("input", onInput);

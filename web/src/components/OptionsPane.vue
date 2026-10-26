@@ -13,11 +13,12 @@ import {
   updateProjectPath,
 } from "../store";
 import { profileID, remoteID } from "../api";
-import { loadProfiles, profiles } from "../profiles";
+import { isFlatView, loadProfiles, profiles } from "../profiles";
 import FolderPicker from "./FolderPicker.vue";
 
-// Projects move between this computer's profiles only.
-const destinations = computed(() => remoteID ? [] : profiles.items
+// Projects move between this computer's profiles only, from a profile of
+// their own rather than the flat view.
+const destinations = computed(() => remoteID || isFlatView ? [] : profiles.items
   .filter((p) => p.id !== profileID)
   .map((p) => ({ label: p.name, value: p.id })));
 const destination = ref("");

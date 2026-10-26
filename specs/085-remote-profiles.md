@@ -47,12 +47,13 @@ same network scope and never run together.
 ## The picker
 
 Once a machine is saved, the profile picker groups profiles under machine
-names: this instance's name first, then each remote's. Remote profiles use the
+names: the flat view of all of them first ([100](100-flat-view.md)), then
+this instance's name, then each remote's. Remote profiles use the
 person icon with a small Wi‑Fi badge. The footer button shows that icon when
 the window is on a remote profile, and its title reads
 `Profile: <machine> › <profile>`. The command palette offers
 `Switch to profile: <machine> › <profile>`. `Ctrl+Alt+P` and its reverse move
-through local profiles, then each machine's, wrapping.
+through the flat view, local profiles, then each machine's, wrapping.
 
 Busy dots pulse beside working local and connected remote profiles in the
 menu. The footer dot shows work in other local profiles and any connected

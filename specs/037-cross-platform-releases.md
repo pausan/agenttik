@@ -36,7 +36,8 @@ or guarantee that antivirus and SmartScreen warnings disappear.
 Only a pushed tag matching `vMAJOR/vMAJOR.MINOR.PATCH`, with an optional suffix of
 letters, dashes and further dots, creates a GitHub Release. The release job
 waits for all matrix builds to succeed, then attaches
-`agenttik_<tag>_<platform>_<architecture>` binaries, with `.exe` on Windows.
+`agenttik_<tag>_<platform>_<architecture>` binaries, with `.exe` on Windows,
+and the Android app as `agenttik_<tag>_android.apk` ([099](099-mobile-app.md)).
 The `<tag>` in filenames is the final component, such as `v0.7.1`; the
 release title also uses that final component while targeting the full
 `v0/v0.7.1` tag. Legacy unprefixed tags are also accepted.

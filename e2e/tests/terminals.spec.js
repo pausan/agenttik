@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { addProject, expect, newTask, openProject, sidebar, test } from "../fixtures.js";
+import { addProject, expect, inspector, newTask, openProject, sidebar, test } from "../fixtures.js";
 
 /* Terminal tabs — see specs/073-terminals.md. The fixture pins SHELL to
    /bin/sh, so the tabs here are named "sh 1", "sh 2" and the screen is one
@@ -230,6 +230,35 @@ test("Ctrl+Alt+T opens a terminal, from the prompt and from a terminal alike", a
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("a terminal expands to the window, keeps Escape for the shell, and restores with its button", async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await addProject(page);
+  await openProject(page);
+  await newTask(page);
+  await newTerminal(page).click();
+  await expect(pane(page)).toBeVisible();
+  const main = page.getByRole("main");
+  const original = await main.boundingBox();
+
+  await page.getByRole("button", { name: "Expand terminal", exact: true }).click();
+  await expect(sidebar(page)).toBeHidden();
+  await expect(inspector(page)).toBeHidden();
+  await expect(page.locator(".main-tab-bar")).toBeVisible();
+  expect(await main.boundingBox()).toEqual({ x: 0, y: 0, ...page.viewportSize() });
+
+  // The keyboard is back with the shell, and Escape stays there.
+  await page.keyboard.type("echo expanded-$((6*7))");
+  await page.keyboard.press("Enter");
+  await expectScreen(page, "expanded-42");
+  await page.keyboard.press("Escape");
+  await expect(sidebar(page)).toBeHidden();
+
+  await page.getByRole("button", { name: "Restore terminal", exact: true }).click();
+  await expect(sidebar(page)).toBeVisible();
+  await expect(inspector(page)).toBeVisible();
+  expect(await main.boundingBox()).toEqual(original);
 });
 
 test("terminal clipboard menu and shortcuts copy selection and paste into the shell", async ({ page, context }) => {

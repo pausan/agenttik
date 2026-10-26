@@ -18,8 +18,10 @@ export function reconcileTaskCompletions(unread, completed, tasks) {
 }
 
 // One timer for the visible transcript, independent of how many rows show it.
-export function trackTaskAttention(unread, currentTask, visible, save = () => {}) {
-  // A manual mark on the current transcript lasts until the next visit.
+// Only a visit the user chose reads: a result or manual mark that arrives on
+// the current transcript, or a transcript the app selected by itself, stays
+// unread until the user leaves and comes back.
+export function trackTaskAttention(unread, currentTask, visible, save = () => {}, automatic = () => false) {
   let held = null;
   const stop = watch(
     () => {
@@ -27,8 +29,8 @@ export function trackTaskAttention(unread, currentTask, visible, save = () => {}
       return [id, id ? unread[id] : null, visible()];
     },
     ([id, turn, shown], previous, cleanup) => {
-      if (id !== previous?.[0] || turn !== -1) held = null;
-      if (turn === -1 && previous?.[0] === id && previous?.[1] !== -1) held = id;
+      if (id !== previous?.[0]) held = turn && automatic() ? id : null;
+      else if (turn !== previous?.[1]) held = turn ? id : null;
       if (held === id) return;
       if (!id || !turn || !shown) return;
       const timer = setTimeout(() => {

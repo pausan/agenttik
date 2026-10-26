@@ -18,7 +18,8 @@ import { createTaskSounds, TASK_SOUNDS_KEY } from "./task-sounds.js";
 import { trackTaskAttention, reconcileTaskCompletions } from "./task-attention.js";
 import { choiceOf, otherChoice, takeFollowUp, upsertBackgroundMessage, wakesAgent } from "./background-tasks.js";
 import { recordError } from "./diagnostics.js";
-import { api, apiURL, storage, clientStorage, diagnosticStorage } from "./api";
+import { api, apiURL, storage, clientStorage, diagnosticStorage, isRemoteConnection, setFlatScope } from "./api";
+import { isFlatView } from "./profiles.js";
 import { debounce } from "./debounce";
 import { ACCENTS, DEFAULT_COLORS, NEUTRALS, applyColors } from "./theme";
 import { ACTIONS, matches } from "./shortcuts";
@@ -88,6 +89,9 @@ export const S = reactive({
   hiddenProjectsLoaded: false,
   actionModels: [],
   orchestrator: null, // shared settings, loaded when Settings opens
+  // The machine's screen: whether there is one to show this window, and
+  // whether sharing is on. See specs/096-screen.md.
+  screen: null,
   subscriptionLimits: {}, // "provider:account" -> its latest allowance buckets
   // Whether this desktop window's server is also exposed for a browser to
   // reach, read when Settings opens like the archived projects beside it.
@@ -590,9 +594,16 @@ export function toggleTaskUnread(id) {
   else S.unreadTasks[id] = -1; // Manually unread, including tasks without turns.
   saveTaskAttention();
 }
+// A transcript the app brings forward by itself, such as a restored tab or
+// the neighbour of a closed one, has not been chosen, so it is not read.
+let autoSelecting = false;
+function selectAutomatically(select) {
+  autoSelecting = true;
+  try { select(); } finally { autoSelecting = false; }
+}
 trackTaskAttention(S.unreadTasks,
   () => S.tab?.kind === "session" ? S.tab.sessionID : null,
-  () => attentionVisible.value, saveTaskAttention);
+  () => attentionVisible.value, saveTaskAttention, () => autoSelecting);
 
 /* ------------------------------------------------------------------ tabs */
 
@@ -946,7 +957,7 @@ export async function closeTab(id, remember = true, force = false, cascade = tru
   if (S.activeTab === id || !S.tabs.some((t) => t.id === S.activeTab)) {
     const left = S.tabs.filter((t) => projectOfTab(t) === projectID);
     const next = left[Math.min(at, left.length - 1)];
-    if (next) selectTab(next.id);
+    if (next) selectAutomatically(() => selectTab(next.id));
     else {
       S.activeTab = "";
       // Emptying a workspace falls back to its project page, which is where
@@ -1031,6 +1042,23 @@ export function currentProjectID() {
   return S.activeProjectID;
 }
 
+/* In the flat view the model picker, Settings and the screen follow the
+   profile of the project in front, so moving to a project on another profile
+   or machine reads that profile's models and that machine's screen. See
+   specs/100-flat-view.md. */
+function frontSource() {
+  return S.projects.find((p) => p.id === currentProjectID())?.source;
+}
+
+if (isFlatView) {
+  setFlatScope(currentProjectID);
+  watch(() => frontSource()?.id, (now, before) => {
+    if (!now || now === before) return;
+    loadScreenInfo();
+    if (initialized) loadProviders().catch(() => {});
+  });
+}
+
 /* -------------------------------------------------------------- terminals */
 
 /* A terminal is a shell running in the project's folder, drawn in a tab of its
@@ -1107,6 +1135,58 @@ export async function syncTerminals(projectID) {
    them at once: a window with eight projects should not spend eight requests
    at launch on shells it is not showing. */
 watch(() => S.activeProjectID, syncTerminals);
+
+/* ----------------------------------------------------------------- screen */
+
+/* The Screen tab shows the machine this window is connected to — a remote
+   profile, `--remote`, or a browser on another device — and drives its mouse
+   and keyboard. It is the machine's, not a project's, so there is one: opening
+   it from another project moves it there. Like a terminal it is not saved,
+   since it is a live view; the stream runs only while the tab is in front.
+   See specs/096-screen.md. */
+
+export async function loadScreenInfo() {
+  try {
+    S.screen = await api("GET", "/api/screen");
+  } catch {
+    S.screen = null; // an older server, or none to ask
+  }
+}
+
+/* The button is offered where it would show another machine: on this one it
+   would only show itself. */
+export function screenOffered() {
+  return !!S.screen && (isRemoteConnection() || !!frontSource()?.remote || S.screen.same_machine === false);
+}
+
+export function openScreen() {
+  const projectID = currentProjectID();
+  if (!projectID) return;
+  let tab = S.tabs.find((t) => t.kind === "screen");
+  if (tab && tab.projectID !== projectID) {
+    S.tabs = S.tabs.filter((t) => t !== tab);
+    tab = null;
+  }
+  addTab(tab || {
+    id: "screen",
+    kind: "screen",
+    projectID,
+    label: screenLabel(),
+  });
+}
+
+function screenLabel() {
+  const machine = frontSource()?.remote ? frontSource().machine : S.instanceInfo?.name;
+  return machine ? `Screen · ${machine}` : "Screen";
+}
+
+export async function setScreenEnabled(enabled) {
+  try {
+    S.screen = await api("PUT", "/api/screen", { enabled });
+  } catch (error) {
+    fail(error);
+  }
+}
 
 /* -------------------------------------------------------------- projects */
 
@@ -1540,8 +1620,11 @@ export async function createSchedule(form) {
       permission: s.permission,
       ...scheduleRecurrence(form),
       remaining: form.remaining,
+      finish_condition: form.finishCondition || "",
     });
-    if (form.every !== "pinned") rememberScheduleDefaults(form);
+    // The condition belongs to this prompt, so the next dialog opens without it.
+    const { finishCondition, ...defaults } = form;
+    if (form.every !== "pinned") rememberScheduleDefaults(defaults);
     await Promise.all([refreshProjects(), refreshSchedules()]).catch(() => {});
     openSchedule(created.schedule.id);
   } catch (e) {
@@ -1657,6 +1740,13 @@ export function setSchedulePrompt(schedule, prompt) {
   prompt = prompt.trim();
   if (!prompt || prompt === schedule.prompt) return;
   return patchSchedule(schedule, { prompt });
+}
+
+/* Nor the finish condition. Empty turns it off. */
+export function setScheduleFinishCondition(schedule, condition) {
+  condition = condition.trim();
+  if (condition === (schedule.finish_condition || "")) return;
+  return patchSchedule(schedule, { finish_condition: condition });
 }
 
 /* Nor the model. Provider, model and effort travel together, since an effort
@@ -2021,6 +2111,23 @@ export async function renameTask(session, title) {
     await Promise.all([refreshProjects(), refreshSessions()]);
     reloadProjects();
   } catch (e) {
+    fail(e);
+  }
+}
+
+/* The mark shows on the row at once; the lists refresh behind it so the
+   archived list moves a newly flagged task to its top. */
+export async function setTaskFlag(session, flag) {
+  const previous = session.flag || "";
+  session.flag = flag;
+  try {
+    const updated = await api("PATCH", "/api/sessions/" + session.id, { flag });
+    const tab = S.tabs.find((t) => t.kind === "session" && t.sessionID === session.id);
+    if (tab) tab.detail.session = updated;
+    await Promise.all([refreshProjects(), refreshSessions()]);
+    reloadProjects();
+  } catch (e) {
+    session.flag = previous;
     fail(e);
   }
 }
@@ -2651,11 +2758,13 @@ async function restoreOpenTabs() {
   restoringTabs = true;
   try {
     const loaded = await Promise.all(saved.tabs.map(loadSavedTab));
-    for (const show of loaded) show?.();
-    if (S.projects.some((p) => p.id === saved.activeProjectID)) {
-      S.activeProjectID = saved.activeProjectID;
-    }
-    if (S.tabs.some((tab) => tab.id === saved.activeTab)) selectTab(saved.activeTab);
+    selectAutomatically(() => {
+      for (const show of loaded) show?.();
+      if (S.projects.some((p) => p.id === saved.activeProjectID)) {
+        S.activeProjectID = saved.activeProjectID;
+      }
+      if (S.tabs.some((tab) => tab.id === saved.activeTab)) selectTab(saved.activeTab);
+    });
   } finally {
     restoringTabs = false;
     saveOpenTabs();
@@ -2883,7 +2992,7 @@ function clearTree() {
 
 /* --------------------------------------------------------- editing files */
 
-/* The Tree's own file operations. Each asks the server and then re-reads the
+/* Shared project file operations. Each asks the server and then re-reads the
    listing rather than patching it: the watcher would refresh a beat later
    anyway, and doing it here is what puts the row on screen with the
    keystroke. Changed is re-read with it, because a file made or deleted is a
@@ -2905,8 +3014,7 @@ export async function createEntry(parent, name, dir = false) {
   return made.path;
 }
 
-export async function renameEntry(path, name) {
-  const id = currentProjectID();
+export async function renameEntry(path, name, id = currentProjectID()) {
   const to = joinPath(parentPath(path), name);
   if (!id || !to || to === path) return "";
   const moved = await api("POST", `/api/projects/${id}/entry/rename`, { path, to });
@@ -4297,6 +4405,7 @@ export function init() {
 
 async function initialize() {
   loadInstanceInfo().catch(fail);
+  loadScreenInfo();
   loadLastUsed();
   loadLayout();
   loadKeys();

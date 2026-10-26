@@ -13,18 +13,24 @@ const open = defineModel("open", { type: Boolean, default: false });
    hour is typed once rather than every time. */
 const form = ref(loadScheduleDefaults());
 const forever = ref(true);
+/* A finish condition is checked first on every run; one that holds pauses
+   the job. It belongs to this prompt, so it is never remembered. */
+const finishing = ref(false);
+const finishCondition = ref("");
 
 watch(open, (on) => {
   if (!on) return;
   form.value = loadScheduleDefaults();
   forever.value = form.value.remaining === -1;
+  finishing.value = false;
+  finishCondition.value = "";
 }, { immediate: true });
 
 /* -1 is forever, and the counter reaches 0 on its own; 0 is not something to
    be asked for, so the toggle switches between forever and a count. */
 function submit() {
   const remaining = forever.value ? -1 : Math.max(1, Math.trunc(Number(form.value.remaining) || 1));
-  createSchedule({ ...form.value, remaining });
+  createSchedule({ ...form.value, remaining, finishCondition: finishing.value ? finishCondition.value.trim() : "" });
   open.value = false;
 }
 </script>
@@ -84,14 +90,34 @@ function submit() {
             type="number"
             min="1"
             class="mt-1 w-full font-normal"
+            :ui="{ base: 'resize-y' }"
           />
+        </label>
+      </div>
+
+      <div class="mt-4 border-t border-default pt-3">
+        <USwitch v-model="finishing" label="Stop when a condition is met" />
+        <label v-if="finishing" class="mt-2 block text-xs font-medium text-muted">
+          Finish condition
+          <UTextarea
+            v-model="finishCondition"
+            :rows="1"
+            :maxrows="5"
+            autoresize
+            placeholder="Stop when the file does not exist or is empty"
+            aria-label="Finish condition"
+            class="mt-1 w-full font-normal"
+          />
+          <span class="mt-1 block font-normal text-dimmed">
+            Checked first on every run. When it is true, the job pauses itself.
+          </span>
         </label>
       </div>
     </template>
     <template #footer>
       <div class="flex w-full justify-end gap-2">
         <UButton color="neutral" variant="ghost" label="Cancel" @click="open = false" />
-        <UButton label="Schedule" :disabled="form.every === 'weekdays' && !form.weekdayMask" @click="submit" />
+        <UButton label="Schedule" :disabled="(form.every === 'weekdays' && !form.weekdayMask) || (finishing && !finishCondition.trim())" @click="submit" />
       </div>
     </template>
   </UModal>

@@ -20,8 +20,11 @@ const colors = {
 </template>
 
 <style scoped>
+/* Stepped, like the tray's pulse: a smooth one redraws at 60 fps, which the
+   desktop window paints in software. Four steps a keyframe gap is 4 fps. See
+   specs/079-ui-performance.md. */
 .status-pulse {
-  animation: status-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  animation: status-pulse 2s steps(4) infinite;
 }
 .status-waiting { animation-duration: 2.5s; }
 @keyframes status-pulse {

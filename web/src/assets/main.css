@@ -22,6 +22,13 @@
   --color-agenttik-950: #052e16;
 }
 
+/* Spinners, Nuxt UI's own included, turn in eight steps rather than every
+   frame: the desktop window paints in software, where a smooth turn costs
+   several percent of a core. See specs/079-ui-performance.md. */
+@theme {
+  --animate-spin: spin 1s steps(8) infinite;
+}
+
 html, body, #app { height: 100%; }
 html { color-scheme: light; }
 html.dark { color-scheme: dark; }
@@ -204,6 +211,9 @@ button[draggable="true"]:active { cursor: grabbing; }
     padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
   }
   .prompt-bar textarea { height: 4.5rem; max-height: 25dvh; resize: none; }
+  .prompt-compact textarea { height: 2.75rem; }
+  .prompt-compact .prompt-controls, .prompt-compact .prompt-extra { display: none; }
+  .prompt-toggle { min-height: 44px; min-width: 44px; justify-content: center; }
   .prompt-controls { flex-wrap: wrap; gap: 0.25rem; }
   .prompt-model-controls, .prompt-action-controls {
     display: flex;
@@ -252,12 +262,13 @@ button[draggable="true"]:active { cursor: grabbing; }
 
 /* The bubble taking streamed text carries a cursor until the turn ends. In a
    rendered reply the text sits inside blocks, so the cursor goes at the end of
-   the last one rather than on a line of its own beneath them. */
+   the last one rather than on a line of its own beneath them. It blinks
+   rather than fades, so it is drawn twice a second instead of every frame. */
 .streaming:not(.markdown)::after,
 .markdown.streaming > :last-child::after {
   content: "▍";
   color: var(--ui-primary);
-  animation: agenttik-pulse 1s infinite;
+  animation: agenttik-pulse 1s steps(1) infinite;
 }
 @keyframes agenttik-pulse {
   50% { opacity: 0.3; }
@@ -453,10 +464,12 @@ button[draggable="true"]:active { cursor: grabbing; }
   font-size: 0.95em;
 }
 .markdown th, .markdown td {
+  min-width: 8rem;
   padding: 0.25em 0.6em;
   border: 1px solid var(--ui-border);
   text-align: left;
 }
+.markdown th:first-child, .markdown td:first-child { min-width: 10rem; }
 .markdown th { background: var(--ui-bg-muted); font-weight: 600; }
 
 /* A picture needs something behind it, or a transparent PNG reads as a solid

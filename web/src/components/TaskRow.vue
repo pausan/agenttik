@@ -12,6 +12,7 @@ import { computed, nextTick, ref } from "vue";
 
 import { S, projectQueueActions, setProjectQueuePaused } from "../store";
 import { taskDot } from "../task-attention.js";
+import { TASK_FLAGS, nextDot, taskFlag } from "../task-flags.js";
 import StatusDot from "./StatusDot.vue";
 
 defineOptions({ inheritAttrs: false });
@@ -34,6 +35,8 @@ const props = defineProps({
   // this is a run of. See specs/028-scheduled-jobs.md.
   job: { type: Number, default: 0 },
   unread: Boolean,
+  // "", "star", "warn" or "danger". A mark replaces the status dot.
+  flag: { type: String, default: "" },
   active: Boolean,
   archived: Boolean,
   archive: Boolean,
@@ -51,7 +54,7 @@ const props = defineProps({
   projectId: { type: Number, default: 0 },
 });
 
-const emit = defineEmits(["select", "stop", "toggle-archive", "delete", "rename", "editing", "open-job", "toggle-unread"]);
+const emit = defineEmits(["select", "stop", "toggle-archive", "delete", "rename", "editing", "open-job", "toggle-unread", "flag"]);
 
 const project = computed(() => S.projects.find((p) => p.id === props.projectId));
 const backgroundLabel = computed(() => {
@@ -59,10 +62,28 @@ const backgroundLabel = computed(() => {
   return props.acceptsPrompts ? `${tasks} · you can keep writing` : tasks;
 });
 const queueAction = computed(() => projectQueueActions.value.get(props.projectId));
+const mark = computed(() => taskFlag(props.flag));
+const step = computed(() => nextDot(props.flag, props.unread));
+const stepLabel = computed(() => step.value.flag ? `Mark ${taskFlag(step.value.flag).label.toLowerCase()}`
+  : step.value.unread ? "Mark unread" : "Clear mark");
+
+function cycle() {
+  const { flag, unread } = step.value;
+  if (flag !== (props.flag || "")) emit("flag", flag);
+  if (unread !== props.unread) emit("toggle-unread");
+}
 
 const menu = computed(() => [
   { label: "Open task", icon: "i-lucide-message-square", onSelect: () => emit("select") },
   { label: props.unread ? "Mark read" : "Mark unread", icon: props.unread ? "i-lucide-mail-open" : "i-lucide-mail", onSelect: () => emit("toggle-unread") },
+  { label: "Mark", icon: mark.value?.icon || "i-lucide-star", children: TASK_FLAGS.map((f) => ({
+    label: f.label,
+    icon: f.icon,
+    type: "checkbox",
+    checked: props.flag === f.value,
+    ui: { itemLeadingIcon: f.color },
+    onUpdateChecked: (on) => emit("flag", on ? f.value : ""),
+  })) },
   { label: "Rename task", icon: "i-lucide-pencil", onSelect: edit },
   ...(props.job ? [{ label: "Open scheduled job", icon: "i-lucide-calendar", onSelect: () => emit("open-job") }] : []),
   ...(queueAction.value ? [{
@@ -138,15 +159,24 @@ defineExpose({ edit });
             class="w-3 shrink-0 font-mono text-[10px] text-dimmed tabular-nums"
             aria-hidden="true"
           >{{ number || "" }}</span>
+          <!-- Each click moves to the next step: unread, then each mark. A
+               mark pulses like the running dot while the task runs, so
+               running stays visible on a marked row. -->
           <button
             type="button"
-            class="-m-1 shrink-0 rounded p-1 enabled:cursor-pointer enabled:hover:bg-elevated focus-visible:outline-primary"
-            :disabled="status === 'running' || queued > 0"
-            :aria-label="unread ? 'Mark read' : 'Mark unread'"
-            :title="unread ? 'Mark read' : 'Mark unread'"
-            @click.stop="$emit('toggle-unread')"
+            class="-m-1 flex size-5 shrink-0 cursor-pointer items-center justify-center rounded hover:bg-elevated focus-visible:outline-primary"
+            :aria-label="stepLabel"
+            :title="stepLabel"
+            @click.stop="cycle"
           >
-            <StatusDot class="block" :status="taskDot(status, unread)" />
+            <UIcon
+              v-if="mark"
+              :name="mark.icon"
+              class="task-flag block size-3"
+              :class="[mark.color, { 'flag-pulse': status === 'running' }]"
+              :data-flag="mark.value"
+            />
+            <StatusDot v-else class="block" :status="taskDot(status, unread)" />
           </button>
           <button
             type="button"
@@ -249,3 +279,14 @@ defineExpose({ edit });
   </div>
   </UContextMenu>
 </template>
+
+<style scoped>
+/* Stepped like StatusDot's pulse; see specs/079-ui-performance.md. */
+.flag-pulse {
+  animation: flag-pulse 2s steps(4) infinite;
+}
+@keyframes flag-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.1; transform: scale(0.6); }
+}
+</style>

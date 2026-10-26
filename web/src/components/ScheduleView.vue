@@ -21,6 +21,7 @@ import {
   scheduleLabel,
   setScheduleArchived,
   setSchedulePaused,
+  setScheduleFinishCondition,
   setScheduleFrequency,
   setScheduleModel,
   setSchedulePrompt,
@@ -64,13 +65,16 @@ function runMenuAction(action) {
 const editingCount = ref(false);
 const editingFreq = ref(false);
 const editingPrompt = ref(false);
+const editingCondition = ref(false);
 const count = ref(String(schedule.value.remaining));
 const freq = ref(scheduleForm(schedule.value));
 const prompt = ref(schedule.value.prompt);
+const condition = ref(schedule.value.finish_condition || "");
 watch(schedule, (s) => {
   if (!editingCount.value) count.value = String(s.remaining);
   if (!editingFreq.value) freq.value = scheduleForm(s);
   if (!editingPrompt.value) prompt.value = s.prompt;
+  if (!editingCondition.value) condition.value = s.finish_condition || "";
 });
 
 /* The prompt is what the schedule repeats, and it is as changeable as the
@@ -80,6 +84,13 @@ watch(schedule, (s) => {
 function commitPrompt() {
   editingPrompt.value = false;
   setSchedulePrompt(schedule.value, prompt.value);
+}
+
+/* The finish condition is checked first on every run; one that holds pauses
+   the job. Leaving it empty turns it off. */
+function commitCondition() {
+  editingCondition.value = false;
+  setScheduleFinishCondition(schedule.value, condition.value);
 }
 
 /* A model edit changes the saved job; runs already started keep their copy. */
@@ -106,6 +117,7 @@ const STATUS = {
   done: { label: "Done", class: "text-muted" },
   error: { label: "Failed", class: "text-error" },
   interrupted: { label: "Interrupted", class: "text-warning" },
+  finished: { label: "Finish condition met — job paused", class: "text-success" },
   skipped: { label: "Skipped — the previous run was still going", class: "text-dimmed" },
 };
 /* A run of skips is written as one row with a count (schedules.go,
@@ -213,6 +225,7 @@ function runTime(run) {
         <UTextarea
           v-model="prompt"
           :rows="3"
+          :maxrows="20"
           autoresize
           class="w-full"
           aria-label="Prompt"
@@ -220,6 +233,22 @@ function runTime(run) {
           @focus="editingPrompt = true"
           @blur="commitPrompt"
         />
+        <div class="pt-1.5 text-muted">Finish when</div>
+        <div>
+          <UTextarea
+            v-model="condition"
+            :rows="1"
+            :maxrows="5"
+            autoresize
+            class="w-full"
+            placeholder="No condition. For example: the file does not exist or is empty"
+            aria-label="Finish condition"
+            :ui="{ base: 'resize-y' }"
+            @focus="editingCondition = true"
+            @blur="commitCondition"
+          />
+          <span class="text-xs text-dimmed">Checked first on every run. When it is true, the job pauses itself.</span>
+        </div>
         <div class="pt-1.5 text-muted">Model</div>
         <div class="flex flex-wrap items-center gap-2">
           <ModelSelection

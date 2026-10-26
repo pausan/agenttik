@@ -1,10 +1,11 @@
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, provide, ref, watch } from "vue";
+import { computed, inject, nextTick, onMounted, onUnmounted, provide, ref, watch } from "vue";
 
 import {
   deleteQueued,
   focusPrompt,
   forceQueued,
+  hit,
   openProjectPrompt,
   openTask,
   openThread,
@@ -16,14 +17,19 @@ import {
 } from "../store";
 import { turnSummaries } from "../api";
 import { otherChoice, runningTaskCount, waitingLabel } from "../background-tasks";
+import { messageTime } from "../message-time";
 import { tabScroll, vTabScroll } from "../tab-scroll";
 import ApprovalCard from "./ApprovalCard.vue";
 import ModelSelection from "./ModelSelection.vue";
 import StickyPrompt from "./StickyPrompt.vue";
 import TranscriptRows from "./TranscriptRows.vue";
+import MicrophoneButton from "./MicrophoneButton.vue";
+import { dictation, dictationLabel } from "../dictation";
 
 defineProps({ findOpen: Boolean });
 const emit = defineEmits(["start-tour"]);
+// Expanded, the conversation drops its reading width so wide tables fit.
+const expanded = inject("expanded");
 const box = ref(null);
 const content = ref(null);
 const transcriptRows = ref(null);
@@ -70,12 +76,12 @@ const allRows = computed(() => {
     i--;
     out.push({ at, tools });
   }
-  // A finished turn closes with its time, tokens and cost under its last row,
-  // then the task's totals so far. Turns whose messages an edit removed still
+  // A finished turn closes with its time, tokens, cost and end time under its
+  // last row, then the task's totals so far. Turns whose messages an edit removed still
   // count, as they do in Stats. Rows streamed before the turn ended carry no
   // turn id; the transcript is re-read when it ends, and that read supplies them.
   // The result files it presented go between its last row and that line.
-  const summaries = turnSummaries(S.detail?.turns || []);
+  const summaries = turnSummaries(S.detail?.turns || [], messageTime);
   const outputs = new Map();
   for (const o of S.detail?.outputs || []) {
     if (!outputs.has(o.turn_id)) outputs.set(o.turn_id, []);
@@ -305,8 +311,17 @@ function cancelEdit() {
   focusPrompt();
 }
 
-function onEditKey(e) {
-  if (e.key === "Escape") cancelEdit();
+/* A queued prompt only has Save, so both of the prompt bar's chords, Send's
+   and Enqueue's, save it. */
+function onEditKey(e, q) {
+  if (e.isComposing) return;
+  if (e.key === "Escape") {
+    e.preventDefault();
+    cancelEdit();
+  } else if (hit(e, "prompt.send") || hit(e, "prompt.enqueue")) {
+    e.preventDefault();
+    saveEdit(q);
+  }
 }
 
 async function saveEdit(q) {
@@ -475,10 +490,16 @@ watch(
     <div
       v-else
       ref="content"
-      class="relative mx-auto max-w-[860px] px-6 pt-5 pb-2 max-md:px-3 max-md:pt-3"
+      class="relative mx-auto px-6 pt-5 pb-2 max-md:px-3 max-md:pt-3"
+      :class="{ 'max-w-[860px]': !expanded }"
       @mouseup="readSelection"
       @keyup.shift="readSelection"
     >
+      <div v-if="!S.detail.messages?.length && !S.detail.running" class="flex min-h-[45dvh] flex-col items-center justify-center gap-4 text-center" data-find-ignore>
+        <MicrophoneButton large />
+        <p role="status" class="text-sm text-muted">{{ dictation.phase === 'idle' ? 'Tap to dictate a prompt' : dictationLabel }}</p>
+        <p class="text-xs text-dimmed">Stop when you finish. Review the text before sending.</p>
+      </div>
       <UButton
         v-if="picked"
         class="absolute z-20 shadow"
@@ -548,7 +569,7 @@ watch(
         @layout="schedulePinnedPrompt"
       />
       <ApprovalCard v-for="a in approvals" :key="a.id" :session-id="S.detail.session.id" :approval="a" />
-      <div v-if="S.detail.running" class="mb-3 flex items-center gap-2 text-xs text-dimmed" aria-label="Agent working">
+      <div v-if="S.detail.running" class="mb-3 flex items-center gap-2 text-xs text-dimmed" aria-label="Agent working" data-find-ignore>
         <span aria-hidden="true">{{ clockFace }}</span>
         <span>{{ workingLabel }} ({{ elapsedLabel }})</span>
       </div>
@@ -563,7 +584,7 @@ watch(
             :class="q.retry_at ? 'text-warning' : 'text-dimmed'"
             >{{ q.pending ? "Sending…" : heldLabel(q) }}</span
           >
-          <span class="flex items-center gap-1 font-mono text-[11px] text-dimmed tabular-nums">
+          <span class="flex items-center gap-1 font-mono text-[11px] text-dimmed tabular-nums" data-find-ignore>
             <span aria-hidden="true">{{ clockFace }}</span>{{ waitLabel(q.created_at) }}
           </span>
         </div>
@@ -577,8 +598,7 @@ watch(
             :rows="3"
             autoresize
             class="w-full"
-            @keydown="onEditKey"
-            @keydown.enter.exact.prevent="saveEdit(q)"
+            @keydown="onEditKey($event, q)"
           />
           <div class="mt-1.5 flex items-center gap-2">
             <UButton type="submit" size="xs" :loading="saving" :disabled="!editDraft.trim()" label="Save" />

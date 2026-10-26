@@ -77,7 +77,9 @@ for (const selected of [true, false]) {
     }).toBe(false);
     await paletteSwitch(page, "Default");
     await expect(row.locator(".task-title")).toHaveClass(/font-bold/);
-    // Leave the restored transcript before its three-second acknowledgement.
+    // A restored transcript was not chosen by the user, so it is not read.
+    await page.waitForTimeout(3200);
+    await expect(row.locator(".task-title")).toHaveClass(/font-bold/);
     await sidebar(page).getByText("Personal project", { exact: true }).click();
     await page.waitForTimeout(3200);
     await expect(row.locator(".task-title")).toHaveClass(/font-bold/);
@@ -196,7 +198,7 @@ test("settings reorder profiles and persist the picker order", async ({ page, ag
   await expect(up.first()).toHaveAttribute("aria-label", "Move Work up");
   await page.getByRole("button", { name: "Done", exact: true }).click();
   await page.getByRole("button", { name: "Profile: Default", exact: true }).click();
-  await expect(page.getByRole("menuitem")).toHaveText(["Work", "Default"]);
+  await expect(page.getByRole("menuitem")).toHaveText(["Flat view", "Work", "Default"]);
 });
 
 test("profile shortcuts cycle in saved order in both directions", async ({ page, agenttik }) => {
@@ -205,12 +207,13 @@ test("profile shortcuts cycle in saved order in both directions", async ({ page,
   await page.request.put(`${agenttik.url}/api/profiles/order`, { data: { ids: ["default", personal.id, work.id] } });
   await page.reload();
   await expect(page.getByRole("button", { name: "Profile: Default", exact: true })).toBeVisible();
-  for (const name of ["Personal", "Work", "Default"]) {
+  // The flat view leads the list, so it comes between the last and the first.
+  for (const name of ["Personal", "Work", "Flat view", "Default"]) {
     await page.keyboard.press("Control+Alt+p");
     await expect(page.getByRole("button", { name: `Profile: ${name}`, exact: true })).toBeVisible();
   }
   await page.keyboard.press("Control+Alt+Shift+p");
-  await expect(page.getByRole("button", { name: "Profile: Work", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Profile: Flat view", exact: true })).toBeVisible();
 });
 
 test("working profiles pulse in the footer and menu, then clear when stopped", async ({ page, agenttik }) => {

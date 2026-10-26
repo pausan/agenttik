@@ -47,7 +47,7 @@ test("snapshots replace manual unread for new results and skip results supersede
   assert.deepEqual(unread, { a: 3, b: 5 });
 });
 
-test("reading requires three uninterrupted visible seconds and restarts for a new completion", (t) => {
+test("reading requires three uninterrupted visible seconds", (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const unread = reactive({ a: 1, b: 2 });
   const selected = ref("a");
@@ -65,17 +65,15 @@ test("reading requires three uninterrupted visible seconds and restarts for a ne
   t.mock.timers.tick(4000);
   assert.equal(unread.a, 1);
   visible.value = true;
-  t.mock.timers.tick(2000);
-  unread.a = 3;
   t.mock.timers.tick(2999);
-  assert.equal(unread.a, 3);
+  assert.equal(unread.a, 1);
   t.mock.timers.tick(1);
   assert.equal(unread.a, undefined);
   assert.equal(unread.b, 2);
   assert.equal(saves, 1);
 });
 
-test("completion while viewing starts its own timer; leaving the transcript cancels it", (t) => {
+test("completion on the selected transcript stays unread until the user leaves and returns", (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const unread = reactive({});
   const selected = ref("a");
@@ -83,7 +81,8 @@ test("completion while viewing starts its own timer; leaving the transcript canc
   t.after(stop);
   t.mock.timers.tick(10000);
   unread.a = 1;
-  t.mock.timers.tick(2000);
+  t.mock.timers.tick(10000);
+  assert.equal(unread.a, 1);
   selected.value = null;
   t.mock.timers.tick(4000);
   assert.equal(unread.a, 1);
@@ -123,13 +122,37 @@ test("manually unread stays unread for the current visit, then clears after retu
   assert.equal(unread.a, undefined);
 });
 
-test("a new completion replaces a manual unread hold", (t) => {
+test("a new completion over a manual mark stays held for the current visit", (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const unread = reactive({});
-  const stop = trackTaskAttention(unread, () => "a", () => true);
+  const selected = ref("a");
+  const stop = trackTaskAttention(unread, () => selected.value, () => true);
   t.after(stop);
   unread.a = -1;
   unread.a = 7;
+  t.mock.timers.tick(3000);
+  assert.equal(unread.a, 7);
+  selected.value = null;
+  selected.value = "a";
+  t.mock.timers.tick(3000);
+  assert.equal(unread.a, undefined);
+});
+
+test("a transcript the app selects by itself is not read until the user returns to it", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const unread = reactive({ a: 1, b: 2 });
+  const selected = ref(null);
+  let automatic = true;
+  const stop = trackTaskAttention(unread, () => selected.value, () => true, () => {}, () => automatic);
+  t.after(stop);
+  selected.value = "a";
+  automatic = false;
+  t.mock.timers.tick(10000);
+  assert.equal(unread.a, 1);
+  selected.value = "b";
+  t.mock.timers.tick(3000);
+  assert.equal(unread.b, undefined);
+  selected.value = "a";
   t.mock.timers.tick(3000);
   assert.equal(unread.a, undefined);
 });

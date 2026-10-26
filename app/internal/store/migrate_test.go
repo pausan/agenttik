@@ -54,6 +54,34 @@ func frozenMigrations(t *testing.T) []string {
 	return append(frozen, migrations[len(frozen):]...)
 }
 
+func TestUpgradeEnablesScreenSharing(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agenttik.db")
+	db := rawDatabase(t, path)
+	// Start just before this migration, even when later features add steps.
+	version := 0
+	for i, step := range migrations {
+		if strings.Contains(step, "ALTER TABLE server_config DROP COLUMN screen_enabled") {
+			version = i
+			break
+		}
+	}
+	if version == 0 {
+		t.Fatal("screen enablement migration not found")
+	}
+	if err := applyMigrations(db, 0, migrations[:version]); err != nil {
+		t.Fatal(err)
+	}
+	execSQL(t, db, `INSERT INTO server_config(id, port, screen_enabled) VALUES(1, 7717, 0)`)
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if cfg, err := s.GetServerConfig(); err != nil || !cfg.ScreenEnabled || cfg.Port != 7717 {
+		t.Fatalf("upgraded config: %+v, %v", cfg, err)
+	}
+}
+
 func TestUpgradeEverySchemaVersion(t *testing.T) {
 	history := frozenMigrations(t)
 	fresh := testStore(t)

@@ -10,10 +10,11 @@
    Every message can be copied. Only your own prompts can be edited, and only
    once they have been stored: a message still arriving over the stream has no
    id to rewrite. */
-import { computed, nextTick, ref } from "vue";
+import { computed, nextTick, onUnmounted, ref, watch } from "vue";
 
-import { S, copyText, editMessage, queueUnprocessed, sendUnprocessed, setModel } from "../store";
+import { S, copyText, editMessage, hit, queueUnprocessed, sendUnprocessed, setModel } from "../store";
 import { promptState } from "../background-tasks";
+import { messageDate, messageTime } from "../message-time";
 import { promptImages, promptText } from "../prompt-images";
 import ConversationImage from "./ConversationImage.vue";
 import MarkdownContent from "./MarkdownContent.vue";
@@ -45,6 +46,30 @@ const BUBBLE = {
 };
 
 const rendered = computed(() => !!RENDERED[props.message.role]);
+
+/* A streaming reply grows by a word every few milliseconds, and every delta
+   would parse the whole reply as markdown and rebuild its DOM. While it
+   streams, the rendered copy catches up at most every STREAM_RENDER_MS; any
+   other change, the end of the stream included, shows at once. */
+const STREAM_RENDER_MS = 100;
+const markdownText = ref(props.message.content);
+let renderTimer = 0;
+watch(
+  () => [props.message.content, props.message.streaming],
+  ([content, streaming]) => {
+    if (streaming) {
+      renderTimer ||= window.setTimeout(() => {
+        renderTimer = 0;
+        markdownText.value = props.message.content;
+      }, STREAM_RENDER_MS);
+      return;
+    }
+    window.clearTimeout(renderTimer);
+    renderTimer = 0;
+    markdownText.value = content;
+  },
+);
+onUnmounted(() => window.clearTimeout(renderTimer));
 const images = computed(() => props.message.role === "user" ? promptImages(props.message.content) : []);
 const text = computed(() => images.value.length ? promptText(props.message.content) : props.message.content);
 const preview = ref(null);
@@ -125,8 +150,21 @@ async function submit(enqueue = false) {
   if (sent) draft.value = null;
 }
 
+/* Send and Enqueue answer the same chords as in the prompt bar, so a
+   rebinding in Settings reaches the editor too. Anything else, plain Enter
+   included when it is bound to neither, types into the box. */
 function onKey(e) {
-  if (e.key === "Escape") draft.value = null;
+  if (e.isComposing) return;
+  if (e.key === "Escape") {
+    e.preventDefault();
+    draft.value = null;
+  } else if (hit(e, "prompt.send")) {
+    e.preventDefault();
+    if (draft.value.trim()) submit();
+  } else if (hit(e, "prompt.enqueue")) {
+    e.preventDefault();
+    if (draft.value.trim()) submit(true);
+  }
 }
 </script>
 
@@ -136,8 +174,16 @@ function onKey(e) {
       class="mb-0.5 flex items-center gap-1.5"
       :class="message.role === 'user' ? 'flex-row-reverse' : ''"
     >
-      <span class="text-[11px] font-medium tracking-wider text-dimmed uppercase">
-        {{ WHO[message.role] || message.role }}
+      <span class="text-[11px] text-dimmed">
+        <span class="font-medium tracking-wider uppercase">{{ WHO[message.role] || message.role }}</span>
+        <template v-if="message.created_at">
+          ·
+          <time
+            class="tabular-nums"
+            :datetime="new Date(message.created_at).toISOString()"
+            :title="messageDate(message.created_at)"
+          >{{ messageTime(message.created_at) }}</time>
+        </template>
       </span>
       <span v-if="state" class="text-[11px] text-dimmed" :class="{ 'italic': state === 'waiting' }" :title="STATE[state].title">
         {{ STATE[state].label }}
@@ -206,7 +252,6 @@ function onKey(e) {
         autoresize
         class="w-full"
         @keydown="onKey"
-        @keydown.enter.exact.prevent="submit()"
       />
       <div class="mt-1.5 flex flex-wrap items-center gap-2">
         <ModelSelection
@@ -239,7 +284,7 @@ function onKey(e) {
     </form>
 
     <template v-else>
-      <MarkdownContent v-if="rendered" :class="classes" :text="message.content" />
+      <MarkdownContent v-if="rendered" :class="classes" :text="markdownText" />
       <div v-else :class="classes">
         <span v-if="text">{{ text }}</span>
         <div v-if="images.length" class="mt-2 flex flex-wrap gap-2" aria-label="Message images">

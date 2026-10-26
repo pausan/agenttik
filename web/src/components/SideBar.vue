@@ -18,6 +18,7 @@ import {
   setScheduleArchived,
   setSchedulePaused,
   setTaskArchived,
+  setTaskFlag,
   toggleTaskUnread,
   setProjectHidden,
   setProjectQueuePaused,
@@ -28,6 +29,7 @@ import {
 import { isMobile, SEGMENTED } from "../ui";
 import { beginDrag, showDropPosition } from "../drag";
 import { projectDot } from "../task-attention";
+import { sourceLabel } from "../profiles";
 import FileTree from "./FileTree.vue";
 import ProfilePicker from "./ProfilePicker.vue";
 import HiddenProjectsMenu from "./HiddenProjectsMenu.vue";
@@ -303,7 +305,9 @@ function onTaskDrop(e, projectID, overID) {
                   />
                   <StatusDot v-if="projectDots.get(p.id)" :status="projectDots.get(p.id)" />
                 </span>
-                <span class="block truncate pl-4 text-xs text-dimmed">{{ p.path }}</span>
+                <span class="block truncate pl-4 text-xs text-dimmed"
+                  ><span v-if="p.source" class="text-muted" data-project-source>{{ sourceLabel(p.source) }} · </span
+                  >{{ p.path }}</span>
               </button>
               <UButton
                 v-if="projectQueueActions.get(p.id)"
@@ -359,6 +363,8 @@ function onTaskDrop(e, projectID, overID) {
               :status="s.status"
               :unread="!!S.unreadTasks[s.id]"
               @toggle-unread="toggleTaskUnread(s.id)"
+              :flag="s.flag"
+              @flag="setTaskFlag(s, $event)"
               :queued="s.queue_count"
               :background="s.background_tasks || 0"
               :accepts-prompts="!!s.accepts_prompts"

@@ -1,4 +1,4 @@
-# Making, renaming and deleting files from the Tree
+# Making, renaming and deleting files
 
 The Tree pane is a file manager as well as a listing. A right click anywhere in
 it opens one menu — **Open in system browser** ([048](048-open-in-system-browser.md)),
@@ -12,6 +12,19 @@ component each would have been four copies of the same dialog.
 
 Files dragged in from the desktop are copied where they are dropped; see
 [095](095-tree-file-drop.md).
+
+## Renaming from tabs and Changes
+
+Right clicking an open working-file tab or an unstaged row in Changed offers
+**Rename**. Both use the same name dialog as the Tree, prefilled with the current
+filename. Cancel leaves the file untouched; a collision keeps the dialog open
+for retry. The rename acts on the clicked file, including a background tab,
+and stays within its project. Deleted files and historical tabs cannot be
+renamed. Staged and commit file lists do not offer Rename.
+
+Renaming changes the working tree without staging it. The Tree and Changed
+refresh, and open working-file tabs follow the new path with unsaved edits
+preserved. Saving afterward writes to the new path.
 
 ## Reverting changes
 

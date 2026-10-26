@@ -79,14 +79,7 @@ func runDesktop(srv *server.Server, lock *single.Lock, defaultAddr string) error
 		return err
 	}
 	dropToken := srv.EnableFileDrops()
-	proxy := httputil.NewSingleHostReverseProxy(target)
-	proxy.FlushInterval = -1 // flush immediately, so SSE streams
-	director := proxy.Director
-	proxy.Director = func(r *http.Request) {
-		director(r)
-		r.Header.Set("X-Agenttik-Update-Token", updateToken)
-		r.Header.Set("X-Agenttik-Window-Token", dropToken)
-	}
+	proxy := localDesktopProxy(target, updateToken, dropToken)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -132,6 +125,21 @@ func runDesktop(srv *server.Server, lock *single.Lock, defaultAddr string) error
 	stopTray := win.startTray(config, srv)
 	defer stopTray()
 	return wails.Run(app)
+}
+
+func localDesktopProxy(target *url.URL, updateToken, dropToken string) *httputil.ReverseProxy {
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	proxy.FlushInterval = -1 // flush immediately, so SSE streams
+	director := proxy.Director
+	proxy.Director = func(r *http.Request) {
+		director(r)
+		// Wails supplies a placeholder client IP. Omit it so the server
+		// recognizes this window's loopback connection as the same machine.
+		r.Header["X-Forwarded-For"] = nil
+		r.Header.Set("X-Agenttik-Update-Token", updateToken)
+		r.Header.Set("X-Agenttik-Window-Token", dropToken)
+	}
+	return proxy
 }
 
 // window is the open Wails window, or the wait for one. The server is already

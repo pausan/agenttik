@@ -42,6 +42,15 @@ selected, and reconciles its tabs with the answer.
 
 Deleting a project ends its terminals, beside stopping its tasks.
 
+## Expanding
+
+**Expand terminal**, at the right of the tab strip on desktop, hides both
+sidebars and their splitters so the shell gets the whole window; the strip
+stays and holds **Restore terminal**. Escape does not restore: it belongs to
+the shell, and vim or less need it. Either button hands the keyboard back to
+the shell. As with an expanded conversation ([004](004-ui.md)), switching tabs
+or projects exits it and it is not saved between launches.
+
 ## Clipboard
 
 Right-click the terminal for **Copy** and **Paste**. Copy uses the terminal's

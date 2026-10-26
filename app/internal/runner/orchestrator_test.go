@@ -35,7 +35,7 @@ func TestOrchestratorReceivesFreshConnectionOnEveryTurn(t *testing.T) {
 		t.Fatal(err)
 	}
 	executable, _ := os.Executable()
-	connection := orchestrator.Context(executable, st.Dir(), sess.ID, cfg.ProjectID)
+	connection := orchestrator.Context(executable, st.Dir(), sess.ID, cfg.ProjectID, 0)
 	for i, prompt := range []string{"Which tasks are running?", "And now?"} {
 		if _, err := r.Send(sess.ID, prompt); err != nil {
 			t.Fatal(err)

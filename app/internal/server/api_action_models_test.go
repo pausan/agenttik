@@ -26,7 +26,13 @@ func TestActionModelDefaultsAndOverrides(t *testing.T) {
 	if got := s.defaultActionModel("commit_message"); got.Model != "gpt-5.6-luna" || got.Effort != "none" {
 		t.Fatal(got)
 	}
+	if got := s.defaultActionModel("transcription"); got.Model != "gpt-5.6-luna" || got.Effort != "none" {
+		t.Fatal(got)
+	}
 	s.registry = agent.NewRegistry(availableModelProvider{claudecode.New()}, fake.New())
+	if got := s.defaultActionModel("transcription"); got.Model != "haiku" {
+		t.Fatal(got)
+	}
 	if got := s.defaultActionModel("merge"); got.Model != "opus" || got.Effort != "high" {
 		t.Fatal(got)
 	}

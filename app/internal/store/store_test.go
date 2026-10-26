@@ -570,8 +570,40 @@ func TestServerConfigStartsEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	if got != (ServerConfig{}) {
-		t.Errorf("GetServerConfig() = %+v, want the zero value", got)
+	if got != (ServerConfig{ScreenEnabled: true}) {
+		t.Errorf("GetServerConfig() = %+v, want only screen sharing enabled", got)
+	}
+}
+
+func TestScreenSharingDefaultsAndPersists(t *testing.T) {
+	for name, write := range map[string]func(*Store) error{
+		"listener": func(s *Store) error { return s.SetServerConfig(ServerConfig{Port: 7717}) },
+		"auth":     func(s *Store) error { return s.SetServerAuth(ServerConfig{AuthEnabled: true}) },
+		"tunnel":   func(s *Store) error { return s.SetServerTunnel(true, "credentials") },
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := testStore(t)
+			if err := write(s); err != nil {
+				t.Fatal(err)
+			}
+			if cfg, err := s.GetServerConfig(); err != nil || !cfg.ScreenEnabled {
+				t.Fatalf("new config: %+v, %v", cfg, err)
+			}
+			if err := s.SetScreenEnabled(false); err != nil {
+				t.Fatal(err)
+			}
+			if err := write(s); err != nil {
+				t.Fatal(err)
+			}
+			reopened, err := Open(s.Path())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer reopened.Close()
+			if cfg, err := reopened.GetServerConfig(); err != nil || cfg.ScreenEnabled {
+				t.Fatalf("saved opt-out: %+v, %v", cfg, err)
+			}
+		})
 	}
 }
 

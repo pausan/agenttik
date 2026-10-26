@@ -23,7 +23,7 @@ const shutdownTimeout = 3 * time.Second
 
 // Manager owns at most one extra listener at a time. Starting a second one
 // replaces the first once the new one is actually up, which is how a host or
-// a port change is applied without a gap.
+// a port change is applied without a gap — except on the same port, see Start.
 type Manager struct {
 	target string // loopback address every request is proxied to
 	// wrap goes in front of the proxy on every listener this manager opens:
@@ -33,8 +33,9 @@ type Manager struct {
 
 	mu   sync.Mutex
 	srv  *http.Server
-	addr string // what is actually bound right now, empty while stopped
-	err  error  // why the last Start failed, if it did
+	ln   net.Listener // srv's socket, closed early by a same-port move
+	addr string       // what is actually bound right now, empty while stopped
+	err  error        // why the last Start failed, if it did
 }
 
 // New returns a manager that proxies to target, the loopback address the
@@ -71,14 +72,30 @@ func (m *Manager) Status() Status {
 // Start listens on addr ("host:port") and proxies every request to the
 // target given to New. On success it replaces whatever this manager was
 // already listening on; on failure the previous listener, if any, is left
-// running untouched.
+// running as it was.
 func (m *Manager) Start(addr string) error {
 	target, err := url.Parse("http://" + m.target)
 	if err != nil {
 		return err
 	}
+
+	m.mu.Lock()
+	old, oldLn, oldAddr := m.srv, m.ln, m.addr
+	m.mu.Unlock()
+
+	// The kernel will not bind a port this manager already listens on, not
+	// even on another host: 0.0.0.0 overlaps 127.0.0.1. So a same-port move
+	// lets go of the old socket first. The old server keeps answering what is
+	// already open meanwhile, and gets its socket back if the bind fails.
+	samePort := old != nil && port(addr) != "0" && port(addr) == port(oldAddr)
+	if samePort {
+		oldLn.Close()
+	}
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
+		if samePort {
+			m.reopen(old, oldAddr)
+		}
 		m.mu.Lock()
 		m.err = err
 		m.mu.Unlock()
@@ -94,18 +111,32 @@ func (m *Manager) Start(addr string) error {
 	srv := &http.Server{Handler: handler}
 
 	m.mu.Lock()
-	old := m.srv
-	m.srv, m.addr, m.err = srv, ln.Addr().String(), nil
+	m.srv, m.ln, m.addr, m.err = srv, ln, ln.Addr().String(), nil
 	m.mu.Unlock()
 
 	go srv.Serve(ln) //nolint:errcheck // Shutdown's own ErrServerClosed; nothing to report
 
 	if old != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-		defer cancel()
-		old.Shutdown(ctx)
+		shutdown(old)
 	}
 	return nil
+}
+
+// reopen puts srv back on addr after a same-port move failed to bind. If even
+// that fails, srv is shut down and the manager reads as stopped.
+func (m *Manager) reopen(srv *http.Server, addr string) {
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		shutdown(srv)
+		m.mu.Lock()
+		m.srv, m.ln, m.addr = nil, nil, ""
+		m.mu.Unlock()
+		return
+	}
+	m.mu.Lock()
+	m.ln = ln
+	m.mu.Unlock()
+	go srv.Serve(ln) //nolint:errcheck // as in Start
 }
 
 // Stop closes whatever this manager is listening on. Safe to call when it
@@ -113,12 +144,23 @@ func (m *Manager) Start(addr string) error {
 func (m *Manager) Stop() error {
 	m.mu.Lock()
 	srv := m.srv
-	m.srv, m.addr, m.err = nil, "", nil
+	m.srv, m.ln, m.addr, m.err = nil, nil, "", nil
 	m.mu.Unlock()
 	if srv == nil {
 		return nil
 	}
+	return shutdown(srv)
+}
+
+// shutdown stops srv, giving what is in flight up to shutdownTimeout.
+func shutdown(srv *http.Server) error {
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	return srv.Shutdown(ctx)
+}
+
+// port is the port part of a "host:port" address, empty if it has none.
+func port(addr string) string {
+	_, p, _ := net.SplitHostPort(addr)
+	return p
 }

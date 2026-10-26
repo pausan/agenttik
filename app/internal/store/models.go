@@ -79,6 +79,9 @@ type SessionRef struct {
 	// came from without opening it. See 028-scheduled-jobs.md.
 	ScheduleID int64 `json:"schedule_id"`
 
+	// Flag is the user's mark, as on Session.
+	Flag string `json:"flag"`
+
 	// Prompt is what the session was opened with, capped; the sidebar shows it
 	// when a row is hovered. See firstPromptCol.
 	Prompt string `json:"prompt,omitempty"`
@@ -89,6 +92,11 @@ type SessionRef struct {
 	// See specs/083-background-tasks.md.
 	BackgroundTasks int  `json:"background_tasks,omitempty"`
 	AcceptsPrompts  bool `json:"accepts_prompts,omitempty"`
+}
+
+// ValidFlag reports whether flag is a task mark, or "" for none.
+func ValidFlag(flag string) bool {
+	return flag == "" || flag == "star" || flag == "warn" || flag == "danger"
 }
 
 type Session struct {
@@ -123,6 +131,10 @@ type Session struct {
 	// SessionRef. Only session listings fill them; they are not stored.
 	BackgroundTasks int  `json:"background_tasks,omitempty"`
 	AcceptsPrompts  bool `json:"accepts_prompts,omitempty"`
+
+	// Flag is the user's mark: "", "star", "warn" or "danger". Flagged tasks
+	// lead the archived list. See 098-task-flags.md.
+	Flag string `json:"flag"`
 
 	// ScheduleID is the schedule that spawned this session, or 0 for one
 	// started by hand. It is the job's number on screen, drawn on the run so
@@ -194,6 +206,10 @@ type Schedule struct {
 	Model      string `json:"model"`
 	Effort     string `json:"effort"`
 	Permission string `json:"permission"`
+
+	// FinishCondition, when set, is put before the prompt of every run. A
+	// run that finds it true pauses the job. Empty means none.
+	FinishCondition string `json:"finish_condition"`
 
 	// Every is how the next run is worked out. IntervalMinutes carries the
 	// whole X hours Y minutes for EveryInterval; AtMinute is minutes past
@@ -417,6 +433,11 @@ type ServerConfig struct {
 	// process. See 084-quick-tunnel.md.
 	TunnelEnabled     bool   `json:"-"`
 	TunnelCredentials string `json:"-"`
+
+	// ScreenEnabled lets viewers and agents see and drive this machine's
+	// screen. On by default on every machine. See
+	// 096-screen.md.
+	ScreenEnabled bool `json:"-"`
 }
 
 // Session status values. Waiting is idle with a reason: the session has a
@@ -447,7 +468,9 @@ const (
 	RunDone        = "done"
 	RunError       = "error"
 	RunInterrupted = "interrupted"
-	RunSkipped     = "skipped"
+	// RunFinished is a run that found the job's finish condition true.
+	RunFinished = "finished"
+	RunSkipped  = "skipped"
 )
 
 // Message roles.

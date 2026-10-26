@@ -60,7 +60,7 @@ async function submit() {
       landed = "";
     } else if (now.kind === "revert") await revertFile(now.path, now.projectID, now.repository);
     else if (now.kind === "delete") await deleteEntry(now.path);
-    else if (now.kind === "rename") landed = await renameEntry(now.path, name.value);
+    else if (now.kind === "rename") landed = await renameEntry(now.path, name.value, now.projectID);
     else {
       landed = await createEntry(parent.value, name.value, now.kind === "folder");
       // A new file is made to be typed into, so it opens — pinned, because a

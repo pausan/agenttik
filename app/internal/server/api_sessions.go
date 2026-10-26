@@ -214,9 +214,13 @@ func (s *Server) updateSession(c *fiber.Ctx) error {
 		Title      *string `json:"title"`
 		Permission *string `json:"permission"`
 		Done       *bool   `json:"done"`
+		Flag       *string `json:"flag"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return badRequest("invalid body: %v", err)
+	}
+	if body.Flag != nil && !store.ValidFlag(*body.Flag) {
+		return badRequest("flag must be star, warn, danger, or empty")
 	}
 	if body.Permission != nil {
 		if string(agent.Permission(*body.Permission).Valid()) != *body.Permission {
@@ -280,6 +284,11 @@ func (s *Server) updateSession(c *fiber.Ctx) error {
 	}
 	if body.Title != nil {
 		if err := s.store.SetSessionTitle(id, *body.Title); err != nil {
+			return err
+		}
+	}
+	if body.Flag != nil {
+		if err := s.store.SetSessionFlag(id, *body.Flag); err != nil {
 			return err
 		}
 	}

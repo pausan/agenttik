@@ -14,9 +14,25 @@ export const profileID = params.get("profile") || "default";
 // instance. The server keeps its own catalogs and window paths local.
 export const remoteID = params.get("remote") || "";
 
+// Explicit remote connections also count when their proxy uses loopback.
+export function isRemoteConnection() {
+  return !!(remoteID || remoteInstance);
+}
+
+// The flat view reads models, favourites, subscriptions and the screen from
+// the profile of the project in front, as that profile's own window would.
+// The server sends a request carrying project_id to that project's profile.
+const PROJECT_SCOPED = ["/api/providers", "/api/stars", "/api/model-visibility", "/api/screen", "/api/stream/screen"];
+let flatScope = () => 0;
+export function setFlatScope(fn) { flatScope = fn; }
+
 export function apiURL(path) {
   if (!path.startsWith("/api/")) return path;
   const query = [];
+  if (profileID === "all" && !remoteID && PROJECT_SCOPED.some(p => path === p || path.startsWith(p + "/") || path.startsWith(p + "?"))) {
+    const id = flatScope();
+    if (id) query.push(`project_id=${encodeURIComponent(id)}`);
+  }
   if (remoteID) query.push(`remote=${encodeURIComponent(remoteID)}`);
   if (profileID !== "default") query.push(`profile=${encodeURIComponent(profileID)}`);
   if (!query.length) return path;
@@ -240,8 +256,9 @@ export function turnSummary(turns) {
 }
 
 // Build every footer in one pass, retaining only the formatted totals rather
-// than a copy of all earlier turns for each message row.
-export function turnSummaries(turns) {
+// than a copy of all earlier turns for each message row. clock, when given,
+// writes the time the turn ended after the turn's own figures.
+export function turnSummaries(turns, clock) {
   const summaries = new Map();
   let ms = 0, input = 0, output = 0, usd = 0, estimated = false, count = 0;
   for (const turn of turns) {
@@ -251,7 +268,7 @@ export function turnSummaries(turns) {
     output += turn.output_tokens || 0;
     usd += (turn.cost_usd || 0) + (turn.estimated_cost_usd || 0);
     estimated ||= !!turn.estimated_cost_usd;
-    const line = turnSummary([turn]);
+    const line = turnSummary([turn]) + (clock ? ` · ${clock(turn.ended_at)}` : "");
     summaries.set(turn.id, ++count > 1 ? `${line} — total ${roughUsage(ms, input, output, usd, estimated)}` : line);
   }
   return summaries;

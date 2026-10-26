@@ -131,3 +131,62 @@ test("expanded tools keep their state until collapsed, then leave the viewport",
   await expect(page.locator('[data-message-id="233"]')).toHaveCount(0);
   await expect(tools).toHaveCount(0);
 });
+
+test("find opens promptly over a long transcript and content changes keep the reader's place", async ({ page, agenttik }) => {
+  test.setTimeout(90_000);
+  await seed(page, agenttik, 2000);
+  await sidebar(page).getByText("Long conversation", { exact: true }).click();
+  await expect(page.locator('[data-message-id="2000"]')).toBeVisible();
+  const bar = page.getByRole("search", { name: "Find in current page" });
+  const opened = async () => {
+    await page.evaluate(() => {
+      window.findShownAt = 0;
+      const seen = () => document.querySelector('[role="search"]') ? (window.findShownAt = performance.now()) : requestAnimationFrame(seen);
+      window.findPressedAt = performance.now();
+      requestAnimationFrame(seen);
+    });
+    await page.keyboard.press("Control+f");
+    await expect(bar).toBeVisible();
+    return page.evaluate(() => window.findShownAt - window.findPressedAt);
+  };
+  const first = await opened();
+  const find = bar.getByRole("textbox");
+  await find.fill("special phrase");
+  const status = bar.getByRole("status");
+  await expect(status).toHaveText("1 of 1000");
+  await find.press("Escape");
+  const again = await opened();
+  await expect(status).toHaveText("1 of 1000");
+  console.log(JSON.stringify({ firstOpenMs: Math.round(first), reopenWithQueryMs: Math.round(again) }));
+  expect(first).toBeLessThan(250);
+  expect(again).toBeLessThan(250);
+
+  await find.press("Enter");
+  await find.press("Enter");
+  await expect(status).toHaveText("3 of 1000");
+  const transcript = page.locator('[data-transcript]');
+  await transcript.evaluate(el => { el.scrollTop = el.scrollHeight / 2; });
+  const where = await transcript.evaluate(el => el.scrollTop);
+  // New content while the bar is open refreshes matches without moving the reader.
+  await transcript.evaluate(el => { const more = document.createElement("span"); el.append(more); more.textContent = "more"; });
+  await page.waitForTimeout(400);
+  expect(await transcript.evaluate(el => el.scrollTop)).toBe(where);
+  await expect(status).toHaveText("3 of 1000");
+  await find.press("Enter");
+  await expect(status).toHaveText("4 of 1000");
+  // A ticking clock is not searched, so its updates cost no new search.
+  const blocked = await page.evaluate(async () => {
+    const clock = document.createElement("span");
+    clock.dataset.findIgnore = "";
+    document.querySelector("[data-transcript]").append(clock);
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const tasks = [];
+    new PerformanceObserver(list => tasks.push(...list.getEntries())).observe({ type: "longtask" });
+    for (let i = 0; i < 4; i++) {
+      clock.textContent = String(i);
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+    return tasks.length;
+  });
+  expect(blocked).toBe(0);
+});

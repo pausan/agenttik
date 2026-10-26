@@ -17,3 +17,13 @@ components.d.ts
 e2e/test-results/
 e2e/playwright-report/
 tmp-*
+# The screen encoder library is built by `make vpx` (scripts/build-vpx.sh);
+# only the placeholders that keep the embed directives valid are tracked.
+app/internal/screen/vpx/lib/*/*
+!app/internal/screen/vpx/lib/*/.gitkeep
+
+# Native Whisper helper, built by make speech.
+!app/internal/speech/bin/
+app/internal/speech/bin/*
+!app/internal/speech/bin/README.txt
+!app/internal/speech/bin/LICENSE.whisper

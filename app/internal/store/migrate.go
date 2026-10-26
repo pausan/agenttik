@@ -408,6 +408,34 @@ CREATE INDEX idx_sessions_parent ON sessions(parent_id) WHERE parent_id != '';`,
 	// specs/082-tool-approvals.md.
 	`ALTER TABLE projects ADD COLUMN run_mode TEXT NOT NULL DEFAULT 'auto';`,
 	`ALTER TABLE projects ADD COLUMN queue_paused INTEGER NOT NULL DEFAULT 0;`,
+	// Whether this machine's screen may be viewed and controlled. See
+	// specs/096-screen.md.
+	`ALTER TABLE server_config ADD COLUMN screen_enabled INTEGER NOT NULL DEFAULT 0;`,
+	// Enable sharing on every machine, including existing installations, and
+	// use the same default when any server setting creates the config row.
+	`ALTER TABLE server_config DROP COLUMN screen_enabled;
+ALTER TABLE server_config ADD COLUMN screen_enabled INTEGER NOT NULL DEFAULT 1;`,
+	`CREATE TABLE speech_config (
+    id INTEGER PRIMARY KEY CHECK(id = 1),
+    model TEXT NOT NULL DEFAULT 'whistle',
+    correct INTEGER NOT NULL DEFAULT 0
+);
+INSERT INTO speech_config(id) VALUES (1);`,
+	// A task's star, warning or danger mark. See specs/098-task-flags.md.
+	`ALTER TABLE sessions ADD COLUMN flag TEXT NOT NULL DEFAULT '';`,
+	// A job's finish condition, checked at the start of every run. See
+	// specs/028-scheduled-jobs.md.
+	`ALTER TABLE schedules ADD COLUMN finish_condition TEXT NOT NULL DEFAULT '';`,
+	// The flat view's own project order and hidden set, kept apart from each
+	// profile's. A project is its source ("remote/profile") and its ID there.
+	// See specs/100-flat-view.md.
+	`CREATE TABLE flat_projects (
+    source     TEXT    NOT NULL,
+    project_id INTEGER NOT NULL,
+    position   INTEGER NOT NULL DEFAULT 0,
+    hidden_at  INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (source, project_id)
+);`,
 }
 
 // migrate reports whether it created the schema in an empty database.

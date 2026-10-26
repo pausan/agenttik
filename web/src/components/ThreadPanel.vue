@@ -49,6 +49,7 @@ function onKey(e) {
     e.preventDefault();
     send();
   } else if (e.key === "Escape") {
+    e.preventDefault();
     closeThread(props.thread.sessionID);
   }
 }

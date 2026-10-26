@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<title>agenttik</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <header>
+    <img src="agenttik.svg" alt="" width="56" height="56">
+    <h1>agenttik</h1>
+  </header>
+
+  <section id="home" hidden>
+    <form id="connect-form">
+      <label for="address">Server address</label>
+      <div class="row">
+        <input id="address" type="text" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false"
+               placeholder="192.168.1.20:7717" required>
+        <button type="submit">Connect</button>
+      </div>
+    </form>
+    <p id="error" class="bad" role="alert"></p>
+
+    <div id="saved-section" hidden>
+      <h2>Saved</h2>
+      <ul id="saved" class="servers"></ul>
+    </div>
+
+    <h2>On this network</h2>
+    <button id="scan" type="button" class="secondary">Find agenttik</button>
+    <p id="scan-status" class="muted"></p>
+    <ul id="found" class="servers"></ul>
+  </section>
+
+  <section id="busy" hidden>
+    <p id="busy-text" class="muted"></p>
+    <button id="cancel" type="button" class="secondary">Cancel</button>
+  </section>
+
+  <section id="login" hidden>
+    <h2 id="login-title"></h2>
+    <p id="login-origin" class="muted"></p>
+    <form id="login-form" autocomplete="off">
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password" required>
+      <div id="code-row">
+        <label for="code">Code</label>
+        <input id="code" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6"
+               autocomplete="one-time-code" placeholder="000000">
+      </div>
+      <p id="login-error" class="bad" role="alert"></p>
+      <div class="row">
+        <button id="back" type="button" class="secondary">Back</button>
+        <button type="submit">Sign in</button>
+      </div>
+    </form>
+    <p class="muted small">This phone is remembered after a good sign-in and signs in by itself next time.</p>
+  </section>
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>

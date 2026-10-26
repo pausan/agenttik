@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, watch } from "vue";
 import { api, ago } from "../api";
-import { S, openSchedule, pickTask, renameTask, setTaskArchived, toggleTaskUnread } from "../store";
+import { S, openSchedule, pickTask, renameTask, setTaskArchived, setTaskFlag, toggleTaskUnread } from "../store";
 import TaskRow from "./TaskRow.vue";
 
 const props = defineProps({
@@ -66,6 +66,7 @@ watch([query, window, page, size, () => props.tab.data.revision, retry], (values
       archived archive deletable
       @select="pickTask(task.id)" @open-job="openSchedule(task.schedule_id)"
       @toggle-unread="toggleTaskUnread(task.id)"
+      :flag="task.flag" @flag="setTaskFlag(task, $event)"
       @toggle-archive="setTaskArchived(task, false)" @rename="renameTask(task, $event)"
       @delete="$emit('delete', task)"
     />

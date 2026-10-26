@@ -14,8 +14,10 @@ import {
   isModelChoiceVisible,
   modelAccountLabel,
   openProject,
+  openScreen,
   openTask,
   providerOf,
+  screenOffered,
   setModel,
   startCurrentTask,
 } from "../store";
@@ -35,6 +37,15 @@ const navigation = computed(() => [
     icon: "i-lucide-chart-no-axes-combined",
     onSelect: () => choose(() => emit("analytics")),
   },
+  ...(screenOffered()
+    ? [{
+      label: "Screen",
+      description: `View and control ${S.instanceInfo?.name || "the machine"}'s screen`,
+      icon: "i-lucide-monitor",
+      disabled: !currentProjectID(),
+      onSelect: () => choose(openScreen),
+    }]
+    : []),
   {
     label: "Projects",
     icon: "i-lucide-folder-kanban",
@@ -85,7 +96,7 @@ const profileItems = computed(() => allProfiles()
   .filter((profile) => !isCurrentProfile(profile.id, profile.remote))
   .map((profile) => ({
     label: `Switch to profile: ${profile.remote ? `${profile.machine} › ` : ""}${profile.name}`,
-    icon: profile.remote ? "i-lucide-wifi" : "i-lucide-user-round",
+    icon: profile.flat ? "i-lucide-layers" : profile.remote ? "i-lucide-wifi" : "i-lucide-user-round",
     onSelect: () => choose(() => switchProfile(profile.id, profile.remote)),
   })),
 );

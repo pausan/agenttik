@@ -43,7 +43,7 @@ test("a passage can be asked about in a thread, which can become a task", async 
   await thread.getByRole("textbox", { name: "Thread reply" }).fill("And Lyon?");
   await thread.getByRole("textbox", { name: "Thread reply" }).press("Enter");
   await expect(thread.locator("[data-message-id]")).toHaveCount(4);
-  await expect(thread.locator("[data-message-id]").last()).toHaveText(/^Agent\s*And Lyon\?\s*$/);
+  await expect(thread.locator("[data-message-id]").last()).toHaveText(/^Agent · \d\d:\d\d:\d\d\s*And Lyon\?\s*$/);
 
   // Closed, it is a chip that survives a reload.
   await thread.getByRole("button", { name: "Close thread" }).click();

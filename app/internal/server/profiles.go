@@ -166,6 +166,7 @@ func (m *profileManager) open(id string) (*profileRuntime, error) {
 	s := New(db, registry, r)
 	s.remotes = nil
 	s.apiRoot = m.root
+	s.speech = m.root.speech
 	s.SetVersion(m.root.version)
 	// CLI calls from this profile's orchestrator discover its own endpoint.
 	ln, err := net.Listen("tcp", "127.0.0.1:0")

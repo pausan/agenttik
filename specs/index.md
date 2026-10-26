@@ -12,7 +12,11 @@ screen, **session** for the row, the route or the CLI flag.
 | [068](068-quick-start-tour.md) | Quick Start Tour, first agent, practice repo, queues and local commits |
 | [067](067-local-profiles.md) | Local profiles, project moves, local models, shared providers, profile switching |
 | [085](085-remote-profiles.md) | Remote profiles, live activity, sign-in, discovery and finding a moved machine |
+| [100](100-flat-view.md) | Flat view of every local and remote profile, merged lists and stream, and the orchestrator over all of them |
+| [099](099-mobile-app.md) | Android and iOS remote client: discovery, sign-in, trusted keys and Android reconnect |
 | [094](094-trusted-machines.md) | Machine keys, automatic sign-in to remotes, and the trusted list in Server settings |
+| [096](096-screen.md) | Screen viewing, sound and control, adaptive bitrate, VP8/VP9 and Opus encoding, and the agent screen API |
+| [097](097-speech-input.md) | Microphone dictation, first-use models, Whisper choices and optional transcript correction |
 | [066](066-private-mode.md) | Temporary instances and cleanup on exit |
 | [065](065-opencode-subscription.md) | OpenCode Go, optional CLI, direct coding turns and provider policy review |
 | [064](064-remote-connections.md) | Remote connections, server names, discovery and login |
@@ -30,8 +34,8 @@ screen, **session** for the row, the route or the CLI flag.
 | [005](005-testing.md) | The three test layers and how they are isolated |
 | [080](080-analytics.md) | Usage cost estimates, provider/model/effort breakdowns, date windows |
 | [081](081-macos-integration.md) | macOS menu bar, dark appearance, About, runtime icon, Dock reopen and Quit |
-| [079](079-ui-performance.md) | Interaction benchmarks, archive memory, editor rendering, long Changed lists and Go to file |
-| [052](052-launch-budget.md) | One-second cold/warm UI gate, concurrent reads, and deferred data |
+| [079](079-ui-performance.md) | Interaction benchmarks, archive memory, editor rendering, long Changed lists, Go to file and desktop idle/streaming CPU |
+| [052](052-launch-budget.md) | 1.5-second cold/warm UI gate, concurrent reads, and deferred data |
 
 ## Projects and tasks
 
@@ -52,6 +56,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [053](053-workspace-repositories.md) | Right Workspace header and repository selection within the current project |
 | [049](049-project-creation-modes.md) | Adding a project on a folder, or on a base folder of repositories cloned into it |
 | [051](051-task-outcomes.md) | What an archived task came to, written from its last reply and drawn under its row |
+| [098](098-task-flags.md) | Star, warning and danger marks on tasks, cycled from the dot, leading the archive |
 | [061](061-hidden-projects.md) | Temporarily hiding projects and restoring them to their saved sidebar position |
 | [062](062-pinned-prompts.md) | Saved prompts, manual runs and explicit editing |
 
@@ -67,7 +72,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [083](083-background-tasks.md) | Background shells and subagents kept in conversation order with status and running time |
 | [020](020-task-titles.md) | Instant first-line title, refined by an isolated small model |
 | [024](024-instant-prompt-echo.md) | Drawing sent and queued prompts on the keypress |
-| [028](028-scheduled-jobs.md) | Interval and calendar schedules, queued runs, and duplicate guards |
+| [028](028-scheduled-jobs.md) | Interval and calendar schedules, queued runs, duplicate guards and finish conditions |
 | [033](033-prompt-model-picker.md) | Model picker groups, search and favourites settings shortcut |
 | [045](045-provider-outage-retry.md) | Provider retries that keep the current task first and hold its project queue |
 | [047](047-project-prompt.md) | The standing prompt a project puts in front of every conversation's first |
@@ -85,7 +90,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [076](076-tab-scroll.md) | Scroll positions for every open tab, file modes, transcripts and terminals |
 | [075](075-page-find.md) | Find in the current page or text file, match navigation and shortcuts |
 | [013](013-project-logs.md) | Commits, local/remote branches, push confirmation, graph, checkout and diffs |
-| [014](014-transcript-messages.md) | Human-message navigation, compact sticky prompts, copying and editing |
+| [014](014-transcript-messages.md) | Human-message navigation, compact sticky prompts, timestamps, copying and editing |
 | [093](093-long-transcripts.md) | Deferred message rendering, retained memory and long-history benchmarks |
 | [016](016-file-tab-reuse.md) | The temporary file tab a click reuses |
 | [019](019-file-watching.md) | Tree and Changed following the disk as it moves |
@@ -97,7 +102,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [081](081-video-preview.md) | Video player controls, ranged streaming and ffmpeg conversion |
 | [059](059-file-information.md) | File byte sizes, image dimensions and color depth in the central header |
 | [027](027-ignored-files-in-the-tree.md) | Alphabetical Tree listings up to a 200,000-entry cap, ignored files gray |
-| [046](046-tree-file-actions.md) | Tree file actions, copying paths and adding paths to prompts |
+| [046](046-tree-file-actions.md) | Tree file actions, renaming from tabs and Changes, copying paths and adding paths to prompts |
 | [095](095-tree-file-drop.md) | Copying desktop files into the Tree by drag and drop, locally and on remotes |
 | [048](048-open-in-system-browser.md) | Opening a project folder or a Tree row on the desktop itself |
 

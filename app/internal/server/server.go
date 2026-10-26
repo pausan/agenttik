@@ -35,7 +35,9 @@ import (
 	"github.com/pausan/agenttik/app/internal/quicktunnel"
 	"github.com/pausan/agenttik/app/internal/remote"
 	"github.com/pausan/agenttik/app/internal/runner"
+	"github.com/pausan/agenttik/app/internal/screen"
 	"github.com/pausan/agenttik/app/internal/smartsearch"
+	"github.com/pausan/agenttik/app/internal/speech"
 	"github.com/pausan/agenttik/app/internal/store"
 	"github.com/pausan/agenttik/app/internal/terminals"
 	"github.com/pausan/agenttik/app/internal/update"
@@ -58,11 +60,17 @@ type Server struct {
 	gitLocks sync.Map // canonical checkout path -> *sync.Mutex
 	watchers *watchers
 	search   *smartsearch.Service
+	speech   speechEngine
 
 	// terminals are the shells behind the terminal tabs, held here rather
 	// than in the store because a shell only exists while this process does.
 	// See specs/073-terminals.md.
 	terminals *terminals.Manager
+
+	// screen is this machine's screen for Screen tabs and agents. Only the
+	// instance's own server uses it; profiles answer from that one. See
+	// specs/096-screen.md.
+	screen *screen.Manager
 
 	// closing is closed by Shutdown to release the SSE handlers. Fiber waits
 	// for every open connection, and a live stream never ends on its own, so
@@ -102,6 +110,10 @@ type Server struct {
 	// previewKey signs HTML preview tokens. It lives as long as the process;
 	// a preview opened again after a restart fetches a fresh one.
 	previewKey []byte
+
+	// flat is what the flat view has learned about where tasks and terminals
+	// live. See flat.go.
+	flat flatState
 }
 
 func New(s *store.Store, reg *agent.Registry, r *runner.Runner) *Server {
@@ -138,7 +150,7 @@ func New(s *store.Store, reg *agent.Registry, r *runner.Runner) *Server {
 	}))
 
 	srv := &Server{app: app, store: s, runner: r, registry: reg,
-		watchers: newWatchers(r.Hub()), terminals: terminals.NewManager(),
+		watchers: newWatchers(r.Hub()), terminals: terminals.NewManager(), screen: screen.NewManager(screen.Open),
 		closing: make(chan struct{}), previewKey: make([]byte, 32)}
 	if _, err := rand.Read(srv.previewKey); err != nil {
 		panic(err)
@@ -151,7 +163,10 @@ func New(s *store.Store, reg *agent.Registry, r *runner.Runner) *Server {
 		return s.ListSessions(store.SessionFilter{})
 	})
 	srv.remotes = newRemoteManager(s.Dir(), s.MachineID, s.ServerName)
+	r.SetFlatProject(srv.FlatProjectID)
+	srv.speech = speech.New(filepath.Join(s.Dir(), "speech"))
 	app.Use(routeHTMLScope)
+	app.Use(srv.routeFlat)
 	app.Use(srv.routeRemote)
 	app.Use(srv.routeProfile)
 	srv.routes()
@@ -256,6 +271,10 @@ func (s *Server) routes() {
 	api.Get("/action-models", s.getActionModels)
 	api.Put("/action-models/:action", s.putActionModel)
 	api.Get("/general", s.getGeneralConfig)
+	api.Get("/speech", s.getSpeech)
+	api.Put("/speech", s.putSpeech)
+	api.Post("/speech/prepare", s.prepareSpeech)
+	api.Post("/speech/transcribe", s.transcribeSpeech)
 	api.Put("/general", s.putGeneralConfig)
 	api.Post("/general/reset", s.resetPreferences)
 	api.Get("/server", s.getServerConfig)
@@ -347,6 +366,15 @@ func (s *Server) routes() {
 	api.Get("/stream", s.streamAll)
 	// Terminal output has a stream of its own. See streamTerminals.
 	api.Get("/stream/terminals", s.streamTerminals)
+	// So does each Screen tab. See api_screen.go.
+	api.Get("/stream/screen", s.streamScreen)
+	api.Get("/screen", s.getScreen)
+	api.Put("/screen", s.putScreen)
+	api.Post("/screen/input", s.screenInput)
+	api.Get("/screen/clipboard", s.getScreenClipboard)
+	api.Put("/screen/clipboard", s.putScreenClipboard)
+	api.Get("/screen/shot", s.screenShot)
+	api.Post("/screen/actions", s.screenActions)
 
 	api.Get("/stars", s.listStars)
 	api.Post("/stars", s.addStar)
@@ -370,6 +398,9 @@ func (s *Server) Listener(ln net.Listener) error { return s.app.Listener(retryAc
 // remaining connections. The timeout is a backstop: a stuck client must never
 // keep the app alive after the window is closed.
 func (s *Server) Shutdown() error {
+	if s.apiRoot == nil {
+		s.speech.Close()
+	}
 	if s.tunnel != nil {
 		s.tunnel.Stop() // tell the edge first, while the backend still answers
 	}
@@ -378,6 +409,7 @@ func (s *Server) Shutdown() error {
 		s.remotes.stop()
 	}
 	s.terminals.Shutdown()
+	s.screen.Close()
 	s.closeOnce.Do(func() { close(s.closing); s.search.Close() })
 	return s.app.ShutdownWithTimeout(shutdownTimeout)
 }

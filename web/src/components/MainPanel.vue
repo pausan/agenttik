@@ -4,11 +4,12 @@
    The strip is the active project's tabs only. Each kind has its own colour,
    tabs can be dragged within their kind. Session shortcuts use the sidebar
    order, so file tabs never consume an Alt number. */
-import { computed, defineAsyncComponent, inject, ref, watch } from "vue";
+import { computed, defineAsyncComponent, inject, onMounted, onUnmounted, ref, watch } from "vue";
 
 import {
   S,
   closeTab,
+  isOutsideProject,
   moveTab,
   persistTabOrder,
   selectTab,
@@ -20,6 +21,7 @@ import Transcript from "./Transcript.vue";
 import PromptBar from "./PromptBar.vue";
 import StatusDot from "./StatusDot.vue";
 import PageFind from "./PageFind.vue";
+import TreeActionModal from "./TreeActionModal.vue";
 
 const transcript = ref(null);
 const find = ref(null);
@@ -27,7 +29,7 @@ const findOpen = ref(false);
 const content = ref(null);
 defineExpose({ find: () => find.value?.show() });
 
-const fileExpanded = inject("fileExpanded");
+const expanded = inject("expanded");
 
 const emit = defineEmits(["start-tour"]);
 
@@ -41,6 +43,7 @@ const PinnedPromptView = defineAsyncComponent(() => import("./PinnedPromptView.v
 const ScheduleView = defineAsyncComponent(() => import("./ScheduleView.vue"));
 const FileView = defineAsyncComponent(() => import("./FileView.vue"));
 const TerminalView = defineAsyncComponent(() => import("./TerminalView.vue"));
+const ScreenView = defineAsyncComponent(() => import("./ScreenView.vue"));
 const StatsPane = defineAsyncComponent(() => import("./StatsPane.vue"));
 
 /* A session title can be a whole sentence, and a job names itself exactly as
@@ -59,6 +62,7 @@ const KINDS = {
   file: { text: "text-amber-500", edge: "border-amber-500" },
   schedule: { text: "text-violet-500", edge: "border-violet-500" },
   terminal: { text: "text-emerald-500", edge: "border-emerald-500" },
+  screen: { text: "text-cyan-500", edge: "border-cyan-500" },
 };
 
 const items = computed(() =>
@@ -80,6 +84,22 @@ const items = computed(() =>
 );
 
 const projectRunning = computed(() => S.project?.sessions.filter(task => task.status === "running").length || 0);
+
+const action = ref(null);
+const aimedTabID = ref("");
+const aimedTab = computed(() => S.tabs.find((tab) => tab.id === aimedTabID.value));
+function aimTab(event) {
+  aimedTabID.value = event.target.closest("[data-tab-id]")?.dataset.tabId || "";
+}
+const tabMenu = computed(() => {
+  const tab = aimedTab.value;
+  return [{
+    label: "Rename",
+    icon: "i-lucide-pencil",
+    disabled: tab?.kind !== "file" || !!tab.commit || isOutsideProject(tab.path) || /^deleted file mode /m.test(tab.diff || ""),
+    onSelect: () => { action.value = { kind: "rename", path: tab.path, projectID: tab.projectID }; },
+  }];
+});
 
 const dragging = ref("");
 
@@ -117,6 +137,20 @@ const retainedHTML = computed(() => {
 });
 const running = computed(() => !!S.detail?.running);
 
+/* An expanded conversation or terminal hides both sidebars but keeps this
+   strip, which holds its Restore button. For a conversation Escape restores
+   too, unless something else spent it: an open popover or menu, or a prompt
+   or thread being edited. A terminal's Escape belongs to the shell. */
+const conversation = computed(() => !!S.detail && (!current.value || current.value.kind === "session"));
+const terminal = computed(() => current.value?.kind === "terminal");
+function onExpandKey(e) {
+  if (e.key !== "Escape" || e.defaultPrevented || !expanded.value || !conversation.value) return;
+  if (document.querySelector("[data-dismissable-layer]")) return;
+  expanded.value = false;
+}
+onMounted(() => window.addEventListener("keydown", onExpandKey));
+onUnmounted(() => window.removeEventListener("keydown", onExpandKey));
+
 /* Stats belongs to the task in front. Leaving that task closes its popover so
    it cannot reopen unexpectedly on a later conversation. The shared flag
    also lets Command Palette open the same control. */
@@ -138,44 +172,47 @@ const badge = computed(() => {
 
 <template>
   <main class="flex min-h-0 min-w-0 flex-col">
-    <div v-show="!fileExpanded" class="main-tab-bar flex shrink-0 items-center gap-2.5 border-b border-default pr-3">
-      <div role="tablist" class="flex min-w-0 flex-1 items-center overflow-x-auto">
-        <div
-          v-for="item in items"
-          :key="item.id"
-          role="tab"
-          draggable="true"
-          :aria-selected="item.id === S.activeTab"
-          :aria-label="item.name"
-          :title="item.title"
-          class="flex shrink-0 cursor-grab items-center gap-1.5 border-b-2 px-2.5 py-2 active:cursor-grabbing"
-          :class="item.id === S.activeTab ? item.colors.edge : 'border-transparent'"
-          @click="selectTab(item.id)"
-          @dragstart="onStart($event, item.id)"
-          @dragover="onOver($event, item.id)"
-          @dragend="onEnd"
-          @drop.prevent="onEnd($event, item.id)"
-        >
-          <StatusDot v-if="item.running" status="running" />
-          <span
-            class="truncate"
-            :class="[
-              item.colors.text,
-              item.id === S.activeTab ? 'font-medium' : 'opacity-75',
-              item.temp ? 'italic' : '',
-            ]"
-            >{{ item.label }}</span
+    <div v-show="!expanded || conversation || terminal" class="main-tab-bar flex shrink-0 items-center gap-2.5 border-b border-default pr-3">
+      <UContextMenu :items="tabMenu">
+        <div role="tablist" class="flex min-w-0 flex-1 items-center overflow-x-auto" @contextmenu="aimTab">
+          <div
+            v-for="item in items"
+            :key="item.id"
+            :data-tab-id="item.id"
+            role="tab"
+            draggable="true"
+            :aria-selected="item.id === S.activeTab"
+            :aria-label="item.name"
+            :title="item.title"
+            class="flex shrink-0 cursor-grab items-center gap-1.5 border-b-2 px-2.5 py-2 active:cursor-grabbing"
+            :class="item.id === S.activeTab ? item.colors.edge : 'border-transparent'"
+            @click="selectTab(item.id)"
+            @dragstart="onStart($event, item.id)"
+            @dragover="onOver($event, item.id)"
+            @dragend="onEnd"
+            @drop.prevent="onEnd($event, item.id)"
           >
-          <button
-            type="button"
-            class="tab-close inline-flex size-4 shrink-0 cursor-pointer items-center justify-center rounded text-dimmed hover:bg-accented hover:text-highlighted"
-            :aria-label="`Close ${item.name}`"
-            title="Close"
-            @click.stop="closeTab(item.id)"
-            >×</button
-          >
+            <StatusDot v-if="item.running" status="running" />
+            <span
+              class="truncate"
+              :class="[
+                item.colors.text,
+                item.id === S.activeTab ? 'font-medium' : 'opacity-75',
+                item.temp ? 'italic' : '',
+              ]"
+              >{{ item.label }}</span
+            >
+            <button
+              type="button"
+              class="tab-close inline-flex size-4 shrink-0 cursor-pointer items-center justify-center rounded text-dimmed hover:bg-accented hover:text-highlighted"
+              :aria-label="`Close ${item.name}`"
+              title="Close"
+              @click.stop="closeTab(item.id)"
+              >×</button
+            >
+          </div>
         </div>
-      </div>
+      </UContextMenu>
 
       <!-- Sits outside the scrolling strip so it stays reachable with a
            dozen tabs open. -->
@@ -233,7 +270,30 @@ const badge = computed(() => {
               </div>
             </template>
           </UPopover>
+          <UButton
+            :icon="expanded ? 'i-lucide-minimize' : 'i-lucide-maximize'"
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            class="max-md:hidden"
+            :aria-label="expanded ? 'Restore conversation' : 'Expand conversation'"
+            :title="expanded ? 'Restore conversation (Escape)' : 'Expand conversation'"
+            :aria-pressed="expanded"
+            @click="expanded = !expanded"
+          />
         </template>
+        <UButton
+          v-else-if="terminal"
+          :icon="expanded ? 'i-lucide-minimize' : 'i-lucide-maximize'"
+          color="neutral"
+          variant="ghost"
+          size="xs"
+          class="max-md:hidden"
+          :aria-label="expanded ? 'Restore terminal' : 'Expand terminal'"
+          :title="expanded ? 'Restore terminal' : 'Expand terminal'"
+          :aria-pressed="expanded"
+          @click="expanded = !expanded"
+        />
       </div>
     </div>
 
@@ -246,6 +306,7 @@ const badge = computed(() => {
       <!-- Keyed by the tab, so switching between two terminals builds the one
            in front rather than rewriting the last one's screen. -->
       <TerminalView v-else-if="current?.kind === 'terminal'" :key="current.id" :tab="current" />
+      <ScreenView v-else-if="current?.kind === 'screen'" :tab="current" />
       <Transcript ref="transcript" v-else-if="!current || current.kind === 'session'" :find-open="findOpen" @start-tour="emit('start-tour')" />
       <FileView
         v-for="tab in retainedHTML"
@@ -255,9 +316,10 @@ const badge = computed(() => {
       />
     </div>
 
-    <!-- A file carries its own bar, and a terminal is one. The prompt box
-         belongs to a conversation, and under either of those it is only in
-         the way. -->
-    <PromptBar @navigate-message="transcript?.navigateMessage($event)" v-if="S.detail && current?.kind !== 'file' && current?.kind !== 'terminal'" />
+    <!-- A file carries its own bar, and a terminal or a screen is one. The
+         prompt box belongs to a conversation, and under any of those it is
+         only in the way. -->
+    <PromptBar @navigate-message="transcript?.navigateMessage($event)" v-if="S.detail && current?.kind !== 'file' && current?.kind !== 'terminal' && current?.kind !== 'screen'" />
+    <TreeActionModal v-model:action="action" />
   </main>
 </template>

@@ -6,7 +6,7 @@
    arrives the other. It is loaded from its own chunk — the emulator is a
    couple of hundred kilobytes and no launch that never opens a terminal
    should pay for it. See specs/073-terminals.md and specs/052-launch-budget.md. */
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
@@ -141,6 +141,10 @@ onMounted(() => {
 watch([colorPreference, () => S.colors.accent, () => S.colors.neutral], () => {
   if (term) term.options.theme = theme();
 });
+
+/* Expanding or restoring is a click on the strip's button, which takes the
+   keyboard with it. The shell gets it back, since typing is what comes next. */
+watch(inject("expanded"), () => term?.focus());
 
 onBeforeUnmount(() => {
   if (term && restoreLine === undefined) {

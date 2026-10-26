@@ -57,13 +57,15 @@ test("live Codex usage adds to finished turns until final stats replace it", () 
 });
 
 test("remote tabs and drafts are scoped to their server across connection checks", async () => {
-  const { api, instanceKey } = await import("./api.js");
+  const { api, instanceKey, isRemoteConnection } = await import("./api.js");
   const original = globalThis.fetch;
   try {
     strictEqual(instanceKey("agenttik.openTabs"), "agenttik.openTabs");
+    strictEqual(isRemoteConnection(), false);
     globalThis.fetch = async () => new Response("{}", { headers: { "Content-Type": "application/json", "X-Agenttik-Remote": "https://one.example" } });
     await api("GET", "/api/projects");
     strictEqual(instanceKey("agenttik.openTabs"), "agenttik.openTabs:https://one.example");
+    strictEqual(isRemoteConnection(), true);
     globalThis.fetch = async () => new Response("{}", { headers: { "Content-Type": "application/json" } });
     await api("POST", "/api/remote/connect", { address: "two.example" });
     strictEqual(instanceKey("agenttik.openTabs"), "agenttik.openTabs:https://one.example");
@@ -72,6 +74,17 @@ test("remote tabs and drafts are scoped to their server across connection checks
     strictEqual(instanceKey("agenttik.openTabs"), "agenttik.openTabs:https://two.example");
   } finally {
     globalThis.fetch = original;
+  }
+});
+
+test("a remote profile is a remote connection before its first response", async () => {
+  const original = globalThis.location;
+  try {
+    globalThis.location = { search: "?remote=office&profile=work" };
+    const { isRemoteConnection } = await import("./api.js?remote-profile");
+    strictEqual(isRemoteConnection(), true);
+  } finally {
+    globalThis.location = original;
   }
 });
 
@@ -170,6 +183,16 @@ test("all turn footers match prefix totals, including failed and edited-away tur
   strictEqual(summaries.size, turns.length);
   for (let i = 0; i < turns.length; i++) strictEqual(summaries.get(i), turnSummary(turns.slice(0, i + 1)));
   strictEqual(turnSummaries([]).size, 0);
+});
+
+test("footers name the time the turn ended before the totals", () => {
+  const turns = [
+    { id: 1, started_at: 0, ended_at: 42_000, input_tokens: 850, output_tokens: 12, cost_usd: 0.004 },
+    { id: 2, started_at: 50_000, ended_at: 95_000, input_tokens: 40, output_tokens: 8300, cost_usd: 0.64 },
+  ];
+  const summaries = turnSummaries(turns, (ms) => `@${ms}`);
+  strictEqual(summaries.get(1), "42s · 850 in / 12 out · <$0.01 · @42000");
+  strictEqual(summaries.get(2), "45s · 40 in / 8.3k out · $0.64 · @95000 — total 1min 27s · 890 in / 8.3k out · $0.64");
 });
 
 test("10,000 turn footers read usage fields a bounded number of times", () => {

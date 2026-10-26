@@ -1,0 +1,312 @@
+import { spawn, execFileSync } from "node:child_process";
+
+import { addProject, expect, newTask, startServer, test } from "../fixtures.js";
+
+/* The Screen tab against a real X server — see specs/096-screen.md. Each test
+   runs its own Xvfb with an xev window, white on the black root, which prints
+   every key and button it receives, and an agenttik showing that display.
+   The browser says it is on another machine (X-Forwarded-For), which is what
+   brings the Screen button out. */
+
+const have = (bin) => {
+  try {
+    execFileSync("which", [bin], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+};
+const haveX = ["Xvfb", "xev", "xsel"].every(have);
+const haveSound = have("pactl") && have("paplay") && (() => {
+  try {
+    execFileSync("pactl", ["info"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+})();
+let sinks = 0;
+
+/* A sound card of the test's own that nobody hears. The server records its
+   monitor (PULSE_SOURCE) and `play` sends it ten seconds of a 440 Hz tone. */
+function startSink() {
+  const name = `agenttik_e2e_${process.pid}_${sinks++}`;
+  const module = execFileSync("pactl", ["load-module", "module-null-sink", `sink_name=${name}`], { encoding: "utf8" }).trim();
+  let player;
+  return {
+    source: `${name}.monitor`,
+    play() {
+      const tone = Buffer.alloc(48000 * 4 * 10);
+      for (let i = 0; i < tone.length / 4; i++) {
+        const v = Math.round(8000 * Math.sin((2 * Math.PI * 440 * i) / 48000));
+        tone.writeInt16LE(v, 4 * i);
+        tone.writeInt16LE(v, 4 * i + 2);
+      }
+      player = spawn("paplay", [`--device=${name}`, "--raw", "--format=s16le", "--rate=48000", "--channels=2"]);
+      player.stdin.on("error", () => {});
+      player.stdin.end(tone);
+    },
+    stop() {
+      player?.kill();
+      execFileSync("pactl", ["unload-module", module]);
+    },
+  };
+}
+
+/* Xvfb picks a free display itself and says which on fd 3, so parallel
+   tests never share one. */
+async function startDisplay() {
+  const xvfb = spawn("Xvfb", ["-displayfd", "3", "-screen", "0", "800x600x24", "-nolisten", "tcp", "-noreset"], {
+    stdio: ["ignore", "ignore", "ignore", "pipe"],
+  });
+  const display = await new Promise((resolve, reject) => {
+    let out = "";
+    xvfb.stdio[3].on("data", (b) => {
+      out += String(b);
+      if (out.includes("\n")) resolve(":" + out.trim());
+    });
+    xvfb.on("exit", (code) => reject(new Error(`Xvfb exited with ${code}`)));
+  });
+  const env = { ...process.env, DISPLAY: display, WAYLAND_DISPLAY: "" };
+  const xev = spawn("xev", ["-geometry", "300x200+400+300"], { env });
+  let events = "";
+  xev.stdout.on("data", (b) => (events += String(b)));
+  await expect.poll(() => events).toContain("MapNotify");
+  return {
+    env,
+    events: () => events,
+    clipboard: () => execFileSync("xsel", ["-b", "-o"], { env, encoding: "utf8" }),
+    copy: (text) => execFileSync("xsel", ["-b", "-i"], { env, input: text }),
+    stop() {
+      xev.kill();
+      xvfb.kill();
+    },
+  };
+}
+
+/* A page on the server, as a browser on another machine sees it. */
+async function remotePage(browser, server, init, options = {}) {
+  const context = await browser.newContext({
+    extraHTTPHeaders: { "X-Forwarded-For": "192.0.2.10" },
+    permissions: ["clipboard-read", "clipboard-write"],
+    ...options,
+  });
+  // Counts the sound the page plays (Playwright's Chromium is muted).
+  await context.addInitScript(() => {
+    window.soundStarts = 0;
+    const start = AudioBufferSourceNode.prototype.start;
+    AudioBufferSourceNode.prototype.start = function (...args) {
+      window.soundStarts++;
+      return start.apply(this, args);
+    };
+  });
+  const page = await context.newPage();
+  if (init) await page.addInitScript(init);
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto(server.url);
+  return { page, context, errors };
+}
+
+/* The canvas pixel at a screen position, read back from what was drawn. */
+function pixel(page, x, y) {
+  return page.getByTestId("screen-canvas").evaluate((canvas, [sx, sy]) => {
+    const k = canvas.width / 800;
+    return [...canvas.getContext("2d").getImageData(Math.floor(sx * k), Math.floor(sy * k), 1, 1).data].slice(0, 3);
+  }, [x, y]);
+}
+
+/* Where a screen position is on the page. */
+async function at(page, x, y) {
+  const box = await page.getByTestId("screen-canvas").boundingBox();
+  return [box.x + (x / 800) * box.width, box.y + (y / 600) * box.height];
+}
+
+/* Each codec as the browser that gets it: Chromium decodes VP9 with full
+   colour; one that cannot decode profile 1 gets 4:2:0; one without WebCodecs
+   gets JPEG bands. */
+const browsers = {
+  "vp9-444": undefined,
+  vp9: () => {
+    const supported = VideoDecoder.isConfigSupported.bind(VideoDecoder);
+    VideoDecoder.isConfigSupported = async (config) =>
+      config.codec.startsWith("vp09.01") ? { supported: false, config } : supported(config);
+  },
+  jpeg: () => {
+    delete window.VideoDecoder;
+  },
+};
+
+for (const [codec, setup] of Object.entries(browsers)) {
+  const label = codec.toUpperCase().replace("-444", " 4:4:4");
+  test(`screen tab shows and drives another machine (${codec})`, async ({ browser }) => {
+    test.skip(!haveX, "needs Xvfb, xev and xsel");
+    const x = await startDisplay();
+    // The sound comes from a sink of the test's own, or from no server at all.
+    const sink = haveSound ? startSink() : null;
+    const sound = sink ? { PULSE_SOURCE: sink.source } : { PULSE_SERVER: "unix:/nonexistent" };
+    const server = await startServer({ env: { DISPLAY: x.env.DISPLAY, WAYLAND_DISPLAY: "", ...sound } });
+    const { page, context, errors } = await remotePage(browser, server, setup);
+    const feedback = [];
+    page.on("request", (request) => {
+      if (request.method() === "POST" && request.url().includes("/api/screen/input")) {
+        const body = request.postDataJSON();
+        if (body.received) feedback.push(body);
+      }
+    });
+    try {
+      await addProject(page);
+      await newTask(page);
+      if (codec === "jpeg") {
+        await page.request.put(server.url + "/api/screen", { data: { enabled: false } });
+      }
+      await page.getByRole("button", { name: "View and control this machine's screen" }).click();
+      if (codec === "jpeg") {
+        await expect(page.getByText(/Screen sharing is off on/)).toBeVisible();
+        await page.getByRole("button", { name: "Turn on screen sharing" }).click();
+      }
+
+      await expect(page.getByTestId("screen-summary")).toContainText(`${label} ·`);
+      await expect(page.getByTestId("screen-summary")).toContainText("800×600");
+      await expect.poll(async () => {
+        const inside = await pixel(page, 600, 450);
+        const outside = await pixel(page, 50, 50);
+        return inside.every((v) => v > 200) && outside.every((v) => v < 60);
+      }, { message: "the white xev window is drawn where it is" }).toBe(true);
+      await expect.poll(() => feedback.length).toBeGreaterThan(0);
+      expect(feedback[0].received.seq).toBeGreaterThan(0);
+      expect(feedback[0].received.at).toBeGreaterThan(0);
+      expect(feedback[0].received.kbps).toBeGreaterThanOrEqual(0);
+      expect(feedback[0].ack).toBeGreaterThan(0);
+
+      // A click and a key reach the xev window on the other end.
+      const [px, py] = await at(page, 550, 400);
+      await page.mouse.click(px, py, { button: "right" });
+      await expect.poll(x.events).toMatch(/ButtonPress[\s\S]*button 3/);
+      await page.keyboard.type("q");
+      await expect.poll(x.events).toContain("keysym 0x71, q");
+
+      // The machine's sound plays here, and stops when muted.
+      const soundButton = page.getByTestId("screen-sound");
+      if (sink) {
+        sink.play();
+        await expect.poll(() => page.evaluate(() => window.soundStarts), { message: "sound plays" }).toBeGreaterThan(10);
+        await soundButton.click();
+        await expect(soundButton).toHaveAttribute("title", "Play the sound");
+        const muted = await page.evaluate(() => window.soundStarts);
+        await page.waitForTimeout(300);
+        expect(await page.evaluate(() => window.soundStarts)).toBe(muted);
+      } else {
+        await expect(soundButton).toHaveAttribute("title", /^No sound: /);
+      }
+
+      // The other machine's clipboard comes to this one...
+      x.copy("copied over there");
+      await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("copied over there");
+      // ...and this one's goes there ahead of the paste keystroke.
+      await page.evaluate(() => navigator.clipboard.writeText("pasted from here"));
+      await page.keyboard.press("Control+V");
+      await expect.poll(x.clipboard).toBe("pasted from here");
+      await expect.poll(x.events).toContain("keysym 0x76, v");
+
+      // Full screen, and back.
+      await page.getByRole("button", { name: "Full screen" }).click();
+      await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(true);
+      // Its bar is dragged out of the way, and stays on screen. Its size
+      // does not follow what the summary says.
+      const bar = page.getByTestId("screen-bar");
+      await page.mouse.move(0, 0);
+      await expect(bar).toHaveCSS("opacity", "0.7");
+      const before = await bar.boundingBox();
+      await page.mouse.move(before.x + 4, before.y + before.height / 2);
+      await expect(bar).toHaveCSS("cursor", "move");
+      await page.mouse.down();
+      await page.mouse.move(before.x - 5000, before.y + before.height / 2 + 300, { steps: 4 });
+      await page.mouse.up();
+      const after = await bar.boundingBox();
+      expect(after.x).toBe(0);
+      expect(after.y).toBeCloseTo(before.y + 300, 0);
+      await expect.poll(async () => (await page.getByTestId("screen-summary").innerText()).includes(" 0 fps · 0 kbps"), { timeout: 10_000 }).toBe(true);
+      const still = await bar.boundingBox();
+      expect([still.width, still.height]).toEqual([before.width, before.height]);
+      await bar.hover({ position: { x: 4, y: 4 } });
+      await expect(bar).toHaveCSS("opacity", "1");
+      await page.getByRole("button", { name: "Exit full screen" }).click();
+      await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(false);
+
+      // An unchanged screen sends nothing more.
+      await expect.poll(async () => (await page.getByTestId("screen-summary").innerText()).includes(" 0 fps"), { timeout: 10_000 }).toBe(true);
+      expect(errors).toEqual([]);
+    } finally {
+      await context.close();
+      await server.stop();
+      sink?.stop();
+      x.stop();
+    }
+  });
+}
+
+test("a tablet taps where it clicks and brings up its keyboard", async ({ browser }) => {
+  test.skip(!haveX, "needs Xvfb, xev and xsel");
+  const x = await startDisplay();
+  // No sound server, so the machine's own sound is never recorded.
+  const server = await startServer({ env: { DISPLAY: x.env.DISPLAY, WAYLAND_DISPLAY: "", PULSE_SERVER: "unix:/nonexistent" } });
+  const { page, context, errors } = await remotePage(browser, server, undefined, { hasTouch: true, viewport: { width: 1180, height: 820 } });
+  try {
+    await addProject(page);
+    await newTask(page);
+    await page.getByRole("button", { name: "View and control this machine's screen" }).click();
+    await expect(page.getByTestId("screen-summary")).toContainText("800×600");
+
+    // Trackpad is the default; touching where you click is the other mode.
+    await page.getByRole("button", { name: "Touch as trackpad" }).click();
+    const [px, py] = await at(page, 550, 400);
+    await page.touchscreen.tap(px, py);
+    await expect.poll(x.events).toMatch(/ButtonPress[^\n]*\n[^\n]*root:\(550,400\),\n[^\n]*button 1,/);
+
+    await page.getByRole("button", { name: "Show the keyboard" }).click();
+    await expect(page.getByLabel("Keyboard input for the remote screen")).toBeFocused();
+    expect(errors).toEqual([]);
+  } finally {
+    await context.close();
+    await server.stop();
+    x.stop();
+  }
+});
+
+test("no Screen button on the machine itself", async ({ page }) => {
+  await page.route("**/api/screen", route => route.fulfill({
+    json: { enabled: true, available: true, same_machine: true },
+  }));
+  await page.reload();
+  await addProject(page);
+  await newTask(page);
+  await expect(page.getByRole("button", { name: "Open a terminal in the project folder" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "View and control this machine's screen" })).toHaveCount(0);
+});
+
+test("a remote profile offers Screen even over loopback with no display", async ({ page, agenttik }) => {
+  const remote = await startServer({ env: { DISPLAY: "invalid-display", WAYLAND_DISPLAY: "" } });
+  try {
+    const state = await (await page.request.post(`${agenttik.url}/api/remotes`, { data: { address: remote.url } })).json();
+    await page.goto(`${agenttik.url}/?remote=${state.remote.id}`);
+    await addProject(page);
+    await newTask(page);
+    await page.getByRole("button", { name: "View and control this machine's screen" }).click();
+    await expect(page.getByText("No screen to show", { exact: true })).toBeVisible();
+  } finally {
+    await remote.stop();
+  }
+});
+
+test("a remote desktop connection offers Screen despite a loopback client address", async ({ page }) => {
+  await page.route("**/api/screen", route => route.fulfill({
+    headers: { "X-Agenttik-Remote": "http://office.example" },
+    json: { enabled: true, available: false, same_machine: true, reason: "No display connected" },
+  }));
+  await page.reload();
+  await addProject(page);
+  await newTask(page);
+  await page.getByRole("button", { name: "View and control this machine's screen" }).click();
+  await expect(page.getByText("No display connected", { exact: true })).toBeVisible();
+});

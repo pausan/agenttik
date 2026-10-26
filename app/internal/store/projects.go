@@ -401,7 +401,7 @@ func (s *Store) recentSessions(projectID int64, limit int) ([]SessionRef, error)
 		(SELECT COUNT(*) FROM queued_messages q WHERE q.session_id = s.id),
 		COALESCE((SELECT t.id FROM turns t WHERE t.session_id = s.id AND t.ended_at > 0
 		 ORDER BY t.id DESC LIMIT 1), 0),
-		s.schedule_id, ` +
+		s.schedule_id, s.flag, ` +
 		firstPromptCol + ` FROM sessions s
 		 WHERE s.project_id = ? AND s.done_at = 0 AND s.parent_id = ''
 		 ORDER BY s.position, s.last_active_at DESC`
@@ -420,7 +420,7 @@ func (s *Store) recentSessions(projectID int64, limit int) ([]SessionRef, error)
 	for rows.Next() {
 		var r SessionRef
 		if err := rows.Scan(&r.ID, &r.Title, &r.Status, &r.QueueCount,
-			&r.LastCompletedTurnID, &r.ScheduleID, &r.Prompt); err != nil {
+			&r.LastCompletedTurnID, &r.ScheduleID, &r.Flag, &r.Prompt); err != nil {
 			return nil, fmt.Errorf("recent sessions for project %d: %w", projectID, err)
 		}
 		refs = append(refs, r)

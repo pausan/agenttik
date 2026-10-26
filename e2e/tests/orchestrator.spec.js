@@ -143,8 +143,7 @@ test("control commands update live task and project views without reloading", as
   expect((await command(agenttik, "GET", `/api/sessions/${task.id}`)).queued).toHaveLength(0);
   await command(agenttik, "PATCH", `/api/sessions/${task.id}`, { done: true });
   await expect(sidebar(page).getByText("Command-created task", { exact: true })).toHaveCount(0);
-  await page.locator("main").getByRole("tab", { name: "Archived", exact: true }).click();
-  await expect(page.locator("main").getByTitle("Unarchive task")).toBeVisible();
+  await expect(page.locator("main").getByRole("region", { name: "Archived tasks" }).getByTitle("Unarchive task")).toBeVisible();
   await command(agenttik, "PATCH", `/api/projects/${project.id}`, { name: "Renamed by command" });
   await expect(page.getByRole("heading", { name: "Renamed by command", exact: true })).toBeVisible();
   await command(agenttik, "PATCH", `/api/projects/${project.id}`, { archived: true });

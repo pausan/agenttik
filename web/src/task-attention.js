@@ -49,11 +49,17 @@ export function taskDot(status, unread) {
 }
 
 // A task waiting on a tool approval needs the user as much as an unread one,
-// and a folded project shows no task rows to say so.
+// and a folded project shows no task rows to say so. A scheduled run counts as
+// running while its prompt is still queued, so in a paused project it is held
+// work, drawn as a clock, rather than a turn in flight.
 export function projectDot(project, unread, approvals = {}) {
-  const running = project.recent_sessions.some((task) => task.status === "running") ||
-    project.schedules.some((schedule) => schedule.running);
+  const working = project.recent_sessions.some((task) => task.status === "running");
+  const scheduled = project.schedules.some((schedule) => schedule.running);
+  const running = working || (scheduled && !project.queue_paused);
+  const held = project.queue_paused && !working &&
+    (scheduled || project.recent_sessions.some((task) => task.queue_count > 0));
   const attention = project.recent_sessions.some((task) =>
     approvals[task.id] || taskDot(task.status, unread[task.id]) === "unread");
-  return attention ? (running ? "unread-running" : "unread") : (running ? "running" : null);
+  if (attention) return running ? "unread-running" : "unread";
+  return running ? "running" : held ? "paused" : null;
 }

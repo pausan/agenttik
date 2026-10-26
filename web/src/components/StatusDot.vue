@@ -1,7 +1,8 @@
 <script setup>
 /* The one-glance state of a session: running pulses, idle is quiet, and
    waiting is the amber in between — work accepted that a provider being away
-   is holding back. See specs/045-provider-outage-retry.md. */
+   is holding back. See specs/045-provider-outage-retry.md. A paused project
+   holding work is a clock: nothing runs until it is resumed. */
 const props = defineProps({ status: { type: String, default: "idle" } });
 
 const colors = {
@@ -16,7 +17,8 @@ const colors = {
 </script>
 
 <template>
-  <span :title="status === 'unread-running' ? 'Unread completion · work running' : status === 'unread' ? 'Unread completion' : status === 'error' ? 'Task failed' : undefined" class="size-1.5 shrink-0 rounded-full" :class="colors[props.status] || colors.idle" />
+  <UIcon v-if="status === 'paused'" name="i-lucide-clock" class="size-3 shrink-0 text-dimmed" title="Paused · work waiting" />
+  <span v-else :title="status === 'unread-running' ? 'Unread completion · work running' : status === 'unread' ? 'Unread completion' : status === 'error' ? 'Task failed' : undefined" class="size-1.5 shrink-0 rounded-full" :class="colors[props.status] || colors.idle" />
 </template>
 
 <style scoped>

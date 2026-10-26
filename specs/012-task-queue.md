@@ -154,6 +154,12 @@ task's priority and restarts dispatch once active turns finish. Other projects
 keep running.
 Explicit Send, Send now and Force send still start work on request.
 
+While paused and no turn is running, a project still holding work — queued
+prompts, provider retries or a scheduled run waiting to start — shows a still
+clock in its sidebar row instead of the pulsing dot. A scheduled run counts as
+running from the moment it is queued, so without this a paused project would
+pulse with nothing working.
+
 `PATCH /api/projects/:id` accepts `queue_paused`. The flag is persisted across
 restarts and included in project detail and list responses. The runner changes
 it under the project's dispatch lock, which also guards the check before

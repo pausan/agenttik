@@ -182,3 +182,15 @@ test("project dots combine unread task attention with task and scheduled job act
   assert.equal(projectDot({ recent_sessions: [{ id: "a", status: "running" }], schedules: [] }, {}, { a: [{ id: "x" }] }),
     "unread-running");
 });
+
+test("a paused project holding work shows a clock instead of a pulse", () => {
+  const project = { queue_paused: true, recent_sessions: [{ id: "a", status: "idle", queue_count: 0 }], schedules: [{ running: true }] };
+  assert.equal(projectDot(project, {}), "paused");
+  assert.equal(projectDot(project, { a: 1 }), "unread");
+  project.schedules[0].running = false;
+  assert.equal(projectDot(project, {}), null);
+  project.recent_sessions[0].queue_count = 1;
+  assert.equal(projectDot(project, {}), "paused");
+  project.recent_sessions[0].status = "running";
+  assert.equal(projectDot(project, {}), "running");
+});

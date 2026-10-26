@@ -593,9 +593,16 @@ export function toggleTaskUnread(id) {
   else S.unreadTasks[id] = -1; // Manually unread, including tasks without turns.
   saveTaskAttention();
 }
+// A transcript the app brings forward by itself, such as a restored tab or
+// the neighbour of a closed one, has not been chosen, so it is not read.
+let autoSelecting = false;
+function selectAutomatically(select) {
+  autoSelecting = true;
+  try { select(); } finally { autoSelecting = false; }
+}
 trackTaskAttention(S.unreadTasks,
   () => S.tab?.kind === "session" ? S.tab.sessionID : null,
-  () => attentionVisible.value, saveTaskAttention);
+  () => attentionVisible.value, saveTaskAttention, () => autoSelecting);
 
 /* ------------------------------------------------------------------ tabs */
 
@@ -949,7 +956,7 @@ export async function closeTab(id, remember = true, force = false, cascade = tru
   if (S.activeTab === id || !S.tabs.some((t) => t.id === S.activeTab)) {
     const left = S.tabs.filter((t) => projectOfTab(t) === projectID);
     const next = left[Math.min(at, left.length - 1)];
-    if (next) selectTab(next.id);
+    if (next) selectAutomatically(() => selectTab(next.id));
     else {
       S.activeTab = "";
       // Emptying a workspace falls back to its project page, which is where
@@ -2725,11 +2732,13 @@ async function restoreOpenTabs() {
   restoringTabs = true;
   try {
     const loaded = await Promise.all(saved.tabs.map(loadSavedTab));
-    for (const show of loaded) show?.();
-    if (S.projects.some((p) => p.id === saved.activeProjectID)) {
-      S.activeProjectID = saved.activeProjectID;
-    }
-    if (S.tabs.some((tab) => tab.id === saved.activeTab)) selectTab(saved.activeTab);
+    selectAutomatically(() => {
+      for (const show of loaded) show?.();
+      if (S.projects.some((p) => p.id === saved.activeProjectID)) {
+        S.activeProjectID = saved.activeProjectID;
+      }
+      if (S.tabs.some((tab) => tab.id === saved.activeTab)) selectTab(saved.activeTab);
+    });
   } finally {
     restoringTabs = false;
     saveOpenTabs();

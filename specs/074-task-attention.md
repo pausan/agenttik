@@ -11,11 +11,16 @@ dot pulses while a task or scheduled job in that project is running. Without
 unread task attention, running projects keep the primary activity pulse and
 inactive projects have no dot. Folding a project does not hide its indicator.
 
-Reading means keeping the task transcript selected in a visible window for
-three continuous seconds. Clicking and keyboard navigation behave alike.
-Leaving the transcript or hiding the window cancels the timer. A completion
-that arrives while reading starts a fresh three seconds. Reading clears the
-bold title and returns the dot to its normal status.
+Reading means choosing the task transcript and keeping it selected in a
+visible window for three continuous seconds. Clicking and keyboard navigation
+behave alike. Leaving the transcript or hiding the window cancels the timer.
+Reading clears the bold title and returns the dot to its normal status.
+
+Only a visit the user chose reads. A completion that arrives while the task
+is already selected stays unread until the user leaves and returns, so a run
+left alone in front is still unread when the user comes back. A transcript
+the app selects by itself — tabs restored on load or profile return, or the
+neighbour shown after closing a tab — is held the same way.
 
 The store records final persisted `done` stream events, including tasks with
 no open tab. A new turn clears the previous unread result. One Vue watcher
@@ -30,9 +35,9 @@ not select the task; deletion keeps the existing confirmation. During inline
 rename the text field keeps its native context menu.
 
 Mark unread works even without a completed turn. On the selected task it holds
-until leaving and returning to the transcript; hiding the window alone does
-not clear it. A new turn or completion replaces that manual state. Manual
-unread uses `-1` alongside positive unread turn IDs.
+until leaving and returning to the transcript, like a completion; hiding the
+window alone does not clear it. A new turn or completion replaces that manual
+state. Manual unread uses `-1` alongside positive unread turn IDs.
 
 Unread markers are saved through instance/profile-scoped UI storage and
 restored on reload. The client also saves each known task's latest completed
@@ -46,9 +51,10 @@ Results superseded by a running turn are skipped. Older remote servers without
 completion IDs keep live-event behaviour. Private mode uses memory storage.
 Read state is local to this client.
 
-`task-attention.test.js` checks interrupted visits, hidden windows, new results,
-completion during viewing, missed completions, and persistent error coloring.
-Browser tests cover menu toggles without selecting the task and automatic
-reading after opening a task. They also switch profiles during
-selected and unselected tasks, check unread persistence on return and reload,
-then read and reload the result.
+`task-attention.test.js` checks interrupted visits, hidden windows, completion
+during viewing, app-made selections, missed completions, and persistent error
+coloring. Browser tests cover menu toggles without selecting the task,
+automatic reading after opening a task, and a result finishing on the
+selected task. They also switch profiles during selected and unselected tasks,
+check that the restored transcript stays unread, check persistence on return
+and reload, then read and reload the result.

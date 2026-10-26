@@ -615,6 +615,21 @@ test("task menus toggle read without selecting and preserve automatic reading", 
   await expect(title).not.toHaveClass(/font-bold/, { timeout: 5000 });
 });
 
+test("a result that finishes on the selected task stays unread until the user returns", async ({ page }) => {
+  await addProject(page);
+  await openProject(page);
+  await newTask(page);
+  const row = sidebar(page).locator(".task-row").first();
+  const title = row.locator(".task-title");
+  await sendPrompt(page, "@wait 500\nFinished while watched");
+  await expect(title).toHaveClass(/font-bold/);
+  await page.waitForTimeout(3200);
+  await expect(title).toHaveClass(/font-bold/);
+  await openProject(page);
+  await row.locator(".task-select").click();
+  await expect(title).not.toHaveClass(/font-bold/, { timeout: 5000 });
+});
+
 test("task dots cycle marks, even while running, and marks lead the archive", async ({ page }) => {
   await addProject(page);
   await openProject(page);
@@ -654,9 +669,9 @@ test("task dots cycle marks, even while running, and marks lead the archive", as
   await expect(flag).toHaveAttribute("data-flag", "warn");
 
   // A newer unmarked archived task still sorts below the marked one, and an
-  // unread mark keeps the bold title.
-  await row.click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Mark unread", exact: true }).click();
+  // unread mark keeps the bold title. The stopped turn ended while its task
+  // was in front, so it is still unread.
+  await expect(row.locator(".task-title")).toHaveClass(/font-bold/);
   await row.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Archive task", exact: true }).click();
   await newTask(page);

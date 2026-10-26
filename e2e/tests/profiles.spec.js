@@ -77,7 +77,9 @@ for (const selected of [true, false]) {
     }).toBe(false);
     await paletteSwitch(page, "Default");
     await expect(row.locator(".task-title")).toHaveClass(/font-bold/);
-    // Leave the restored transcript before its three-second acknowledgement.
+    // A restored transcript was not chosen by the user, so it is not read.
+    await page.waitForTimeout(3200);
+    await expect(row.locator(".task-title")).toHaveClass(/font-bold/);
     await sidebar(page).getByText("Personal project", { exact: true }).click();
     await page.waitForTimeout(3200);
     await expect(row.locator(".task-title")).toHaveClass(/font-bold/);

@@ -8,6 +8,11 @@ export function terminalOutput(term, onInput, onDraw) {
   let queued = [];
   let drawing = null;
   let disposed = false;
+  // Set by a scrollback clear until its output has settled. xterm shrinks its
+  // scroll area a frame later, and the browser's clamped scroll event then
+  // reads as the user scrolling up, pinning the view to the top of the
+  // scrollback as more output arrives.
+  let following = false;
   const query = () => {
     answeringReplay = replaying;
     queueMicrotask(() => { answeringReplay = false; });
@@ -23,7 +28,10 @@ export function terminalOutput(term, onInput, onDraw) {
   handlers.push(term.parser.registerCsiHandler({ final: "J" }, params => {
     // Clearing scrollback also ends reading old output. Otherwise xterm can
     // leave the new output pinned to the top of its buffer after `clear`.
-    if (params[0] === 3) queueMicrotask(() => { if (!disposed) term.scrollToBottom(); });
+    if (params[0] === 3) {
+      following = true;
+      queueMicrotask(() => { if (!disposed) term.scrollToBottom(); });
+    }
     return false;
   }));
   handlers.push(term.parser.registerDcsHandler({ intermediates: "$", final: "q" }, query));
@@ -42,10 +50,19 @@ export function terminalOutput(term, onInput, onDraw) {
     term.write(bytes, () => {
       replaying = false;
       answeringReplay = false;
+      if (following && !disposed) term.scrollToBottom();
       if (!disposed) onDraw?.();
       resolve();
     });
   });
+  // Once the output after a clear has stopped, the late scroll event comes
+  // within two frames; scrolling after them leaves the view at the bottom.
+  const nextFrame = globalThis.requestAnimationFrame ?? (callback => setTimeout(callback, 16));
+  const settle = () => nextFrame(() => nextFrame(() => {
+    if (disposed || drawing) return; // more output came, and its drain settles
+    term.scrollToBottom();
+    following = false;
+  }));
   // Frames that arrive while one is drawn go to xterm together. One write per
   // frame paid a clamped timer each, which made a long listing crawl.
   const batchBytes = 128 << 10;
@@ -64,6 +81,7 @@ export function terminalOutput(term, onInput, onDraw) {
     }
     queued = [];
     drawing = null;
+    if (following && !disposed) settle();
   };
 
   return {

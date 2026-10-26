@@ -79,6 +79,30 @@ test("clearing scrollback resumes following output without replacing erase handl
   strictEqual(term.bottomScrolls, 1);
 });
 
+test("output after a scrollback clear stays at the bottom until it settles", async () => {
+  const term = emulator();
+  const output = terminalOutput(term, () => {});
+  output.write("clear", false, false);
+  term.erase(3);
+  await Promise.resolve();
+  strictEqual(term.bottomScrolls, 1);
+  // The listing that follows the clear keeps the bottom in view as it draws.
+  output.write("seq", false, false);
+  term.writes[0].callback();
+  await new Promise(resolve => setTimeout(resolve));
+  strictEqual(term.bottomScrolls, 2);
+  term.writes[1].callback();
+  await new Promise(resolve => setTimeout(resolve));
+  strictEqual(term.bottomScrolls, 3);
+  // Two frames after the output stops, once more, and then it is left alone.
+  await new Promise(resolve => setTimeout(resolve, 50));
+  strictEqual(term.bottomScrolls, 4);
+  output.write("later", false, false);
+  term.writes[2].callback();
+  await new Promise(resolve => setTimeout(resolve, 50));
+  strictEqual(term.bottomScrolls, 4);
+});
+
 test("queued live queries keep their replies and resets wait for previous writes", async () => {
   const term = emulator();
   const sent = [];

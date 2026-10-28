@@ -111,7 +111,11 @@ test.describe("phone", () => {
     await expect(prompt(page)).toHaveValue("");
     await prompt(page).fill("API draft");
 
-    await selectProject(page, "Website");
+    // Coming back to a project goes back to the task left open there.
+    await projectsButton(page).tap();
+    await projectDrawer(page).getByRole("button", { name: /^Website/ }).tap();
+    await expect(projectDrawer(page)).toBeHidden();
+    await expect(prompt(page)).toHaveValue("Website draft");
     await projectsButton(page).tap();
     await projectDrawer(page).getByRole("button", { name: "Untitled task", exact: true }).tap();
     await expect(projectDrawer(page)).toBeHidden();

@@ -7,7 +7,7 @@ import {
   TAB_CHORDS,
   defaultProjectID,
   openInSystem,
-  openProject,
+  pickProject,
   openSchedule,
   pickTask,
   renameSchedule,
@@ -276,15 +276,14 @@ function onTaskDrop(e, projectID, overID) {
                   class="size-3.5 block text-dimmed"
                 />
               </button>
-              <!-- A click on the row opens the project's own page, selected or
-                   not: it is the overview, and the only way back to it once a
-                   conversation is open on top. Alt and the project's letter is
-                   the way to the work instead. -->
+              <!-- A click on another project's row goes back to where that
+                   project was left; on the selected one it opens the page,
+                   the only way back to it once a conversation is on top. -->
               <button
                 type="button"
                 class="min-w-0 flex-1 text-left"
                 :title="projectKey(i) ? `${p.name}  (Alt+${projectKey(i)})` : p.name"
-                @click="navigate(openProject, p.id)"
+                @click="navigate(pickProject, p.id)"
               >
                 <span class="flex items-center gap-1.5">
                   <span

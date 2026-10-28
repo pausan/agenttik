@@ -13,7 +13,7 @@ import {
   currentProjectID,
   isModelChoiceVisible,
   modelAccountLabel,
-  openProject,
+  pickProject,
   openScreen,
   openTask,
   providerOf,
@@ -77,7 +77,7 @@ const projectItems = computed(() =>
     label: project.name,
     description: project.path,
     icon: "i-lucide-folder",
-    onSelect: () => choose(() => openProject(project.id)),
+    onSelect: () => choose(() => pickProject(project.id)),
   })),
 );
 

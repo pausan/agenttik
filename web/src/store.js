@@ -841,23 +841,34 @@ export function selectAdjacentTab(step) {
   selectTab(strip[at < 0 ? (step > 0 ? 0 : n - 1) : (at + step + n) % n].id);
 }
 
-/* switchProject is Alt+A … Alt+H: the strip becomes that project's, on the
-   work rather than on its page. The task it lands on is the last one opened
-   there — the session in the project's context slot, since opening another
-   replaces it — and otherwise the top of its task list, which is the one
-   Alt+1 reaches. Only a project with no tasks at all shows its own page,
-   where the first one is started from; a click on the project row is the way
-   back to that page. */
+/* switchProject is how a project is reached, by Alt+A … Alt+H or a click on
+   a row not already selected: the strip becomes that project's, on whatever
+   was last left in its context slot — a task, a job or the page itself, since
+   opening any of them replaces the one before. A project not visited yet
+   lands on the top of its task list, the one Alt+1 reaches, and only a
+   project with no tasks shows its page. The cursor goes to the prompt, when
+   what comes up has one. */
 export async function switchProject(id) {
   S.activeProjectID = id;
-  const open = S.tabs.find((t) => t.kind === "session" && projectOfTab(t) === id);
-  if (open) return selectTab(open.id);
-  // Nothing is in front while the view is fetched: the strip is already this
-  // project's, and the tab that was showing belongs to the one left behind.
-  S.activeTab = "";
-  const first = S.projects.find((p) => p.id === id)?.recent_sessions[0];
-  if (first) return openTask(first.id);
-  await openProject(id);
+  const context = S.tabs.find((t) => isContextTab(t) && projectOfTab(t) === id);
+  if (context) selectTab(context.id);
+  else {
+    // Nothing is in front while the view is fetched: the strip is already
+    // this project's, and the tab that was showing belongs to the one left.
+    S.activeTab = "";
+    const first = S.projects.find((p) => p.id === id)?.recent_sessions[0];
+    if (first) await openTask(first.id);
+    else await openProject(id);
+  }
+  await nextTick();
+  focusPrompt();
+}
+
+/* A click on a project row, or its Command Palette entry: another project is
+   switched to, back where it was left; the project already showing opens its
+   page, which is the way back to the overview once a task is on top. */
+export function pickProject(id) {
+  return S.activeProjectID === id ? openProject(id) : switchProject(id);
 }
 
 /* Alt+A … Alt+H address the first eight projects by where they sit in the

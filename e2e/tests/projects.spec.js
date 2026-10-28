@@ -280,3 +280,50 @@ test("project stats aggregate over every task", async ({ page }) => {
   }
   await expect(page.getByText("$0.0000")).toBeVisible();
 });
+
+test("a project row goes back to where that project was left, with the cursor in the prompt", async ({ page }) => {
+  await addProject(page, REPO + "/app");
+  await addProject(page, REPO + "/web");
+  const app = sidebar(page).getByText(REPO + "/app", { exact: true });
+  const web = sidebar(page).getByText(REPO + "/web", { exact: true });
+  const prompt = page.getByPlaceholder("Ask the agent…");
+  const pageTitle = page.getByPlaceholder("Filter tasks");
+
+  await openProject(page, REPO + "/app");
+  await newTask(page);
+  await pickModel(page);
+  await sendPrompt(page, "left open");
+  await expect(sidebar(page).getByText("left open")).toBeVisible();
+
+  // A project with no tasks shows its page.
+  await web.click();
+  await expect(pageTitle).toBeVisible();
+  await expect(prompt).toHaveCount(0);
+
+  // Coming back lands on the task, ready to type.
+  await app.click();
+  await expect(prompt).toBeVisible();
+  await expect(prompt).toBeFocused();
+  await expect(pageTitle).toHaveCount(0);
+
+  // The selected project's row opens its page, and that is remembered too.
+  await app.click();
+  await expect(pageTitle).toBeVisible();
+  await web.click();
+  await app.click();
+  await expect(pageTitle).toBeVisible();
+  await expect(prompt).toHaveCount(0);
+
+  // Alt and the project's letter follow the same rule.
+  await sidebar(page).getByText("left open").click();
+  await expect(prompt).toBeFocused();
+  await web.click();
+  await expect(pageTitle).toBeVisible();
+  await page.keyboard.press(`Alt+${await letterOf(page, REPO + "/app")}`);
+  await expect(prompt).toBeFocused();
+});
+
+async function letterOf(page, path) {
+  const row = sidebar(page).locator(".sidebar-project").filter({ hasText: path });
+  return (await row.locator("span.font-mono").first().innerText()).trim();
+}

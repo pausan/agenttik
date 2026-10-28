@@ -535,6 +535,11 @@ test("new task choices stay with their project across reloads", async ({ page })
   await page.reload();
   await expect(modelButton(page)).toContainText("Fake Careful");
 
+  // The first click goes back to the task left in project A, the second to
+  // its page.
+  await sidebar(page).getByText(REPO, { exact: true }).click();
+  await expect(page.getByPlaceholder("Ask the agent…")).toHaveValue("keep project A task");
+  await expect(modelButton(page)).toContainText("Fake Quick");
   await sidebar(page).getByText(REPO, { exact: true }).click();
   const created = page.waitForRequest((r) => r.method() === "POST" && r.url().endsWith("/api/sessions"));
   await newTask(page);

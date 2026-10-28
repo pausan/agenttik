@@ -99,8 +99,11 @@ session, as `routeRemote` does).
   that drops is reopened after 1 s, doubling to 30 s. When it comes back, a
   `projects_changed` event makes the window read the lists again.
 - **Unreachable machines.** A list waits at most 4 s for a source. A remote
-  that fails is skipped for 20 s. Only this machine's Default failing fails a
-  list. A remote that wants sign-in answers 503, telling the user to sign in
+  that fails or takes longer is skipped until it answers again: every 20 s,
+  the first request that would use it starts a background `GET /api/version`
+  instead, and no request waits on it. Once the probe answers, the window's
+  stream reopens on the remote and its `projects_changed` reads the lists
+  again. Only this machine's Default failing fails a list. A remote that wants sign-in answers 503, telling the user to sign in
   from Settings → Profiles, rather than 401: the flat view cannot open one
   machine's sign-in dialog for another.
 - **Where the browser is.** A request for this machine's own profiles runs
@@ -125,7 +128,7 @@ browser on another device, a flat order that mixes profiles and leaves theirs
 alone, hiding and restoring in the flat view only, where unplaced projects
 go, an unknown source, task lookup after a restart,
 the merged stream carrying a remote's event, lists that do not wait on a
-stopped remote, image copies, stable distinct codes and the orchestrator's
+stopped remote, a machine that is off probed in the background and back once it answers, image copies, stable distinct codes and the orchestrator's
 flat context. `e2e/tests/flat-view.spec.js` opens the flat view from the
 picker, checks the source labels, runs a task on a remote's project and finds
 it on that machine, checks the labels in the phone drawer, drags a

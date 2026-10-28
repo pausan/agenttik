@@ -38,8 +38,9 @@ const (
 	flatBits    = 16
 	flatMask    = 1<<flatBits - 1
 	flatTimeout = 4 * time.Second
-	// A remote that did not answer is skipped for this long, so one machine
-	// that is off does not slow every list.
+	// A remote that did not answer is skipped, so one machine that is off
+	// does not slow every list. It is asked again this often, in the
+	// background.
 	flatDown = 20 * time.Second
 )
 
@@ -69,7 +70,7 @@ type flatState struct {
 	sessions  map[string]string    // task or thread ID -> source key
 	terminals map[string]string    // terminal ID -> source key
 	copied    map[string]bool      // source key + attachment name, already uploaded
-	down      map[string]time.Time // remote ID -> when to try it again
+	down      map[string]time.Time // remote ID -> when to probe it again
 }
 
 func (f *flatState) remember(m *map[string]string, id, key string) {
@@ -90,10 +91,20 @@ func (f *flatState) lookup(m map[string]string, id string) string {
 	return m[id]
 }
 
-func (f *flatState) isDown(remote string) bool {
+// skip reports whether a remote is known not to answer. Once its pause is
+// over, the first caller is told to probe it; the rest keep skipping it.
+func (f *flatState) skip(remote string) (skip, probe bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return time.Now().Before(f.down[remote])
+	retry, down := f.down[remote]
+	if !down {
+		return false, false
+	}
+	if time.Now().Before(retry) {
+		return true, false
+	}
+	f.down[remote] = time.Now().Add(flatDown)
+	return true, true
 }
 
 func (f *flatState) markDown(remote string, down bool) {
@@ -458,7 +469,10 @@ func (s *Server) flatDo(ctx context.Context, src flatSource, req flatRequest) (*
 		}
 		return s.flatLocal(req.method, target, req.body, header), nil
 	}
-	if s.flat.isDown(src.Remote) {
+	if skip, probe := s.flat.skip(src.Remote); skip {
+		if probe {
+			go s.flatProbe(src.Remote)
+		}
 		return nil, errors.New(src.Machine + " is not answering")
 	}
 	r, err := s.remotes.get(src.Remote)
@@ -471,7 +485,9 @@ func (s *Server) flatDo(ctx context.Context, src flatSource, req flatRequest) (*
 	}
 	res, err := s.remotes.request(ctx, r, req.method, target, body, req.header)
 	if err != nil {
-		if ctx.Err() == nil {
+		// A window that went away says nothing about the remote; a remote
+		// that took too long does.
+		if !errors.Is(ctx.Err(), context.Canceled) {
 			s.flat.markDown(src.Remote, true)
 		}
 		return nil, err
@@ -485,6 +501,24 @@ func (s *Server) flatDo(ctx context.Context, src flatSource, req flatRequest) (*
 			Body:   io.NopCloser(strings.NewReader(`{"error":` + strconv.Quote("Sign in to "+src.Machine+" in Settings → Profiles") + `}`))}, nil
 	}
 	return res, nil
+}
+
+// flatProbe asks a remote that stopped answering whether it is back, away
+// from any window's request. A flat window hears of it from its stream, which
+// reopens on the remote and makes the window read the lists again.
+func (s *Server) flatProbe(id string) {
+	r, err := s.remotes.get(id)
+	if err != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), flatTimeout)
+	defer cancel()
+	res, err := s.remotes.request(ctx, r, "GET", "/api/version", nil, nil)
+	if err != nil {
+		return
+	}
+	res.Body.Close()
+	s.flat.markDown(id, false)
 }
 
 // flatLocal runs a request through this app in process, as routeProfile hands

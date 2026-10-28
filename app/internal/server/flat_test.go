@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -276,6 +277,74 @@ func TestFlatViewIncludesRemoteMachines(t *testing.T) {
 		t.Fatalf("lists waited %v on a stopped machine", time.Since(start))
 	}
 	_ = remoteStore
+}
+
+func TestFlatViewProbesAMachineThatIsOffInTheBackground(t *testing.T) {
+	remoteSrv, _ := newTestServer(t)
+	made := decode[store.Project](t, do(t, remoteSrv, "POST", "/api/projects", map[string]string{"path": t.TempDir(), "name": "Far"}))
+	address := listen(t, remoteSrv)
+	local, _ := newTestServer(t)
+	id := decode[remoteState](t, do(t, local, "POST", "/api/remotes", map[string]string{"address": address})).Remote.ID
+	listed := func() bool {
+		for _, p := range flatProjects(t, local) {
+			if p.Name == made.Name && p.Source.Remote {
+				return true
+			}
+		}
+		return false
+	}
+	setAddress := func(a string) {
+		if _, err := local.remotes.update(id, func(r *savedRemote) { r.Address, r.Addresses = a, nil }); err != nil {
+			t.Fatal(err)
+		}
+	}
+	expire := func() {
+		local.flat.mu.Lock()
+		local.flat.down[id] = time.Now().Add(-time.Second)
+		local.flat.mu.Unlock()
+	}
+
+	// A machine that takes connections and never answers.
+	hung, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer hung.Close()
+	go func() {
+		for {
+			conn, err := hung.Accept()
+			if err != nil {
+				return
+			}
+			defer conn.Close()
+		}
+	}()
+	setAddress("http://" + hung.Addr().String())
+	local.flat.markDown(id, true)
+
+	// Once its pause is over, lists still do not wait for it.
+	expire()
+	start := time.Now()
+	if listed() || listed() {
+		t.Fatal("machine that is off listed")
+	}
+	if waited := time.Since(start); waited > time.Second {
+		t.Fatalf("lists waited %v on a machine that is off", waited)
+	}
+
+	// When it answers again, the probe brings it back.
+	setAddress("http://" + address)
+	expire()
+	if listed() {
+		t.Fatal("listed before the probe answered")
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for !listed() {
+		if time.Now().After(deadline) {
+			t.Fatal("machine not back after it answered")
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }
 
 func TestFlatViewCopiesImagesToTheProfileThatUsesThem(t *testing.T) {

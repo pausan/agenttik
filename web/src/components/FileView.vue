@@ -5,6 +5,8 @@
 
    Tree selections prefer Edit, with Preview for images, fonts and videos. Changes
    and commit file lists open Diff. The toggle changes the current tab's view.
+   Every text file has a Preview: what renders is rendered, and code is shown
+   coloured and read-only, so a diff can be swapped for the file it leaves.
 
    The bar underneath is the file's own: a conversation's prompt box has no
    business under a file, so MainPanel leaves it out and this takes its
@@ -12,7 +14,7 @@
 import { computed, inject, onMounted, onUnmounted, ref, watch } from "vue";
 import { vTabScroll } from "../tab-scroll";
 
-import { canPreview, isDirty, isFont, isImage, isMedia, isOutsideProject, isVideo, saveFile, setFileMode } from "../store";
+import { isDirty, isFont, isImage, isMedia, isOutsideProject, isVideo, saveFile, setFileMode } from "../store";
 import { langOf } from "../highlight";
 import { api, nf } from "../api";
 import { fileInfoLabel } from "../file-info";
@@ -73,11 +75,16 @@ watch(
   { immediate: true },
 );
 
-/* A file opened from a commit has one view. There is nothing to edit in a
-   revision that has already been made, and its text is not what is on disk,
-   so offering Edit or Preview would only show the wrong thing. */
+/* A file opened from a commit has no editor: there is nothing to edit in a
+   revision that has already been made. Its Preview reads the file at that
+   commit, not on disk. Git prints "Binary files … differ" for a file with no
+   text to preview, and an image's diff is already its two pictures. */
 const modes = computed(() => {
-  if (props.tab.commit) return [{ label: "Diff", value: "diff" }];
+  if (props.tab.commit) {
+    const items = [{ label: "Diff", value: "diff" }];
+    if (!media.value && !/^Binary files /m.test(props.tab.diff || "")) items.push({ label: "Preview", value: "preview" });
+    return items;
+  }
   if (props.tab.binary && !media.value) {
     const items = [{ label: "Hex", value: "hex" }];
     if (!outside.value) items.push({ label: "Diff", value: "diff" });
@@ -87,7 +94,7 @@ const modes = computed(() => {
   const items = media.value ? [] : [{ label: "Edit", value: "edit" }];
   // A file outside the project is in no repository of it: there is no diff.
   if (!outside.value) items.push({ label: "Diff", value: "diff" });
-  if (canPreview(props.tab.path)) items.push({ label: "Preview", value: "preview" });
+  items.push({ label: "Preview", value: "preview" });
   if (media.value) items.push({ label: "Hex", value: "hex" });
   return items;
 });

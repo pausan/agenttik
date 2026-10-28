@@ -498,38 +498,22 @@ type fileContent struct {
 }
 
 func (s *Server) projectFile(c *fiber.Ctx) error {
-	root, err := s.projectRoot(c)
-	if err != nil {
-		return err
-	}
+	var buf []byte
+	var size int64
+	var err error
 	rel := c.Query("path")
-	abs, err := resolveReadableFile(root, rel)
+	if c.Query("rev") != "" {
+		rel, buf, size, err = s.revisionFile(c)
+	} else {
+		buf, size, err = s.workingFile(c, rel)
+	}
 	if err != nil {
 		return err
 	}
-	info, err := os.Stat(abs)
-	if err != nil {
-		return badRequest("cannot read %s: %v", rel, err)
-	}
-	if info.IsDir() {
-		return badRequest("%s is a directory", rel)
-	}
-
-	f, err := os.Open(abs)
-	if err != nil {
-		return badRequest("cannot read %s: %v", rel, err)
-	}
-	defer f.Close()
-
-	buf := make([]byte, maxFileBytes)
-	n, err := io.ReadFull(f, buf)
-	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
-		return badRequest("cannot read %s: %v", rel, err)
-	}
-	buf = buf[:n]
+	n := len(buf)
 	// A preview cap can split a valid UTF-8 rune. Only trim an incomplete
 	// final rune; invalid bytes elsewhere must still open in Hex.
-	if c.Query("format") != "hex" && info.Size() > int64(n) && bytes.IndexByte(buf, 0) < 0 && !utf8.Valid(buf) {
+	if c.Query("format") != "hex" && size > int64(n) && bytes.IndexByte(buf, 0) < 0 && !utf8.Valid(buf) {
 		for trim := 1; trim < utf8.UTFMax && trim <= len(buf); trim++ {
 			if !utf8.FullRune(buf[len(buf)-trim:]) && utf8.Valid(buf[:len(buf)-trim]) {
 				buf = buf[:len(buf)-trim]
@@ -538,7 +522,7 @@ func (s *Server) projectFile(c *fiber.Ctx) error {
 		}
 	}
 
-	body := fileContent{Path: rel, Size: info.Size(), Partial: info.Size() > int64(n)}
+	body := fileContent{Path: rel, Size: size, Partial: size > int64(n)}
 	if c.Query("format") == "hex" || bytes.IndexByte(buf, 0) >= 0 || !utf8.Valid(buf) {
 		body.Binary = true
 		body.Hex = hex.EncodeToString(buf)
@@ -547,6 +531,77 @@ func (s *Server) projectFile(c *fiber.Ctx) error {
 		body.Content = string(buf)
 	}
 	return c.JSON(body)
+}
+
+// workingFile reads up to maxFileBytes of the file on disk, and its size.
+func (s *Server) workingFile(c *fiber.Ctx, rel string) ([]byte, int64, error) {
+	root, err := s.projectRoot(c)
+	if err != nil {
+		return nil, 0, err
+	}
+	abs, err := resolveReadableFile(root, rel)
+	if err != nil {
+		return nil, 0, err
+	}
+	info, err := os.Stat(abs)
+	if err != nil {
+		return nil, 0, badRequest("cannot read %s: %v", rel, err)
+	}
+	if info.IsDir() {
+		return nil, 0, badRequest("%s is a directory", rel)
+	}
+	f, err := os.Open(abs)
+	if err != nil {
+		return nil, 0, badRequest("cannot read %s: %v", rel, err)
+	}
+	defer f.Close()
+	buf := make([]byte, maxFileBytes)
+	n, err := io.ReadFull(f, buf)
+	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+		return nil, 0, badRequest("cannot read %s: %v", rel, err)
+	}
+	return buf[:n], info.Size(), nil
+}
+
+// revisionFile reads the file as one commit left it, for the preview of a
+// file opened from that commit: up to maxFileBytes of it, and its size.
+func (s *Server) revisionFile(c *fiber.Ctx) (string, []byte, int64, error) {
+	root, rel, _, err := s.previewFilePath(c)
+	if err != nil {
+		return "", nil, 0, err
+	}
+	rev := c.Query("rev")
+	if !isGitRepo(root) {
+		return "", nil, 0, badRequest("%s is not a git repository", root)
+	}
+	if !rawRev.MatchString(rev) {
+		return "", nil, 0, badRequest("invalid revision")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "--no-optional-locks", "show", rev+":"+filepath.ToSlash(filepath.Clean(rel)))
+	cmd.Dir = root
+	out := &head{max: maxFileBytes}
+	cmd.Stdout = out
+	if err := cmd.Run(); err != nil {
+		return "", nil, 0, fiber.NewError(fiber.StatusNotFound, fmt.Sprintf("%s is not in %s", rel, rev))
+	}
+	return rel, out.buf.Bytes(), out.size, nil
+}
+
+// head keeps the first max bytes of a command's output and counts the rest.
+type head struct {
+	buf  bytes.Buffer
+	max  int
+	size int64
+}
+
+func (w *head) Write(p []byte) (int, error) {
+	w.size += int64(len(p))
+	if room := w.max - w.buf.Len(); room > 0 {
+		w.buf.Write(p[:min(room, len(p))])
+	}
+	return len(p), nil
 }
 
 type savedFile struct {

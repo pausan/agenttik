@@ -18,10 +18,15 @@
 
    Raster images and fonts have no text to follow: their bytes come from the
    raw endpoint. FontPreview registers a face only while it is displayed.
-   Videos stream from their own endpoint, in ranges, through VideoPreview. */
+   Videos stream from their own endpoint, in ranges, through VideoPreview.
+
+   Any other text is shown as it reads in the editor, coloured, but as a page
+   rather than a field: nothing to type into, and selecting it is copying. */
 import { computed, ref, watch } from "vue";
 import { profileID, remoteID } from "../api";
 import { htmlPreviewDocument, htmlPreviewURL } from "../html-preview";
+import { highlight, langOf } from "../highlight";
+import { largeFile } from "../file-editor";
 
 import MarkdownContent from "./MarkdownContent.vue";
 import { fail, htmlPreviewToken, isFont, isImage, isVideo, rawURL, S } from "../store";
@@ -57,6 +62,10 @@ const html = computed(() => isHTML.value && token.value ? htmlPreviewDocument(te
 
 /* A data URL keeps the markup exact without a base64 round trip, and costs
    one encode per keystroke on a file small enough to be drawn as a picture. */
+const markdown = computed(() => /\.(md|markdown)$/i.test(props.tab.path));
+// A file too large to colour in the editor is not coloured here either.
+const code = computed(() => markdown.value ? "" : highlight(text.value, largeFile(text.value) ? "" : langOf(props.tab.path)));
+
 const svg = computed(() => "data:image/svg+xml;charset=utf-8," + encodeURIComponent(text.value));
 </script>
 
@@ -89,5 +98,7 @@ const svg = computed(() => "data:image/svg+xml;charset=utf-8," + encodeURICompon
 
   <CsvPreview v-else-if="/\.(csv|tsv)$/i.test(tab.path)" :key="tab.id" :text="text" />
 
-  <MarkdownContent v-else class="markdown w-full px-8 py-5" :text="text" :base-path="tab.path" />
+  <MarkdownContent v-else-if="markdown" class="markdown w-full px-8 py-5" :text="text" :base-path="tab.path" />
+
+  <pre v-else class="m-0 px-5 py-4 font-mono text-xs leading-[1.55] whitespace-pre-wrap break-words text-highlighted [tab-size:2]"><code v-html="code"></code></pre>
 </template>

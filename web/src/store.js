@@ -2247,6 +2247,8 @@ const FONT = /\.(ttf|otf|woff2?)$/i;
 // Not .ts or .mts: those are TypeScript far more often than MPEG streams.
 const VIDEO = /\.(mp4|m4v|mov|webm|ogv|mkv|avi|mpe?g|wmv|flv|3gp|m2ts)$/i;
 
+/* Every text file has a Preview, but only these render as something other
+   than their own text — the ones a remembered Preview should open on. */
 export function canPreview(path) {
   const name = String(path || "");
   return PREVIEWABLE.test(name) || isMedia(name);
@@ -2390,7 +2392,7 @@ function selectOpenFile(tabID, pin, line = 0) {
    clears it, so the same reference clicked twice scrolls twice. A line only
    means anything in the editor, so a tab left on Diff or Preview is switched
    — without moving S.fileMode, which is the choice the user made and not one
-   a link should make for them. A commit's file has only its diff. */
+   a link should make for them. A commit's file has no editor. */
 async function gotoLine(tab, line) {
   if (tab.commit || tab.binary || isMedia(tab.path)) return;
   if (tab.mode !== "edit") {
@@ -2423,9 +2425,9 @@ function openingMode(path, line) {
    when nothing else in that project is open.
 
    commit names a revision when the tab is a file as one commit changed it.
-   Such a tab only ever shows a diff — the working copy is a different thing
-   from what was committed, and the commit itself cannot be edited — so it
-   opens read-only in Diff and stays there. Its id carries the revision, so
+   Such a tab shows its diff or a preview of the file as the commit left it —
+   the working copy is a different thing from what was committed, and the
+   commit itself cannot be edited — so it opens read-only in Diff. Its id carries the revision, so
    the same path can be open once per commit and once for the working tree. */
 async function openFileIn(projectID, ownerID, path, opts = {}) {
   (await loadFileTabIn(projectID, ownerID, path, opts))?.();
@@ -2499,6 +2501,17 @@ async function loadFileTab(tab) {
   if (!id) return;
   const query = `path=${encodeURIComponent(tab.path)}`;
   if (tab.commit) {
+    if (tab.mode === "preview") {
+      if (tab.content !== null) return;
+      // A file the commit deleted is previewed as its parent left it.
+      const rev = /^deleted file mode /m.test(tab.diff || "") ? tab.commit + "^" : tab.commit;
+      const f = await api("GET", `/api/projects/${id}/file?${query}&rev=${encodeURIComponent(rev)}`);
+      if (f.binary) throw new Error(`${tab.path} is binary at ${tab.commit}: it has no preview.`);
+      tab.partial = !!f.partial;
+      tab.size = f.size;
+      tab.content = f.content + (f.partial ? "\n\n… truncated" : "");
+      return;
+    }
     if (tab.diff !== null) return;
     const at = `hash=${encodeURIComponent(tab.commit)}`;
     tab.diff = (await api("GET", `/api/projects/${id}/commit/diff?${at}&${query}`)).diff || "";
@@ -2548,7 +2561,8 @@ function refreshPreviewTabs(projectID) {
    the tab back rather than leaving it on an empty pane. */
 export async function setFileMode(tab, mode, remember = true) {
   if (mode === "edit" && tab?.binary) mode = "hex";
-  if (tab?.kind !== "file" || tab.commit || tab.mode === mode || !FILE_MODES.includes(mode)) return;
+  if (tab?.kind !== "file" || tab.mode === mode || !FILE_MODES.includes(mode)) return;
+  if (tab.commit && mode !== "diff" && mode !== "preview") return;
   if (mode === "edit" && isMedia(tab.path)) return;
   const previous = tab.mode;
   tab.mode = mode;
@@ -2558,7 +2572,8 @@ export async function setFileMode(tab, mode, remember = true) {
     tab.mode = previous;
     return fail(e);
   }
-  if (remember && mode !== "hex") {
+  // A commit's tab always opens on its diff, so its choice is not a habit.
+  if (remember && mode !== "hex" && !tab.commit) {
     S.fileMode = mode;
     persist(FILE_MODE_KEY, mode);
   }

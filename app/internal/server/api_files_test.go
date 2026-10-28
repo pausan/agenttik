@@ -329,3 +329,44 @@ func TestAbsolutePathReadsOutsideTheProject(t *testing.T) {
 		t.Errorf("revision status = %d, want 400", resp.StatusCode)
 	}
 }
+
+func TestFileReadsARevision(t *testing.T) {
+	s, st := newTestServer(t)
+	dir := t.TempDir()
+	p, err := st.CreateProject("alpha", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "notes.md"), []byte("# then"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"init"}, {"add", "notes.md"}, {"-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "fixture"}} {
+		if _, err := runGit(dir, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Remove(filepath.Join(dir, "notes.md")); err != nil {
+		t.Fatal(err)
+	}
+	base := "/api/projects/" + itoa(p.ID) + "/file?path=notes.md"
+	got := decode[fileContent](t, do(t, s, "GET", base+"&rev=HEAD", nil))
+	if got.Content != "# then" || got.Size != 6 || got.Partial || got.Binary {
+		t.Fatalf("revision content = %+v", got)
+	}
+	for rev, want := range map[string]int{"HEAD%5E": http.StatusNotFound, "--help": http.StatusBadRequest} {
+		resp := do(t, s, "GET", base+"&rev="+rev, nil)
+		resp.Body.Close()
+		if resp.StatusCode != want {
+			t.Errorf("%s: status %d, want %d", rev, resp.StatusCode, want)
+		}
+	}
+}
+
+func TestHeadKeepsTheStartAndCountsTheRest(t *testing.T) {
+	w := &head{max: 4}
+	w.Write([]byte("abc"))
+	w.Write([]byte("defg"))
+	if w.buf.String() != "abcd" || w.size != 7 {
+		t.Fatalf("head = %q, size %d", w.buf.String(), w.size)
+	}
+}

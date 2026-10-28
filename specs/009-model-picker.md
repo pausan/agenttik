@@ -41,6 +41,15 @@ Choosing a model from another provider — or another subscription of the same
 one — changes the task's provider and clears the provider-owned thread id. The next prompt starts a new thread on that
 provider; opaque thread ids cannot be resumed across CLIs. The API validates
 the selected provider, its availability, and that the model belongs to it.
+A model or effort change within the same provider and subscription keeps the
+thread and resumes it.
+
+A task that has run but has no thread to resume — after a provider or
+subscription change, or a CLI tool-access change — hands the conversation over
+without the user doing anything. Its next prompt is preceded by the task's
+project prompt and its transcript as text, in a `<conversation>` block: user
+and assistant messages only, no tool calls, the last 60,000 bytes. Prompts no
+turn has taken are left out. Later prompts resume the new thread as usual.
 
 Codex discovers its visible models and reasoning efforts through the installed
 CLI's `app-server` `model/list` endpoint, following all pages in CLI order.

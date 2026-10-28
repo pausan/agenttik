@@ -44,9 +44,25 @@ func (r *Runner) inherit(sess *store.Session, provider agent.Provider) (forkFrom
 			source.AnchorQuote + "\n</quote>\n\n")
 	}
 	b.WriteString(r.transcriptText(source.ID))
-	body := strings.TrimSpace(b.String())
+	return "", conversationText(b.String(), "The conversation so far, for context:")
+}
+
+// handOver is what a conversation that has run is given when its provider
+// thread was reset — another provider, subscription or tool access — and the
+// new thread cannot resume the old one: its own transcript, so the agent
+// carries on rather than starting over. A model change the provider can
+// resume never comes here. See specs/009-model-picker.md.
+func (r *Runner) handOver(sessionID string) string {
+	return conversationText(r.transcriptText(sessionID),
+		"This conversation continues from an earlier session, which this one cannot resume. What was said so far, for context:")
+}
+
+// conversationText wraps a transcript for a provider's prompt, keeping its
+// end when it is too long.
+func conversationText(body, intro string) string {
+	body = strings.TrimSpace(body)
 	if body == "" {
-		return "", ""
+		return ""
 	}
 	if len(body) > maxInheritedText {
 		cut := len(body) - maxInheritedText
@@ -55,10 +71,12 @@ func (r *Runner) inherit(sess *store.Session, provider agent.Provider) (forkFrom
 		}
 		body = "…" + body[cut:]
 	}
-	return "", "<conversation>\nThe conversation so far, for context:\n\n" + body + "\n</conversation>\n\n"
+	return "<conversation>\n" + intro + "\n\n" + body + "\n</conversation>\n\n"
 }
 
-// transcriptText is what was said in a session, without tool calls.
+// transcriptText is what was said in a session, without tool calls. A prompt
+// no turn has taken yet is left out: no agent has seen it, and it may be the
+// one about to be sent.
 func (r *Runner) transcriptText(sessionID string) string {
 	messages, err := r.store.ListMessages(sessionID)
 	if err != nil {
@@ -67,7 +85,7 @@ func (r *Runner) transcriptText(sessionID string) string {
 	var b strings.Builder
 	for _, m := range messages {
 		who := map[string]string{store.RoleUser: "User", store.RoleAssistant: "Assistant"}[m.Role]
-		if who == "" || strings.TrimSpace(m.Content) == "" {
+		if who == "" || m.TurnID == 0 || strings.TrimSpace(m.Content) == "" {
 			continue
 		}
 		b.WriteString(who + ": " + strings.TrimSpace(m.Content) + "\n\n")

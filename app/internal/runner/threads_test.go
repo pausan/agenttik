@@ -104,3 +104,40 @@ func TestThreadWithoutForkGetsTranscript(t *testing.T) {
 		t.Fatalf("a spawned task is not a thread: %q", p)
 	}
 }
+
+// A model change the provider can resume keeps its thread and is given only
+// the prompt. A reset thread — another provider or subscription — is handed
+// the conversation and the project prompt once, and resumed after that.
+func TestResetThreadIsHandedTheConversation(t *testing.T) {
+	fp := &fakeProvider{script: script("main")}
+	r, st, sess := setup(t, fp)
+	if err := st.SetProjectPrompt(sess.ProjectID, "project rules"); err != nil {
+		t.Fatal(err)
+	}
+	turn(t, r, sess.ID, "please look at x")
+
+	if err := st.SetSessionModel(sess.ID, "fake", 0, "m2", "low", false); err != nil {
+		t.Fatal(err)
+	}
+	turn(t, r, sess.ID, "go on")
+	if fp.lastReq.ProviderSessionID != "prov-main" || fp.lastReq.Prompt != "go on" {
+		t.Fatalf("a resumable model change should resume: %+v", fp.lastReq)
+	}
+
+	if err := st.SetSessionModel(sess.ID, "fake", 0, "m3", "low", true); err != nil {
+		t.Fatal(err)
+	}
+	fp.script = script("other")
+	turn(t, r, sess.ID, "and now?")
+	p := fp.lastReq.Prompt
+	if fp.lastReq.ProviderSessionID != "" || !strings.HasPrefix(p, "project rules\n\n<conversation>") ||
+		!strings.Contains(p, "User: please look at x\n\nAssistant: main\n\nUser: go on\n\nAssistant: main") ||
+		!strings.HasSuffix(p, "</conversation>\n\nand now?") {
+		t.Fatalf("reset thread prompt: %+v", fp.lastReq)
+	}
+
+	turn(t, r, sess.ID, "thanks")
+	if fp.lastReq.ProviderSessionID != "prov-other" || fp.lastReq.Prompt != "thanks" {
+		t.Fatalf("the new thread should be resumed: %+v", fp.lastReq)
+	}
+}

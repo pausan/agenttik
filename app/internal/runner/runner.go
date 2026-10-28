@@ -542,14 +542,20 @@ func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage, stored int64
 	}
 	// A thread, or a task spawned from one, starts from the conversation it
 	// came from. A forked copy already holds the project prompt.
+	// A conversation that has run but has no thread to resume had it reset,
+	// and the new thread is handed what was said, project prompt included.
 	forkFrom, inherited := "", ""
-	if !hasRun && sess.ProviderSessionID == "" {
+	handedOver := hasRun && sess.ProviderSessionID == ""
+	switch {
+	case !hasRun && sess.ProviderSessionID == "":
 		forkFrom, inherited = r.inherit(sess, provider)
+	case handedOver:
+		inherited = r.handOver(sessionID)
 	}
 	if forkFrom == "" {
 		r.claimProjectPrompt(sess, hasRun)
 	}
-	providerPrompt := withProjectPrompt(sess, hasRun, inherited+threadPreamble(sess, hasRun)+
+	providerPrompt := withProjectPrompt(sess, hasRun && !handedOver, inherited+threadPreamble(sess, hasRun)+
 		attachments.Resolve(prompt, r.store.Dir()))
 	if sess.ProjectKind == "orchestrator" {
 		executable, err := os.Executable()

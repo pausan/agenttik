@@ -21,14 +21,14 @@ test("a project appears in the sidebar with its folder underneath", async ({ pag
   await addProject(page);
   await expect(sidebar(page).getByText("agenttik", { exact: true })).toHaveCount(1);
   await expect(sidebar(page).getByText(REPO)).toBeVisible();
-  await expect(sidebar(page).getByRole("combobox", { name: "Git repository" })).toHaveCount(0);
+  await expect(sidebar(page).getByRole("button", { name: "Git repository" })).toHaveCount(0);
 });
 
 test("multiple projects do not show a repository selector", async ({ page }) => {
   await addProject(page);
   await addProject(page, REPO + "/web");
   await openProject(page, REPO + "/web");
-  await expect(page.getByRole("combobox", { name: "Git repository" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Git repository" })).toHaveCount(0);
   await expect(sidebar(page).getByRole("heading", { name: "Workspace" })).toHaveCount(0);
 });
 

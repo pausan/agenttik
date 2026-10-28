@@ -10,7 +10,8 @@ a repository, including nested checkouts. Discovery runs when refreshing the
 workspace; no repository records or clone metadata are stored.
 
 The right header shows a Git repository dropdown only when this list contains
-more than one entry. One repository is used automatically; zero entries leave
+more than one entry. Its search box fuzzy-matches repository paths in the
+browser, best match first. One repository is used automatically; zero entries leave
 the Git panes empty. Switching projects clears the selection and selects the
 first repository. Switching repositories keeps the project and task active,
 clears old Git results, and loads the selected repository's Changed and Commits.

@@ -17,12 +17,14 @@ test("the right workspace selects repositories within one project", async ({ pag
     }
     await addProject(page, root);
     await openProject(page, root);
-    const picker = inspector(page).getByRole("combobox", { name: "Git repository" });
+    const picker = inspector(page).getByRole("button", { name: "Git repository" });
     await expect(picker).toBeVisible();
-    await expect(sidebar(page).getByRole("combobox", { name: "Git repository" })).toHaveCount(0);
+    await expect(sidebar(page).getByRole("button", { name: "Git repository" })).toHaveCount(0);
     await inspector(page).getByRole("tab", { name: "Commits" }).click();
     await expect(inspector(page).getByText("alpha commit", { exact: true })).toBeVisible();
     await picker.click();
+    await page.getByPlaceholder("Search repositories…").fill("bt");
+    await expect(page.getByRole("option", { name: "alpha", exact: true })).toHaveCount(0);
     await page.getByRole("option", { name: "beta", exact: true }).click();
     await expect(inspector(page).getByText("beta commit", { exact: true })).toBeVisible();
     await expect(inspector(page).getByText("alpha commit", { exact: true })).toHaveCount(0);

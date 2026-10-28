@@ -1,6 +1,7 @@
 <script setup>
-import { computed, defineAsyncComponent } from "vue";
+import { computed, defineAsyncComponent, ref } from "vue";
 
+import { filterLabels } from "../fuzzy";
 import { S, selectRepository } from "../store";
 import ChangesPane from "./ChangesPane.vue";
 import { SEGMENTED } from "../ui";
@@ -17,6 +18,12 @@ const OptionsPane = defineAsyncComponent(() => import("./OptionsPane.vue"));
 
 const LABELS = { changed: "Changed", options: "Project Options", logs: "Commits" };
 
+const repoSearch = ref("");
+const repos = computed(() => filterLabels(
+  S.repositories.map((path) => ({ label: path === "." ? "Project root" : path, value: path })),
+  repoSearch.value,
+));
+
 const items = computed(() => S.inspector.panes.map((p) => ({ label: LABELS[p], value: p })));
 
 const active = computed({
@@ -29,13 +36,17 @@ const active = computed({
   <aside class="flex min-h-0 flex-col bg-muted">
     <header class="mx-2.5 mt-3 shrink-0">
       <h2 class="m-0 px-0.5 text-sm font-semibold tracking-tight text-highlighted">Workspace</h2>
-      <USelect
+      <USelectMenu
         v-if="S.repositories.length > 1"
         :model-value="S.repository"
-        :items="S.repositories.map((path) => ({ label: path === '.' ? 'Project root' : path, value: path }))"
+        v-model:search-term="repoSearch"
+        :items="repos"
+        value-key="value"
+        ignore-filter
         size="sm"
         class="mt-2 w-full"
         aria-label="Git repository"
+        :search-input="{ placeholder: 'Search repositories…' }"
         @update:model-value="selectRepository"
       />
     </header>

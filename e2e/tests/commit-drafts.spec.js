@@ -30,8 +30,9 @@ async function showChanges(page, project) {
 }
 
 async function selectRepo(page, repo) {
-  await inspector(page).getByRole("combobox", { name: "Git repository" }).click();
+  await inspector(page).getByRole("button", { name: "Git repository" }).click();
   await page.getByRole("option", { name: repo, exact: true }).click();
+  await expect(page.getByRole("listbox")).toHaveCount(0); // reopening while it closes loses the click
 }
 
 test("commit drafts survive pane, task and file tabs, reloads and manual clearing", async ({ page, repos }) => {

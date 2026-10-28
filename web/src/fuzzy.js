@@ -63,3 +63,14 @@ export function fuzzyAny(fields, needle) {
   }
   return best;
 }
+
+/* filterLabels keeps the items whose label matches, best match first, so a
+   select menu can fuzzy-search its own options. */
+export function filterLabels(items, needle) {
+  const query = needle.trim();
+  if (!query) return items;
+  return items.map((item) => ({ item, m: fuzzy(item.label, query) }))
+    .filter((row) => row.m)
+    .sort((a, b) => a.m.score - b.m.score || a.item.label.length - b.item.label.length)
+    .map((row) => row.item);
+}

@@ -472,6 +472,16 @@ func TestTagAndPushRefs(t *testing.T) {
 	}
 	request("push-tag", map[string]string{"name": "missing"}, 400)
 
+	request("delete-tag", map[string]string{"name": "v1.0"}, 204)
+	if git(root, "tag", "--list") != "" {
+		t.Fatal("tag not deleted")
+	}
+	if git(remote, "tag", "--list") != "v1.0" {
+		t.Fatal("delete reached the remote")
+	}
+	request("delete-tag", map[string]string{"name": "v1.0"}, 400)
+	request("delete-tag", map[string]string{"name": "-l"}, 400)
+
 	// A branch other than the current one, which gains an upstream.
 	request("push-branch", map[string]string{"name": "feature/old"}, 204)
 	if git(remote, "for-each-ref", "--format=%(refname:short)", "refs/heads/") != "feature/old" {

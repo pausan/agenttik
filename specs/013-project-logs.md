@@ -160,8 +160,9 @@ offers **Push branch X to origin** for each local branch and **Push tag Y to
 origin** for each tag on the commit. Each pushes only that ref to origin under the
 same name; a branch without an upstream gets origin's. Rejections, such as a
 remote branch that moved on, appear as the pane error and are never forced.
-Remote branch chips get no push item. Tag and push items are disabled while a
-request runs. Checkout switches to that commit with a detached HEAD and refreshes the
+Remote branch chips get no push item. **Delete tag Y** removes that local tag at
+once, without a dialog; a copy already pushed stays on the remote. Tag, delete
+and push items are disabled while a request runs. Checkout switches to that commit with a detached HEAD and refreshes the
 log, changes and tree. It uses Git's normal local-change checks; conflicts appear
 in the pane. The branch selector shows **detached** and can switch back to a local
 branch. Checkout is disabled while a request or merge/rebase is in progress.
@@ -186,7 +187,7 @@ other, revision included.
 | Method | Path | Answers |
 |---|---|---|
 | GET | `/api/projects/:id/log?limit=&graph=` | `{branch, branches[], remoteBranches[{remote,branch,tip}], head, operation, commits[]}` — up to 500 commits in topological order; graph includes all branch/tag histories; picker refs have empty `tip` |
-| POST | `/api/projects/:id/branches/:action?repo=` | `{branch, target?}`; switch/pull/push/fetch return 204; switch optionally accepts `remote` to fetch and sync a local tracking branch; push returns `{confirmPush:true}` when confirmation is needed, and accepts `setUpstream:true` to publish to origin; a diverged push returns `{confirmForce:true,remote,tip,error}`, and `force:<tip>` force pushes with that lease; fetch also accepts an empty branch; checkout accepts `{hash}` and returns 204; tag accepts `{hash,name}` and returns 204; push-tag and push-branch accept `{name}`, push that ref to origin and return 204; clean returns `{deleted[]}`; check-remote returns `{remotes[{remote,branch,tip}]}`; clean-remote accepts `{branch,remotes[]}` and returns `{deleted[],error?}`; merge/rebase/continue/abort return `{message}` |
+| POST | `/api/projects/:id/branches/:action?repo=` | `{branch, target?}`; switch/pull/push/fetch return 204; switch optionally accepts `remote` to fetch and sync a local tracking branch; push returns `{confirmPush:true}` when confirmation is needed, and accepts `setUpstream:true` to publish to origin; a diverged push returns `{confirmForce:true,remote,tip,error}`, and `force:<tip>` force pushes with that lease; fetch also accepts an empty branch; checkout accepts `{hash}` and returns 204; tag accepts `{hash,name}` and returns 204; delete-tag accepts `{name}`, deletes that local tag and returns 204; push-tag and push-branch accept `{name}`, push that ref to origin and return 204; clean returns `{deleted[]}`; check-remote returns `{remotes[{remote,branch,tip}]}`; clean-remote accepts `{branch,remotes[]}` and returns `{deleted[],error?}`; merge/rebase/continue/abort return `{message}` |
 | GET | `/api/projects/:id/commit?hash=` | `{hash, files[{path,status,additions,deletions,binary}]}` |
 | GET | `/api/projects/:id/commit/diff?hash=&path=` | the same `{path, diff, partial}` a working-tree diff answers |
 
@@ -205,8 +206,8 @@ branch, available branches and history without reopening the pane.
 `hash` is matched against `^[0-9a-fA-F]{4,40}$` rather than merely escaped: anything else could
 be read as a flag. Switch accepts only validated, existing local branch names.
 Checkout accepts only a validated commit hash and also works from a detached HEAD.
-Tag names must pass `git check-ref-format` and not start with `-`; push-tag and
-push-branch accept only refs that exist locally. None of the three depends on
+Tag names must pass `git check-ref-format` and not start with `-`; delete-tag, push-tag and
+push-branch accept only refs that exist locally. None of the four depends on
 the current branch.
 Other branch actions reject requests if the current branch no longer matches.
 Paths go through the same `resolveInRoot` check as every other file route. A folder that is not a repository, and one with no commits

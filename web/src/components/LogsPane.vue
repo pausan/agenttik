@@ -50,7 +50,7 @@ const actions = [
   { action: "clean", icon: "i-lucide-brush-cleaning", label: "Clean branches merged into main or master" },
 ];
 async function act(action, branch = S.log.branch, remotes = [], hash = "", options = {}) {
-  if (busy.value || (!branch && !["continue", "abort", "checkout", "fetch", "tag", "push-tag", "push-branch"].includes(action))) return;
+  if (busy.value || (!branch && !["continue", "abort", "checkout", "fetch", "tag", "delete-tag", "push-tag", "push-branch"].includes(action))) return;
   const id = currentProjectID();
   const repo = S.repository;
   const stillHere = () => id === currentProjectID() && repo === S.repository;
@@ -66,7 +66,7 @@ async function act(action, branch = S.log.branch, remotes = [], hash = "", optio
         forceConfirmation.value = result?.confirmForce ? { branch, ...result, setUpstream: !!options.setUpstream } : null;
       }
       if (result?.message) notice.value = result.message;
-      const done = { tag: `Added tag ${options.name}.`, "push-tag": `Pushed tag ${options.name} to origin.`, "push-branch": `Pushed ${options.name} to origin.` }[action];
+      const done = { tag: `Added tag ${options.name}.`, "delete-tag": `Deleted tag ${options.name}.`, "push-tag": `Pushed tag ${options.name} to origin.`, "push-branch": `Pushed ${options.name} to origin.` }[action];
       if (done) notice.value = done;
       if (action === "clean-remote") {
         remoteCleanup.value = null;
@@ -189,6 +189,12 @@ const menu = computed(() => [[
     icon: "i-lucide-arrow-up",
     disabled: !!busy.value,
     onSelect: () => act("push-tag", S.log.branch, [], "", { name }),
+  })),
+  ...(aimedCommit.value?.tags || []).map(name => ({
+    label: `Delete tag ${name}`,
+    icon: "i-lucide-trash-2",
+    disabled: !!busy.value,
+    onSelect: () => act("delete-tag", S.log.branch, [], "", { name }),
   })),
 ], [
   {

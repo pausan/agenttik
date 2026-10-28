@@ -38,6 +38,8 @@ func (s *Server) branchAction(c *fiber.Ctx) error {
 	switch action {
 	case "tag":
 		return tagCommit(c, root, body.Hash, body.Name)
+	case "delete-tag":
+		return deleteTag(c, root, body.Name)
 	case "push-tag":
 		return pushRef(c, root, "refs/tags/"+body.Name)
 	case "push-branch":
@@ -141,6 +143,21 @@ func tagCommit(c *fiber.Ctx, root, hash, name string) error {
 		return badRequest("invalid tag name")
 	}
 	if _, err := runGit(root, "tag", "--", name, hash); err != nil {
+		return badRequest("%s", err)
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// deleteTag removes a local tag only; a copy already pushed stays on the
+// remote.
+func deleteTag(c *fiber.Ctx, root, name string) error {
+	if name == "" || strings.HasPrefix(name, "-") {
+		return badRequest("invalid tag name")
+	}
+	if _, err := runGit(root, "show-ref", "--verify", "--quiet", "refs/tags/"+name); err != nil {
+		return badRequest("%s does not exist", name)
+	}
+	if _, err := runGit(root, "tag", "-d", "--", name); err != nil {
 		return badRequest("%s", err)
 	}
 	return c.SendStatus(fiber.StatusNoContent)

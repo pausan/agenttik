@@ -21,6 +21,9 @@ The server watches, the browser re-reads:
   [027](027-ignored-files-in-the-tree.md)) is not re-read at all. In a folder too
   large to list, something is always changing, and every read would be the
   listing at its cap.
+- A re-read sends back the version of the listing the Tree holds. Saving a file
+  leaves the listing as it was, so the answer is then only "unchanged": no
+  lists cross the wire and the Tree is not rebuilt.
 
 `git ls-files` keeps listing a tracked file that has been deleted until the
 deletion is staged, so `withoutDeleted` drops those: the tree now loses a file

@@ -2960,15 +2960,29 @@ export function refreshTree() {
   return treeLoad;
 }
 
+/* treeVersion names the listing the Tree holds. The server hashes what it
+   lists, so a matching version means the Tree is already right, whichever
+   project it was read for. Saving a file leaves the listing as it was, and
+   then no 15 MB listing is sent, parsed and rebuilt again. */
+let treeVersion = "";
+
 async function loadTree() {
   const id = currentProjectID();
   if (!id) return clearTree();
   try {
-    const { files = [], ignored = [], dirs = [], truncated = false } =
-      (await api("GET", `/api/projects/${id}/tree`)) || {};
+    const since = treeVersion ? `?since=${encodeURIComponent(treeVersion)}` : "";
+    const {
+      files = [],
+      ignored = [],
+      dirs = [],
+      truncated = false,
+      version = "",
+      unchanged = false,
+    } = (await api("GET", `/api/projects/${id}/tree${since}`)) || {};
     // A slow request for the tab we just left must not replace the active
     // project's sidebar Tree.
-    if (currentProjectID() !== id) return;
+    if (currentProjectID() !== id || unchanged) return;
+    treeVersion = version;
     // The two lists arrive apart to identify ignored files;
     // the pane wants one listing, and `tree` being empty is what "No files."
     // is read from.
@@ -2984,6 +2998,7 @@ async function loadTree() {
 }
 
 function clearTree() {
+  treeVersion = "";
   S.tree = [];
   S.treeIgnored = [];
   S.treeDirs = [];

@@ -53,6 +53,55 @@ func TestRawFontTypes(t *testing.T) {
 	}
 }
 
+// A Tree re-read after a file is saved names the listing it holds, and is not
+// sent the same listing again. A new file, or one moving into the ignored
+// list, is a new listing.
+func TestTreeSendsOnlyAChangedListing(t *testing.T) {
+	s, st := newTestServer(t)
+	dir := t.TempDir()
+	if _, err := runGit(dir, "init"); err != nil {
+		t.Fatal(err)
+	}
+	write := func(name, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("a.txt", "one")
+	p, err := st.CreateProject("versioned tree", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	url := "/api/projects/" + itoa(p.ID) + "/tree"
+	type reply struct {
+		projectFiles
+		Unchanged bool `json:"unchanged"`
+	}
+	first := decode[reply](t, do(t, s, "GET", url, nil))
+	if first.Version == "" || first.Unchanged || !slices.Contains(first.Files, "a.txt") {
+		t.Fatalf("first read: %+v", first)
+	}
+
+	write("a.txt", "edited")
+	same := decode[reply](t, do(t, s, "GET", url+"?since="+first.Version, nil))
+	if !same.Unchanged || same.Version != first.Version || same.Files != nil {
+		t.Fatalf("an edit re-sent the listing: %+v", same)
+	}
+
+	write("b.txt", "new")
+	grown := decode[reply](t, do(t, s, "GET", url+"?since="+first.Version, nil))
+	if grown.Unchanged || grown.Version == first.Version || !slices.Contains(grown.Files, "b.txt") {
+		t.Fatalf("a new file did not send the listing: %+v", grown)
+	}
+
+	write(".gitignore", "b.txt\n")
+	ignored := decode[reply](t, do(t, s, "GET", url+"?since="+grown.Version, nil))
+	if ignored.Unchanged || !slices.Contains(ignored.Ignored, "b.txt") {
+		t.Fatalf("a newly ignored file did not send the listing: %+v", ignored)
+	}
+}
+
 func TestTreeIncludesIgnoredFilesBeyondFormerLimit(t *testing.T) {
 	s, st := newTestServer(t)
 	dir := t.TempDir()

@@ -5,8 +5,16 @@ folders first and its files after them; each group is sorted alphabetically by
 name, regardless of ignore status. Sorting uses the browser's locale
 comparison.
 
-`GET /api/projects/:id/tree` returns `{files, ignored, dirs}`, plus
+`GET /api/projects/:id/tree` returns `{files, ignored, dirs, version}`, plus
 `truncated: true` when the folder holds more than one listing carries.
+`version` is a hash of the listing. Asked with `?since=<version>` for the
+listing it names, the server answers `{version, unchanged: true}` without the
+lists. The client sends the version it holds on every re-read, so the
+re-read that follows a saved file costs git's listing on the server and
+nothing in the window. In a project with 130,000 ignored dependency files,
+that cut a re-read from 14.5 MB of JSON and about 90 MB of server allocation
+to 44 bytes and about 20 MB, and the window's heap stopped swinging by
+over 100 MB on each save.
 Git supplies tracked files through `git ls-files --cached`, untracked ones
 through `git ls-files --others --exclude-standard`, and ignored files through
 `git ls-files --others --ignored --exclude-standard`. Deleted tracked files

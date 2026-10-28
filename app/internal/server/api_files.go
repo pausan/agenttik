@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"io/fs"
 	"os"
@@ -131,19 +132,30 @@ type fileEntry struct {
 //
 // Truncated says the folder holds more than one listing carries, and this is
 // only the first part of it. See listTree.
+//
+// Version names this exact listing. A client that already holds it sends it
+// back as `since`, and gets `{version, unchanged: true}` instead of the lists.
 type projectFiles struct {
 	Files     []string `json:"files"`
 	Ignored   []string `json:"ignored"`
 	Dirs      []string `json:"dirs"`
 	Truncated bool     `json:"truncated,omitempty"`
+	Version   string   `json:"version"`
 }
 
+// projectTree answers the Tree. Most re-reads follow a file being saved, which
+// leaves the listing as it was; with dependency folders in it that listing can
+// be 15 MB of JSON, so an unchanged one is not sent again.
 func (s *Server) projectTree(c *fiber.Ctx) error {
 	root, err := s.projectRoot(c)
 	if err != nil {
 		return err
 	}
-	return c.JSON(listTree(root, maxTreeEntries))
+	tree := listTree(root, maxTreeEntries)
+	if since := c.Query("since"); since != "" && since == tree.Version {
+		return c.JSON(fiber.Map{"version": tree.Version, "unchanged": true})
+	}
+	return c.JSON(tree)
 }
 
 // listTree fills one listing of at most max entries. The project's own files
@@ -157,7 +169,27 @@ func listTree(root string, max int) projectFiles {
 	if !cut {
 		tree.Dirs, tree.Truncated = emptyDirs(root, files, ignored, max-len(files)-len(ignored))
 	}
+	tree.Version = treeVersion(tree)
 	return tree
+}
+
+// treeVersion hashes a listing. A zero byte ends each path and a one byte each
+// list, so moving a path from one list to the next changes the hash.
+func treeVersion(t projectFiles) string {
+	h := fnv.New64a()
+	// One reused buffer: fnv takes bytes, and a copy per path is 200,000 of them.
+	var buf []byte
+	for _, list := range [][]string{t.Files, t.Ignored, t.Dirs} {
+		for _, p := range list {
+			buf = append(append(buf[:0], p...), 0)
+			h.Write(buf)
+		}
+		h.Write([]byte{1})
+	}
+	if t.Truncated {
+		h.Write([]byte{2})
+	}
+	return strconv.FormatUint(h.Sum64(), 36)
 }
 
 // listFiles prefers git, which gives us .gitignore handling for free and is

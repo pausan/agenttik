@@ -65,8 +65,9 @@ session, as `routeRemote` does).
   that names no current source answers 404. Task IDs are UUIDs and stay as
   they are. Terminal IDs stay as they are too.
 - **Rewriting.** In every JSON answer, `project_id` and `schedule_id` are
-  encoded. A top-level `id` is encoded on project and job routes, and on
-  `schedules` inside projects. Projects gain
+  encoded. A top-level `id` is encoded on project and job routes, on
+  `schedules` inside projects, and on the `schedule` of a job's page. Projects
+  gain
   `source: {id, machine, profile, remote}`. Task IDs seen in any answer or
   event are remembered with their source. Terminal IDs are remembered from
   `/api/projects/:id/terminals`.

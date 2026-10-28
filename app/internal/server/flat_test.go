@@ -391,6 +391,35 @@ func TestFlatViewCopiesImagesToTheProfileThatUsesThem(t *testing.T) {
 	}
 }
 
+// A job's page carries the flat ID too, so its Run menu reaches the job, even
+// when the project's queue is paused.
+func TestFlatViewRunsAJobFromItsPage(t *testing.T) {
+	s := profileServer(t)
+	do(t, s, "POST", "/api/profiles", map[string]string{"name": "Work"})
+	do(t, s, "POST", "/api/projects", map[string]string{"path": t.TempDir(), "name": "P"})
+	p := flatNamed(t, flatProjects(t, s), "P", "Default")
+	if resp := do(t, s, "PATCH", fmt.Sprintf("/api/projects/%d?profile=all", p.ID), map[string]bool{"queue_paused": true}); resp.StatusCode != 200 {
+		t.Fatalf("pause: %d", resp.StatusCode)
+	}
+	body := map[string]any{"project_id": p.ID, "provider": "fake", "model": "fake-quick", "prompt": "x", "title": "x",
+		"every": store.EveryInterval, "interval_minutes": 60, "remaining": -1}
+	created := decode[scheduleDetail](t, do(t, s, "POST", "/api/schedules?profile=all", body)).Schedule
+	list := decode[[]store.Schedule](t, do(t, s, "GET", "/api/schedules?profile=all", nil))
+	if len(list) != 1 || created.ID != list[0].ID {
+		t.Fatalf("created %d, listed %+v", created.ID, list)
+	}
+	path := fmt.Sprintf("/api/schedules/%d", created.ID)
+	if got := decode[scheduleDetail](t, do(t, s, "GET", path+"?profile=all", nil)).Schedule; got.ID != created.ID || got.ProjectID != p.ID {
+		t.Fatalf("page: %+v", got)
+	}
+	if resp := do(t, s, "POST", path+"/run?profile=all", map[string]bool{"enqueue": true}); resp.StatusCode != 202 {
+		t.Fatalf("enqueue: %d", resp.StatusCode)
+	}
+	if runs := decode[scheduleDetail](t, do(t, s, "GET", path+"?profile=all", nil)).Runs; len(runs) != 1 {
+		t.Fatalf("runs: %+v", runs)
+	}
+}
+
 func TestFlatCodesAreStableAndDistinct(t *testing.T) {
 	var list []flatSource
 	for i := range 2000 {

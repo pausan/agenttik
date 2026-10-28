@@ -639,6 +639,12 @@ func (s *Server) flatWalk(v any, src flatSource, shape flatShape, top bool) any 
 					x[k] = s.flatWalk(val, src, flatSchedulesShape, true)
 					continue
 				}
+			case "schedule":
+				// A job's page answers {schedule, runs}.
+				if top && shape == flatSchedulesShape {
+					x[k] = s.flatWalk(val, src, flatSchedulesShape, true)
+					continue
+				}
 			}
 			x[k] = s.flatWalk(val, src, flatPlain, false)
 		}

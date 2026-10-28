@@ -96,7 +96,7 @@ const profileItems = computed(() => allProfiles()
   .filter((profile) => !isCurrentProfile(profile.id, profile.remote))
   .map((profile) => ({
     label: `Switch to profile: ${profile.remote ? `${profile.machine} › ` : ""}${profile.name}`,
-    icon: profile.flat ? "i-lucide-layers" : profile.remote ? "i-lucide-wifi" : "i-lucide-user-round",
+    icon: profile.flat ? "i-lucide-layers" : profile.remote ? (profile.down ? "i-lucide-wifi-off" : "i-lucide-wifi") : "i-lucide-user-round",
     onSelect: () => choose(() => switchProfile(profile.id, profile.remote)),
   })),
 );

@@ -54,7 +54,10 @@ func (m *remoteManager) watchActivity(r savedRemote, profiles []profileStatus) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				m.refreshActivity(ctx, r, a)
+				// A machine that is off is tried only now and then.
+				if skip, try := m.skip(r.ID); !skip || try {
+					m.refreshActivity(ctx, r, a)
+				}
 			}
 		}
 	}()

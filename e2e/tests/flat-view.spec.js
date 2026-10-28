@@ -64,6 +64,23 @@ test("on a phone the flat view names each project's place in the drawer", async 
   }
 });
 
+test("a machine that stops answering shows a red cross and is tried again when opened", async ({ page, agenttik }) => {
+  const other = await startServer();
+  await page.request.put(`${other.url}/api/server/name`, { data: { name: "Laptop" } });
+  await page.request.post(`${agenttik.url}/api/remotes`, { data: { address: other.url } });
+  await other.stop();
+
+  await page.goto(`${agenttik.url}/?profile=all`);
+  await page.getByRole("button", { name: "Profile: Flat view", exact: true }).click();
+  const far = page.getByRole("menuitem", { name: "Default", exact: true }).last();
+  await expect(far.locator("[data-down]")).toBeVisible({ timeout: 10_000 });
+  await page.screenshot({ path: "test-results/flat-view-remote-down.png" });
+
+  // Opening it tries the machine again and says what can be done.
+  await far.click();
+  await expect(page.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
+});
+
 test("the flat view keeps its own order and hidden projects", async ({ page, agenttik }) => {
   const work = await (await page.request.post(`${agenttik.url}/api/profiles`, { data: { name: "Work" } })).json();
   for (const name of ["Alpha", "Beta"]) {

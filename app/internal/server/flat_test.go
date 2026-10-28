@@ -3,6 +3,8 @@ package server
 import (
 	"bufio"
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"image"
 	"image/png"
@@ -299,9 +301,9 @@ func TestFlatViewProbesAMachineThatIsOffInTheBackground(t *testing.T) {
 		}
 	}
 	expire := func() {
-		local.flat.mu.Lock()
-		local.flat.down[id] = time.Now().Add(-time.Second)
-		local.flat.mu.Unlock()
+		local.remotes.downMu.Lock()
+		local.remotes.down[id] = time.Now().Add(-time.Second)
+		local.remotes.downMu.Unlock()
 	}
 
 	// A machine that takes connections and never answers.
@@ -320,7 +322,10 @@ func TestFlatViewProbesAMachineThatIsOffInTheBackground(t *testing.T) {
 		}
 	}()
 	setAddress("http://" + hung.Addr().String())
-	local.flat.markDown(id, true)
+	local.remotes.noteReach(context.Background(), id, errors.New("off"))
+	down := func() bool {
+		return decode[struct{ Remotes []remoteView }](t, do(t, local, "GET", "/api/remotes", nil)).Remotes[0].Down
+	}
 
 	// Once its pause is over, lists still do not wait for it.
 	expire()
@@ -330,6 +335,9 @@ func TestFlatViewProbesAMachineThatIsOffInTheBackground(t *testing.T) {
 	}
 	if waited := time.Since(start); waited > time.Second {
 		t.Fatalf("lists waited %v on a machine that is off", waited)
+	}
+	if !down() {
+		t.Fatal("machine that is off not shown as down")
 	}
 
 	// When it answers again, the probe brings it back.
@@ -344,6 +352,9 @@ func TestFlatViewProbesAMachineThatIsOffInTheBackground(t *testing.T) {
 			t.Fatal("machine not back after it answered")
 		}
 		time.Sleep(50 * time.Millisecond)
+	}
+	if down() {
+		t.Fatal("machine that answers still shown as down")
 	}
 }
 

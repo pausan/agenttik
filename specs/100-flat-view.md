@@ -99,11 +99,13 @@ session, as `routeRemote` does).
   that drops is reopened after 1 s, doubling to 30 s. When it comes back, a
   `projects_changed` event makes the window read the lists again.
 - **Unreachable machines.** A list waits at most 4 s for a source. A remote
-  that fails or takes longer is skipped until it answers again: every 20 s,
-  the first request that would use it starts a background `GET /api/version`
-  instead, and no request waits on it. Once the probe answers, the window's
-  stream reopens on the remote and its `projects_changed` reads the lists
-  again. Only this machine's Default failing fails a list. A remote that wants sign-in answers 503, telling the user to sign in
+  that fails or takes longer is down ([085](085-remote-profiles.md)) and
+  skipped until it answers again: every 60 s, the first request that would
+  use it starts a background `GET /api/version` instead, and no request waits
+  on it. The picker shows its profiles with a red cross. Once the probe
+  answers, the window's stream reopens on the remote and its
+  `projects_changed` reads the lists again. Only this machine's Default
+  failing fails a list. A remote that wants sign-in answers 503, telling the user to sign in
   from Settings → Profiles, rather than 401: the flat view cannot open one
   machine's sign-in dialog for another.
 - **Where the browser is.** A request for this machine's own profiles runs
@@ -132,7 +134,7 @@ stopped remote, a machine that is off probed in the background and back once it 
 flat context. `e2e/tests/flat-view.spec.js` opens the flat view from the
 picker, checks the source labels, runs a task on a remote's project and finds
 it on that machine, checks the labels in the phone drawer, drags a
-project between two profiles' projects and hides and restores one, and runs a
-terminal on another profile and on a remote, with Screen offered only on the
+project between two profiles' projects and hides and restores one, shows a stopped remote's profile with a red cross
+whose click offers Retry, and runs a terminal on another profile and on a remote, with Screen offered only on the
 remote's project.
 `profiles.spec.js` checks the picker order and the shortcut cycle.

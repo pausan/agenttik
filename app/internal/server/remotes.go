@@ -50,6 +50,7 @@ type remoteView struct {
 	Version   string          `json:"version,omitempty"`
 	Profiles  []profileStatus `json:"profiles"`
 	SignedIn  bool            `json:"signed_in"`
+	Down      bool            `json:"down,omitempty"`
 }
 
 type remoteScan struct {
@@ -90,6 +91,10 @@ type remoteManager struct {
 	keyMu      sync.Mutex
 	key        ed25519.PrivateKey
 	keyRefused map[string]bool
+
+	// downMu guards down: remote ID -> when to try it again in the background.
+	downMu sync.Mutex
+	down   map[string]time.Time
 }
 
 func newRemoteManager(dir string, self, selfName func() (string, error)) *remoteManager {
@@ -194,7 +199,8 @@ func (r savedRemote) view() remoteView {
 // the best of them and tries once more. When the remote asks for sign-in,
 // this machine signs in with its key and tries once more. Either way, body
 // must be seekable, as every caller's is.
-func (m *remoteManager) request(ctx context.Context, r savedRemote, method, path string, body io.Reader, header http.Header) (*http.Response, error) {
+func (m *remoteManager) request(ctx context.Context, r savedRemote, method, path string, body io.Reader, header http.Header) (res *http.Response, err error) {
+	defer func() { m.noteReach(ctx, r.ID, err) }()
 	seeker, rewindable := body.(io.Seeker)
 	rewind := func() error {
 		if seeker == nil {
@@ -203,7 +209,7 @@ func (m *remoteManager) request(ctx context.Context, r savedRemote, method, path
 		_, err := seeker.Seek(0, io.SeekStart)
 		return err
 	}
-	res, err := m.send(ctx, r, method, path, body, header)
+	res, err = m.send(ctx, r, method, path, body, header)
 	if err != nil && ctx.Err() == nil && len(r.known()) > 1 && (body == nil || rewindable) {
 		moved, _, reachErr := m.reach(ctx, r)
 		if reachErr != nil || moved.Address == r.Address {
@@ -351,6 +357,7 @@ func (s *Server) listRemotes(c *fiber.Ctx) error {
 	views := make([]remoteView, 0, len(m.remotes))
 	for _, r := range m.remotes {
 		view := r.view()
+		view.Down = m.isDown(r.ID)
 		if a := m.activity[r.ID]; a != nil && a.profiles != nil {
 			view.Profiles = a.profiles
 		}

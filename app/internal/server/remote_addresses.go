@@ -224,6 +224,7 @@ func locate(ctx context.Context, r savedRemote) (string, remote.Info, error) {
 // it as the one in use.
 func (m *remoteManager) reach(ctx context.Context, r savedRemote) (savedRemote, remote.Info, error) {
 	address, info, err := locate(ctx, r)
+	m.noteReach(ctx, r.ID, err)
 	if err != nil {
 		return r, info, err
 	}

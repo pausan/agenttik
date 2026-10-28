@@ -50,10 +50,12 @@ same network scope and never run together.
 Once a machine is saved, the profile picker groups profiles under machine
 names: the flat view of all of them first ([100](100-flat-view.md)), then
 this instance's name, then each remote's. Remote profiles use the
-person icon with a small Wi‑Fi badge. The footer button shows that icon when
+person icon with a small Wi‑Fi badge, a red cross while the machine is down
+(see Connecting). The footer button shows that icon when
 the window is on a remote profile, and its title reads
 `Profile: <machine> › <profile>`. The command palette offers
-`Switch to profile: <machine> › <profile>`. `Ctrl+Alt+P` and its reverse move
+`Switch to profile: <machine> › <profile>`, with a Wi‑Fi-off icon for a
+machine that is down. `Ctrl+Alt+P` and its reverse move
 through the flat view, local profiles, then each machine's, wrapping.
 
 Busy dots pulse beside working local and connected remote profiles in the
@@ -79,10 +81,19 @@ profiles and busy state every three seconds, with a three-second deadline.
 It finds the machine as above before fetching profiles with the saved sign-in.
 This continues while the window is hidden or showing a local profile. Failed
 requests, expired sign-ins and a different machine at the address clear the
-working dots; the worker retries on its next tick. Removing the machine or
+working dots. Removing the machine or
 shutting down cancels its worker. Busy state stays in memory and is never
 restored from disk. The desktop tray shows remote-only work with a Wi-Fi
 badge; local work always takes priority ([060](060-desktop-tray.md)).
+
+A machine is **down** once a request to it, or the search for its address,
+fails or runs out of time; a request whose caller left does not count. It is
+up again as soon as anything reaches it, even with a sign-in prompt.
+`GET /api/remotes` marks it `down`. While it is down, background callers
+leave it alone: the worker above and the flat view ([100](100-flat-view.md))
+try it once every 60 s, the first to ask after the pause. Opening one of its
+profiles always tries it at once, and shows the dialog below if it still
+does not answer.
 
 The window's URL is `/?remote=<machine-id>&profile=<remote-profile-id>`. The
 UI comes from this instance; every `/api/` request carries `remote=` and is
@@ -191,6 +202,7 @@ repeated addresses, restart, deduplication, filtering, connection-triggered
 pause and shutdown. A browser test exercises the controls and connects to
 two real machines with deterministic discovery results.
 Activity tests cover initial and refreshed busy state, overlapping remote
-work, expired sign-ins, reconnects, removal and shutdown. A browser test checks
+work, expired sign-ins, reconnects, removal and shutdown. `remote_down_test.go`
+covers when a machine counts as down and that it is tried once per pause. A browser test checks
 the footer and menu dots through two real instances, from both a local and a
 remote profile.

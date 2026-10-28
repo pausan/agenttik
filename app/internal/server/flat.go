@@ -38,10 +38,6 @@ const (
 	flatBits    = 16
 	flatMask    = 1<<flatBits - 1
 	flatTimeout = 4 * time.Second
-	// A remote that did not answer is skipped, so one machine that is off
-	// does not slow every list. It is asked again this often, in the
-	// background.
-	flatDown = 20 * time.Second
 )
 
 // flatSource is one profile the flat view reads: this machine's when Remote
@@ -67,10 +63,9 @@ func (f flatSource) encode(id int64) int64 {
 // flatState is what the flat view has learned about where things live.
 type flatState struct {
 	mu        sync.Mutex
-	sessions  map[string]string    // task or thread ID -> source key
-	terminals map[string]string    // terminal ID -> source key
-	copied    map[string]bool      // source key + attachment name, already uploaded
-	down      map[string]time.Time // remote ID -> when to probe it again
+	sessions  map[string]string // task or thread ID -> source key
+	terminals map[string]string // terminal ID -> source key
+	copied    map[string]bool   // source key + attachment name, already uploaded
 }
 
 func (f *flatState) remember(m *map[string]string, id, key string) {
@@ -89,35 +84,6 @@ func (f *flatState) lookup(m map[string]string, id string) string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return m[id]
-}
-
-// skip reports whether a remote is known not to answer. Once its pause is
-// over, the first caller is told to probe it; the rest keep skipping it.
-func (f *flatState) skip(remote string) (skip, probe bool) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	retry, down := f.down[remote]
-	if !down {
-		return false, false
-	}
-	if time.Now().Before(retry) {
-		return true, false
-	}
-	f.down[remote] = time.Now().Add(flatDown)
-	return true, true
-}
-
-func (f *flatState) markDown(remote string, down bool) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.down == nil {
-		f.down = map[string]time.Time{}
-	}
-	if down {
-		f.down[remote] = time.Now().Add(flatDown)
-	} else {
-		delete(f.down, remote)
-	}
 }
 
 // flatSources lists this machine's Default first, then its other profiles in
@@ -469,8 +435,9 @@ func (s *Server) flatDo(ctx context.Context, src flatSource, req flatRequest) (*
 		}
 		return s.flatLocal(req.method, target, req.body, header), nil
 	}
-	if skip, probe := s.flat.skip(src.Remote); skip {
-		if probe {
+	// One machine that is off does not slow every list.
+	if skip, try := s.remotes.skip(src.Remote); skip {
+		if try {
 			go s.flatProbe(src.Remote)
 		}
 		return nil, errors.New(src.Machine + " is not answering")
@@ -485,14 +452,8 @@ func (s *Server) flatDo(ctx context.Context, src flatSource, req flatRequest) (*
 	}
 	res, err := s.remotes.request(ctx, r, req.method, target, body, req.header)
 	if err != nil {
-		// A window that went away says nothing about the remote; a remote
-		// that took too long does.
-		if !errors.Is(ctx.Err(), context.Canceled) {
-			s.flat.markDown(src.Remote, true)
-		}
 		return nil, err
 	}
-	s.flat.markDown(src.Remote, false)
 	// The flat view cannot open one machine's sign-in dialog for another.
 	if res.StatusCode == http.StatusUnauthorized {
 		res.Body.Close()
@@ -504,8 +465,9 @@ func (s *Server) flatDo(ctx context.Context, src flatSource, req flatRequest) (*
 }
 
 // flatProbe asks a remote that stopped answering whether it is back, away
-// from any window's request. A flat window hears of it from its stream, which
-// reopens on the remote and makes the window read the lists again.
+// from any window's request; request notes the answer. A flat window hears of
+// it from its stream, which reopens on the remote and makes the window read
+// the lists again.
 func (s *Server) flatProbe(id string) {
 	r, err := s.remotes.get(id)
 	if err != nil {
@@ -513,12 +475,9 @@ func (s *Server) flatProbe(id string) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), flatTimeout)
 	defer cancel()
-	res, err := s.remotes.request(ctx, r, "GET", "/api/version", nil, nil)
-	if err != nil {
-		return
+	if res, err := s.remotes.request(ctx, r, "GET", "/api/version", nil, nil); err == nil {
+		res.Body.Close()
 	}
-	res.Body.Close()
-	s.flat.markDown(id, false)
 }
 
 // flatLocal runs a request through this app in process, as routeProfile hands

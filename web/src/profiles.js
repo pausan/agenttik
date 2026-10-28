@@ -25,7 +25,7 @@ export const isFlatView = profileID === FLAT_PROFILE && !remoteID;
 export function allProfiles() {
   const list = [
     ...profiles.items.map(p => ({ ...p, remote: "" })),
-    ...profiles.remotes.flatMap(r => r.profiles.map(p => ({ ...p, remote: r.id, machine: r.name }))),
+    ...profiles.remotes.flatMap(r => r.profiles.map(p => ({ ...p, remote: r.id, machine: r.name, down: !!r.down }))),
   ];
   if (list.length < 2) return list;
   return [{ id: FLAT_PROFILE, name: "Flat view", remote: "", flat: true }, ...list];

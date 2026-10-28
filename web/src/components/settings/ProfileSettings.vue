@@ -151,7 +151,7 @@ async function remove() {
     <RemoteMachineSearch :busy="busy" @connect="machine => addRemote(machine.address, true)" />
     <div v-for="r in profiles.remotes" :key="r.id" class="border-t border-default py-2">
       <div class="flex items-center gap-2">
-        <ProfileIcon remote />
+        <ProfileIcon remote :down="r.down" />
         <div class="min-w-0 flex-1">
           <div class="truncate font-medium">{{ r.name }}</div>
           <div class="truncate text-xs text-dimmed" :title="r.addresses?.join('\n')">{{ r.address }}<template v-if="r.addresses?.length > 1"> · {{ r.addresses.length - 1 }} more {{ r.addresses.length > 2 ? "addresses" : "address" }}</template><template v-if="r.version"> · agenttik {{ r.version }}</template></div>

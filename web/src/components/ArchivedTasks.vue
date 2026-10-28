@@ -62,7 +62,7 @@ watch([query, window, page, size, () => props.tab.data.revision, retry], (values
       :project-id="tab.projectID"
       :title="task.title" :prompt="task.prompt" :status="task.status"
       :sub="`${task.model} · ${ago(task.last_active_at)}`" :outcome="task.summary"
-      :job="task.schedule_id" :unread="!!S.unreadTasks[task.id]"
+      :job="task.schedule_id" :unread="S.unreadTasks[task.id] || 0"
       archived archive deletable
       @select="pickTask(task.id)" @open-job="openSchedule(task.schedule_id)"
       @toggle-unread="toggleTaskUnread(task.id)"

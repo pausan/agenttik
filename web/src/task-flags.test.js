@@ -17,8 +17,8 @@ test("an unknown or missing flag is no flag", () => {
 
 test("a read, unmarked dot marks unread first and the cycle ends read", () => {
   const seen = [];
-  let dot = { flag: "", unread: false };
-  for (let i = 0; i < 5; i++) seen.push(dot = nextDot(dot.flag, dot.unread));
+  let dot = { flag: "", unread: 0 };
+  for (let i = 0; i < 5; i++) seen.push(dot = nextDot(dot.flag, dot.unread ? -1 : 0));
   assert.deepEqual(seen, [
     { flag: "", unread: true },
     { flag: "star", unread: true },
@@ -29,6 +29,11 @@ test("a read, unmarked dot marks unread first and the cycle ends read", () => {
 });
 
 test("an unread or marked dot moves straight to the next mark", () => {
-  assert.deepEqual(nextDot("", true), { flag: "star", unread: true });
-  assert.deepEqual(nextDot("warn", false), { flag: "danger", unread: true });
+  assert.deepEqual(nextDot("", -1), { flag: "star", unread: true });
+  assert.deepEqual(nextDot("warn", 0), { flag: "danger", unread: true });
+  assert.deepEqual(nextDot("warn", 7), { flag: "danger", unread: true });
+});
+
+test("an unmarked dot left unread by a finished turn is read first", () => {
+  assert.deepEqual(nextDot("", 7), { flag: "", unread: false });
 });

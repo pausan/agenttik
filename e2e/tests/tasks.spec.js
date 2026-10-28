@@ -630,6 +630,22 @@ test("a result that finishes on the selected task stays unread until the user re
   await expect(title).not.toHaveClass(/font-bold/, { timeout: 5000 });
 });
 
+test("a finished result's dot reads it first, then the cycle starts over", async ({ page }) => {
+  await addProject(page);
+  await openProject(page);
+  await newTask(page);
+  const row = sidebar(page).locator(".task-row").first();
+  const title = row.locator(".task-title");
+  await sendPrompt(page, "@wait 500\nFinished while watched");
+  await expect(title).toHaveClass(/font-bold/);
+  await row.getByRole("button", { name: "Mark read", exact: true }).click();
+  await expect(title).not.toHaveClass(/font-bold/);
+  await row.getByRole("button", { name: "Mark unread", exact: true }).click();
+  await expect(title).toHaveClass(/font-bold/);
+  await row.getByRole("button", { name: "Mark star", exact: true }).click();
+  await expect(row.locator(".task-flag")).toHaveAttribute("data-flag", "star");
+});
+
 test("task dots cycle marks, even while running, and marks lead the archive", async ({ page }) => {
   await addProject(page);
   await openProject(page);

@@ -17,8 +17,11 @@ export function nextFlag(flag) {
 }
 
 // Where a click on the dot goes: a read, unmarked task turns unread first,
-// then the marks follow, and clearing the last mark reads it again.
+// then the marks follow, and clearing the last mark reads it again. unread is
+// 0 when read, -1 when marked by hand, or the finished turn's ID; an unmarked
+// task left unread by a finished turn is only read, so the cycle starts over.
 export function nextDot(flag, unread) {
+  if (!taskFlag(flag) && unread > 0) return { flag: "", unread: false };
   if (!taskFlag(flag) && !unread) return { flag: "", unread: true };
   const next = nextFlag(flag);
   return { flag: next, unread: !!next };

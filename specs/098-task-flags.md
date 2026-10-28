@@ -16,8 +16,11 @@ Unread still makes the title bold; read and unread now live only in the
 row's right-click menu.
 
 Clicking the dot steps read → unread → star → warning → danger → read
-without selecting the task. A task already unread or marked skips the unread
-step and moves to its next mark; clearing the last mark also marks it read. It works while the task runs or has queued prompts. The
+without selecting the task. An unmarked task left unread by a finished turn
+is only read by the first click, so the next click starts the cycle again.
+A task marked unread by hand or marked skips the unread step and moves to
+its next mark; clearing the last mark also marks it read. It works while the
+task runs or has queued prompts. The
 right-click menu has a **Mark** submenu that sets a mark directly; choosing
 the checked one clears it.
 
@@ -31,9 +34,11 @@ Archiving and unarchiving keep the mark. The archived list sorts marked tasks
 first, then newest first, in SQL, so the order holds across pages. Open task
 lists keep their dragged order.
 
-`task-flags.test.js` checks the cycle and the unread step. `session_paging_test.go` checks the
+`task-flags.test.js` checks the cycle, the unread step and reading a
+finished turn. `session_paging_test.go` checks the
 archived order, unknown flags and the sidebar field. The browser test steps
-a running task's dot through unread and the marks, checks a running mark
+a running task's dot through unread and the marks, reads a finished result
+from its dot, checks a running mark
 pulses and a stopped one does not, sets a mark from the menu,
 reloads, and checks that a marked, unread archived task leads a newer
 unmarked one with a bold title.

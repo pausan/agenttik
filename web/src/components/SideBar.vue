@@ -361,7 +361,7 @@ function onTaskDrop(e, projectID, overID) {
               :title="s.title"
               :prompt="s.prompt"
               :status="s.status"
-              :unread="!!S.unreadTasks[s.id]"
+              :unread="S.unreadTasks[s.id] || 0"
               @toggle-unread="toggleTaskUnread(s.id)"
               :flag="s.flag"
               @flag="setTaskFlag(s, $event)"

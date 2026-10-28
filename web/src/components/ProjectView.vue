@@ -350,7 +350,7 @@ async function doDelete() {
             :title="row.task.title"
             :prompt="row.task.prompt"
             :status="row.task.status"
-            :unread="!!S.unreadTasks[row.task.id]"
+            :unread="S.unreadTasks[row.task.id] || 0"
             @toggle-unread="toggleTaskUnread(row.task.id)"
             :flag="row.task.flag"
             @flag="setTaskFlag(row.task, $event)"

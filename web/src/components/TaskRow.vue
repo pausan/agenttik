@@ -34,7 +34,8 @@ const props = defineProps({
   // Forty runs of a job share a name, so the number is what says which job
   // this is a run of. See specs/028-scheduled-jobs.md.
   job: { type: Number, default: 0 },
-  unread: Boolean,
+  // 0 when read, -1 when marked unread by hand, or the finished turn's ID.
+  unread: { type: Number, default: 0 },
   // "", "star", "warn" or "danger". A mark replaces the status dot.
   flag: { type: String, default: "" },
   active: Boolean,
@@ -65,12 +66,12 @@ const queueAction = computed(() => projectQueueActions.value.get(props.projectId
 const mark = computed(() => taskFlag(props.flag));
 const step = computed(() => nextDot(props.flag, props.unread));
 const stepLabel = computed(() => step.value.flag ? `Mark ${taskFlag(step.value.flag).label.toLowerCase()}`
-  : step.value.unread ? "Mark unread" : "Clear mark");
+  : step.value.unread ? "Mark unread" : props.flag ? "Clear mark" : "Mark read");
 
 function cycle() {
   const { flag, unread } = step.value;
   if (flag !== (props.flag || "")) emit("flag", flag);
-  if (unread !== props.unread) emit("toggle-unread");
+  if (unread !== !!props.unread) emit("toggle-unread");
 }
 
 const menu = computed(() => [
@@ -160,6 +161,7 @@ defineExpose({ edit });
             aria-hidden="true"
           >{{ number || "" }}</span>
           <!-- Each click moves to the next step: unread, then each mark. A
+               finished turn's unread is only read by the first click. A
                mark pulses like the running dot while the task runs, so
                running stays visible on a marked row. -->
           <button

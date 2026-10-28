@@ -11,7 +11,7 @@ screen, **session** for the row, the route or the CLI flag.
 |-----|----------------|
 | [068](068-quick-start-tour.md) | Quick Start Tour, first agent, practice repo, queues and local commits |
 | [067](067-local-profiles.md) | Local profiles, project moves, local models, shared providers, profile switching |
-| [085](085-remote-profiles.md) | Remote profiles, live activity, sign-in, discovery and finding a moved machine |
+| [085](085-remote-profiles.md) | Remote profiles, live activity, sign-in, discovery, local and public addresses, and finding a moved machine |
 | [100](100-flat-view.md) | Flat view of every local and remote profile, merged lists and stream, and the orchestrator over all of them |
 | [099](099-mobile-app.md) | Android and iOS remote client: discovery, sign-in, trusted keys and Android reconnect |
 | [094](094-trusted-machines.md) | Machine keys, automatic sign-in to remotes, and the trusted list in Server settings |

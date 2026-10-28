@@ -154,7 +154,7 @@ async function remove() {
         <ProfileIcon remote />
         <div class="min-w-0 flex-1">
           <div class="truncate font-medium">{{ r.name }}</div>
-          <div class="truncate text-xs text-dimmed">{{ r.address }}<template v-if="r.version"> · agenttik {{ r.version }}</template></div>
+          <div class="truncate text-xs text-dimmed" :title="r.addresses?.join('\n')">{{ r.address }}<template v-if="r.addresses?.length > 1"> · {{ r.addresses.length - 1 }} more {{ r.addresses.length > 2 ? "addresses" : "address" }}</template><template v-if="r.version"> · agenttik {{ r.version }}</template></div>
         </div>
         <UButton color="neutral" variant="ghost" icon="i-lucide-refresh-cw" :aria-label="`Check ${r.name}`" title="Check the machine and refresh its profiles" :disabled="busy" @click="checkRemote(r.id)" />
         <UButton color="error" variant="ghost" icon="i-lucide-trash-2" :aria-label="`Remove ${r.name}`" :disabled="busy" @click="removingRemote = r" />

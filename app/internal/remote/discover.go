@@ -45,6 +45,16 @@ func DiscoveryNetworks(addresses []netip.Addr) []netip.Prefix {
 
 // LocalNetworks lists the private ranges of this machine's active interfaces.
 func LocalNetworks() ([]netip.Prefix, error) {
+	addresses, err := InterfaceAddrs()
+	if err != nil {
+		return nil, err
+	}
+	return DiscoveryNetworks(addresses), nil
+}
+
+// InterfaceAddrs lists the addresses of this machine's up, non-loopback
+// interfaces.
+func InterfaceAddrs() ([]netip.Addr, error) {
 	interfaces, err := net.Interfaces()
 	if err != nil {
 		return nil, err
@@ -65,7 +75,7 @@ func LocalNetworks() ([]netip.Prefix, error) {
 			}
 		}
 	}
-	return DiscoveryNetworks(addresses), nil
+	return addresses, nil
 }
 
 // NetworkHosts counts, for each network, the addresses no earlier network

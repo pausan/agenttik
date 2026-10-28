@@ -169,13 +169,13 @@ func TestRemoteMovedAndFoundAgain(t *testing.T) {
 	id := machineID(t, remoteStore)
 	decode[remoteState](t, do(t, local, "POST", "/api/remotes", map[string]string{"address": address}))
 
-	local.remotes.update(id, func(r *savedRemote) { r.Address = "http://" + otherAddress })
+	local.remotes.update(id, func(r *savedRemote) { r.Address, r.Addresses = "http://"+otherAddress, nil })
 	if state := decode[remoteState](t, do(t, local, "POST", "/api/remotes/"+id+"/connect", nil)); state.Status != "moved" {
 		t.Fatalf("%+v", state)
 	}
 
 	_, port, _ := net.SplitHostPort(address)
-	local.remotes.update(id, func(r *savedRemote) { r.Address = "http://192.0.2.1:" + port })
+	local.remotes.update(id, func(r *savedRemote) { r.Address, r.Addresses = "http://192.0.2.1:"+port, nil })
 	local.remotes.networks = func() ([]netip.Prefix, error) {
 		return []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32"), netip.MustParsePrefix("127.0.0.0/31")}, nil
 	}

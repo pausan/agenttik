@@ -98,6 +98,9 @@ type Server struct {
 	// tunnel is the optional public trycloudflare.com address in front of
 	// that same backend and lock; nil wherever network is.
 	tunnel *quicktunnel.Client
+	// listenAddr is the address Listener serves on: the whole server in web
+	// mode, loopback for the desktop window.
+	listenAddr string
 
 	// auth is the lock that listener can be put behind. It exists in every
 	// mode so the routes that set it up have something to call; only the
@@ -291,6 +294,7 @@ func (s *Server) routes() {
 	api.Get("/server/trusted", s.listTrustedMachines)
 	api.Delete("/server/trusted/:key", s.forgetTrustedMachine)
 	api.Put("/server/tunnel", s.putServerTunnel)
+	api.Get("/server/addresses", s.serverAddresses)
 	api.Get("/orchestrator", s.getOrchestratorConfig)
 	api.Put("/orchestrator", s.putOrchestratorConfig)
 	api.Post("/orchestrator/prompt/reset", s.resetOrchestratorPrompt)
@@ -397,7 +401,10 @@ func (s *Server) Listen(addr string) error { return s.app.Listen(addr) }
 
 // Listener serves on an already-open listener, which desktop mode uses so it
 // can learn the port before the window opens.
-func (s *Server) Listener(ln net.Listener) error { return s.app.Listener(retryAccept{ln}) }
+func (s *Server) Listener(ln net.Listener) error {
+	s.listenAddr = ln.Addr().String()
+	return s.app.Listener(retryAccept{ln})
+}
 
 // Shutdown releases the live streams first, then waits briefly for the
 // remaining connections. The timeout is a backstop: a stuck client must never

@@ -6,8 +6,6 @@ import (
 	"io"
 	"net/http"
 	"time"
-
-	"github.com/pausan/agenttik/app/internal/remote"
 )
 
 const remoteActivityInterval = 3 * time.Second
@@ -28,7 +26,7 @@ func (m *remoteManager) watchActivity(r savedRemote, profiles []profileStatus) {
 	// A removed machine must not be revived by an in-flight connection.
 	found := false
 	for _, saved := range m.remotes {
-		if saved.ID == r.ID && saved.Address == r.Address {
+		if saved.ID == r.ID {
 			found = true
 			break
 		}
@@ -67,10 +65,12 @@ func (m *remoteManager) refreshActivity(parent context.Context, initial savedRem
 	defer cancel()
 	var profiles []profileStatus
 	r, err := m.get(initial.ID)
-	if err == nil && r.Address == initial.Address {
+	if err == nil {
 		// Do not attribute work to a different machine at the saved address.
-		_, info, err := remote.Check(ctx, r.Address)
-		if err == nil && info.ID == r.ID {
+		// Each tick moves to the best address that answers, so a machine
+		// stays connected when this one leaves or joins its network.
+		r, _, err = m.reach(ctx, r)
+		if err == nil {
 			res, err := m.request(ctx, r, "GET", "/api/profiles", nil, http.Header{"Accept": {"application/json"}})
 			if err == nil {
 				var list struct {

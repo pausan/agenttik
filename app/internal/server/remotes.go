@@ -28,25 +28,28 @@ import (
 )
 
 // savedRemote is another machine whose profiles this instance lists. It is
-// keyed by the remote's machine ID, so a new address updates the same entry.
+// keyed by the remote's machine ID, so a new address joins the same entry.
+// Address is the one in use; Addresses are all known, most recent first.
 // Cookies hold the remote's sign-in session; they never reach the browser.
 type savedRemote struct {
-	ID       string            `json:"id"`
-	Name     string            `json:"name"`
-	Address  string            `json:"address"`
-	Version  string            `json:"version,omitempty"`
-	Profiles []Profile         `json:"profiles"`
-	Cookies  map[string]string `json:"cookies,omitempty"`
+	ID        string            `json:"id"`
+	Name      string            `json:"name"`
+	Address   string            `json:"address"`
+	Addresses []string          `json:"addresses,omitempty"`
+	Version   string            `json:"version,omitempty"`
+	Profiles  []Profile         `json:"profiles"`
+	Cookies   map[string]string `json:"cookies,omitempty"`
 }
 
 // remoteView is what the UI sees of a saved remote.
 type remoteView struct {
-	ID       string          `json:"id"`
-	Name     string          `json:"name"`
-	Address  string          `json:"address"`
-	Version  string          `json:"version,omitempty"`
-	Profiles []profileStatus `json:"profiles"`
-	SignedIn bool            `json:"signed_in"`
+	ID        string          `json:"id"`
+	Name      string          `json:"name"`
+	Address   string          `json:"address"`
+	Addresses []string        `json:"addresses"`
+	Version   string          `json:"version,omitempty"`
+	Profiles  []profileStatus `json:"profiles"`
+	SignedIn  bool            `json:"signed_in"`
 }
 
 type remoteScan struct {
@@ -183,18 +186,38 @@ func (r savedRemote) view() remoteView {
 	for _, p := range r.Profiles {
 		profiles = append(profiles, profileStatus{Profile: p})
 	}
-	return remoteView{ID: r.ID, Name: r.Name, Address: r.Address, Version: r.Version, Profiles: profiles, SignedIn: len(r.Cookies) > 0}
+	return remoteView{ID: r.ID, Name: r.Name, Address: r.Address, Addresses: r.known(), Version: r.Version, Profiles: profiles, SignedIn: len(r.Cookies) > 0}
 }
 
 // request calls the remote with its saved session. Cookies it sets are kept.
-// When the remote asks for sign-in, this machine signs in with its key and
-// tries once more; body must then be seekable, as every caller's is.
+// When the address in use stops answering, a machine with others moves to
+// the best of them and tries once more. When the remote asks for sign-in,
+// this machine signs in with its key and tries once more. Either way, body
+// must be seekable, as every caller's is.
 func (m *remoteManager) request(ctx context.Context, r savedRemote, method, path string, body io.Reader, header http.Header) (*http.Response, error) {
+	seeker, rewindable := body.(io.Seeker)
+	rewind := func() error {
+		if seeker == nil {
+			return nil
+		}
+		_, err := seeker.Seek(0, io.SeekStart)
+		return err
+	}
 	res, err := m.send(ctx, r, method, path, body, header)
+	if err != nil && ctx.Err() == nil && len(r.known()) > 1 && (body == nil || rewindable) {
+		moved, _, reachErr := m.reach(ctx, r)
+		if reachErr != nil || moved.Address == r.Address {
+			return nil, err
+		}
+		if err := rewind(); err != nil {
+			return nil, err
+		}
+		r = moved
+		res, err = m.send(ctx, r, method, path, body, header)
+	}
 	if err != nil || res.StatusCode != http.StatusUnauthorized || strings.HasPrefix(path, "/__auth/") {
 		return res, err
 	}
-	seeker, rewindable := body.(io.Seeker)
 	if body != nil && !rewindable {
 		return res, nil
 	}
@@ -203,10 +226,8 @@ func (m *remoteManager) request(ctx context.Context, r savedRemote, method, path
 		return res, nil
 	}
 	res.Body.Close()
-	if seeker != nil {
-		if _, err := seeker.Seek(0, io.SeekStart); err != nil {
-			return nil, err
-		}
+	if err := rewind(); err != nil {
+		return nil, err
 	}
 	return m.send(ctx, fresh, method, path, body, header)
 }
@@ -339,7 +360,8 @@ func (s *Server) listRemotes(c *fiber.Ctx) error {
 }
 
 // addRemote checks an address and saves the machine that answers there. A
-// machine already saved keeps its session and moves to the new address.
+// machine already saved keeps its session and its other addresses, and uses
+// the new one.
 func (s *Server) addRemote(c *fiber.Ctx) error {
 	m, err := s.remoteManager()
 	if err != nil {
@@ -373,12 +395,13 @@ func (s *Server) addRemote(c *fiber.Ctx) error {
 	found := false
 	for i := range next {
 		if next[i].ID == info.ID {
-			next[i].Address, next[i].Name, next[i].Version = target.String(), remoteName(info, target.String()), info.Version
+			next[i].use(target.String())
+			next[i].Name, next[i].Version = remoteName(info, target.String()), info.Version
 			found = true
 		}
 	}
 	if !found {
-		next = append(next, savedRemote{ID: info.ID, Name: remoteName(info, target.String()), Address: target.String(), Version: info.Version})
+		next = append(next, savedRemote{ID: info.ID, Name: remoteName(info, target.String()), Address: target.String(), Addresses: []string{target.String()}, Version: info.Version})
 	}
 	err = m.save(next)
 	m.mu.Unlock()
@@ -400,8 +423,8 @@ func remoteName(info remote.Info, address string) string {
 }
 
 type remoteState struct {
-	// Status is ok, signin, unreachable or moved. Moved means another machine
-	// answers at the saved address.
+	// Status is ok, signin, unreachable or moved. Moved means no address
+	// reached the machine and another machine answers at one of them.
 	Status       string      `json:"status"`
 	Error        string      `json:"error,omitempty"`
 	CodeRequired bool        `json:"code_required,omitempty"`
@@ -420,8 +443,9 @@ func (s *Server) connectRemote(c *fiber.Ctx) error {
 	return c.JSON(m.connect(c.UserContext(), c.Params("id")))
 }
 
-// connect checks that the saved address still reaches the same machine and
-// refreshes its profile list. Only an explicit switch or check calls it.
+// connect finds the best address that still reaches the same machine,
+// refreshes its profile list and learns its other addresses. Only an explicit
+// switch or check calls it.
 func (m *remoteManager) connect(parent context.Context, id string) remoteState {
 	m.pauseDiscovery()
 	r, err := m.get(id)
@@ -430,14 +454,14 @@ func (m *remoteManager) connect(parent context.Context, id string) remoteState {
 	}
 	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
 	defer cancel()
-	_, info, err := remote.Check(ctx, r.Address)
+	r, info, err := m.reach(ctx, r)
+	if errors.Is(err, errOtherMachine) {
+		view := r.view()
+		return remoteState{Status: "moved", Error: "another agenttik answers at " + r.Address, Remote: &view}
+	}
 	if err != nil {
 		view := r.view()
 		return remoteState{Status: "unreachable", Error: err.Error(), Remote: &view}
-	}
-	if info.ID != r.ID {
-		view := r.view()
-		return remoteState{Status: "moved", Error: "another agenttik answers at " + r.Address, Remote: &view}
 	}
 	res, err := m.request(ctx, r, "GET", "/api/profiles", nil, http.Header{"Accept": {"application/json"}})
 	if err != nil {
@@ -473,6 +497,7 @@ func (m *remoteManager) connect(parent context.Context, id string) remoteState {
 	if err != nil {
 		return remoteState{Status: "unreachable", Error: err.Error()}
 	}
+	r = m.learnAddresses(ctx, r)
 	view := r.view()
 	view.Profiles = list.Profiles
 	m.watchActivity(r, list.Profiles)
@@ -627,7 +652,8 @@ func (s *Server) findRemote(c *fiber.Ctx) error {
 				return nil
 			}
 			if _, err := m.update(r.ID, func(saved *savedRemote) {
-				saved.Address, saved.Name, saved.Version = target.String(), remoteName(info, target.String()), info.Version
+				saved.use(target.String())
+				saved.Name, saved.Version = remoteName(info, target.String()), info.Version
 			}); err != nil {
 				return err
 			}

@@ -7,7 +7,7 @@ let fixture = 0;
 
 // Run the actual page with a small DOM and native bridge. Timers are manual
 // so a lost network never makes these tests wait or send real requests.
-async function page(t, { lost = false, request, nativeCall } = {}) {
+async function page(t, { lost = false, request, nativeCall, saved } = {}) {
   const elements = new Map();
   let created = 0;
   function element(id) {
@@ -18,7 +18,7 @@ async function page(t, { lost = false, request, nativeCall } = {}) {
     });
     return elements.get(id);
   }
-  const data = new Map();
+  const data = new Map(saved ? [['agenttik.servers', JSON.stringify(saved)]] : []);
   const storage = {
     getItem: (key) => data.get(key) ?? null,
     setItem: (key, value) => data.set(key, String(value)),
@@ -160,4 +160,21 @@ test('recovery asks for sign-in when the server session expired', async (t) => {
   assert.equal(p.element('login').hidden, false);
   assert.equal(p.timers.size, 0);
   assert.equal(p.location.href, 'https://localhost/');
+});
+
+test('a lost local address falls back to the public one, and learns addresses', async (t) => {
+  const away = 'https://lab.trycloudflare.com';
+  const version = { status: 200, data: { application: 'agenttik', version: 'test', id: 'lab', name: 'Lab' } };
+  const p = await page(t, { lost: true, saved: [{ origin, id: 'lab', name: 'Lab', origins: [origin, away] }], request: async ({ url }) => {
+    if (url.startsWith(origin)) throw new Error('offline');
+    if (url.endsWith('/api/version')) return version;
+    if (url.endsWith('/api/server/addresses')) return { status: 200, data: { addresses: [origin, 'http://10.0.0.9:7717'] } };
+    return { status: 200, data: '<div id="app"></div>' };
+  } });
+  await p.tick();
+  assert.equal(p.location.href, away + '/');
+  assert.equal(p.timers.size, 0);
+  const [saved] = JSON.parse(p.localStorage.getItem('agenttik.servers'));
+  assert.equal(saved.origin, away);
+  assert.deepEqual(saved.origins, [away, origin, 'http://10.0.0.9:7717']);
 });

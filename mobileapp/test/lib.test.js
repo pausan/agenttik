@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  base64url, identify, isPrivateIPv4, keyMessage, loginError, loginState,
-  parseAddress, pool, scanHosts,
+  MAX_ORIGINS, base64url, candidates, identify, isLocalOrigin, isPrivateIPv4,
+  keyMessage, locate, loginError, loginState, parseAddress, pool, remember,
+  scanHosts,
 } from '../www/lib.js';
 
 test('parseAddress follows the desktop rules', () => {
@@ -73,4 +74,65 @@ test('pool caps concurrency and visits every item', async () => {
   });
   assert.equal(peak, 3);
   assert.deepEqual(seen.sort(), [1, 2, 3, 4, 5, 6, 7]);
+});
+
+test('isLocalOrigin matches the desktop', () => {
+  for (const o of ['http://192.168.1.5:7717', 'http://10.0.0.2:7717', 'http://127.0.0.1:7717', 'http://169.254.1.1:7717',
+    'http://[fd00::1]:7717', 'http://studio:7717', 'http://studio.local:7717', 'http://box.home.arpa']) {
+    assert.ok(isLocalOrigin(o), o);
+  }
+  for (const o of ['https://a.trycloudflare.com', 'http://203.0.113.9:7717', 'http://[2001:db8::1]:7717', 'nope']) {
+    assert.ok(!isLocalOrigin(o), o);
+  }
+});
+
+test('candidates put local origins first, then the most recent', () => {
+  const server = { origin: 'https://a.trycloudflare.com', origins: ['https://a.trycloudflare.com', 'http://203.0.113.9:7717', 'http://192.168.1.5:7717'] };
+  assert.deepEqual(candidates(server), ['http://192.168.1.5:7717', 'https://a.trycloudflare.com', 'http://203.0.113.9:7717']);
+});
+
+test('remember keeps one entry per server with all its origins', () => {
+  const home = 'http://192.168.1.5:7717';
+  const away = 'https://a.trycloudflare.com';
+  let list = remember([], { origin: home, id: 'lab', name: 'Lab' }, [away, 'bad/path', home]);
+  assert.deepEqual(list, [{ origin: home, id: 'lab', name: 'Lab', origins: [home, away] }]);
+  list = remember([{ origin: 'http://other:7717', id: 'other' }, ...list], { origin: away, id: 'lab', name: 'Lab' });
+  assert.deepEqual(list.map((s) => [s.id, s.origin, s.origins]), [['lab', away, [away, home]], ['other', 'http://other:7717', undefined]]);
+  // Another server now at a saved origin replaces the one last seen there.
+  list = remember(list, { origin: 'http://other:7717', id: 'new' });
+  assert.deepEqual(list.map((s) => s.id), ['new', 'lab']);
+  const many = Array.from({ length: 12 }, (_, i) => `http://10.0.0.${i + 1}:7717`);
+  assert.equal(remember([], { origin: home, id: 'lab' }, many)[0].origins.length, MAX_ORIGINS);
+});
+
+test('locate picks the best origin that answers, quickly', async () => {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const servers = { dead: -1, fast: 0, slow: 60, silent: 1000 };
+  const started = [];
+  const check = async (o) => {
+    started.push(o);
+    if (servers[o] < 0) throw new Error(`down ${o}`);
+    await wait(servers[o]);
+    return { id: o };
+  };
+  const opts = { stagger: 30, grace: 100 };
+  const run = async (...origins) => {
+    started.length = 0;
+    const t = Date.now();
+    const { origin } = await locate(origins, check, opts);
+    return [origin, Date.now() - t];
+  };
+  assert.equal((await run('dead', 'fast'))[0], 'fast');
+  // The best answering first does not start the others.
+  const [best, took] = await run('fast', 'silent');
+  assert.equal(best, 'fast');
+  assert.ok(took < 30, `${took} ms`);
+  assert.deepEqual(started, ['fast']);
+  // A better origin that answers within the grace wins.
+  assert.equal((await run('slow', 'fast'))[0], 'slow');
+  // One that never answers costs the grace, no more.
+  const [fallback, waited] = await run('silent', 'fast');
+  assert.equal(fallback, 'fast');
+  assert.ok(waited < 30 + 100 + 50, `${waited} ms`);
+  await assert.rejects(locate(['dead', 'dead2'], async (o) => { throw new Error(o); }, opts), /dead$/);
 });

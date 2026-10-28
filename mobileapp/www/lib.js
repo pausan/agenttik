@@ -115,3 +115,104 @@ export async function pool(items, n, worker) {
   };
   await Promise.all(Array.from({ length: Math.min(n, items.length) }, run));
 }
+
+// A server can be reached on more than one origin: its local network address
+// at home, its public one from anywhere else. A saved server keeps up to
+// MAX_ORIGINS of them.
+export const MAX_ORIGINS = 8;
+
+// isLocalOrigin tells a local network origin from a public one, as the
+// desktop does: private, loopback and link-local IPs, and names without a
+// domain or under a local one.
+export function isLocalOrigin(origin) {
+  let host;
+  try {
+    host = new URL(origin).hostname.replace(/^\[|\]$/g, '');
+  } catch {
+    return false;
+  }
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) {
+    return isPrivateIPv4(host) || host.startsWith('127.') || host.startsWith('169.254.');
+  }
+  if (host.includes(':')) return /^(::1$|f[cd]|fe[89ab])/i.test(host);
+  return !host.includes('.') || /\.(local|lan|home\.arpa)$/.test(host);
+}
+
+// knownOrigins lists a saved server's origins: the one in use first, then
+// the others from the most recently reached.
+export function knownOrigins(server) {
+  return [...new Set([server.origin, ...(server.origins || [])])];
+}
+
+// candidates is the order to try a server's origins in: local network
+// first, then the most recently reached.
+export function candidates(server) {
+  const list = knownOrigins(server);
+  return [...list.filter(isLocalOrigin), ...list.filter((o) => !isLocalOrigin(o))];
+}
+
+// remember puts entry first in the saved list, one per server: entries with
+// its machine ID (or, without one, its origin) merge into it, keeping their
+// origins after its own, then the learned ones. Another server last seen at
+// its origin is dropped, as that origin now reaches this one.
+export function remember(list, entry, learned = []) {
+  const same = list.filter((s) => (entry.id ? s.id === entry.id : s.origin === entry.origin));
+  const origins = [];
+  for (const o of [entry.origin, ...same.flatMap(knownOrigins), ...learned]) {
+    let origin;
+    try {
+      origin = parseAddress(o);
+    } catch {
+      continue;
+    }
+    if (!origins.includes(origin) && origins.length < MAX_ORIGINS) origins.push(origin);
+  }
+  const rest = list.filter((s) => !same.includes(s) && s.origin !== entry.origin);
+  return [{ ...entry, origins }, ...rest];
+}
+
+// locate tries origins in order and resolves with the best one check
+// accepts, as {origin, info}. The next starts when the last fails or after
+// stagger ms. Once one answers, better ones still pending get grace ms.
+// With none, it rejects with the first origin's error.
+export function locate(origins, check, { stagger = 300, grace = 1000 } = {}) {
+  return new Promise((resolve, reject) => {
+    const failed = [];
+    let started = 0;
+    let best = -1;
+    let bestInfo;
+    let done = false;
+    let staggerTimer;
+    let graceTimer;
+    const finish = () => {
+      done = true;
+      clearTimeout(staggerTimer);
+      clearTimeout(graceTimer);
+      if (best >= 0) resolve({ origin: origins[best], info: bestInfo });
+      else reject(failed[0]);
+    };
+    const settle = () => {
+      if (done) return;
+      if (best >= 0 && failed.slice(0, best).filter(Boolean).length === best) finish();
+      else if (best < 0 && started < origins.length) next();
+      else if (best < 0 && failed.filter(Boolean).length === origins.length) finish();
+    };
+    const next = () => {
+      clearTimeout(staggerTimer);
+      const i = started++;
+      if (started < origins.length) staggerTimer = setTimeout(() => !done && best < 0 && next(), stagger);
+      Promise.resolve().then(() => check(origins[i])).then((info) => {
+        if (best < 0 || i < best) {
+          best = i;
+          bestInfo = info;
+        }
+        if (graceTimer === undefined) graceTimer = setTimeout(() => !done && finish(), grace);
+        settle();
+      }, (err) => {
+        failed[i] = err || new Error(`Could not reach ${origins[i]}.`);
+        settle();
+      });
+    };
+    next();
+  });
+}

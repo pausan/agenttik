@@ -1,6 +1,6 @@
 import {
-  PORT, base64url, identify, keyMessage, loginError, loginState,
-  parseAddress, pool, randomHex, scanHosts,
+  PORT, base64url, candidates, identify, keyMessage, knownOrigins, locate,
+  loginError, loginState, parseAddress, pool, randomHex, remember, scanHosts,
 } from './lib.js';
 
 // The native bridge Capacitor injects into this page. Plugins are called
@@ -40,10 +40,14 @@ function servers() {
   }
 }
 
-function saveServer(entry) {
-  const list = servers().filter((s) => s.origin !== entry.origin);
-  list.unshift({ ...entry, used: Date.now() });
-  localStorage.setItem(SERVERS, JSON.stringify(list));
+// saveServer puts entry first, merged with what is saved for the same
+// server, plus the origins it reported.
+function saveServer(entry, learned = []) {
+  localStorage.setItem(SERVERS, JSON.stringify(remember(servers(), { ...entry, used: Date.now() }, learned)));
+}
+
+function savedServer(origin) {
+  return servers().find((s) => knownOrigins(s).includes(origin));
 }
 
 function forgetServer(origin) {
@@ -134,14 +138,26 @@ async function state(origin) {
   return loginState(res.data);
 }
 
+// reach finds where a saved server answers now: its local network origins
+// first, then the most recently reached. Others answer like check.
+async function reach(origin, known) {
+  if (!known?.id || knownOrigins(known).length < 2) return { origin, info: await check(origin) };
+  return locate(candidates({ ...known, origin }), async (o) => {
+    const info = await check(o);
+    if (info.id !== known.id) throw new Error(`Another agenttik answers at ${o}.`);
+    return info;
+  });
+}
+
 async function connect(origin, reconnect = false) {
   clearTimeout(retry);
   const current = ++attempt;
   showBusy(`${reconnect ? 'Reconnecting' : 'Connecting'} to ${origin}…`);
   try {
-    const info = await check(origin);
+    const known = savedServer(origin);
+    let info;
+    ({ origin, info } = await reach(origin, known));
     if (current !== attempt) return;
-    const known = servers().find((s) => s.origin === origin);
     const entry = { origin, name: info.name, id: info.id, trusted: !!(known?.trusted && known.id === info.id) };
     const s = await state(origin);
     if (current !== attempt) return;
@@ -209,6 +225,18 @@ async function passwordSignIn(password, code) {
   return open({ origin, name: info.name, id: info.id, trusted: !!info.id && !keyError }, current);
 }
 
+// addresses asks a signed-in server where else it can be reached. Older
+// servers do not say.
+async function addresses(origin) {
+  try {
+    const res = await http(origin + '/api/server/addresses', { connectTimeout: 2000, readTimeout: 2000, headers: { Accept: 'application/json' } });
+    const data = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
+    return res.status === 200 && Array.isArray(data?.addresses) ? data.addresses.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
 // open hands the WebView over to the remote. The native side keeps that one
 // origin inside the app; every other link still opens in the system browser.
 async function open(entry, current) {
@@ -216,9 +244,11 @@ async function open(entry, current) {
   // sure the WebView's store holds it before navigating.
   await native('CapacitorCookies', 'getCookies', { url: entry.origin }).catch(() => {});
   if (current !== attempt) return;
+  const learned = entry.id ? await addresses(entry.origin) : [];
+  if (current !== attempt) return;
   await native('AgenttikNative', 'allow', { origin: entry.origin });
   if (current !== attempt) return;
-  saveServer(entry);
+  saveServer(entry, learned);
   localStorage.removeItem(SIGNED_OUT);
   location.href = entry.origin + '/';
 }
@@ -231,7 +261,7 @@ async function scan() {
   $('scan').disabled = true;
   $('scan-status').textContent = 'Looking on this network…';
   let found = 0;
-  const saved = new Map(servers().map((s) => [s.origin, s]));
+  const saved = new Map(servers().flatMap((s) => knownOrigins(s).map((o) => [o, s])));
   try {
     const { addresses } = await native('AgenttikNative', 'addresses');
     const hosts = scanHosts(addresses);
@@ -265,8 +295,11 @@ function serverButton(s, { removable = false, known = false } = {}) {
   b.innerHTML = '<strong></strong><span></span>';
   b.querySelector('strong').textContent = s.name || s.origin;
   const signedOut = localStorage.getItem(SIGNED_OUT) === s.origin;
+  const more = knownOrigins(s).length - 1;
+  b.title = knownOrigins(s).join('\n');
   b.querySelector('span').textContent = [
-    s.origin, s.version, signedOut ? 'signed out' : '', s.trusted ? 'remembered' : known ? 'saved' : '',
+    s.origin, more > 0 ? `+${more} more` : '', s.version, signedOut ? 'signed out' : '',
+    s.trusted ? 'remembered' : known ? 'saved' : '',
   ].filter(Boolean).join(' · ');
   b.onclick = () => connect(s.origin);
   li.append(b);

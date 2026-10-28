@@ -20,10 +20,20 @@ helpers and connection flows, with a fake DOM, native bridge and timers.
   500 ms each, with the same signature check as the desktop. The desktop
   goes on to /16 and wider; the phone stops at the /24, which takes seconds.
 - **Saved.** Every server reached is saved in `localStorage`, newest first,
-  with its name, machine ID and whether this phone is trusted there. A cold
-  start reconnects to the newest one; Cancel stops it. Coming back to the
-  page in the same run does not reconnect. Scan results that are also saved
-  get an accent border and say `saved` or `remembered`.
+  with its name, machine ID, whether this phone is trusted there and its
+  origins. A cold start reconnects to the newest one; Cancel stops it.
+  Coming back to the page in the same run does not reconnect. Scan results
+  that are also saved get an accent border and say `saved` or `remembered`.
+- **Origins.** A server keeps up to eight origins, one entry per machine
+  ID: the one in use first, then the others from the most recently reached.
+  Before handing over, the app asks the signed-in server for
+  `/api/server/addresses` ([085](085-remote-profiles.md)) and adds them. A
+  saved server shows its origin in use and `+N more`. Connecting to any of
+  its origins, including after a lost connection, runs the desktop's quick
+  check: local network origins first, then the most recent; the next starts
+  when the last fails or after 300 ms, and once one answers with the same
+  machine ID, better ones still pending get one more second. So a phone that
+  leaves home moves to the public origin, and back to the local one at home.
 
 ## Signing in
 

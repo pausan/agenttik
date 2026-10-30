@@ -108,8 +108,9 @@ message will wake you.
 Once the user's requested work is complete, stop disposable background helpers
 you started that are no longer needed, using TaskStop where available, before
 your final reply. Keep waiting for tests, builds, or agents whose results are
-still needed. Do not stop work just to end the turn, or stop processes the user
-explicitly asked to keep running.`
+still needed. A task that only waits for one of those is not disposable: it is
+how you are woken when the work it watches finishes. Do not stop work just to
+end the turn, or stop processes the user explicitly asked to keep running.`
 
 // sendPrompt writes the turn's first prompt.
 func (h *host) sendPrompt(prompt string) error {

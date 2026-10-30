@@ -159,7 +159,9 @@ agent waits on (`is_backgrounded: false`) is not a background task. A reply
 keeps the turn open while tasks remain active, using both list and individual
 status updates. Each task prompt tells the agent to stop disposable helpers
 once its requested work is complete, while waiting for work it still needs
-and respecting processes the user asked to keep running. There is no automatic
+and respecting processes the user asked to keep running. A task that only
+waits for such work is not disposable: it is what wakes the agent when the
+work it watches finishes. There is no automatic
 timeout or cancellation based on the reply's wording.
 
 **Codex** has no background flag. Unified exec runs a command in a PTY. When

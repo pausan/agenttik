@@ -559,7 +559,7 @@ func TestPromptIsAStreamJSONLine(t *testing.T) {
 	if line["type"] != "user" || !strings.HasSuffix(content, "\n\nhi\nthere") {
 		t.Errorf("prompt line = %v", line)
 	}
-	for _, guidance := range []string{"keep writing to you", "stop disposable background helpers", "Keep waiting for tests", "explicitly asked to keep running"} {
+	for _, guidance := range []string{"keep writing to you", "stop disposable background helpers", "Keep waiting for tests", "only waits for one of those is not disposable", "explicitly asked to keep running"} {
 		if !strings.Contains(content, guidance) {
 			t.Errorf("prompt missing guidance %q", guidance)
 		}

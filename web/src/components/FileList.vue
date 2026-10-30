@@ -1,10 +1,10 @@
 <script setup>
-import { computed, ref } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 
 import TreeActionModal from "./TreeActionModal.vue";
 import { useBatches } from "../batches";
 import { ROW_BUTTON } from "../ui";
-import { S, currentProjectID, openFile } from "../store";
+import { S, currentProjectID, fail, openFile, revertFile } from "../store";
 
 const emit = defineEmits(["show-in-tree"]);
 
@@ -32,6 +32,27 @@ function aim(e) {
 
 function revert(path) {
   action.value = { kind: "revert", path, projectID: currentProjectID(), repository: S.repository };
+}
+
+/* The row's revert button asks on itself: the first click turns it red, the
+   second reverts. A press anywhere else stands it down again. */
+const ARMED = "rounded-md p-1 inline-flex items-center text-error bg-error/15 transition-colors hover:bg-error/25 active:bg-error/25 outline-inverted/25 focus-visible:outline-3 disabled:cursor-not-allowed disabled:opacity-75";
+const armed = ref("");
+function disarm(e) {
+  if (e.target.closest?.("[data-revert]")?.dataset.revert !== armed.value) armed.value = "";
+}
+watch(armed, (path) => {
+  if (path) document.addEventListener("pointerdown", disarm, true);
+  else document.removeEventListener("pointerdown", disarm, true);
+});
+onBeforeUnmount(() => document.removeEventListener("pointerdown", disarm, true));
+function revertClick(path) {
+  if (armed.value !== path) {
+    armed.value = path;
+    return;
+  }
+  armed.value = "";
+  revertFile(path, currentProjectID(), S.repository).catch(fail);
 }
 
 const menu = computed(() => [
@@ -73,9 +94,20 @@ const menu = computed(() => [
             <span v-if="f.status" class="w-5 shrink-0 text-primary">{{ f.status }}</span>
             <span class="path-clip truncate"><span>{{ f.path }}</span></span>
           </button>
-          <button v-if="allowRevert" type="button" :class="ROW_BUTTON" :aria-label="`Revert changes to ${f.path}`" :title="`Revert changes to ${f.path}`" :disabled="disabled" @click="revert(f.path)">
-            <UIcon name="i-lucide-undo-2" class="size-4 shrink-0" />
-          </button>
+          <span v-if="allowRevert" class="relative inline-flex">
+            <button
+              type="button"
+              :class="armed === f.path ? ARMED : ROW_BUTTON"
+              :data-revert="f.path"
+              :aria-label="armed === f.path ? `Click again to revert ${f.path}` : `Revert changes to ${f.path}`"
+              :title="armed === f.path ? undefined : `Revert changes to ${f.path}`"
+              :disabled="disabled"
+              @click="revertClick(f.path)"
+            >
+              <UIcon name="i-lucide-undo-2" class="size-4 shrink-0" />
+            </button>
+            <span v-if="armed === f.path" role="tooltip" class="pointer-events-none absolute right-full top-1/2 z-10 mr-1 -translate-y-1/2 whitespace-nowrap rounded-sm bg-default px-2 py-1 text-xs text-highlighted shadow-sm ring ring-default">Click again to confirm</span>
+          </span>
           <slot name="actions" :file="f" />
         </div>
         <button

@@ -29,6 +29,8 @@ preserved. Saving afterward writes to the new path.
 ## Reverting changes
 
 Changed files in the Tree and file lists offer **Revert changes…** on right click.
+(The row buttons in the Changed lists confirm with a second click instead, see
+[063](063-staging.md).)
 The confirmation names the file and explains that staged and unstaged changes
 will be discarded, newly added files removed, and open working-file tabs closed
 with their unsaved edits. Cancel leaves the file untouched. Unchanged files,

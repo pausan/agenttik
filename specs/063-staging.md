@@ -18,7 +18,10 @@ dialog ([046](046-tree-file-actions.md)); renaming does not stage the file.
 Clicking a Staged row opens its staged diff; a Changes row opens what is not
 staged yet ([004](004-ui.md#diff)).
 Both lists have an undo-arrow button on each row, with a tooltip, to revert
-the file after confirmation (discarding both staged and unstaged changes).
+the file (discarding both staged and unstaged changes). The first click turns
+the button red with a "Click again to confirm" tip; a second click on it
+reverts. A press anywhere else, including the same row's name, stands it down,
+so the next click on the button only arms it again.
 Each section also offers an all-files button. Unstaging preserves working
 files, including before the first commit. Renames include both index paths.
 

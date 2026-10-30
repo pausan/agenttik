@@ -161,24 +161,34 @@ for (const surface of ["Changes", "Tree", "Changes button", "Staged button"]) te
       await pane.getByRole("button", { name: "Stage file.txt", exact: true }).click();
       await expect(pane.getByRole("button", { name: "Unstage file.txt", exact: true })).toBeVisible();
     }
-    const askRevert = async () => {
-      if (surface.endsWith("button")) {
-        const revert = pane.getByRole("button", { name: "Revert changes to file.txt", exact: true });
-        await expect(revert).toHaveAttribute("title", "Revert changes to file.txt");
-        await revert.click();
-      } else {
+    if (surface.endsWith("button")) {
+      // The row button asks on itself: red after one click, reverts on two.
+      const revert = pane.getByRole("button", { name: "Revert changes to file.txt", exact: true });
+      const armed = pane.getByRole("button", { name: "Click again to revert file.txt", exact: true });
+      await expect(revert).toHaveAttribute("title", "Revert changes to file.txt");
+      await revert.click();
+      await expect(armed).toBeVisible();
+      await expect(pane.getByRole("tooltip")).toHaveText("Click again to confirm");
+      // A click anywhere else, even on the same file's row, stands it down.
+      await row.click();
+      await expect(armed).toHaveCount(0);
+      await revert.click();
+      expect(await readFile(join(root, "file.txt"), "utf8")).toBe("changed\n");
+      await armed.click();
+    } else {
+      const askRevert = async () => {
         await row.click({ button: "right" });
         await page.getByRole("menuitem", { name: "Revert changes" }).click();
-      }
-    };
-    await askRevert();
-    const dialog = page.getByRole("dialog", { name: "Revert changes" });
-    await expect(dialog).toBeVisible();
-    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
-    expect(await readFile(join(root, "file.txt"), "utf8")).toBe("changed\n");
-    await askRevert();
-    await dialog.getByRole("button", { name: "Revert", exact: true }).click();
-    await expect(dialog).toBeHidden();
+      };
+      await askRevert();
+      const dialog = page.getByRole("dialog", { name: "Revert changes" });
+      await expect(dialog).toBeVisible();
+      await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+      expect(await readFile(join(root, "file.txt"), "utf8")).toBe("changed\n");
+      await askRevert();
+      await dialog.getByRole("button", { name: "Revert", exact: true }).click();
+      await expect(dialog).toBeHidden();
+    }
     await expect(pane.getByText("No edited files.")).toBeVisible();
     expect(await readFile(join(root, "file.txt"), "utf8")).toBe("original\n");
     expect(git("status", "--porcelain")).toBe("");

@@ -87,16 +87,16 @@ type SessionFilter struct {
 	Query       string
 	Limit       int
 	Offset      int
-	Newest      bool // newest created session, for new-task model defaults
-	ExcludeDone bool // the project views hide ticked-off sessions
-	OnlyDone    bool // ... and list them separately, under their own filter
+	Newest      bool   // newest created session, for new-task model defaults
+	ExcludeDone bool   // the project views hide ticked-off sessions
+	OnlyDone    bool   // ... and list them separately, under their own filter
+	Flag        string // only sessions with this mark; "" means any or none
 }
 
 // ListSessions orders one project's sessions by the order they were dragged
 // into, and every other listing by running first, then recency. An
 // archived-only listing is history rather than a list anyone arranged, so it
-// comes back flagged first, then newest first, whether or not it is scoped to
-// a project.
+// comes back newest first, whether or not it is scoped to a project.
 func (s *Store) ListSessions(f SessionFilter) ([]Session, error) {
 	// Threads are drawn under their message, never in a list of tasks.
 	where := []string{"s.parent_id = ''"}
@@ -116,6 +116,10 @@ func (s *Store) ListSessions(f SessionFilter) ([]Session, error) {
 	if f.OnlyDone {
 		where = append(where, "s.done_at > 0")
 	}
+	if f.Flag != "" {
+		where = append(where, "s.flag = ?")
+		args = append(args, f.Flag)
+	}
 	if q := strings.TrimSpace(f.Query); q != "" {
 		where = append(where, "(s.title LIKE ? OR p.name LIKE ? OR p.path LIKE ?)")
 		like := "%" + q + "%"
@@ -126,7 +130,7 @@ func (s *Store) ListSessions(f SessionFilter) ([]Session, error) {
 	if f.Newest {
 		sqlStr += ` ORDER BY s.created_at DESC, s.id DESC`
 	} else if f.OnlyDone {
-		sqlStr += ` ORDER BY (s.flag <> '') DESC, s.last_active_at DESC, s.id DESC`
+		sqlStr += ` ORDER BY s.last_active_at DESC, s.id DESC`
 	} else if f.ProjectID > 0 {
 		sqlStr += ` ORDER BY s.position, s.last_active_at DESC`
 	} else {

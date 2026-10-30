@@ -3,6 +3,14 @@ import { computed, ref, watch } from "vue";
 import { api, ago } from "../api";
 import { S, openSchedule, pickTask, renameTask, setTaskArchived, setTaskFlag, toggleTaskUnread } from "../store";
 import TaskRow from "./TaskRow.vue";
+import { SEGMENTED } from "../ui";
+
+const MARKS = [
+  { label: "All", value: "all" },
+  { label: "Starred", value: "star" },
+  { label: "Warning", value: "warn" },
+  { label: "Danger", value: "danger" },
+];
 
 const props = defineProps({
   tab: { type: Object, required: true },
@@ -12,6 +20,7 @@ const props = defineProps({
 defineEmits(["delete"]);
 const query = computed(() => props.query);
 const window = computed(() => props.window);
+const mark = ref("all");
 const page = ref(1);
 const rows = ref([]);
 const loading = ref(false);
@@ -21,8 +30,8 @@ const size = computed(() => S.taskPageSize);
 const visible = computed(() => rows.value.slice(0, size.value));
 const more = computed(() => rows.value.length > size.value);
 
-watch([query, window, size], () => { page.value = 1; }, { flush: "sync" });
-watch([query, window, page, size, () => props.tab.data.revision, retry], (values, previous, onCleanup) => {
+watch([query, window, mark, size], () => { page.value = 1; }, { flush: "sync" });
+watch([query, window, mark, page, size, () => props.tab.data.revision, retry], (values, previous, onCleanup) => {
   let stale = false;
   loading.value = true;
   error.value = "";
@@ -32,6 +41,7 @@ watch([query, window, page, size, () => props.tab.data.revision, retry], (values
     window: window.value, project_id: props.tab.projectID, only_done: "true",
     limit: size.value + 1, offset: (page.value - 1) * size.value, q: query.value.trim(),
   });
+  if (mark.value !== "all") params.set("flag", mark.value);
   const timer = setTimeout(async () => {
     try {
       const result = await api("GET", `/api/sessions?${params}`);
@@ -50,7 +60,10 @@ watch([query, window, page, size, () => props.tab.data.revision, retry], (values
 
 <template>
   <section aria-label="Archived tasks">
-    <h3 class="mb-3 text-sm font-medium text-muted">Archived tasks</h3>
+    <div class="mb-3 flex items-center justify-between gap-3">
+      <h3 class="text-sm font-medium text-muted">Archived tasks</h3>
+      <UTabs v-model="mark" :items="MARKS" :content="false" size="xs" :ui="SEGMENTED" aria-label="Archived tasks filter" />
+    </div>
     <p v-if="loading" role="status" class="text-sm text-dimmed">Loading archived tasks…</p>
     <div v-else-if="error" role="alert">
       <p class="text-error">{{ error }}</p>

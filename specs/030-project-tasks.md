@@ -60,7 +60,8 @@ a different pane or project.
 ## API
 
 `GET /api/sessions` accepts `include_done=false` for open tasks and
-`only_done=true` for history. `limit` and `offset` page the filtered list;
+`only_done=true` for history. `flag=star|warn|danger` keeps one mark
+([098](098-task-flags.md)). `limit` and `offset` page the filtered list;
 a positive offset requires a positive limit. The default limit is 200;
 `limit=0` remains available for callers needing all open tasks. The UI's
 background session list excludes archived tasks.

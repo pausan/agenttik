@@ -132,8 +132,8 @@ type Session struct {
 	BackgroundTasks int  `json:"background_tasks,omitempty"`
 	AcceptsPrompts  bool `json:"accepts_prompts,omitempty"`
 
-	// Flag is the user's mark: "", "star", "warn" or "danger". Flagged tasks
-	// lead the archived list. See 098-task-flags.md.
+	// Flag is the user's mark: "", "star", "warn" or "danger". The archived
+	// list filters by it. See 098-task-flags.md.
 	Flag string `json:"flag"`
 
 	// ScheduleID is the schedule that spawned this session, or 0 for one

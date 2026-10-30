@@ -967,12 +967,7 @@ func sortFlatSessions(items []map[string]any, query url.Values) {
 		switch {
 		case newest:
 			return flatNum(a, "created_at") > flatNum(b, "created_at")
-		case onlyDone:
-			af, bf := a["flag"] != "" && a["flag"] != nil, b["flag"] != "" && b["flag"] != nil
-			if af != bf {
-				return af
-			}
-		default:
+		case !onlyDone:
 			ar, br := a["status"] == "running", b["status"] == "running"
 			if ar != br {
 				return ar

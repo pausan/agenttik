@@ -30,15 +30,17 @@ changes it; anything other than the three names or `""` is refused. Setting
 a mark is not activity, so `last_active_at` stays put. The row updates at
 once and reverts if the request fails.
 
-Archiving and unarchiving keep the mark. The archived list sorts marked tasks
-first, then newest first, in SQL, so the order holds across pages. Open task
-lists keep their dragged order.
+Archiving and unarchiving keep the mark. The archived list ignores marks when
+sorting and stays newest first. A switch on its title line shows All, Starred,
+Warning or Danger; it starts on All and resets with the list. The choice is
+sent as `flag` on `GET /api/sessions` and applied in SQL, so it holds across
+pages. Unknown flags are refused. Open task lists keep their dragged order.
 
 `task-flags.test.js` checks the cycle, the unread step and reading a
 finished turn. `session_paging_test.go` checks the
-archived order, unknown flags and the sidebar field. The browser test steps
+archived order, the filter, unknown flags and the sidebar field. The browser test steps
 a running task's dot through unread and the marks, reads a finished result
 from its dot, checks a running mark
 pulses and a stopped one does not, sets a mark from the menu,
-reloads, and checks that a marked, unread archived task leads a newer
-unmarked one with a bold title.
+reloads, and checks that a marked, unread archived task keeps its bold title
+below a newer unmarked one, and that the filter narrows the list to one mark.

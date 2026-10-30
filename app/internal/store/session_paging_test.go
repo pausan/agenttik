@@ -84,7 +84,7 @@ func BenchmarkArchivedSessions(b *testing.B) {
 	}
 }
 
-func TestFlaggedArchivedSessionsComeFirst(t *testing.T) {
+func TestArchivedSessionsSortByDateAndFilterByFlag(t *testing.T) {
 	s := testStore(t)
 	p, err := s.CreateProject("flags", t.TempDir())
 	if err != nil {
@@ -116,8 +116,12 @@ func TestFlaggedArchivedSessionsComeFirst(t *testing.T) {
 	for _, row := range rows {
 		got = append(got, row.ID+row.Flag)
 	}
-	if fmt.Sprint(got) != "[2star 0danger 3 1]" {
+	if fmt.Sprint(got) != "[3 2star 1 0danger]" {
 		t.Fatalf("order: %v", got)
+	}
+	rows, err = s.ListSessions(SessionFilter{ProjectID: p.ID, OnlyDone: true, Flag: "star"})
+	if err != nil || len(rows) != 1 || rows[0].ID != "2" {
+		t.Fatalf("starred: %v, %v", rows, err)
 	}
 	// The mark survives unarchiving and comes back on the sidebar row.
 	if err := s.SetSessionDone("0", false); err != nil {

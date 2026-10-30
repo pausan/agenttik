@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
@@ -417,6 +418,18 @@ func TestFlatViewRunsAJobFromItsPage(t *testing.T) {
 	}
 	if runs := decode[scheduleDetail](t, do(t, s, "GET", path+"?profile=all", nil)).Runs; len(runs) != 1 {
 		t.Fatalf("runs: %+v", runs)
+	}
+}
+
+func TestFlatArchivedSessionsIgnoreMarksAndRunning(t *testing.T) {
+	items := []map[string]any{
+		{"id": "old", "flag": "star", "last_active_at": json.Number("1")},
+		{"id": "new", "flag": "", "last_active_at": json.Number("3")},
+		{"id": "mid", "status": "running", "last_active_at": json.Number("2")},
+	}
+	sortFlatSessions(items, url.Values{"only_done": {"true"}})
+	if got := fmt.Sprint(items[0]["id"], items[1]["id"], items[2]["id"]); got != "newmidold" {
+		t.Fatalf("order: %s", got)
 	}
 }
 

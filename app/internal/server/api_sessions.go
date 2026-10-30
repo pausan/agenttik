@@ -43,6 +43,10 @@ func (s *Server) listSessions(c *fiber.Ctx) error {
 		// archive filter.
 		ExcludeDone: !c.QueryBool("include_done", true),
 		OnlyDone:    c.QueryBool("only_done", false),
+		Flag:        c.Query("flag"),
+	}
+	if !store.ValidFlag(f.Flag) {
+		return badRequest("flag must be star, warn, danger, or empty")
 	}
 	if f.Offset < 0 || (f.Offset > 0 && f.Limit <= 0) {
 		return badRequest("offset requires a positive limit and must not be negative")

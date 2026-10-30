@@ -651,7 +651,7 @@ test("a finished result's dot reads it first, then the cycle starts over", async
   await expect(row.locator(".task-flag")).toHaveAttribute("data-flag", "star");
 });
 
-test("task dots cycle marks, even while running, and marks lead the archive", async ({ page }) => {
+test("task dots cycle marks, even while running, and the archive filters by mark", async ({ page }) => {
   await addProject(page);
   await openProject(page);
   await newTask(page);
@@ -689,8 +689,8 @@ test("task dots cycle marks, even while running, and marks lead the archive", as
   await page.reload();
   await expect(flag).toHaveAttribute("data-flag", "warn");
 
-  // A newer unmarked archived task still sorts below the marked one, and an
-  // unread mark keeps the bold title. The stopped turn ended while its task
+  // A newer unmarked archived task sorts above the marked one, and an unread
+  // mark keeps the bold title. The stopped turn ended while its task
   // was in front, so it is still unread.
   await expect(row.locator(".task-title")).toHaveClass(/font-bold/);
   await row.click({ button: "right" });
@@ -704,7 +704,17 @@ test("task dots cycle marks, even while running, and marks lead the archive", as
   await openProject(page);
   const archived = page.getByRole("region", { name: "Archived tasks" }).locator(".task-row");
   await expect(archived).toHaveCount(2);
-  await expect(archived.first().locator(".task-flag")).toHaveAttribute("data-flag", "warn");
-  await expect(archived.first().locator(".task-title")).toHaveClass(/font-bold/);
-  await expect(archived.last().locator(".task-flag")).toHaveCount(0);
+  await expect(archived.first().locator(".task-flag")).toHaveCount(0);
+  await expect(archived.last().locator(".task-flag")).toHaveAttribute("data-flag", "warn");
+  await expect(archived.last().locator(".task-title")).toHaveClass(/font-bold/);
+
+  // The filter on the title line narrows the list to one mark.
+  const filters = page.getByRole("region", { name: "Archived tasks" }).getByRole("tab");
+  await filters.filter({ hasText: "Starred" }).click();
+  await expect(page.getByText("No archived tasks match.")).toBeVisible();
+  await filters.filter({ hasText: "Warning" }).click();
+  await expect(archived).toHaveCount(1);
+  await expect(archived.locator(".task-flag")).toHaveAttribute("data-flag", "warn");
+  await filters.filter({ hasText: "All" }).click();
+  await expect(archived).toHaveCount(2);
 });

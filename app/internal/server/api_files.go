@@ -450,11 +450,18 @@ func (s *Server) projectDiff(c *fiber.Ctx) error {
 	}
 
 	context := diffContext(c)
+	side := c.Query("side")
 	var out string
-	if _, err := runGit(root, "ls-files", "--error-unmatch", "--", rel); err == nil {
-		// HEAD covers staged and unstaged together; a repository with no
-		// commits has no HEAD, and there the index is the only baseline.
-		if out, err = gitDiff(root, "diff", "--no-color", context, "HEAD", "--", rel); err != nil {
+	if side == "staged" {
+		// HEAD to the index; with no commits yet, the index against nothing.
+		out, _ = gitDiff(root, "diff", "--no-color", context, "--cached", "--", rel)
+	} else if _, err := runGit(root, "ls-files", "--error-unmatch", "--", rel); err == nil {
+		if side == "unstaged" {
+			// The index to the working tree: what staging would add.
+			out, _ = gitDiff(root, "diff", "--no-color", context, "--", rel)
+		} else if out, err = gitDiff(root, "diff", "--no-color", context, "HEAD", "--", rel); err != nil {
+			// HEAD covers staged and unstaged together; a repository with no
+			// commits has no HEAD, and there the index is the only baseline.
 			out, _ = gitDiff(root, "diff", "--no-color", context, "--cached", "--", rel)
 		}
 	} else {

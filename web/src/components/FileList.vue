@@ -12,6 +12,7 @@ const props = defineProps({
   files: { type: Array, required: true }, // [{ path, status? }]
   allowRevert: { type: Boolean, default: false },
   allowRename: { type: Boolean, default: false },
+  side: { type: String, default: "" }, // which diff a click opens, see openFile
   disabled: { type: Boolean, default: false },
   compactEmpty: { type: Boolean, default: false },
   empty: { type: String, required: true },
@@ -66,8 +67,8 @@ const menu = computed(() => [
             type="button"
             class="flex min-w-0 flex-1 select-none items-center gap-1.5 rounded-[var(--ui-radius)] px-1.5 py-0.5 text-left font-mono text-xs hover:bg-elevated hover:text-highlighted"
             :data-path="f.path"
-            @click="openFile(f.path, false, 'diff')"
-            @dblclick="openFile(f.path, true, 'diff')"
+            @click="openFile(f.path, false, 'diff', side)"
+            @dblclick="openFile(f.path, true, 'diff', side)"
           >
             <span v-if="f.status" class="w-5 shrink-0 text-primary">{{ f.status }}</span>
             <span class="path-clip truncate"><span>{{ f.path }}</span></span>

@@ -15,6 +15,8 @@ copy matches HEAD again (the file then appears in both lists).
 A plus button stages a file. A minus button unstages it.
 Unstaged rows offer **Rename** on right click, using the shared file-name
 dialog ([046](046-tree-file-actions.md)); renaming does not stage the file.
+Clicking a Staged row opens its staged diff; a Changes row opens what is not
+staged yet ([004](004-ui.md#diff)).
 Both lists have an undo-arrow button on each row, with a tooltip, to revert
 the file after confirmation (discarding both staged and unstaged changes).
 Each section also offers an all-files button. Unstaging preserves working

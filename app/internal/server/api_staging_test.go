@@ -151,3 +151,54 @@ func TestGenerateCommitMessageUsesOnlyIndex(t *testing.T) {
 		t.Fatal("generation committed")
 	}
 }
+
+func TestDiffSides(t *testing.T) {
+	s, st := newTestServer(t)
+	root := t.TempDir()
+	git := func(args ...string) {
+		t.Helper()
+		if _, err := runGit(root, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write := func(value string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(root, "f.txt"), []byte(value), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	git("init")
+	p, err := st.CreateProject("sides", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	diff := func(side string) string {
+		t.Helper()
+		return decode[fileDiff](t, do(t, s, "GET", "/api/projects/"+itoa(p.ID)+"/diff?path=f.txt&side="+side, nil)).Diff
+	}
+	write("first\n")
+	if got := diff("staged"); got != "" {
+		t.Fatalf("untracked file has a staged diff: %s", got)
+	}
+	if got := diff("unstaged"); !strings.Contains(got, "+first") {
+		t.Fatalf("untracked file: %s", got)
+	}
+	git("add", "f.txt")
+	if got := diff("staged"); !strings.Contains(got, "+first") {
+		t.Fatalf("staged with no commits: %s", got)
+	}
+	git("-c", "user.name=T", "-c", "user.email=t@example.com", "commit", "-m", "init")
+	write("second\n")
+	git("add", "f.txt")
+	write("third\n")
+	staged, unstaged, all := diff("staged"), diff("unstaged"), diff("")
+	if !strings.Contains(staged, "-first") || !strings.Contains(staged, "+second") || strings.Contains(staged, "third") {
+		t.Fatalf("staged: %s", staged)
+	}
+	if !strings.Contains(unstaged, "-second") || !strings.Contains(unstaged, "+third") || strings.Contains(unstaged, "first") {
+		t.Fatalf("unstaged: %s", unstaged)
+	}
+	if !strings.Contains(all, "-first") || !strings.Contains(all, "+third") {
+		t.Fatalf("against HEAD: %s", all)
+	}
+}

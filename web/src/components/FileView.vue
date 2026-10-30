@@ -216,6 +216,7 @@ const stat = computed(() => {
       <span v-else-if="media && body !== 'hex'" class="text-dimmed">not editable</span>
       <span v-else-if="tab.readOnly" class="text-warning">read only</span>
       <span v-else-if="dirty" class="text-primary">unsaved</span>
+      <span v-if="tab.side && tab.mode === 'diff'">{{ tab.side }}</span>
       <span v-if="body === 'edit' && large">plain text · no wrap</span>
       <span class="flex-1"></span>
       <template v-if="stat">

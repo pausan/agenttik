@@ -91,7 +91,7 @@ async function act(action, path) {
         </button>
         <UButton icon="i-lucide-minus" aria-label="Unstage all files" title="Unstage all files" size="xs" variant="ghost" color="neutral" :disabled="busy || !staged.length" @click="act('unstage')" />
       </div>
-      <FileList allow-revert :disabled="busy" v-if="expanded" :files="staged" compact-empty empty="No staged files." @show-in-tree="emit('show-in-tree', $event)">
+      <FileList allow-revert side="staged" :disabled="busy" v-if="expanded" :files="staged" compact-empty empty="No staged files." @show-in-tree="emit('show-in-tree', $event)">
         <template #actions="{ file }">
           <button type="button" :class="ROW_BUTTON" :aria-label="`Unstage ${file.path}`" :title="`Unstage ${file.path}`" :disabled="busy" @click="act('unstage', file.path)">
             <UIcon name="i-lucide-minus" class="size-4 shrink-0" />
@@ -104,7 +104,7 @@ async function act(action, path) {
         <span class="text-xs font-semibold">Changes <span class="text-dimmed">{{ unstaged.length }}</span></span>
         <UButton icon="i-lucide-plus" aria-label="Stage all files" title="Stage all files" size="xs" variant="ghost" color="neutral" :disabled="busy || !unstaged.length" @click="act('stage')" />
       </div>
-      <FileList allow-revert allow-rename :disabled="busy" :files="unstaged" empty="No edited files." @show-in-tree="emit('show-in-tree', $event)">
+      <FileList allow-revert allow-rename side="unstaged" :disabled="busy" :files="unstaged" empty="No edited files." @show-in-tree="emit('show-in-tree', $event)">
         <template #actions="{ file }">
           <button type="button" :class="ROW_BUTTON" :aria-label="`Stage ${file.path}`" :title="`Stage ${file.path}`" :disabled="busy" @click="act('stage', file.path)">
             <UIcon name="i-lucide-plus" class="size-4 shrink-0" />

@@ -2324,11 +2324,19 @@ export function isDirty(tab) {
    rather than twenty. A double click pins the tab instead, and so does typing
    in it; a pinned tab is only closed by hand. The Tree prefers Edit, with
    Preview for media; Changes explicitly requests Diff, even for an open tab. */
-export async function openFile(path, pin = false, mode = isMedia(path) ? "preview" : "edit") {
+/* side picks what Diff compares: "staged" is HEAD to the index, "unstaged"
+   the index to the working tree, and nothing is HEAD to the working tree. */
+export async function openFile(path, pin = false, mode = isMedia(path) ? "preview" : "edit", side = "") {
   const projectID = currentProjectID();
-  await openFileIn(projectID, S.owner?.id || "", path, { pin, mode });
+  await openFileIn(projectID, S.owner?.id || "", path, { pin, mode, side });
   const tab = S.tabs.find((t) => t.id === `file:${projectID}:${path}`);
-  if (tab) await setFileMode(tab, mode, false);
+  if (!tab) return;
+  if (tab.side !== side) {
+    tab.side = side;
+    tab.diff = null;
+    if (tab.mode === "diff") await loadFileTab(tab).catch(fail);
+  }
+  await setFileMode(tab, mode, false);
 }
 
 /* File search uses the same editor-first default as the Tree. */
@@ -2460,6 +2468,7 @@ async function loadFileTabIn(projectID, ownerID, path, opts = {}) {
     projectID,
     path,
     commit,
+    side: commit ? "" : opts.side || "",
     // temp is the tab a click opens: the next file clicked takes it over,
     // until a double click or a keystroke pins it.
     temp: !pin,
@@ -2530,7 +2539,8 @@ async function loadFileTab(tab) {
   }
   if (tab.mode === "diff") {
     if (tab.diff !== null) return;
-    tab.diff = (await api("GET", `/api/projects/${id}/diff?${query}`)).diff || "";
+    const side = tab.side ? `&side=${tab.side}` : "";
+    tab.diff = (await api("GET", `/api/projects/${id}/diff?${query}${side}`)).diff || "";
     return;
   }
   if (tab.content !== null && !(tab.mode === "hex" && !tab.binary)) return;
@@ -2716,6 +2726,7 @@ function savedTab(tab) {
       projectID: tab.projectID,
       path: tab.path,
       commit: tab.commit || "",
+      side: tab.side || "",
       temp: !!tab.temp,
     };
   }
@@ -2726,7 +2737,7 @@ function savedTab(tab) {
    there was a temporary one have no flag, and a tab the user chose to keep is
    the safer reading of those. */
 function restoreOpts(tab) {
-  return { silent: true, commit: tab.commit || "", pin: !tab.temp, defer: true };
+  return { silent: true, commit: tab.commit || "", side: tab.side || "", pin: !tab.temp, defer: true };
 }
 
 let restoringTabs = false;

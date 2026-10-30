@@ -23,7 +23,7 @@ const contexts = [
 const full = ref(null);
 const error = ref("");
 watch(
-  () => [S.diffContext, props.tab.projectID, props.tab.path, props.tab.commit, props.diff],
+  () => [S.diffContext, props.tab.projectID, props.tab.path, props.tab.commit, props.tab.side, props.diff],
   async (_, __, onCleanup) => {
     let stale = false;
     onCleanup(() => { stale = true; });
@@ -34,6 +34,7 @@ watch(
     const endpoint = commit ? "commit/diff" : "diff";
     const query = new URLSearchParams({ path, context: "full" });
     if (commit) query.set("hash", commit);
+    else if (props.tab.side) query.set("side", props.tab.side);
     try {
       const result = await api("GET", `/api/projects/${projectID}/${endpoint}?${query}`);
       if (!stale) full.value = result;

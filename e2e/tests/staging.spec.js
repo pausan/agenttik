@@ -186,3 +186,36 @@ for (const surface of ["Changes", "Tree", "Changes button", "Staged button"]) te
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("a staged row opens the staged diff and a changes row what is not staged yet", async ({ page }) => {
+  const root = await mkdtemp(join(tmpdir(), "staging-sides-"));
+  const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8" });
+  try {
+    git("init", "-q");
+    await writeFile(join(root, "f.txt"), "first line\n");
+    git("add", ".");
+    git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Initial");
+    await writeFile(join(root, "f.txt"), "staged line\n");
+    git("add", ".");
+    await writeFile(join(root, "f.txt"), "working line\n");
+
+    await addProject(page, root);
+    await openProject(page, root);
+    await newTask(page);
+    const pane = inspector(page);
+    const main = page.getByRole("main");
+    const rows = pane.locator('button[data-path="f.txt"]');
+    await expect(rows).toHaveCount(2);
+    await rows.first().click();
+    await expect(main.locator("pre")).toContainText("+staged line");
+    await expect(main.locator("pre")).toContainText("-first line");
+    await expect(main.locator("pre")).not.toContainText("working line");
+    await rows.last().click();
+    await expect(main.locator("pre")).toContainText("+working line");
+    await expect(main.locator("pre")).toContainText("-staged line");
+    await expect(main.locator("pre")).not.toContainText("first line");
+
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

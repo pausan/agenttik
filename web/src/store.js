@@ -18,6 +18,7 @@ import { createTaskSounds, TASK_SOUNDS_KEY } from "./task-sounds.js";
 import { trackTaskAttention, reconcileTaskCompletions } from "./task-attention.js";
 import { choiceOf, otherChoice, takeFollowUp, upsertBackgroundMessage, wakesAgent } from "./background-tasks.js";
 import { recordError } from "./diagnostics.js";
+import { writeClipboard } from "./clipboard.js";
 import { api, apiURL, storage, clientStorage, diagnosticStorage, isRemoteConnection, setFlatScope } from "./api";
 import { isFlatView } from "./profiles.js";
 import { debounce } from "./debounce";
@@ -3631,12 +3632,11 @@ export async function editMessage(message, prompt, enqueue = false) {
   }
 }
 
-/* copyText is the transcript's copy button. The clipboard is only reachable
-   from a secure context, which loopback counts as, but a refusal should say
-   so rather than look like nothing happened. */
+/* copyText is every copy button and menu item. A refusal should say so rather
+   than look like nothing happened. */
 export async function copyText(text) {
   try {
-    await navigator.clipboard.writeText(String(text ?? ""));
+    await writeClipboard(String(text ?? ""), navigator.clipboard, document);
     return true;
   } catch (e) {
     fail(e);

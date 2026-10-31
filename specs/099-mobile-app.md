@@ -152,6 +152,16 @@ Android declares `RECORD_AUDIO` and `MODIFY_AUDIO_SETTINGS`; the second, with
 the first, lets Capacitor grant `getUserMedia` on HTTPS servers. iOS sets
 `NSMicrophoneUsageDescription`.
 
+## Clipboard
+
+Copying needs no permission or native code. `navigator.clipboard` does not
+exist on a plain-HTTP page, and Android's WebView answers `NotAllowedError` on
+secure origins too, which no manifest entry changes. So `copyText`
+(`web/src/clipboard.js`) falls back to `execCommand("copy")`, filling the copy
+event's data so that focus and the keyboard stay put. It needs a recent tap;
+reading the clipboard is still unavailable. This was tested on an Android
+WebView, not yet on iOS.
+
 ## Icon
 
 The app icon is the desktop one, `web/public/agenttik.svg`.

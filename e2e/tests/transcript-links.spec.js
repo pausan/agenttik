@@ -43,6 +43,25 @@ test("a transcript web link can be copied or opened from its menu", async ({ pag
   await expect.poll(() => page.evaluate(() => window.openedLinks)).toEqual(["https://example.com/docs"]);
 });
 
+test("a transcript link is copied from its menu without the clipboard API", async ({ page, context }) => {
+  // What a phone's WebView has on a plain-HTTP server: no navigator.clipboard.
+  await page.addInitScript(() => {
+    window.realClipboard = navigator.clipboard;
+    delete Navigator.prototype.clipboard;
+  });
+  await page.reload();
+  await addProject(page, REPO);
+  await openProject(page, REPO);
+  await newTask(page);
+  await pickModel(page);
+  await sendPrompt(page, "[example](https://example.com/docs)");
+
+  await context.grantPermissions(["clipboard-read"], { origin: new URL(page.url()).origin });
+  await page.getByRole("link", { name: "example" }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Copy link" }).click();
+  await expect.poll(() => page.evaluate(() => window.realClipboard.readText())).toBe("https://example.com/docs");
+});
+
 test("local transcript links open kept tabs and offer the system opener", async ({ page, context }) => {
   await addProject(page, REPO);
   await openProject(page, REPO);

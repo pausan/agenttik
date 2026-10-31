@@ -6,6 +6,7 @@ import {
   accountUsage,
   addAccount,
   configureAccount,
+  copyText,
   fail,
   removeAccount,
   setDefaultAccount,
@@ -145,9 +146,6 @@ async function signIn(provider, account) {
   }
 }
 
-function copy(text) {
-  navigator.clipboard?.writeText(text).catch(() => {});
-}
 </script>
 
 <template>
@@ -343,7 +341,7 @@ function copy(text) {
               variant="ghost"
               icon="i-lucide-copy"
               aria-label="Copy the login command"
-              @click="copy(command[rowKey(p.name, a)].command)"
+              @click="copyText(command[rowKey(p.name, a)].command)"
             />
           </div>
         </div>

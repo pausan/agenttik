@@ -59,9 +59,6 @@ let pasteCode = "";
 let pasteTimer = 0;
 let barDrag = null;
 let seenClip = null; // what this machine's clipboard last held, as far as known
-let escTimer = 0;
-
-const ESC_HOLD_MS = 1500; // as browsers do once the keyboard is locked
 
 const floating = computed(() => fullscreen.value || pseudo.value);
 const machine = computed(() => S.instanceInfo?.name || "this machine");
@@ -218,9 +215,6 @@ function onKeyDown(e) {
   // a terminal: Ctrl+W there closes a window over there, not this tab.
   e.stopPropagation();
   stream?.resumeAudio();
-  if (e.key === "Escape" && desktop && pseudo.value && !e.repeat) {
-    escTimer = setTimeout(exitFullscreen, ESC_HOLD_MS);
-  }
   if (e.key === "Unidentified" || e.key === "Process" || e.isComposing) return; // `input` brings it
   if (isPaste(e) && !e.repeat) {
     // Let the browser fire `paste`, which carries this machine's clipboard
@@ -239,7 +233,6 @@ function onKeyDown(e) {
 function onKeyUp(e) {
   e.stopPropagation();
   e.preventDefault();
-  if (e.key === "Escape") clearTimeout(escTimer);
   if (e.code && e.code === pasteCode) {
     pasteCode = "";
     return;
@@ -287,7 +280,6 @@ function onInput(e) {
 
 /* Keys still down when focus leaves would stay down over there. */
 function releaseKeys() {
-  clearTimeout(escTimer);
   const events = [...held].map(([code, key]) => ({ t: "k", key, code, d: false }));
   held.clear();
   typed.clear();
@@ -507,7 +499,7 @@ onBeforeUnmount(() => {
           size="xs"
           color="neutral"
           variant="ghost"
-          :title="floating ? (desktop ? 'Exit full screen (or hold Esc)' : 'Exit full screen') : 'Full screen'"
+          :title="floating ? 'Exit full screen' : 'Full screen'"
           :aria-label="floating ? 'Exit full screen' : 'Full screen'"
           @click="toggleFullscreen"
         />

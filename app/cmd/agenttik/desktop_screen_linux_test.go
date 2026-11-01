@@ -230,10 +230,11 @@ window.addEventListener('load', async () => {
 						press("Escape")
 						press("Super_L")
 						press("ctrl+w")
+						press("ctrl+f")
 						if fired.Load() != 1 {
 							t.Errorf("Alt+Tab reached the window manager in full screen: %d", fired.Load())
 						}
-						for _, key := range []string{"Tab", "Escape", "Super", "w"} {
+						for _, key := range []string{"Tab", "Escape", "Super", "w", "f"} {
 							if !pageSaw(key) {
 								t.Errorf("the page did not see %s", key)
 							}

@@ -239,6 +239,9 @@ for (const [codec, setup] of Object.entries(browsers)) {
       await expect.poll(() => page.evaluate(() => window.locks)).toEqual([[]]);
       await page.keyboard.press("Alt+Tab");
       await expect.poll(x.events).toContain("(keysym 0xff09, Tab)");
+      await page.keyboard.press("Control+F");
+      await expect.poll(x.events).toContain("(keysym 0x66, f)");
+      expect(await page.evaluate(() => !!document.fullscreenElement)).toBe(true);
       // Its bar is dragged out of the way, and stays on screen. Its size
       // does not follow what the summary says.
       const bar = page.getByTestId("screen-bar");

@@ -486,9 +486,9 @@ a click outside the canvas does not take the keyboard away.
   On Linux `desktop_keyboard_linux.go` takes the keyboard with `gdk_seat_grab`,
   retrying for 3 s while the window manager holds it: an X grab, which beats
   the window manager's shortcuts and the global tray shortcut, or on Wayland
-  a shortcut inhibitor, which may ask the person first. Holding Esc for 1.5 s
-  exits, as does the button. A page that loads gives the keyboard back, since
-  it cannot know it holds it. Windows and macOS windows do not take the
+  a shortcut inhibitor, which may ask the person first. No key exits, not
+  even a held Esc: only the toolbar's button does. A page that loads gives the
+  keyboard back, since it cannot know it holds it. Windows and macOS windows do not take the
   keyboard: Esc reaches the other machine, Alt+Tab and Cmd+Tab stay here.
 
 In full screen the toolbar floats at the top, solid black at 70% opacity and
@@ -525,4 +525,4 @@ window picked from the server's list and whether it plays sound. WebKitGTK
 2.52 picks VP9 4:2:0 and decodes Opus: the window is a secure context, so
 WebCodecs and the clipboard API are there. It also stands a root passive grab
 on Alt+Tab in for a window manager: quiet in full screen while the page sees
-Tab, Esc, Super and Ctrl+W, firing again afterwards.
+Tab, Esc, Super, Ctrl+W and Ctrl+F, firing again afterwards.

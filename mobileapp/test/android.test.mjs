@@ -70,7 +70,7 @@ test('Android recovers after losing a connected server', { timeout: 90000 }, asy
     return response.result.result.value;
   }
   const waitFor = (expression) => until(() => evaluate(expression));
-  await waitFor('!!document.getElementById("address")');
+  await waitFor('!!document.getElementById("connect-form")?.onsubmit');
   await evaluate('localStorage.clear(); sessionStorage.setItem("started", "1")');
   const connect = async () => {
     await evaluate(`document.getElementById('address').value=${JSON.stringify(origin)}; document.getElementById('connect-form').requestSubmit()`);
@@ -113,6 +113,19 @@ test('Android recovers after losing a connected server', { timeout: 90000 }, asy
     await setTimeout(4000);
     assert.equal(requests, stopped);
     assert.equal(await evaluate('location.hostname'), 'localhost');
+  });
+
+  await t.test('a live page reports addresses and hands over when its server stops answering', async () => {
+    offline = false;
+    await connect();
+    await evaluate(`window.agenttikApp.postMessage('addresses:["https://away.example"]')`);
+    offline = true;
+    await evaluate('window.agenttikApp.postMessage("lost")');
+    await waitFor('location.hostname === "localhost" && !!document.getElementById("busy") && !document.getElementById("busy").hidden');
+    const [saved] = JSON.parse(await evaluate('localStorage.getItem("agenttik.servers")'));
+    assert.deepEqual(saved.origins, [origin, 'https://away.example']);
+    await evaluate('document.getElementById("cancel").click()');
+    await waitFor('!document.getElementById("home").hidden');
   });
 
   await t.test('manual reconnect and logout still work', async () => {

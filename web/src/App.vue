@@ -30,6 +30,7 @@ import { MACOS } from "./platform";
 import { checkRemote, profiles, switchAdjacentProfile } from "./profiles";
 import { onRemoteSignIn, remoteID, storage } from "./api";
 import { readTour, saveTour } from "./quick-start-state";
+import { mobileApp } from "./mobile-app";
 
 /* Everything below is reached by a click or a chord, never by the first
    paint, so its code is fetched from its own chunk the moment it is first
@@ -236,6 +237,7 @@ function run(e, action) {
 }
 
 onMounted(() => {
+  mobileApp()?.watch();
   // The remote this window shows did not answer; its dialog reloads once it does.
   if (!profiles.connecting?.current) {
     const showSpinner = setTimeout(() => (bootSpinner.value = true), 1000);

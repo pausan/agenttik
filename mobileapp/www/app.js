@@ -253,6 +253,17 @@ async function open(entry, current) {
   location.href = entry.origin + '/';
 }
 
+// learn saves what a remote reported while it was open. That page cannot
+// reach this page's storage, so the native side keeps the latest report until
+// this page loads again.
+async function learn() {
+  try {
+    const { origin, addresses } = await native('AgenttikNative', 'learned');
+    const server = origin && savedServer(origin);
+    if (server) localStorage.setItem(SERVERS, JSON.stringify(remember(servers(), server, JSON.parse(addresses))));
+  } catch {}
+}
+
 // ---- finding servers ----
 
 async function scan() {
@@ -379,6 +390,8 @@ $('back').onclick = () => {
   showHome();
 };
 
+await learn();
+
 // Log out in the remote's Settings comes back here with #signed-out.
 if (location.hash === '#signed-out') {
   localStorage.setItem(SIGNED_OUT, servers()[0]?.origin || '');
@@ -389,7 +402,8 @@ if (location.hash === '#signed-out') {
 // logged out. Coming back to this page from the remote, within the same run,
 // does not.
 // A failed remote document has lost all of its JavaScript, including SSE's
-// reconnect. Android brings it here so retries work even while LAN is down.
+// reconnect, so Android brings it here. The remote's own page does the same
+// when its server stops answering, since it cannot move to another origin.
 let lostOrigin;
 if (location.hash.startsWith('#connection-lost=')) {
   try {

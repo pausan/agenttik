@@ -6,15 +6,16 @@ import WebKit
 // The little the connect page cannot do from JavaScript: list this phone's
 // IPv4 addresses for the scan, and keep the chosen agenttik inside the
 // WebView instead of handing it to the system browser. It also gives that
-// agenttik a microphone (see Microphone) and a way back to the connect page
-// (see AppChannel).
+// agenttik a microphone (see Microphone), a way back to the connect page and
+// a place to leave the addresses it reports for that page (see AppChannel).
 @objc(AgenttikNativePlugin)
 public class AgenttikNativePlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "AgenttikNativePlugin"
     public let jsName = "AgenttikNative"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "addresses", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "allow", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "allow", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "learned", returnType: CAPPluginReturnPromise)
     ]
 
     private var allowed: URL?
@@ -57,6 +58,19 @@ public class AgenttikNativePlugin: CAPPlugin, CAPBridgedPlugin {
         call.resolve()
     }
 
+    // learned hands the connect page the latest addresses a remote reported,
+    // once.
+    @objc func learned(_ call: CAPPluginCall) {
+        let store = UserDefaults.standard
+        var report: [String: String] = [:]
+        if let origin = store.string(forKey: "learnedOrigin"), let addresses = store.string(forKey: "learnedAddresses") {
+            report = ["origin": origin, "addresses": addresses]
+        }
+        store.removeObject(forKey: "learnedOrigin")
+        store.removeObject(forKey: "learnedAddresses")
+        call.resolve(report)
+    }
+
     override public func shouldOverrideLoad(_ navigationAction: WKNavigationAction) -> NSNumber? {
         guard let allowed = allowed, let url = navigationAction.request.url else { return nil }
         let same = url.scheme == allowed.scheme && url.host == allowed.host && port(url) == port(allowed)
@@ -73,9 +87,27 @@ public class AgenttikNativePlugin: CAPPlugin, CAPBridgedPlugin {
     // #signed-out, which it reads as "do not reconnect".
     func disconnect() {
         allowed = nil
+        loadConnectPage(fragment: "signed-out")
+    }
+
+    // lost hands a remote whose server stopped answering to the connect page,
+    // which retries every origin it knows for that server.
+    func lost() {
+        guard let origin = allowed?.absoluteString else { return }
+        allowed = nil
+        loadConnectPage(fragment: "connection-lost=" + origin)
+    }
+
+    func saveAddresses(_ addresses: String) {
+        guard let origin = allowed?.absoluteString else { return }
+        UserDefaults.standard.set(origin, forKey: "learnedOrigin")
+        UserDefaults.standard.set(addresses, forKey: "learnedAddresses")
+    }
+
+    private func loadConnectPage(fragment: String) {
         guard let start = bridge?.config.appStartServerURL,
               var parts = URLComponents(url: start, resolvingAgainstBaseURL: false) else { return }
-        parts.fragment = "signed-out"
+        parts.fragment = fragment
         if let url = parts.url { webView?.load(URLRequest(url: url)) }
     }
 
@@ -91,7 +123,9 @@ class BridgeViewController: CAPBridgeViewController {
 }
 
 // Log out in the remote's Settings posts "disconnect" once it has signed out.
-// Only the allowed origin's main frame is heard.
+// The remote also posts "lost" when its server stops answering, and
+// "addresses:<JSON list>" with where that server can be reached. Only the
+// allowed origin's main frame is heard.
 class AppChannel: NSObject, WKScriptMessageHandler {
     private weak var plugin: AgenttikNativePlugin?
 
@@ -100,9 +134,15 @@ class AppChannel: NSObject, WKScriptMessageHandler {
     }
 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard message.frameInfo.isMainFrame, message.body as? String == "disconnect",
+        guard message.frameInfo.isMainFrame, let body = message.body as? String,
               let plugin = plugin, plugin.isAllowed(message.frameInfo.securityOrigin) else { return }
-        plugin.disconnect()
+        if body == "disconnect" {
+            plugin.disconnect()
+        } else if body == "lost" {
+            plugin.lost()
+        } else if body.hasPrefix("addresses:"), body.count <= 4096 {
+            plugin.saveAddresses(String(body.dropFirst("addresses:".count)))
+        }
     }
 }
 

@@ -97,7 +97,7 @@ test('Cancel stops scheduled recovery', async (t) => {
   p.element('cancel').onclick();
   assert.equal(p.timers.size, 0);
   assert.equal(p.element('home').hidden, false);
-  assert.equal(p.calls.length, 0);
+  assert.ok(!p.calls.some((c) => c.plugin === 'CapacitorHttp'));
 });
 
 test('a cancelled in-flight attempt cannot override a newer connection', async (t) => {
@@ -110,7 +110,7 @@ test('a cancelled in-flight attempt cannot override a newer connection', async (
   await p.flush();
   assert.equal(pending.length, 2);
   assert.equal(p.location.href, 'https://localhost/');
-  assert.ok(!p.calls.some((c) => c.plugin === 'AgenttikNative'));
+  assert.ok(!p.calls.some((c) => c.method === 'allow'));
   pending[1].resolve({ status: 200, data: { application: 'agenttik', version: 'test' } });
   await p.flush();
   pending[2].resolve({ status: 200, data: '<div id="app"></div>' });
@@ -137,7 +137,7 @@ test('Cancel during cookie transfer prevents the native handoff', async (t) => {
   complete({});
   await p.flush();
   assert.equal(p.location.href, 'https://localhost/');
-  assert.ok(!p.calls.some((c) => c.plugin === 'AgenttikNative'));
+  assert.ok(!p.calls.some((c) => c.method === 'allow'));
 });
 
 test('a failed native handoff is caught and shown on the address page', async (t) => {
@@ -177,4 +177,25 @@ test('a lost local address falls back to the public one, and learns addresses', 
   const [saved] = JSON.parse(p.localStorage.getItem('agenttik.servers'));
   assert.equal(saved.origin, away);
   assert.deepEqual(saved.origins, [away, origin, 'http://10.0.0.9:7717']);
+});
+
+test('addresses reported while the remote was open are saved and tried', async (t) => {
+  const away = 'https://lab.trycloudflare.com';
+  const report = { origin, addresses: JSON.stringify([origin, away]) };
+  const version = { status: 200, data: { application: 'agenttik', version: 'test', id: 'lab', name: 'Lab' } };
+  const p = await page(t, { lost: true, saved: [{ origin, id: 'lab', name: 'Lab', origins: [origin] }],
+    nativeCall: (plugin, method) => method === 'learned' ? report : {},
+    request: async ({ url }) => {
+      if (url.startsWith(origin)) throw new Error('offline');
+      return url.endsWith('/api/version') ? version : { status: 200, data: '<div id="app"></div>' };
+    } });
+  assert.deepEqual(JSON.parse(p.localStorage.getItem('agenttik.servers'))[0].origins, [origin, away]);
+  await p.tick();
+  assert.equal(p.location.href, away + '/');
+});
+
+test('a report from a server that is no longer saved is dropped', async (t) => {
+  const p = await page(t, { saved: [{ origin, id: 'lab', origins: [origin] }],
+    nativeCall: (plugin, method) => method === 'learned' ? { origin: 'http://10.0.0.9:7717', addresses: '["https://x.example"]' } : {} });
+  assert.deepEqual(JSON.parse(p.localStorage.getItem('agenttik.servers'))[0].origins, [origin]);
 });

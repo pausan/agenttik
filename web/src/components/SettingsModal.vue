@@ -71,6 +71,7 @@ watch([filter, counts], () => {
 watch(open, async (on) => {
   if (!on) return;
   filter.value = "";
+  app?.refresh();
   try {
     await Promise.all([loadActionModels(), loadProfiles(), loadProviders(), loadArchivedProjects(), loadOrchestratorConfig(), loadServerConfig()]);
   } catch (e) {

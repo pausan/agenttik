@@ -13,7 +13,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [067](067-local-profiles.md) | Local profiles, project moves, local models, shared providers, profile switching |
 | [085](085-remote-profiles.md) | Remote profiles, live activity, sign-in, discovery, local and public addresses, and finding a moved machine |
 | [100](100-flat-view.md) | Flat view of every local and remote profile, merged lists and stream, and the orchestrator over all of them |
-| [099](099-mobile-app.md) | Android and iOS remote client: discovery, sign-in, trusted keys and Android reconnect |
+| [099](099-mobile-app.md) | Android and iOS remote client: discovery, sign-in, trusted keys, and reconnecting on any known address |
 | [094](094-trusted-machines.md) | Machine keys, automatic sign-in to remotes, and the trusted list in Server settings |
 | [096](096-screen.md) | Screen viewing, sound and control, adaptive bitrate, VP8/VP9 and Opus encoding, and the agent screen API |
 | [097](097-speech-input.md) | Microphone dictation, first-use models, Whisper choices and optional transcript correction |

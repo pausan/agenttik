@@ -27,13 +27,16 @@ helpers and connection flows, with a fake DOM, native bridge and timers.
 - **Origins.** A server keeps up to eight origins, one entry per machine
   ID: the one in use first, then the others from the most recently reached.
   Before handing over, the app asks the signed-in server for
-  `/api/server/addresses` ([085](085-remote-profiles.md)) and adds them. A
-  saved server shows its origin in use and `+N more`. Connecting to any of
+  `/api/server/addresses` ([085](085-remote-profiles.md)) and adds them, as
+  it does for what the remote reports later (see Staying up to date). Public
+  origins it learns go ahead of the saved ones, so a full list still takes a
+  new one. A saved server shows its origin in use and `+N more`. Connecting to any of
   its origins, including after a lost connection, runs the desktop's quick
   check: local network origins first, then the most recent; the next starts
   when the last fails or after 300 ms, and once one answers with the same
   machine ID, better ones still pending get one more second. So a phone that
-  leaves home moves to the public origin, and back to the local one at home.
+  leaves home moves to the public origin, and back to the local one the next
+  time it connects at home.
 
 ## Signing in
 
@@ -74,17 +77,41 @@ remote shows its own password form; Back and a tap on the saved server signs
 in with the key instead. On the connect page Back always leaves, even with
 the remote's pages behind it. iOS has no Back; reopening the app reconnects.
 
-## Connection loss on Android
+## Staying up to date
 
-The loaded UI's event streams reconnect themselves after a network loss.
-Failed images, frames and other subresources leave that UI in place. A failed
-main-frame navigation or reload is different: WebView replaces the document
-with its built-in error page, which cannot run agenttik's reconnect code.
+A server can gain a public address at any time, and the remote page cannot
+write to the connect page's storage. So the remote's own UI
+(`web/src/mobile-app.js`), only when it runs inside the app, asks its server
+for `/api/server/addresses` when Settings opens, every five minutes while the
+page shows, and whenever the phone comes back to the page. It goes to the
+server the phone is connected to, even on a remote profile, and a tunnel that
+is still starting shows up at the next check.
 
-The native `BridgeWebViewClient` handles network errors for the allowed
-origin's main frame. It clears the allowed origin, logs the WebView error
-under `Agenttik`, and loads the bundled page with
-`#connection-lost=<encoded origin>`. The page removes the fragment and retries
+It posts `addresses:<JSON list>` on the `agenttikApp` channel. The native side
+keeps the latest report with its origin, across restarts (`SharedPreferences`,
+`UserDefaults`, 4 KiB at most), and the connect page takes and saves it each
+time it loads, so it is there before any reconnect. A report for a server no
+longer saved is dropped. Servers report what they know: their listeners and
+the quick tunnel. A forwarded port or a domain pointing at the server is
+unknown to it, so it is added on the phone by connecting through it once.
+
+## Connection loss
+
+The loaded UI's event streams reconnect themselves after a network loss, but
+only to the origin the page came from, so a page left open at home would
+never move to the public one. Each check above therefore also tests the
+connection: a request that fails, then fails again three seconds later, posts
+`lost`. Any HTTP answer counts as reachable. Both platforms then load the
+bundled page with `#connection-lost=<origin>`.
+
+On Android, failed images, frames and other subresources leave the UI in
+place. A failed main-frame navigation or reload is different: WebView replaces
+the document with its built-in error page, which cannot run agenttik's
+reconnect code. The native `BridgeWebViewClient` handles network errors for
+the allowed origin's main frame the same way as `lost`: it clears the allowed
+origin, logs the error under `Agenttik`, and loads that page.
+
+The page removes the fragment and retries
 that server after three seconds, repeating after each failed attempt. This
 delay also applies when native HTTP works but WebView navigation keeps
 failing. It checks discovery and the front page again, signs in by key when
@@ -101,7 +128,8 @@ to the address page without repeated retries.
 HTTP fixture. Install a debug APK in a running emulator and set
 `ANDROID_SERIAL=emulator-<port>`; the test refuses physical devices. It checks
 plain HTTP navigation, bridge isolation, subresource failure, a failed reload
-after a successful connection, automatic recovery, Cancel and logout. It uses
+after a successful connection, automatic recovery, a live page's address report
+and `lost`, Cancel and logout. It uses
 `adb reverse` and WebView's debug protocol, with no running agenttik service.
 
 ## Logging out
@@ -122,7 +150,7 @@ trust are kept, so tapping the server again signs in by key.
 
 The plugin lives in the app itself, registered by `MainActivity` on Android
 and by `BridgeViewController` (`AgenttikNativePlugin.swift`) on iOS. It has
-two methods, `addresses` (up, non-loopback IPv4) and `allow`, the
+three methods, `addresses` (up, non-loopback IPv4), `allow` and `learned`, the
 `agenttikApp` channel above (a web message listener on Android, a script
 message handler on iOS), and the microphone below.
 

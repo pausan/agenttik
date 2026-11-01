@@ -1,5 +1,7 @@
 package com.pausan.agenttik;
 
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.util.Log;
 import android.webkit.WebResourceError;
@@ -22,9 +24,13 @@ import java.util.Collections;
 // The little the connect page cannot do from JavaScript: list this phone's
 // IPv4 addresses for the scan, and keep the chosen agenttik inside the
 // WebView instead of handing it to the system browser. It also gives that
-// agenttik a microphone (see Microphone) and a way back to the connect page.
+// agenttik a microphone (see Microphone), a way back to the connect page, and
+// a place to leave the addresses it reports for that page to pick up.
 @CapacitorPlugin(name = "AgenttikNative")
 public class AgenttikNativePlugin extends Plugin {
+
+    private static final String ADDRESSES = "addresses:";
+    private static final int MAX_MESSAGE = 4096;
 
     private volatile String allowed;
 
@@ -38,22 +44,40 @@ public class AgenttikNativePlugin extends Plugin {
                 // error page, which has no reconnect code. Subresource errors
                 // leave the UI alive and must not take it away.
                 if (!request.isForMainFrame() || !same(request.getUrl())) return;
-                String origin = allowed;
-                allowed = null;
-                Log.w("Agenttik", "Connection lost to " + origin + ": " + error.getErrorCode() + " " + error.getDescription());
-                view.post(() -> view.loadUrl(bridge.getLocalUrl() + "/#connection-lost=" + Uri.encode(origin)));
+                lost(view, error.getErrorCode() + " " + error.getDescription());
             }
         });
         new Microphone(getActivity(), bridge.getWebView(), this::same);
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return;
         // Log out in the remote's Settings posts "disconnect" once it has
         // signed out. The connect page reads #signed-out as "do not reconnect".
+        // The remote also posts "lost" when its server stops answering, and
+        // "addresses:<JSON list>" with where that server can be reached.
         WebViewCompat.addWebMessageListener(bridge.getWebView(), "agenttikApp", Collections.singleton("*"),
             (view, message, origin, isMainFrame, reply) -> {
-                if (!isMainFrame || !same(origin) || !"disconnect".equals(message.getData())) return;
-                allowed = null;
-                view.loadUrl(bridge.getLocalUrl() + "/#signed-out");
+                String data = message.getData();
+                if (!isMainFrame || !same(origin) || data == null) return;
+                if (data.equals("disconnect")) {
+                    allowed = null;
+                    view.loadUrl(bridge.getLocalUrl() + "/#signed-out");
+                } else if (data.equals("lost")) {
+                    lost(view, "not answering");
+                } else if (data.startsWith(ADDRESSES) && data.length() <= MAX_MESSAGE) {
+                    learnedStore().edit().putString("origin", allowed)
+                        .putString("addresses", data.substring(ADDRESSES.length())).apply();
+                }
             });
+    }
+
+    private void lost(WebView view, String reason) {
+        String origin = allowed;
+        allowed = null;
+        Log.w("Agenttik", "Connection lost to " + origin + ": " + reason);
+        view.post(() -> view.loadUrl(bridge.getLocalUrl() + "/#connection-lost=" + Uri.encode(origin)));
+    }
+
+    private SharedPreferences learnedStore() {
+        return getContext().getSharedPreferences("agenttik-learned", Context.MODE_PRIVATE);
     }
 
     @PluginMethod
@@ -84,6 +108,18 @@ public class AgenttikNativePlugin extends Plugin {
         }
         allowed = origin;
         call.resolve();
+    }
+
+    // learned hands the connect page the latest addresses a remote reported,
+    // once.
+    @PluginMethod
+    public void learned(PluginCall call) {
+        SharedPreferences store = learnedStore();
+        JSObject ret = new JSObject();
+        ret.put("origin", store.getString("origin", null));
+        ret.put("addresses", store.getString("addresses", null));
+        store.edit().clear().apply();
+        call.resolve(ret);
     }
 
     @Override

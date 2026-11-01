@@ -1,7 +1,7 @@
 import { deepStrictEqual, strictEqual } from "node:assert/strict";
 import { test } from "node:test";
 
-import { ArrivalMeter, AudioClock, InputQueue, Trackpad, WheelSteps, audioSupported, chooseCodec, decodeBase64, fitSize, keyEvents, mouseButton, toScreen } from "./screen.js";
+import { ArrivalMeter, AudioClock, InputQueue, Trackpad, WheelSteps, audioSupported, chooseCodec, decodeBase64, fitSize, keyEvents, mouseButton, pasteIsNew, toScreen } from "./screen.js";
 
 /* A send that waits until the test lets it finish, so a test can act while a
    request is in flight. */
@@ -238,4 +238,14 @@ test("sound plays where the browser decodes Opus", async () => {
   strictEqual(await audioSupported(none, context), false);
   strictEqual(await audioSupported(opus, undefined), false);
   strictEqual(await audioSupported(undefined, context), false);
+});
+
+test("a paste only replaces the other machine's clipboard with a newer copy", () => {
+  strictEqual(pasteIsNew("new here", "came from there", false), true, "copied here since");
+  strictEqual(pasteIsNew("new here", null, false), true, "nothing known, nothing waiting");
+  strictEqual(pasteIsNew("new here", "old", true), true, "copied here after the refused write");
+  strictEqual(pasteIsNew("came from there", "came from there", false), false, "the same copy");
+  strictEqual(pasteIsNew("old here", "old here", true), false, "the last copy is still over there");
+  strictEqual(pasteIsNew("old here", null, true), false, "a copy over there is all that is known");
+  strictEqual(pasteIsNew("", "old", false), false, "no text, such as an image");
 });

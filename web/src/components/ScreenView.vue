@@ -17,8 +17,10 @@ import {
   fitSize,
   keyEvents,
   mouseButton,
+  pasteIsNew,
   setRemoteClipboard,
   toScreen,
+  writeLocalClipboard,
 } from "../screen";
 
 defineProps({ tab: { type: Object, required: true } });
@@ -40,6 +42,8 @@ const pseudo = ref(false); // a CSS stand-in where the Fullscreen API is missing
 // it at the top.
 const barAt = ref(JSON.parse(localStorage.getItem("screen.bar") || "null"));
 const touchDevice = typeof navigator !== "undefined" && navigator.maxTouchPoints > 0;
+// The desktop window goes full screen natively, and takes the keyboard.
+const desktop = !!window.runtime?.EventsEmit;
 const touchMode = ref(localStorage.getItem("screen.touch") || "trackpad");
 // The machine's sound: on unless turned off; `playable` once both ends can,
 // `error` why the machine sends none.
@@ -54,6 +58,10 @@ const held = new Map(); // key events sent down and not yet up, by code
 let pasteCode = "";
 let pasteTimer = 0;
 let barDrag = null;
+let seenClip = null; // what this machine's clipboard last held, as far as known
+let escTimer = 0;
+
+const ESC_HOLD_MS = 1500; // as browsers do once the keyboard is locked
 
 const floating = computed(() => fullscreen.value || pseudo.value);
 const machine = computed(() => S.instanceInfo?.name || "this machine");
@@ -210,6 +218,9 @@ function onKeyDown(e) {
   // a terminal: Ctrl+W there closes a window over there, not this tab.
   e.stopPropagation();
   stream?.resumeAudio();
+  if (e.key === "Escape" && desktop && pseudo.value && !e.repeat) {
+    escTimer = setTimeout(exitFullscreen, ESC_HOLD_MS);
+  }
   if (e.key === "Unidentified" || e.key === "Process" || e.isComposing) return; // `input` brings it
   if (isPaste(e) && !e.repeat) {
     // Let the browser fire `paste`, which carries this machine's clipboard
@@ -228,6 +239,7 @@ function onKeyDown(e) {
 function onKeyUp(e) {
   e.stopPropagation();
   e.preventDefault();
+  if (e.key === "Escape") clearTimeout(escTimer);
   if (e.code && e.code === pasteCode) {
     pasteCode = "";
     return;
@@ -242,12 +254,16 @@ async function onPaste(e) {
   const text = e.clipboardData?.getData("text/plain") || "";
   const key = pasteCode ? "v" : "";
   clearTimeout(pasteTimer);
-  if (text) {
+  if (pasteIsNew(text, seenClip, !!remoteClip.value)) {
+    seenClip = text;
+    remoteClip.value = "";
     try {
       await setRemoteClipboard(text);
     } catch (error) {
       fail(error);
     }
+  } else if (remoteClip.value) {
+    await receiveClipboard(remoteClip.value); // this key press may be the click it needed
   }
   // A paste from a touch keyboard's menu has no keystroke behind it.
   if (key) sendPasteKey(key);
@@ -271,10 +287,18 @@ function onInput(e) {
 
 /* Keys still down when focus leaves would stay down over there. */
 function releaseKeys() {
+  clearTimeout(escTimer);
   const events = [...held].map(([code, key]) => ({ t: "k", key, code, d: false }));
   held.clear();
   typed.clear();
   send(...events);
+}
+
+function onKeysBlur() {
+  releaseKeys();
+  // In full screen nothing else takes keys: a click on the bar or the margin
+  // must not leave them to this machine.
+  if (floating.value && !touchDevice) nextTick(() => keys.value?.focus({ preventScroll: true }));
 }
 
 function showKeyboard() {
@@ -291,7 +315,8 @@ function setTouchMode(mode) {
 async function receiveClipboard(text) {
   if (!text) return;
   try {
-    await navigator.clipboard.writeText(text);
+    await writeLocalClipboard(text);
+    seenClip = text;
     remoteClip.value = "";
   } catch {
     // Safari, and others without a recent click, need one to write.
@@ -300,7 +325,7 @@ async function receiveClipboard(text) {
 }
 
 async function copyRemoteClipboard() {
-  await copyText(remoteClip.value);
+  if (await copyText(remoteClip.value)) seenClip = remoteClip.value;
   remoteClip.value = "";
   keys.value?.focus({ preventScroll: true });
 }
@@ -311,7 +336,11 @@ function toggleFullscreen() {
   if (fullscreen.value || pseudo.value) return exitFullscreen();
   const el = root.value;
   const request = el.requestFullscreen || el.webkitRequestFullscreen;
-  if (request) {
+  if (desktop) {
+    // Not the Fullscreen API: WebKitGTK keeps Esc for itself while it is on.
+    pseudo.value = true;
+    window.runtime.EventsEmit("agenttik:screen-fullscreen", true);
+  } else if (request) {
     Promise.resolve(request.call(el)).catch(() => (pseudo.value = true));
   } else {
     pseudo.value = true;
@@ -320,6 +349,7 @@ function toggleFullscreen() {
 }
 
 function exitFullscreen() {
+  if (desktop && pseudo.value) window.runtime.EventsEmit("agenttik:screen-fullscreen", false);
   pseudo.value = false;
   if (document.fullscreenElement || document.webkitFullscreenElement) {
     (document.exitFullscreen || document.webkitExitFullscreen).call(document);
@@ -328,7 +358,10 @@ function exitFullscreen() {
 
 function onFullscreenChange() {
   fullscreen.value = (document.fullscreenElement || document.webkitFullscreenElement) === root.value;
-  nextTick(fit);
+  // Esc, Alt+Tab and the like reach the page only while this is on, which
+  // Chromium allows in full screen on a secure page. Holding Esc still exits.
+  if (fullscreen.value) navigator.keyboard?.lock?.().catch(() => {});
+  else navigator.keyboard?.unlock?.();
 }
 
 /* In full screen the bar floats and can be dragged by anything but its
@@ -380,7 +413,10 @@ const drawnCursor = computed(() => {
   };
 });
 
-watch(pseudo, () => nextTick(fit));
+watch(floating, (on) => {
+  if (!on) releaseKeys(); // the Esc that exited may never come up
+  nextTick(fit);
+});
 
 onMounted(() => {
   observer = new ResizeObserver(fit);
@@ -471,7 +507,7 @@ onBeforeUnmount(() => {
           size="xs"
           color="neutral"
           variant="ghost"
-          :title="floating ? 'Exit full screen' : 'Full screen'"
+          :title="floating ? (desktop ? 'Exit full screen (or hold Esc)' : 'Exit full screen') : 'Full screen'"
           :aria-label="floating ? 'Exit full screen' : 'Full screen'"
           @click="toggleFullscreen"
         />
@@ -524,7 +560,7 @@ onBeforeUnmount(() => {
         @keyup="onKeyUp"
         @paste="onPaste"
         @input="onInput"
-        @blur="releaseKeys"
+        @blur="onKeysBlur"
       />
 
       <div v-if="status === 'starting'" class="text-sm text-dimmed">Connecting to {{ machine }}…</div>

@@ -451,35 +451,64 @@ travels as a key pressed and released. On a Mac viewing a machine that is not
 one, Cmd travels as Ctrl, so Cmd+C copies. The other way round, Ctrl and the
 Windows key swap, so Ctrl+C copies on the Mac and its Ctrl is still at hand.
 Any system can view and drive any other. Keys still held when focus leaves
-are released. Browsers keep some chords for themselves (Ctrl+W in Chrome, and
-Alt+Tab or Cmd+Tab everywhere).
+are released. Outside full screen, browsers keep some chords for themselves
+(Ctrl+W in Chrome, and Alt+Tab or Cmd+Tab everywhere), so they act here.
 
-**Clipboard.** Ctrl/Cmd+V lets the browser fire `paste`, which carries this
-machine's text without a permission prompt. That text is set as the remote
-clipboard, then the V keystroke follows, so the remote program pastes it. A
-paste with no keystroke behind it (a touch keyboard's menu) is typed. When the
-remote clipboard changes, the text is written to this machine's clipboard.
-Where the browser refuses without a recent click (Safari), a **Copy remote
-clipboard** button does it on the next click.
+**Clipboard.** One clipboard across both machines: the last copy on either
+is what the next paste on either gives. Text only. Ctrl/Cmd+V lets the browser
+fire `paste`, which carries this machine's text without a permission prompt.
+Text copied here since the view last saw this clipboard (`pasteIsNew`) is set
+as the remote clipboard, then the V keystroke follows, so the remote program
+pastes it. Otherwise the remote clipboard is left alone, so an image or rich
+text copied over there still pastes there. A paste with no keystroke behind it
+(a touch keyboard's menu) is typed. When the remote clipboard changes, the text
+is written to this machine's clipboard: natively in the desktop window, which
+needs no click, else through the browser. Where the browser refuses without a
+recent click (Safari, plain HTTP, a window without focus), the text waits. A
+**Copy remote clipboard** button writes it on the next click, and so does the
+next paste, which counts the remote copy as the newest unless this clipboard
+changed since the view last saw it. If the view never saw it, the wait wins.
 
-**Full screen.** The toolbar button uses the Fullscreen API on the tab, with
-a CSS stand-in where that is missing (iPhone). In full screen the toolbar
-floats at the top, solid black at 70% opacity and opaque under the pointer,
-and its button exits; Esc also exits native full screen. The toolbar can be
-dragged anywhere but its buttons (a move cursor), stays wholly on screen, and
-its place is kept in `localStorage` (`screen.bar`).
+**Full screen.** Every key goes to the other machine, including Esc, Alt+Tab
+and the Windows key; only the clipboard crosses over. What stays out of reach
+is what the system handles below applications, such as Ctrl+Alt+Del and
+switching virtual terminals. Keys are released on leaving, and in full screen
+a click outside the canvas does not take the keyboard away.
+
+- **Browser:** the toolbar button uses the Fullscreen API on the tab, then
+  Keyboard Lock (`navigator.keyboard.lock()`), which Chromium offers on secure
+  pages. Holding Esc exits. Firefox, Safari and plain HTTP have no lock: Esc
+  exits and Alt+Tab stays here.
+- **Touch:** a CSS stand-in where the Fullscreen API is missing (iPhone).
+- **Desktop window:** the page fills the window (the same stand-in) and sends
+  `agenttik:screen-fullscreen`, which makes the window full screen. The
+  Fullscreen API is not used, as WebKitGTK keeps Esc for itself while it is on.
+  On Linux `desktop_keyboard_linux.go` takes the keyboard with `gdk_seat_grab`,
+  retrying for 3 s while the window manager holds it: an X grab, which beats
+  the window manager's shortcuts and the global tray shortcut, or on Wayland
+  a shortcut inhibitor, which may ask the person first. Holding Esc for 1.5 s
+  exits, as does the button. A page that loads gives the keyboard back, since
+  it cannot know it holds it. Windows and macOS windows do not take the
+  keyboard: Esc reaches the other machine, Alt+Tab and Cmd+Tab stay here.
+
+In full screen the toolbar floats at the top, solid black at 70% opacity and
+opaque under the pointer, and its button exits. The toolbar can be dragged
+anywhere but its buttons (a move cursor), stays wholly on screen, and its place
+is kept in `localStorage` (`screen.bar`).
 
 Tests: `web/src/screen.test.js` covers the input queue (one request in flight,
 coalescing, newest acknowledgement and arrival report, the sound flag once
 per viewer), throughput after startup and idle, key translation (text
-against keys, Cmd as Ctrl, AltGr, Option, released typed keys), pointer, fit
+against keys, Cmd as Ctrl, AltGr, Option, released typed keys), `pasteIsNew`, pointer, fit
 and wheel arithmetic, every trackpad gesture, codec choice, Opus support and
 sound scheduling (lead, growth after running dry, restart after a gap,
 dropping a burst).
 `e2e/tests/screen.spec.js` runs an Xvfb with an `xev` window per test. With
 VP9 4:4:4, VP9 4:2:0 (a browser refusing profile 1) and JPEG it turns sharing on from the tab and checks drawn pixels,
 arrival feedback, a right click and a key reaching xev, clipboard both ways,
-full screen in and out with its toolbar dragged against an edge and keeping
+a paste leaving a remote copy alone when the local write was refused,
+full screen in and out with the keyboard locked and Alt+Tab reaching xev,
+its toolbar dragged against an edge and keeping
 its size when the numbers drop to 0 fps and 0 kbps, and 0 fps on a still screen.
 With `pactl` and `paplay` each server records a null sink of the test's own
 (`PULSE_SOURCE`) and a tone played into it must reach the page's Web Audio
@@ -494,4 +523,6 @@ window, through the same loopback proxy the app uses, against a fake screen.
 It checks the screen is drawn and input comes back, and logs the codec the
 window picked from the server's list and whether it plays sound. WebKitGTK
 2.52 picks VP9 4:2:0 and decodes Opus: the window is a secure context, so
-WebCodecs and the clipboard API are there.
+WebCodecs and the clipboard API are there. It also stands a root passive grab
+on Alt+Tab in for a window manager: quiet in full screen while the page sees
+Tab, Esc, Super and Ctrl+W, firing again afterwards.

@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"syscall"
 
 	"github.com/wailsapp/wails/v2"
@@ -104,6 +105,7 @@ func runDesktop(srv *server.Server, lock *single.Lock, defaultAddr string) error
 		OnStartup: func(ctx context.Context) {
 			win.opened(ctx)
 			startNative(win)
+			watchScreenFullscreen(ctx)
 			// Only reported where configureDesktop enables native drops; the
 			// page reads the files back from /api/desktop/drop.
 			runtime.OnFileDrop(ctx, func(x, y int, paths []string) {
@@ -118,6 +120,7 @@ func runDesktop(srv *server.Server, lock *single.Lock, defaultAddr string) error
 				}
 			}()
 		},
+		OnDomReady:    leaveScreenFullscreen,
 		OnShutdown:    func(ctx context.Context) { srv.Shutdown() },
 		OnBeforeClose: win.beforeClose,
 	}
@@ -179,6 +182,31 @@ func (w *window) present() bool {
 	return true
 }
 
+// screenFullscreen is whether the Screen tab holds the window full screen.
+var screenFullscreen atomic.Bool
+
+// watchScreenFullscreen lets the Screen tab fill the display and take the
+// keyboard, so that Esc and Alt+Tab reach the machine it shows.
+func watchScreenFullscreen(ctx context.Context) {
+	runtime.EventsOn(ctx, "agenttik:screen-fullscreen", func(data ...interface{}) {
+		if on, _ := data[0].(bool); !on {
+			leaveScreenFullscreen(ctx)
+		} else if !screenFullscreen.Swap(true) {
+			runtime.WindowFullscreen(ctx)
+			grabKeyboard()
+		}
+	})
+}
+
+// leaveScreenFullscreen also runs for each page that loads: one reloaded in
+// full screen could no longer give the keyboard back.
+func leaveScreenFullscreen(ctx context.Context) {
+	if screenFullscreen.Swap(false) {
+		releaseKeyboard()
+		runtime.WindowUnfullscreen(ctx)
+	}
+}
+
 // quietAborts drops the abort a reverse proxy raises when the client goes away
 // mid-body. The webview does that on every reload and on every reopen of the
 // event stream, which the UI does whenever a tab opens or closes.
@@ -215,7 +243,11 @@ func runRemoteDesktop(handler *remote.Client, title string) error {
 		Title: title, Width: 1440, Height: 900, MinWidth: 900, MinHeight: 600,
 		AssetServer:      &assetserver.Options{Handler: quietAborts(media.Handler())},
 		BackgroundColour: &options.RGBA{R: 17, G: 18, B: 21, A: 255},
-		OnStartup:        func(context.Context) { startNative(nil) },
+		OnStartup: func(ctx context.Context) {
+			startNative(nil)
+			watchScreenFullscreen(ctx)
+		},
+		OnDomReady: leaveScreenFullscreen,
 	}
 	configureDesktop(app)
 	return wails.Run(app)

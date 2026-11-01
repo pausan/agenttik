@@ -208,10 +208,37 @@ for (const [codec, setup] of Object.entries(browsers)) {
       await page.keyboard.press("Control+V");
       await expect.poll(x.clipboard).toBe("pasted from here");
       await expect.poll(x.events).toContain("keysym 0x76, v");
+      // A paste with no newer copy here leaves the other machine's clipboard
+      // alone: what is copied there and not readable here must survive it.
+      await page.evaluate(() => {
+        window.realWrite = navigator.clipboard.writeText;
+        navigator.clipboard.writeText = () => Promise.reject(new Error("refused"));
+        document.execCommand = () => false;
+      });
+      x.copy("newest over there");
+      await expect(page.getByRole("button", { name: "Copy remote clipboard" })).toBeVisible();
+      await page.keyboard.press("Control+V");
+      await page.waitForTimeout(300);
+      expect(x.clipboard()).toBe("newest over there");
+      await page.evaluate(() => {
+        navigator.clipboard.writeText = window.realWrite;
+        delete document.execCommand;
+      });
+      await page.keyboard.press("Control+V");
+      await expect(page.getByRole("button", { name: "Copy remote clipboard" })).toBeHidden();
+      await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("newest over there");
 
-      // Full screen, and back.
+      // Full screen locks the keyboard, so Esc and Alt+Tab go over there.
+      await page.evaluate(() => {
+        window.locks = [];
+        navigator.keyboard.lock = (...keys) => (window.locks.push(keys), Promise.resolve());
+        navigator.keyboard.unlock = () => window.locks.push("unlock");
+      });
       await page.getByRole("button", { name: "Full screen" }).click();
       await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(true);
+      await expect.poll(() => page.evaluate(() => window.locks)).toEqual([[]]);
+      await page.keyboard.press("Alt+Tab");
+      await expect.poll(x.events).toContain("(keysym 0xff09, Tab)");
       // Its bar is dragged out of the way, and stays on screen. Its size
       // does not follow what the summary says.
       const bar = page.getByTestId("screen-bar");
@@ -233,6 +260,7 @@ for (const [codec, setup] of Object.entries(browsers)) {
       await expect(bar).toHaveCSS("opacity", "1");
       await page.getByRole("button", { name: "Exit full screen" }).click();
       await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(false);
+      await expect.poll(() => page.evaluate(() => window.locks)).toEqual([[], "unlock"]);
 
       // An unchanged screen sends nothing more.
       await expect.poll(async () => (await page.getByTestId("screen-summary").innerText()).includes(" 0 fps"), { timeout: 10_000 }).toBe(true);

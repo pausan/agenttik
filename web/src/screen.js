@@ -11,6 +11,7 @@
    functions below and draws what ScreenStream hands it. */
 
 import { apiURL } from "./api.js";
+import { writeClipboard } from "./clipboard.js";
 import { openEventStream } from "./eventStream.js";
 
 /* WebCodecs names for what the server sends. Profile 0, level 1.0, 8 bits:
@@ -166,7 +167,7 @@ export function keyEvents(e, { down, cmdIsCtrl = false, ctrlIsCmd = false, mac =
   } else if (ctrlIsCmd && key === "Control") {
     key = "Meta";
     code = right ? "MetaRight" : "MetaLeft";
-  } else if (ctrlIsCmd && (key === "Meta" || key === "OS")) {
+  } else if (ctrlIsCmd && (key === "Meta" || key === "OS" || key === "Super")) { // WebKitGTK says Super
     key = "Control";
     code = right ? "ControlRight" : "ControlLeft";
   }
@@ -605,6 +606,25 @@ export class AudioPlayer {
     this.decoder = null;
     this.ctx.close().catch(() => {});
   }
+}
+
+/* pasteIsNew says whether a paste carries a copy made on this machine, which
+   then goes to the other one. `seen` is what this machine's clipboard last
+   held as far as the view knows, null if it never saw it; `pending` is that
+   a copy over there has not reached this machine yet. Anything else leaves
+   the other machine's clipboard alone: it holds the last copy, perhaps
+   richer than the text that came here. */
+export function pasteIsNew(text, seen, pending) {
+  if (!text || text === seen) return false;
+  return seen !== null || !pending;
+}
+
+/* writeLocalClipboard puts a copy made over there on this machine's clipboard.
+   The desktop window writes natively, which a webview would refuse without a
+   click. */
+export async function writeLocalClipboard(text) {
+  if (await window.runtime?.ClipboardSetText?.(text)) return;
+  await writeClipboard(text, navigator.clipboard, document);
 }
 
 /* setRemoteClipboard puts the viewer's text on the other machine's clipboard,

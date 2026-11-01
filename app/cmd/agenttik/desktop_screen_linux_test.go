@@ -10,7 +10,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -78,7 +81,7 @@ func TestDesktopScreen(t *testing.T) {
 	target, _ := url.Parse("http://" + ln.Addr().String())
 	proxy := localDesktopProxy(target, "", "")
 
-	sources := webModules(t, "screen.js", "eventStream.js")
+	sources := webModules(t, "screen.js", "clipboard.js", "eventStream.js")
 	sources["index.html"] = &fstest.MapFile{Data: []byte(`<canvas id="c"></canvas>
 <script type="importmap">{"imports":{"vue":"/vue.js"}}</script>
 <script type="module">
@@ -133,6 +136,120 @@ try {
 				}
 				w.WriteHeader(http.StatusNoContent)
 				runtime.Quit(<-started)
+			}),
+		},
+	}
+	configureDesktop(app)
+	if err := wails.Run(app); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// In full screen every key belongs to the other machine, including the ones
+// the window manager keeps for itself. A root passive grab on Alt+Tab is how
+// a window manager gets that chord, so it stands in for one here: it must stay
+// quiet while the window holds the keyboard, the page must see the keys, and
+// it must fire again once the window lets go.
+// Run with make test-desktop-screen (needs Xvfb, xdotool and the desktop libraries).
+func TestDesktopScreenKeyboard(t *testing.T) {
+	if os.Getenv("AGENTTIK_SCREEN_TEST_CHILD") != "1" {
+		if os.Getenv("DISPLAY") == "" {
+			t.Skip("requires an X display; use make test-desktop-screen")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestDesktopScreenKeyboard$", "-test.v")
+		cmd.Env = append(os.Environ(), "AGENTTIK_SCREEN_TEST_CHILD=1")
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("native keyboard grab failed: %v\n%s", err, output)
+		}
+		return
+	}
+
+	var fired atomic.Int32
+	stop, err := registerToggle("Alt+Tab", func(bool) { fired.Add(1) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+
+	press := func(chord string) {
+		t.Helper()
+		if output, err := exec.Command("xdotool", "key", chord).CombinedOutput(); err != nil {
+			t.Fatalf("xdotool %s: %v\n%s", chord, err, output)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	var mu sync.Mutex
+	var seen []string
+	pageSaw := func(key string) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Contains(seen, key)
+	}
+
+	started := make(chan context.Context, 1)
+	app := &options.App{
+		Title: "Screen keyboard regression test",
+		Width: 400, Height: 300,
+		OnStartup: func(ctx context.Context) {
+			watchScreenFullscreen(ctx)
+			started <- ctx
+		},
+		AssetServer: &assetserver.Options{
+			Assets: fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte(`<textarea id="keys" autofocus></textarea>
+<script>
+const keys = document.getElementById('keys');
+keys.addEventListener('keydown', (e) => {
+  e.preventDefault();
+  fetch('/key?' + new URLSearchParams({ key: e.key, code: e.code }));
+});
+window.addEventListener('load', async () => {
+  keys.focus();
+  await fetch('/ready');
+});
+</script>`)}},
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/key":
+					mu.Lock()
+					seen = append(seen, r.URL.Query().Get("key"), r.URL.Query().Get("code"))
+					mu.Unlock()
+				case "/ready":
+					ctx := <-started
+					go func() {
+						defer runtime.Quit(ctx)
+						time.Sleep(500 * time.Millisecond)
+						press("alt+Tab")
+						if fired.Load() != 1 {
+							t.Errorf("the stand-in window manager did not see Alt+Tab before the grab: %d", fired.Load())
+						}
+						runtime.EventsEmit(ctx, "agenttik:screen-fullscreen", true)
+						time.Sleep(time.Second)
+						press("alt+Tab")
+						press("Escape")
+						press("Super_L")
+						press("ctrl+w")
+						if fired.Load() != 1 {
+							t.Errorf("Alt+Tab reached the window manager in full screen: %d", fired.Load())
+						}
+						for _, key := range []string{"Tab", "Escape", "Super", "w"} {
+							if !pageSaw(key) {
+								t.Errorf("the page did not see %s", key)
+							}
+						}
+						leaveScreenFullscreen(ctx)
+						time.Sleep(time.Second)
+						press("alt+Tab")
+						if fired.Load() != 2 {
+							t.Errorf("Alt+Tab did not come back after full screen: %d", fired.Load())
+						}
+						mu.Lock()
+						t.Logf("page saw %q", seen)
+						mu.Unlock()
+					}()
+				}
+				w.WriteHeader(http.StatusNoContent)
 			}),
 		},
 	}

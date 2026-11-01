@@ -139,10 +139,10 @@ test-desktop-video:
 test-desktop-terminal:
 	xvfb-run -a go test -tags "$(DESKTOP_TAGS)" $(PKG) -run '^TestDesktopTerminalInput$$' -count=1
 
-## test-desktop-screen: native Wails/WebKit Screen tab drawing and input (needs Xvfb)
+## test-desktop-screen: native Wails/WebKit Screen tab drawing, input and keyboard grab (needs Xvfb, xdotool)
 .PHONY: test-desktop-screen
 test-desktop-screen:
-	xvfb-run -a go test -tags "$(DESKTOP_TAGS)" $(PKG) -run '^TestDesktopScreen$$' -count=1 -v
+	xvfb-run -a go test -tags "$(DESKTOP_TAGS)" $(PKG) -run '^TestDesktopScreen(Keyboard)?$$' -count=1 -v
 
 ## test-desktop-scrollbars: native scrollbar paint regression (needs Xvfb, xdotool, ImageMagick)
 .PHONY: test-desktop-scrollbars

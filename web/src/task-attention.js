@@ -17,6 +17,13 @@ export function reconcileTaskCompletions(unread, completed, tasks) {
   return changed;
 }
 
+// Follow what another window saved. Entries that did not change stay as they
+// are: rewriting one would look like a new result to the timer below.
+export function syncTaskAttention(target, saved) {
+  for (const id of Object.keys(target)) if (!(id in saved)) delete target[id];
+  Object.assign(target, saved);
+}
+
 // One timer for the visible transcript, independent of how many rows show it.
 // Only a visit the user chose reads: a result or manual mark that arrives on
 // the current transcript, or a transcript the app selected by itself, stays

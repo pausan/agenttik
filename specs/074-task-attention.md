@@ -40,9 +40,14 @@ until leaving and returning to the transcript, like a completion; hiding the
 window alone does not clear it. A new turn or completion replaces that manual
 state. Manual unread uses `-1` alongside positive unread turn IDs.
 
-Unread markers are saved through instance/profile-scoped UI storage and
-restored on reload. The client also saves each known task's latest completed
-turn ID. Project task rows report `last_completed_turn_id`, read using the
+Unread markers are saved in client storage and restored on reload. They are
+keyed by task UUID, so a task's profile window, a remote's window and the flat
+view ([100](100-flat-view.md)) read one copy. Open windows follow each other
+through the browser's `storage` event, so reading a task in one clears it in
+the rest. A profile's older copy joins the shared one when that profile first
+opens; the flat view's older copy is dropped. The client also saves each known
+task's latest completed turn ID the same way, so a result seen in one view is
+not new in another. Project task rows report `last_completed_turn_id`, read using the
 existing session/turn index. Refreshing the project list compares those IDs
 and marks newer results unread, including turns that finished while another
 profile was open or the stream was disconnected. Initial history establishes
@@ -53,7 +58,8 @@ completion IDs keep live-event behaviour. Private mode uses memory storage.
 Read state is local to this client.
 
 `task-attention.test.js` checks interrupted visits, hidden windows, completion
-during viewing, app-made selections, missed completions, and persistent error
+during viewing, app-made selections, missed completions, following another
+window, and persistent error
 coloring. Browser tests cover menu toggles without selecting the task,
 automatic reading after opening a task, and a result finishing on the
 selected task. They also switch profiles during selected and unselected tasks,

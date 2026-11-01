@@ -11,6 +11,14 @@ and `Ctrl+Alt+P` start with **Flat view** (a layers icon). It opens
 `/?profile=all`. Every other part of the window works as in a profile of its
 own.
 
+## Tasks
+
+Tasks here are their profile's tasks. Read and unread
+([074](074-task-attention.md)), marks ([098](098-task-flags.md)) and everything
+else about a task match its profile's window, and a change in either shows in
+the other at once. Only the project order and the hidden set below are the
+flat view's own.
+
 Each project row names where the project lives before its folder:
 `Laptop › Work · /path`. The machine is named only when a remote is saved;
 with local profiles alone, the row names just the profile. The same folder in
@@ -134,7 +142,8 @@ the merged stream carrying a remote's event, lists that do not wait on a
 stopped remote, a machine that is off probed in the background and back once it answers, image copies, stable distinct codes and the orchestrator's
 flat context. `e2e/tests/flat-view.spec.js` opens the flat view from the
 picker, checks the source labels, runs a task on a remote's project and finds
-it on that machine, checks the labels in the phone drawer, drags a
+it on that machine, keeps unread and marks the same in a flat and a profile
+window open side by side, checks the labels in the phone drawer, drags a
 project between two profiles' projects and hides and restores one, shows a stopped remote's profile with a red cross
 whose click offers Retry, and runs a terminal on another profile and on a remote, with Screen offered only on the
 remote's project.

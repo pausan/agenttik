@@ -45,6 +45,81 @@ test("the flat view shows every profile's projects and runs work where each live
   }
 });
 
+test("a task's unread state and mark are the same in the flat view and its profile", async ({ page, agenttik, context }) => {
+  const work = await (await page.request.post(`${agenttik.url}/api/profiles`, { data: { name: "Work" } })).json();
+  const project = await (await page.request.post(`${agenttik.url}/api/projects?profile=${work.id}`, {
+    data: { path: await mkdtemp(join(tmpdir(), "agenttik-flat-tasks-")), name: "Work project" },
+  })).json();
+  const task = await (await page.request.post(`${agenttik.url}/api/sessions?profile=${work.id}`, {
+    data: { project_id: project.id, provider: "fake", model: "fake-quick", title: "Seen everywhere" },
+  })).json();
+  await page.goto(`${agenttik.url}/?profile=${work.id}`);
+  const flat = await context.newPage();
+  await flat.goto(`${agenttik.url}/?profile=all`);
+  const inProfile = sidebar(page).locator(".task-row").filter({ hasText: task.title });
+  const inFlat = sidebar(flat).locator(".task-row").filter({ hasText: task.title });
+  await sidebar(page).getByText("Work project", { exact: true }).click();
+  await sidebar(flat).getByText("Work project", { exact: true }).click();
+  await expect(inProfile).toBeVisible();
+  await expect(inFlat).toBeVisible();
+
+  // Unread set in one window shows in the other, and across a reload.
+  await inProfile.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Mark unread", exact: true }).click();
+  await expect(inFlat.locator(".task-title")).toHaveClass(/font-bold/);
+  await flat.reload();
+  await expect(inFlat.locator(".task-title")).toHaveClass(/font-bold/);
+
+  // Reading it in the flat view reads it in the profile.
+  await inFlat.click();
+  await expect(inFlat.locator(".task-title")).not.toHaveClass(/font-bold/, { timeout: 6000 });
+  await expect(inProfile.locator(".task-title")).not.toHaveClass(/font-bold/);
+  await page.reload();
+  await expect(inProfile.locator(".task-title")).not.toHaveClass(/font-bold/);
+
+  // A mark set in the flat view shows in the profile, and the other way.
+  await sidebar(page).getByText("Work project", { exact: true }).click();
+  await expect(inProfile).toBeVisible();
+  await inFlat.click({ button: "right" });
+  await flat.getByRole("menuitem", { name: "Mark", exact: true }).hover();
+  await flat.getByRole("menuitemcheckbox", { name: "Star", exact: true }).click();
+  await expect(inProfile.locator(".task-flag")).toHaveAttribute("data-flag", "star");
+  await inProfile.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Mark", exact: true }).hover();
+  await page.getByRole("menuitemcheckbox", { name: "Warning", exact: true }).click();
+  await expect(inFlat.locator(".task-flag")).toHaveAttribute("data-flag", "warn");
+});
+
+test("a profile's saved unread state joins the shared copy and the flat view's old copy goes", async ({ page, agenttik }) => {
+  const work = await (await page.request.post(`${agenttik.url}/api/profiles`, { data: { name: "Work" } })).json();
+  const res = await page.request.get(`${agenttik.url}/api/projects?profile=${work.id}`);
+  const instance = res.headers()["x-agenttik-instance"];
+  const project = await (await page.request.post(`${agenttik.url}/api/projects?profile=${work.id}`, {
+    data: { path: await mkdtemp(join(tmpdir(), "agenttik-flat-saved-")), name: "Work project" },
+  })).json();
+  const create = async (title) => (await page.request.post(`${agenttik.url}/api/sessions?profile=${work.id}`, {
+    data: { project_id: project.id, provider: "fake", model: "fake-quick", title },
+  })).json();
+  const kept = await create("Unread in Work");
+  const stale = await create("Unread only in the flat view");
+  const old = (scope) => `agenttik.unreadTasks:${instance}:${scope}`;
+  await page.evaluate(([workKey, flatKey, keptID, staleID]) => {
+    localStorage.setItem(workKey, JSON.stringify({ [keptID]: -1 }));
+    localStorage.setItem(flatKey, JSON.stringify({ [staleID]: -1 }));
+  }, [old(work.id), old("all"), kept.id, stale.id]);
+
+  await page.goto(`${agenttik.url}/?profile=${work.id}`);
+  await sidebar(page).getByText("Work project", { exact: true }).click();
+  const row = (title) => sidebar(page).locator(".task-row").filter({ hasText: title }).locator(".task-title");
+  await expect(row(kept.title)).toHaveClass(/font-bold/);
+
+  await page.goto(`${agenttik.url}/?profile=all`);
+  await sidebar(page).getByText("Work project", { exact: true }).click();
+  await expect(row(kept.title)).toHaveClass(/font-bold/);
+  await expect(row(stale.title)).not.toHaveClass(/font-bold/);
+  expect(await page.evaluate((keys) => keys.map((key) => localStorage.getItem(key)), [old(work.id), old("all")])).toEqual([null, null]);
+});
+
 test("on a phone the flat view names each project's place in the drawer", async ({ page, agenttik }) => {
   const other = await startServer();
   try {

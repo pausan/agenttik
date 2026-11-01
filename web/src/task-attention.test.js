@@ -1,7 +1,21 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { reactive, ref } from "vue";
-import { trackTaskAttention, reconcileTaskCompletions, taskDot, projectDot } from "./task-attention.js";
+import { trackTaskAttention, reconcileTaskCompletions, syncTaskAttention, taskDot, projectDot } from "./task-attention.js";
+
+test("following another window drops what it read and leaves the visit in front reading", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const unread = reactive({ front: 4, read: 5 });
+  const stop = trackTaskAttention(unread, () => "front", () => true);
+  t.mock.timers.tick(2000);
+
+  syncTaskAttention(unread, { front: 4, fresh: 6 });
+  assert.deepEqual({ ...unread }, { front: 4, fresh: 6 });
+
+  t.mock.timers.tick(1000);
+  assert.deepEqual({ ...unread }, { fresh: 6 });
+  stop();
+});
 
 test("snapshots recover missed completions without marking existing history or read results unread", () => {
   const unread = {};

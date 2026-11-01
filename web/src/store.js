@@ -15,11 +15,11 @@ import { computed, markRaw, nextTick, reactive, ref, watch } from "vue";
 import { projectQueueAction } from "./project-queue.js";
 import { DEFAULT_SCHEDULE, scheduleRecurrence } from "./schedules.js";
 import { createTaskSounds, TASK_SOUNDS_KEY } from "./task-sounds.js";
-import { trackTaskAttention, reconcileTaskCompletions } from "./task-attention.js";
+import { trackTaskAttention, reconcileTaskCompletions, syncTaskAttention } from "./task-attention.js";
 import { choiceOf, otherChoice, takeFollowUp, upsertBackgroundMessage, wakesAgent } from "./background-tasks.js";
 import { recordError } from "./diagnostics.js";
 import { writeClipboard } from "./clipboard.js";
-import { api, apiURL, storage, clientStorage, diagnosticStorage, isRemoteConnection, setFlatScope } from "./api";
+import { api, apiURL, storage, clientStorage, diagnosticStorage, instanceKey, isRemoteConnection, setFlatScope } from "./api";
 import { isFlatView } from "./profiles.js";
 import { debounce } from "./debounce";
 import { ACCENTS, DEFAULT_COLORS, NEUTRALS, applyColors } from "./theme";
@@ -47,6 +47,8 @@ const WINDOW_KEY = "agenttik.window";
 const TASK_PAGE_KEY = "agenttik.taskPageSize";
 const SCHEDULE_KEY = "agenttik.schedule";
 const FOLD_KEY = "agenttik.foldOthers";
+const UNREAD_KEY = "agenttik.unreadTasks";
+const COMPLETED_KEY = "agenttik.completedTasks";
 const LAYOUT_LIMITS = { left: [180, 520], right: [200, 620] };
 
 /* The letters Alt reaches a project with. The first eight rows of the
@@ -564,26 +566,50 @@ const attentionVisible = ref(!document.hidden);
 const completedTasks = {};
 let attentionLoaded = false;
 document.addEventListener("visibilitychange", () => { attentionVisible.value = !document.hidden; });
+/* Task IDs are UUIDs, so one copy of the read state serves a task's profile
+   window and the flat view alike. See specs/074-task-attention.md. */
 function saveTaskAttention() {
   try {
-    storage.setItem("agenttik.unreadTasks", JSON.stringify(S.unreadTasks));
-    storage.setItem("agenttik.completedTasks", JSON.stringify(completedTasks));
+    clientStorage.setItem(UNREAD_KEY, JSON.stringify(S.unreadTasks));
+    clientStorage.setItem(COMPLETED_KEY, JSON.stringify(completedTasks));
   } catch { /* memory still works */ }
+}
+function savedTurns(from, key, valid) {
+  const turns = {};
+  try {
+    for (const [id, turn] of Object.entries(JSON.parse(from.getItem(key) || "{}") || {})) {
+      if (Number.isSafeInteger(turn) && valid(turn)) turns[id] = turn;
+    }
+  } catch { /* Ignore invalid saved state. */ }
+  return turns;
+}
+const savedUnread = (from) => savedTurns(from, UNREAD_KEY, (turn) => turn > 0 || turn === -1);
+const savedCompleted = (from) => savedTurns(from, COMPLETED_KEY, (turn) => turn >= 0);
+function readTaskAttention() {
+  syncTaskAttention(S.unreadTasks, savedUnread(clientStorage));
+  syncTaskAttention(completedTasks, savedCompleted(clientStorage));
+}
+/* Read state was once kept per profile, Default's under the key still in use.
+   Each profile's copy joins the shared one the first time it opens. The flat
+   view's copy is dropped: it never saw what was read in a profile. */
+function adoptProfileAttention() {
+  if (instanceKey(UNREAD_KEY) === UNREAD_KEY) return;
+  if (!isFlatView) {
+    Object.assign(S.unreadTasks, savedUnread(storage));
+    for (const [id, turn] of Object.entries(savedCompleted(storage))) {
+      completedTasks[id] = Math.max(completedTasks[id] || 0, turn);
+    }
+  }
+  try {
+    storage.removeItem(UNREAD_KEY);
+    storage.removeItem(COMPLETED_KEY);
+  } catch { /* the copy stays, and is read again next time */ }
+  saveTaskAttention();
 }
 function loadTaskAttention() {
   if (attentionLoaded) return;
-  try {
-    const unread = JSON.parse(storage.getItem("agenttik.unreadTasks") || "{}");
-    for (const [id, turn] of Object.entries(unread || {})) {
-      if (Number.isSafeInteger(turn) && (turn > 0 || turn === -1)) S.unreadTasks[id] = turn;
-    }
-  } catch { /* Ignore invalid saved state. */ }
-  try {
-    const completed = JSON.parse(storage.getItem("agenttik.completedTasks") || "{}");
-    for (const [id, turn] of Object.entries(completed || {})) {
-      if (Number.isSafeInteger(turn) && turn >= 0) completedTasks[id] = turn;
-    }
-  } catch { /* Ignore invalid saved state. */ }
+  readTaskAttention();
+  adoptProfileAttention();
   attentionLoaded = true;
 }
 function reconcileProjectAttention() {
@@ -4462,7 +4488,9 @@ async function initialize() {
   loadLayout();
   loadKeys();
   window.addEventListener("storage", (e) => {
-    if (e.storageArea === localStorage && (e.key === KEYS_KEY || e.key === null)) loadKeys();
+    if (e.storageArea !== localStorage) return;
+    if (e.key === KEYS_KEY || e.key === null) loadKeys();
+    if (attentionLoaded && (e.key === UNREAD_KEY || e.key === COMPLETED_KEY || e.key === null)) readTaskAttention();
   });
   loadFileMode();
   loadWindow();

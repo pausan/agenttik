@@ -144,6 +144,11 @@ test-desktop-terminal:
 test-desktop-screen:
 	xvfb-run -a go test -tags "$(DESKTOP_TAGS)" $(PKG) -run '^TestDesktopScreen(Keyboard)?$$' -count=1 -v
 
+## test-desktop-tasks: native task dot cycling and keyboard navigation (needs built UI, Xvfb, xdotool)
+.PHONY: test-desktop-tasks
+test-desktop-tasks:
+	xvfb-run -a go test -tags "$(DESKTOP_TAGS)" $(PKG) -run '^TestDesktop(TaskKeyboard|RequestRelease)$$' -count=1
+
 ## test-desktop-scrollbars: native scrollbar paint regression (needs Xvfb, xdotool, ImageMagick)
 .PHONY: test-desktop-scrollbars
 test-desktop-scrollbars:

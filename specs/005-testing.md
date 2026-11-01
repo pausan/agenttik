@@ -12,6 +12,7 @@ Tests cover logic, browser flows and the native desktop transport.
 | Linux desktop microphone API | `app/cmd/agenttik/desktop_microphone_linux_test.go` | `make test-desktop-speech` |
 | Linux desktop terminal input | `app/cmd/agenttik/desktop_terminal_linux_test.go` | `make test-desktop-terminal` |
 | Linux desktop video playback | `app/cmd/agenttik/desktop_video_linux_test.go` | `make test-desktop-video` |
+| Linux desktop task keyboard | `app/cmd/agenttik/desktop_tasks_linux_test.go` | `make test-desktop-tasks` |
 | Linux desktop scrollbar layers | `app/cmd/agenttik/desktop_scrollbars_linux_test.go` | `make test-desktop-scrollbars` |
 
 `make test` is the fast loop and runs the first two. `make e2e` builds the
@@ -36,6 +37,17 @@ built UI (`cd web && npm run build`). It checks actual Wails/WebKit screenshot
 pixels where opaque popups cover active horizontal and vertical scrollbars,
 in light and dark themes and above a nested dialog. DOM hit testing alone
 cannot detect the native scrollbar paint-order bug.
+
+`make test-desktop-tasks` needs a built UI, Xvfb and xdotool. It opens real
+task rows with running and idle status, cycles their focused dots through
+unread and all flags three times, checks each resulting button label, and
+continues with task selection, context-menu and function keys. Each child
+has isolated WebKit storage so task read state cannot leak between runs.
+A native ownership test also releases a WebKit URI request from a worker
+and requires its finalization to run inside GTK’s main context. Unrelated
+GObjects must still finalize immediately on their owner’s thread. The fixture
+also verifies synchronous GTK dispatch preserves the caller’s arguments and
+returns only after the callback finishes.
 
 Tests are written with the change they guard, where writing one is reasonable
 — see rule 6 in `AGENTS.md`. What exists guards the logic that is hard to

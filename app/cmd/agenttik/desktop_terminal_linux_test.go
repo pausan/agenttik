@@ -42,7 +42,7 @@ func TestDesktopTerminalInput(t *testing.T) {
 		return
 	}
 
-	sources := webModules(t, "terminals.js")
+	sources := webModules(t, "terminals.js", "eventStream.js")
 
 	// 0xe9 is a report-mode byte, the one shape that has to reach the shell as
 	// a single byte. Typing more while the first request is still in flight is

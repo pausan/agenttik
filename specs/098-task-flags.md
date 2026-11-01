@@ -16,7 +16,9 @@ Unread still makes the title bold; read and unread now live only in the
 row's right-click menu.
 
 Clicking the dot steps read → unread → star → warning → danger → read
-without selecting the task. An unmarked task left unread by a finished turn
+without selecting the task. Space or Enter on the focused dot follows the
+same cycle. Stopping a running task uses its separate Stop task control.
+An unmarked task left unread by a finished turn
 is only read by the first click, so the next click starts the cycle again.
 A task marked unread by hand or marked skips the unread step and moves to
 its next mark; clearing the last mark also marks it read. It works while the

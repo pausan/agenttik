@@ -137,6 +137,33 @@ test("file tabs stay still while dragging and save their order on drop", async (
 });
 
 
+test("the insertion line never leaves while a drag is on, and a drop lands on it", async ({ page }) => {
+  await addProject(page, REPO + "/app");
+  await addProject(page, REPO + "/web");
+  const rows = sidebar(page).locator('[draggable="true"]');
+  const source = rows.filter({ hasText: REPO + "/web" });
+  const box = await source.boundingBox();
+  const marker = page.locator("[data-drop-position]");
+  const x = box.x + box.width / 2;
+  const middle = box.y + box.height / 2;
+  await page.mouse.move(x, middle);
+  await page.mouse.down();
+  await page.mouse.move(x + 8, middle, { steps: 3 });
+
+  // Over its own row, beside its own edges, and well out of the list.
+  await page.mouse.move(x, middle + 1, { steps: 2 });
+  await expect(marker).toHaveCount(1);
+  const viewport = page.viewportSize();
+  await page.mouse.move(viewport.width / 2, viewport.height - 5, { steps: 5 });
+  await expect(marker).toHaveCount(1);
+  await expect(marker).toHaveAttribute("data-drop-position", "after");
+  await expect(marker).toContainText(REPO + "/app");
+
+  await page.mouse.up();
+  await expect(marker).toHaveCount(0);
+  await expect(rows.last()).toContainText(REPO + "/web");
+});
+
 test("cancelling a project drag leaves its order unchanged and sends no save", async ({ page }) => {
   await addProject(page, REPO + "/app");
   await addProject(page, REPO + "/web");

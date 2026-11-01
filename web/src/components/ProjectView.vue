@@ -29,7 +29,7 @@ import { ago, duration, isoDate, isoLocal, nf, tokens, usageBreakdownRows, usage
 import { TASK_TIME_FILTERS, filterTaskRows, taskText } from "../task-search.js";
 import { smartSearch, refreshSmartIndex, searchTasks } from "../smart-search.js";
 import SmartSearchProgress from "./SmartSearchProgress.vue";
-import { beginDrag, showDropPosition } from "../drag";
+import { beginDrag } from "../drag";
 import { isMobile } from "../ui";
 import ScheduleRow from "./ScheduleRow.vue";
 import TaskRow from "./TaskRow.vue";
@@ -37,7 +37,6 @@ import ArchivedTasks from "./ArchivedTasks.vue";
 
 const props = defineProps({ tab: { type: Object, required: true } });
 
-const dragging = ref("");
 const renaming = ref(""); // the task whose title is being edited
 const filter = ref("");
 const timeFilter = ref("all");
@@ -245,34 +244,13 @@ const filtering = computed(() => !!filter.value.trim() || timeFilter.value !== "
 
 const subtitle = (s) => `${s.model}${s.effort ? " · " + s.effort : ""} · ${ago(s.last_active_at)}`;
 
-function onStart(e, id) {
-  dragging.value = id;
-  beginDrag(e, id);
-}
-
 /* Hover only previews the insertion edge. The list changes on drop. */
-function onOver(e, overID) {
-  if (!dragging.value) return;
-  const tasks = props.tab.data.sessions;
-  const from = tasks.findIndex((s) => s.id === dragging.value);
-  const to = tasks.findIndex((s) => s.id === overID);
-  if (from < 0 || to < 0) return;
-  e.preventDefault();
-  showDropPosition(e, from, to);
-}
-
-function onDrop(e, overID) {
-  if (!dragging.value) return;
-  const tasks = props.tab.data.sessions;
-  const from = tasks.findIndex((s) => s.id === dragging.value);
-  dragging.value = "";
-  if (e.type !== "drop") return;
-  const target = tasks.findIndex((s) => s.id === overID);
-  if (from < 0 || target < 0) return;
-  const to = showDropPosition(e, from, target);
-  if (from === to) return;
-  tasks.splice(to, 0, ...tasks.splice(from, 1));
-  reorderTasks(props.tab, props.tab.data.sessions.map((s) => s.id));
+function onStart(e) {
+  beginDrag(e, (from, to) => {
+    const tasks = props.tab.data.sessions;
+    tasks.splice(to, 0, ...tasks.splice(from, 1));
+    reorderTasks(props.tab, tasks.map((s) => s.id));
+  });
 }
 
 async function doDelete() {
@@ -332,10 +310,8 @@ async function doDelete() {
           :key="row.task.id"
           class="flex items-center gap-1"
           :draggable="!row.archived && renaming !== row.task.id && !filtering"
-          @dragstart="onStart($event, row.task.id)"
-          @dragover="onOver($event, row.task.id)"
-          @drop.prevent="onDrop($event, row.task.id)"
-          @dragend="onDrop"
+          :data-drag-index="row.archived || filtering ? null : tasks.indexOf(row.task)"
+          @dragstart="onStart"
         >
           <UIcon
             v-if="!row.archived"

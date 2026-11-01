@@ -34,19 +34,34 @@ The source remains in its original position, including in the project task
 list and the centre tab strip. Settings favourites use their whole row as the
 preview and dim the source to half opacity.
 
-A thin accent line marks the hovered insertion edge. The upper half of a row
-selects before it, and the lower half selects after it. Projects mark their
-whole block, including tasks. Tabs use their left and right halves for a
-vertical line. The line changes without moving content, disappears over
-invalid targets or positions that would leave the order unchanged, and clears
-on drop or cancellation. The same rule applies to Settings favourites.
+A thin accent line marks the insertion edge nearest the pointer. While a drag
+lasts the line is always shown, wherever the pointer is. It sits between the
+two rows whose midpoints surround the pointer, so the upper half of a row
+selects before it and the lower half after it. Past either end of the list, or
+over something that takes no drops, it stays on the closest edge the dragged
+item can reach: a project header clamps a task to its own project's rows, the
+pinned orchestrator clamps a project to the slot below it, and a tab stays
+among tabs of its own kind. Over the dragged row itself the line sits on that
+row's nearest edge, and a drop there changes nothing.
+
+A drop anywhere in the window lands on the line. Only Escape, or letting go
+outside the window, cancels. Projects mark their whole block, including tasks.
+Tabs use their left and right halves for a vertical line. The line changes
+without moving content and clears on drop or cancellation. The same rule
+applies to Settings favourites.
+
+`beginDrag` takes the drop as a callback. A row opts in with `data-drag-index`,
+its place in the list it belongs to. The rows a drag can land beside are the
+source's siblings with that attribute and the same `data-drag-group`. A row
+without an index, such as the orchestrator, is skipped.
 
 `e2e/tests/drag-drop.spec.js` uses real mouse drags on sidebar projects and
 tasks, project-page tasks, and file tabs. It checks stationary rows during
-hover, the insertion line and its cleanup, one order request on drop, saved
-order after reload, and cancellation without a save. Unit tests cover both
-insertion edges, invalid targets, previews and cancellation; the
-model-settings browser test covers favourite drops.
+hover, the insertion line and its cleanup, the line staying on the nearest edge
+outside the rows, one order request on drop, saved order after reload, and
+cancellation without a save. Unit tests cover the nearest edge, rows that take
+no drops, previews and cancellation; the model-settings browser test covers
+favourite drops.
 
 Project order lives in `projects.position` and task order in
 `sessions.position`, which serves the sidebar and the project page alike.

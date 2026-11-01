@@ -27,7 +27,7 @@ import {
   toggleProjectTasks,
 } from "../store";
 import { isMobile, SEGMENTED } from "../ui";
-import { beginDrag, showDropPosition } from "../drag";
+import { beginDrag } from "../drag";
 import { projectDot } from "../task-attention";
 import { sourceLabel } from "../profiles";
 import FileTree from "./FileTree.vue";
@@ -99,8 +99,6 @@ defineExpose({
 });
 
 
-const draggingProject = ref(0);
-const draggingTask = ref(null);
 const renaming = ref(""); // the task whose title is being edited
 
 /* Folded projects live in the store, since Alt and a project's letter folds
@@ -158,67 +156,19 @@ function onProjectStart(e, id) {
     e.preventDefault();
     return;
   }
-  draggingProject.value = id;
-  beginDrag(e, id);
+  beginDrag(e, (from, to) => {
+    S.projects.splice(to, 0, ...S.projects.splice(from, 1));
+    reorderProjects(S.projects.map((p) => p.id));
+  });
 }
 
-function onProjectOver(e, overID) {
-  if (!draggingProject.value) return;
-  if (S.projects.find((p) => p.id === overID)?.kind === "orchestrator") return;
-  e.preventDefault();
-  const from = S.projects.findIndex((p) => p.id === draggingProject.value);
-  const to = S.projects.findIndex((p) => p.id === overID);
-  if (from < 0 || to < 0) return;
-  showDropPosition(e, from, to);
-}
-
-function onProjectDrop(e, overID) {
-  if (!draggingProject.value) return;
-  const from = S.projects.findIndex((p) => p.id === draggingProject.value);
-  draggingProject.value = 0;
-  if (e.type !== "drop") return;
-  const target = S.projects.findIndex((p) => p.id === overID);
-  if (from < 0 || target < 0 || S.projects[target].kind === "orchestrator") return;
-  const to = showDropPosition(e, from, target);
-  if (from === to) return;
-  S.projects.splice(to, 0, ...S.projects.splice(from, 1));
-  reorderProjects(S.projects.map((p) => p.id));
-}
-
-function onTaskStart(e, projectID, taskID) {
-  draggingTask.value = { projectID, taskID };
-  beginDrag(e, taskID);
-}
-
-function onTaskOver(e, projectID, overID) {
-  const dragged = draggingTask.value;
-  if (!dragged || dragged.projectID !== projectID) return;
-  e.stopPropagation();
-  e.preventDefault();
-  const project = S.projects.find((p) => p.id === projectID);
-  if (!project) return;
-  const from = project.recent_sessions.findIndex((s) => s.id === dragged.taskID);
-  const to = project.recent_sessions.findIndex((s) => s.id === overID);
-  if (from < 0 || to < 0) return;
-  showDropPosition(e, from, to);
-}
-
-function onTaskDrop(e, projectID, overID) {
-  const dragged = draggingTask.value;
-  if (!dragged) return;
-  e.stopPropagation();
-  e.preventDefault();
-  draggingTask.value = null;
-  if (e.type !== "drop" || dragged.projectID !== projectID) return;
-  const project = S.projects.find((p) => p.id === dragged.projectID);
-  if (!project) return;
-  const from = project.recent_sessions.findIndex((s) => s.id === dragged.taskID);
-  const target = project.recent_sessions.findIndex((s) => s.id === overID);
-  if (from < 0 || target < 0) return;
-  const to = showDropPosition(e, from, target);
-  if (from === to) return;
-  project.recent_sessions.splice(to, 0, ...project.recent_sessions.splice(from, 1));
-  reorderSidebarTasks(project, project.recent_sessions.map((s) => s.id));
+function onTaskStart(e, projectID) {
+  beginDrag(e, (from, to) => {
+    const project = S.projects.find((p) => p.id === projectID);
+    if (!project) return;
+    project.recent_sessions.splice(to, 0, ...project.recent_sessions.splice(from, 1));
+    reorderSidebarTasks(project, project.recent_sessions.map((s) => s.id));
+  });
 }
 </script>
 
@@ -250,8 +200,7 @@ function onTaskDrop(e, projectID, overID) {
           v-for="(p, i) in S.projects"
           :key="p.id"
           class="px-2.5 py-1 not-first:border-t not-first:border-muted"
-          @dragover="onProjectOver($event, p.id)"
-          @drop.prevent="onProjectDrop($event, p.id)"
+          :data-drag-index="p.kind === 'orchestrator' ? null : i"
         >
           <!-- The menu wraps the project row itself, not the block around
                it: what follows are the project's jobs and tasks, and a right
@@ -262,7 +211,6 @@ function onTaskDrop(e, projectID, overID) {
               class="sidebar-project mb-0.5 flex items-start gap-1 rounded-[var(--ui-radius)] px-1.5 py-1"
               :class="[S.activeProjectID === p.id ? 'bg-primary/10' : 'hover:bg-elevated', p.kind === 'orchestrator' ? 'cursor-default' : 'cursor-grab active:cursor-grabbing']"
               @dragstart="onProjectStart($event, p.id)"
-              @dragend="onProjectDrop"
             >
               <button
                 type="button"
@@ -346,14 +294,12 @@ function onTaskDrop(e, projectID, overID) {
           />
           <div
             v-if="!folded(p)"
-            v-for="s in p.recent_sessions"
+            v-for="(s, j) in p.recent_sessions"
             :key="s.id"
             :class="renaming === s.id ? '' : 'cursor-grab active:cursor-grabbing'"
             :draggable="renaming !== s.id"
-            @dragstart.stop="onTaskStart($event, p.id, s.id)"
-            @dragover="onTaskOver($event, p.id, s.id)"
-            @drop="onTaskDrop($event, p.id, s.id)"
-            @dragend="onTaskDrop"
+            :data-drag-index="j"
+            @dragstart.stop="onTaskStart($event, p.id)"
           >
             <TaskRow
               :ref="(el) => setTaskRow(s.id, el)"

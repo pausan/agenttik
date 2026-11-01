@@ -15,7 +15,7 @@ import {
   selectTab,
   startCurrentTask,
 } from "../store";
-import { beginDrag, dropAfter, showDropPosition } from "../drag";
+import { beginDrag } from "../drag";
 import { primaryChord } from "../platform";
 import Transcript from "./Transcript.vue";
 import PromptBar from "./PromptBar.vue";
@@ -68,6 +68,7 @@ const KINDS = {
 const items = computed(() =>
   S.strip.map((t) => ({
     id: t.id,
+    index: S.tabs.indexOf(t),
     kind: t.kind,
     // The tab is named by its whole label even when the strip shows less of
     // it, so a truncated tab is still addressable.
@@ -101,28 +102,12 @@ const tabMenu = computed(() => {
   }];
 });
 
-const dragging = ref("");
-
 /* The strip stays still while the line previews a drop within the same kind. */
-function onOver(e, id) {
-  if (!dragging.value) return;
-  const from = S.tabs.findIndex((t) => t.id === dragging.value);
-  const to = S.tabs.findIndex((t) => t.id === id);
-  if (from < 0 || to < 0 || S.tabs[from].kind !== S.tabs[to].kind) return;
-  e.preventDefault();
-  showDropPosition(e, from, to);
-}
-
-function onStart(e, id) {
-  dragging.value = id;
-  beginDrag(e, id);
-}
-
-function onEnd(e, overID) {
-  const id = dragging.value;
-  dragging.value = "";
-  if (!id || e.type !== "drop") return;
-  if (moveTab(id, overID, dropAfter(e))) persistTabOrder(id);
+function onStart(e) {
+  beginDrag(e, (from, to, over, after) => {
+    const { id } = S.tabs[from];
+    if (moveTab(id, S.tabs[over].id, after)) persistTabOrder(id);
+  });
 }
 
 const current = computed(() => S.tab);
@@ -179,6 +164,8 @@ const badge = computed(() => {
             v-for="item in items"
             :key="item.id"
             :data-tab-id="item.id"
+            :data-drag-index="item.index"
+            :data-drag-group="item.kind"
             role="tab"
             draggable="true"
             :aria-selected="item.id === S.activeTab"
@@ -187,10 +174,7 @@ const badge = computed(() => {
             class="flex shrink-0 cursor-grab items-center gap-1.5 border-b-2 px-2.5 py-2 active:cursor-grabbing"
             :class="item.id === S.activeTab ? item.colors.edge : 'border-transparent'"
             @click="selectTab(item.id)"
-            @dragstart="onStart($event, item.id)"
-            @dragover="onOver($event, item.id)"
-            @dragend="onEnd"
-            @drop.prevent="onEnd($event, item.id)"
+            @dragstart="onStart"
           >
             <StatusDot v-if="item.running" status="running" />
             <span

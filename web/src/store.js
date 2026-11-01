@@ -2170,23 +2170,20 @@ export async function setTaskFlag(session, flag) {
   }
 }
 
-/* A default session with no history, queued work, or local draft is just an
-   abandoned placeholder. Drop it rather than making it an archived row the
-   user has to find later. Checking the detail also keeps a titled or used
-   session safe when archive is clicked from a compact project-list row. */
+/* A session with no history, queued work, or local draft has nothing to keep,
+   even if renamed. Check its detail when archiving from a project-list row. */
 async function shouldDeleteBlankSession(session, tab) {
   if (tab?.detail?.pendingQueued?.length) return false;
-  if (session.title || (tab?.draft || S.drafts[session.id] || "").trim()) return false;
+  if ((tab?.draft ?? S.drafts[session.id] ?? "").trim()) return false;
   if (tab && unsavedUnder(tab.id).length) return false;
   const detail = tab?.detail || await api("GET", "/api/sessions/" + session.id);
-  return !detail.session.title &&
-    !detail.messages.length &&
+  return !detail.messages.length &&
     !detail.turns.length &&
     !detail.queued.length &&
     !detail.running;
 }
 /* setTaskArchived removes a session from project views and closes its tab.
-   Archived sessions remain restorable; an untouched untitled placeholder is
+   Archived sessions remain restorable; an empty task is
    deleted instead. */
 export async function setTaskArchived(session, archived) {
   try {

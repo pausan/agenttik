@@ -18,9 +18,10 @@ Submitting a new prompt, either immediately or to the queue, automatically
 unarchives the task and returns it to the project's open task lists. Opening
 an archived task to read its transcript leaves it archived.
 
-An untitled task with no transcript, turns, queued work or draft is **deleted**
+A task with no transcript, turns, queued work or non-whitespace draft is **deleted**
 rather than archived, so glancing at a new task and closing it leaves nothing
-behind in the archive or the restore stack.
+behind in the archive or the restore stack. A title does not keep an otherwise
+empty task; running tasks and tasks with unsaved files are kept.
 
 **Deleting** on purpose works the same way, on any task: a trash icon on every
 row of the project page's Tasks and Tasks tabs, behind a confirmation

@@ -36,6 +36,29 @@ test("an empty prompt sends nothing", async ({ page }) => {
   await expect(page.getByText("You", { exact: true })).toHaveCount(0);
 });
 
+for (const draft of ["", "   \n\t"]) {
+  for (const renamed of [false, true]) {
+    test(`archiving deletes an empty task (draft=${JSON.stringify(draft)}, renamed=${renamed})`, async ({ page, agenttik }) => {
+      await addProject(page);
+      await openProject(page);
+      await newTask(page);
+      const [session] = await (await page.request.get(`${agenttik.url}/api/sessions`)).json();
+      const row = sidebar(page).locator(".task-row").first();
+      if (renamed) {
+        await row.click({ button: "right" });
+        await page.getByRole("menuitem", { name: "Rename task", exact: true }).click();
+        await row.getByRole("textbox").fill("Empty renamed task");
+        await row.getByRole("textbox").press("Enter");
+      }
+      await page.getByPlaceholder("Ask the agent…").fill(draft);
+      await row.click({ button: "right" });
+      await page.getByRole("menuitem", { name: "Archive task", exact: true }).click();
+      await expect(row).toHaveCount(0);
+      await expect.poll(async () => (await page.request.get(`${agenttik.url}/api/sessions/${session.id}`)).status()).toBe(404);
+    });
+  }
+}
+
 test("model settings only list connected providers and setup keeps subscriptions", async ({ page }) => {
   await page.getByRole("button", { name: "Settings" }).click();
   await page.getByRole("button", { name: "Models" }).click();
@@ -551,6 +574,7 @@ test("task context menus rename and persist unread without opening the task", as
   await addProject(page);
   await openProject(page);
   await newTask(page);
+  await page.getByPlaceholder("Ask the agent…").fill("Keep this draft");
   const row = sidebar(page).locator(".task-row").first();
   await row.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Mark unread", exact: true }).click();

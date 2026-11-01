@@ -105,6 +105,14 @@ test('remember keeps one entry per server with all its origins', () => {
   assert.equal(remember([], { origin: home, id: 'lab' }, many)[0].origins.length, MAX_ORIGINS);
 });
 
+test('remember keeps a newly reported public origin when the list is full', () => {
+  const away = 'https://new.trycloudflare.com';
+  const many = Array.from({ length: MAX_ORIGINS }, (_, i) => `http://10.0.0.${i + 1}:7717`);
+  const list = remember([{ origin: many[0], id: 'lab', origins: many }], { origin: many[0], id: 'lab' }, [...many, away]);
+  assert.equal(list[0].origins.length, MAX_ORIGINS);
+  assert.deepEqual(list[0].origins.slice(0, 2), [many[0], away]);
+});
+
 test('locate picks the best origin that answers, quickly', async () => {
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const servers = { dead: -1, fast: 0, slow: 60, silent: 1000 };

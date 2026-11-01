@@ -153,12 +153,15 @@ export function candidates(server) {
 
 // remember puts entry first in the saved list, one per server: entries with
 // its machine ID (or, without one, its origin) merge into it, keeping their
-// origins after its own, then the learned ones. Another server last seen at
-// its origin is dropped, as that origin now reaches this one.
+// origins after its own, then the learned ones. Learned public origins go
+// ahead of the saved ones: a server reports its local addresses first and
+// the only way in from outside must not lose its place to them. Another
+// server last seen at its origin is dropped, as that origin now reaches this
+// one.
 export function remember(list, entry, learned = []) {
   const same = list.filter((s) => (entry.id ? s.id === entry.id : s.origin === entry.origin));
   const origins = [];
-  for (const o of [entry.origin, ...same.flatMap(knownOrigins), ...learned]) {
+  for (const o of [entry.origin, ...learned.filter((l) => !isLocalOrigin(l)), ...same.flatMap(knownOrigins), ...learned]) {
     let origin;
     try {
       origin = parseAddress(o);

@@ -5,7 +5,8 @@ use the same storage with `every = pinned`; see [062](062-pinned-prompts.md). Th
 action, **Schedule**, beside Send and Enqueue. It asks for a recurrence and a
 number of runs, and leaves a schedule behind in the project. When each run
 comes due the schedule creates a *new* task and queues its prompt, on the
-provider, model, effort and permission the prompt bar was set to. It starts
+provider, model, effort, permission and mode ([101](101-modes.md)) the
+prompt bar was set to. It starts
 when the project's active turns finish, following the ordinary task queue.
 
 A schedule is not a task. It has no transcript, no provider session id and no
@@ -300,7 +301,7 @@ the repository; the schedule page already carries everything its clock knows.
 Schedules use two tables and link each spawned session through `schedule_id`:
 
 - **schedules** — `id, project_id, title, prompt, provider, model, effort,
-  permission, finish_condition, every, interval_minutes, at_minute, day_interval, weekday_mask,
+  permission, finish_condition, mode_id, every, interval_minutes, at_minute, day_interval, weekday_mask,
   anchor_at, remaining, paused, next_run_at, created_at, done_at, position`.
   `every` is `interval`, `day`,
   `days`, `weekdays`, `week` or `month` for repeating jobs (`pinned` for manual-only
@@ -360,9 +361,9 @@ idle cost of the feature is a query every quarter minute.
 | Method | Path | Purpose |
 |--------|------|---------|
 | GET | `/api/schedules` | `?window=&q=&project_id=&include_done=` — the sidebar list, and with `include_done` the project page's Jobs tab, which draws both states |
-| POST | `/api/schedules` | `{project_id, prompt, provider, model, effort, permission, every, interval_minutes, at_minute, remaining, finish_condition, title}` — `title` and `finish_condition` optional; without it the job names itself ([above](#the-name)) |
+| POST | `/api/schedules` | `{project_id, prompt, provider, model, effort, permission, mode_id, every, interval_minutes, at_minute, remaining, finish_condition, title}` — `title`, `mode_id` and `finish_condition` optional; without it the job names itself ([above](#the-name)) |
 | GET | `/api/schedules/:id` | the schedule and its runs |
-| PATCH | `/api/schedules/:id` | `{title, prompt, finish_condition, provider, model, effort, remaining, paused, done, every, interval_minutes, at_minute}` — any subset |
+| PATCH | `/api/schedules/:id` | `{title, prompt, finish_condition, provider, model, effort, mode_id, remaining, paused, done, every, interval_minutes, at_minute}` — any subset |
 | DELETE | `/api/schedules/:id` | drops the schedule and its run history; the sessions it spawned stay |
 | POST | `/api/schedules/:id/run` | `{enqueue}` — force one run now; see [Running one now](#running-one-now) |
 

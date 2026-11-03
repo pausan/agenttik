@@ -22,7 +22,7 @@ const sessionCols = `s.id, s.project_id, s.title, s.provider, s.account_id, s.pr
 	s.model, s.effort, s.permission, s.source, s.status,
 	s.created_at, s.updated_at, s.last_active_at, s.done_at, s.position, s.flag,
 	(SELECT COUNT(*) FROM queued_messages q WHERE q.session_id = s.id),
-	s.schedule_id, s.project_prompt, s.summary,
+	s.schedule_id, s.project_prompt, s.mode_id, s.mode_title, s.summary,
 	s.parent_id, s.anchor_message_id, s.anchor_quote, s.origin_id, p.name, p.path, p.kind, ` + firstPromptCol
 
 func scanSession(sc interface{ Scan(...any) error }) (*Session, error) {
@@ -30,7 +30,7 @@ func scanSession(sc interface{ Scan(...any) error }) (*Session, error) {
 	err := sc.Scan(&v.ID, &v.ProjectID, &v.Title, &v.Provider, &v.AccountID, &v.ProviderSessionID,
 		&v.Model, &v.Effort, &v.Permission, &v.Source, &v.Status,
 		&v.CreatedAt, &v.UpdatedAt, &v.LastActiveAt, &v.DoneAt, &v.Position, &v.Flag,
-		&v.QueueCount, &v.ScheduleID, &v.ProjectPrompt, &v.Summary,
+		&v.QueueCount, &v.ScheduleID, &v.ProjectPrompt, &v.ModeID, &v.ModeTitle, &v.Summary,
 		&v.ParentID, &v.AnchorMessageID, &v.AnchorQuote, &v.OriginID,
 		&v.ProjectName, &v.ProjectPath, &v.ProjectKind, &v.Prompt)
 	if err != nil {
@@ -51,15 +51,15 @@ func (s *Store) CreateSession(v *Session) error {
 	_, err := s.db.Exec(
 		`INSERT INTO sessions (id, project_id, title, provider, account_id, provider_session_id,
 		    model, effort, permission, source, status, created_at, updated_at, last_active_at,
-		    schedule_id, parent_id, anchor_message_id, anchor_quote, origin_id, position)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
+		    schedule_id, parent_id, anchor_message_id, anchor_quote, origin_id, mode_id, position)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
 		    (SELECT CASE (SELECT new_item_position FROM general_config WHERE id = 1)
 		      WHEN 'bottom' THEN COALESCE(MAX(position), 0) + 1
 		      ELSE COALESCE(MIN(position), 0) - 1 END FROM sessions WHERE project_id = ?))`,
 		v.ID, v.ProjectID, v.Title, v.Provider, v.AccountID, v.ProviderSessionID,
 		v.Model, v.Effort, v.Permission, v.Source, v.Status,
 		v.CreatedAt, v.UpdatedAt, v.LastActiveAt, v.ScheduleID,
-		v.ParentID, v.AnchorMessageID, v.AnchorQuote, v.OriginID, v.ProjectID)
+		v.ParentID, v.AnchorMessageID, v.AnchorQuote, v.OriginID, v.ModeID, v.ProjectID)
 	if err != nil {
 		return fmt.Errorf("create session: %w", err)
 	}
@@ -231,12 +231,13 @@ func (s *Store) RetitleSession(id, title, expect string) (bool, error) {
 // clears its opaque thread id: a Codex thread cannot be resumed by Claude,
 // and vice versa.
 // SetSessionProjectPrompt records the project prompt a conversation was opened
-// with, which is prepended to the first prompt its provider is given. Written
-// once, when the conversation accepts its first prompt: from then on it is
-// what this conversation was told, not what the project currently says.
-func (s *Store) SetSessionProjectPrompt(id, prompt string) error {
+// with, which is prepended to the first prompt its provider is given, and the
+// title of the mode it began with, if any. Written once, when the conversation
+// accepts its first prompt: from then on it is what this conversation was
+// told, not what the project or the mode currently says.
+func (s *Store) SetSessionProjectPrompt(id, prompt, modeTitle string) error {
 	_, err := s.db.Exec(
-		`UPDATE sessions SET project_prompt = ? WHERE id = ?`, prompt, id)
+		`UPDATE sessions SET project_prompt = ?, mode_title = ? WHERE id = ?`, prompt, modeTitle, id)
 	if err != nil {
 		return fmt.Errorf("set project prompt on session %s: %w", id, err)
 	}

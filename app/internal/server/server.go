@@ -299,6 +299,11 @@ func (s *Server) routes() {
 	api.Put("/orchestrator", s.putOrchestratorConfig)
 	api.Post("/orchestrator/prompt/reset", s.resetOrchestratorPrompt)
 
+	api.Get("/modes", s.listModes)
+	api.Post("/modes", s.createMode)
+	api.Patch("/modes/:id", s.updateMode)
+	api.Delete("/modes/:id", s.deleteMode)
+
 	api.Get("/analytics", s.analytics)
 	api.Get("/projects", s.listProjects)
 	api.Post("/projects", s.createProject)
@@ -548,6 +553,8 @@ func errorHandler(c *fiber.Ctx, err error) error {
 	case errors.Is(err, store.ErrNotFound):
 		code = fiber.StatusNotFound
 	case errors.Is(err, store.ErrPathInUse):
+		code = fiber.StatusConflict
+	case errors.Is(err, store.ErrModeTitleTaken):
 		code = fiber.StatusConflict
 	case errors.Is(err, runner.ErrBusy):
 		code = fiber.StatusConflict

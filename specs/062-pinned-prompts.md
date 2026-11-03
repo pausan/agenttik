@@ -1,7 +1,8 @@
 # Pinned prompts
 
 The prompt action menu offers **Pinned task**. It saves the current prompt,
-project, provider, subscription, model, effort and permission without starting
+project, provider, subscription, model, effort, permission and mode
+([101](101-modes.md)) without starting
 a task or making a provider request. The first prompt line supplies its title.
 
 Pinned prompts stay above schedules and tasks in the project sidebar. They

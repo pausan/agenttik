@@ -76,6 +76,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [033](033-prompt-model-picker.md) | Model picker groups, search and favourites settings shortcut |
 | [045](045-provider-outage-retry.md) | Provider retries that keep the current task first and hold its project queue |
 | [047](047-project-prompt.md) | The standing prompt a project puts in front of every conversation's first |
+| [101](101-modes.md) | Reusable modes: project links, per-task choice before the first prompt, Claude subagents |
 
 ## Reading the transcript and the files
 

@@ -15,7 +15,7 @@ import (
 func TestBuildArgsFirstTurnPicksSessionID(t *testing.T) {
 	args := buildArgs(agent.TurnRequest{
 		SessionID: "abc", Model: "opus", Effort: "high",
-		Permission: agent.PermissionWorkspace})
+		Permission: agent.PermissionWorkspace}, "")
 	got := strings.Join(args, " ")
 	for _, want := range []string{
 		"--output-format stream-json", "--include-partial-messages",
@@ -32,7 +32,7 @@ func TestBuildArgsFirstTurnPicksSessionID(t *testing.T) {
 }
 
 func TestBuildArgsResumesWithProviderSessionID(t *testing.T) {
-	args := buildArgs(agent.TurnRequest{SessionID: "abc", ProviderSessionID: "xyz"})
+	args := buildArgs(agent.TurnRequest{SessionID: "abc", ProviderSessionID: "xyz"}, "")
 	got := strings.Join(args, " ")
 	if !strings.Contains(got, "--resume xyz") {
 		t.Errorf("args %q should resume xyz", got)
@@ -44,11 +44,11 @@ func TestBuildArgsResumesWithProviderSessionID(t *testing.T) {
 
 // A thread's first turn copies its conversation; later turns resume the copy.
 func TestBuildArgsForksOnFirstTurn(t *testing.T) {
-	got := strings.Join(buildArgs(agent.TurnRequest{SessionID: "abc", ForkFrom: "parent"}), " ")
+	got := strings.Join(buildArgs(agent.TurnRequest{SessionID: "abc", ForkFrom: "parent"}, ""), " ")
 	if !strings.Contains(got, "--resume parent --fork-session") || strings.Contains(got, "--session-id") {
 		t.Errorf("first turn should fork parent without picking an id: %q", got)
 	}
-	got = strings.Join(buildArgs(agent.TurnRequest{SessionID: "abc", ProviderSessionID: "copy", ForkFrom: "parent"}), " ")
+	got = strings.Join(buildArgs(agent.TurnRequest{SessionID: "abc", ProviderSessionID: "copy", ForkFrom: "parent"}, ""), " ")
 	if !strings.Contains(got, "--resume copy") || strings.Contains(got, "--fork-session") {
 		t.Errorf("later turn should resume the copy: %q", got)
 	}
@@ -241,7 +241,7 @@ func TestParseSeparatesSubagentUsageFromMainContext(t *testing.T) {
 
 func TestIsolatedConflictResolutionAllowsTools(t *testing.T) {
 	for _, permission := range []agent.Permission{agent.PermissionPlan, agent.PermissionWorkspace} {
-		args := buildArgs(agent.TurnRequest{Isolated: true, Permission: permission})
+		args := buildArgs(agent.TurnRequest{Isolated: true, Permission: permission}, "")
 		joined := strings.Join(args, " ")
 		if !strings.Contains(joined, "--no-session-persistence") {
 			t.Fatal(args)
@@ -567,11 +567,11 @@ func TestPromptIsAStreamJSONLine(t *testing.T) {
 }
 
 func TestBuildArgsAsksOnlyForTaskTurns(t *testing.T) {
-	task := strings.Join(buildArgs(agent.TurnRequest{}), " ")
+	task := strings.Join(buildArgs(agent.TurnRequest{}, ""), " ")
 	if !strings.Contains(task, "--input-format stream-json --permission-prompt-tool stdio --replay-user-messages") {
 		t.Errorf("task turn args %q should prompt over stdio", task)
 	}
-	isolated := strings.Join(buildArgs(agent.TurnRequest{Isolated: true}), " ")
+	isolated := strings.Join(buildArgs(agent.TurnRequest{Isolated: true}, ""), " ")
 	if strings.Contains(isolated, "--permission-prompt-tool") || strings.Contains(isolated, "--input-format") {
 		t.Errorf("isolated args %q must not prompt", isolated)
 	}
@@ -720,5 +720,45 @@ func TestOnlyAWrittenFollowUpsEchoIsTaken(t *testing.T) {
 	}
 	if done := feed(`{"type":"result","subtype":"success","usage":{}}`); len(done) != 1 || done[0].FollowUp != nil || !stdin.closed {
 		t.Fatalf("last reply = %+v closed=%v", done, stdin.closed)
+	}
+}
+
+func TestBuildArgsDefinesModesAsAgents(t *testing.T) {
+	modes := []agent.Subagent{{Name: "review", Description: "d", Prompt: "Review only."}}
+	args := buildArgs(agent.TurnRequest{SessionID: "abc", Subagents: modes}, "/tmp/agents.json")
+	i := slices.Index(args, "--agents")
+	if i < 0 || args[i+1] != "/tmp/agents.json" {
+		t.Fatalf("args = %q", args)
+	}
+	if args := buildArgs(agent.TurnRequest{Isolated: true, Subagents: modes}, "/tmp/agents.json"); slices.Contains(args, "--agents") {
+		t.Fatalf("isolated request got agents: %q", args)
+	}
+	if args := buildArgs(agent.TurnRequest{SessionID: "abc", Subagents: modes}, ""); slices.Contains(args, "--agents") {
+		t.Fatalf("unwritten agents file still named: %q", args)
+	}
+}
+
+// The file holds every mode however long the library is: a command line could
+// not, which is why the CLI is given a path.
+func TestWriteAgentsHoldsEveryMode(t *testing.T) {
+	modes := []agent.Subagent{
+		{Name: "huge", Description: "d", Prompt: strings.Repeat(`"x"`, 32<<10)},
+		{Name: "review", Description: "d", Prompt: "Review only."},
+	}
+	path, err := writeAgents(modes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(path)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]agent.Subagent
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got["huge"].Prompt != modes[0].Prompt || got["review"].Prompt != "Review only." {
+		t.Fatalf("agents file = %d modes, %q", len(got), data[:min(len(data), 120)])
 	}
 }

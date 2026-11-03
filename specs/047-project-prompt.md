@@ -5,6 +5,11 @@ conversation started in it opens with. It is set on the project page, under
 **Prompt**, beside Tasks and Stats. Empty — which is how every project
 starts — adds nothing anywhere.
 
+A project can also link to a mode, a standing prompt shared with other
+projects, which goes ahead of its own text; a task can pick another mode
+before its first prompt ([101](101-modes.md)). What follows applies to the
+combined text.
+
 When it is not empty, it goes in front of the **first prompt of each task**,
 separated by a blank line, and the task says so: a line above the transcript
 reading *Project prompt added*, the text itself on hover, and the project's

@@ -55,7 +55,9 @@ The working folder stays in place. The profile-owned orchestrator cannot move.
 The move carries the project prompt, tasks (including archived tasks), messages,
 turn usage, outcomes, schedules and their run history. Session UUIDs stay stable;
 integer IDs and their references are remapped to avoid destination collisions.
-Images referenced by project/task prompts, messages or schedules and direct API
+The modes it uses go with it, matched by title against the destination's
+([101](101-modes.md#moving-a-project)).
+Images referenced by project/task prompts, modes, messages or schedules and direct API
 conversation files are copied into the destination. Source managed files remain
 because another task may reference them. Browser preferences and drafts do not move.
 

@@ -151,6 +151,11 @@ func (s *Server) updateProject(c *fiber.Ctx) error {
 	if body.RunMode != "" && !store.ValidRunMode(body.RunMode) {
 		return badRequest("run_mode must be %q, %q or %q", store.RunAuto, store.RunGuarded, store.RunManual)
 	}
+	if body.Prompt != nil {
+		if err := checkPromptLength("project prompt", strings.TrimSpace(*body.Prompt)); err != nil {
+			return err
+		}
+	}
 	if body.Archived != nil && *body.Archived {
 		if err := s.canArchiveProject(id); err != nil {
 			return err

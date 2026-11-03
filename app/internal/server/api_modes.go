@@ -3,6 +3,7 @@ package server
 import (
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -13,6 +14,20 @@ import (
 
 // Modes are the library of standing prompts projects and tasks open their
 // conversations with. See specs/101-modes.md.
+
+// maxPromptChars bounds a standing prompt — a mode's text or a project's own.
+// Both open every conversation linked to them, where their whole length is
+// paid for in context. The orchestrator prompt the app ships with, the longest
+// it has, is under 7,000 characters, so the limit leaves room for several of
+// those and still catches a pasted document. The fields warn from 8,000.
+const maxPromptChars = 32_000
+
+func checkPromptLength(what, text string) error {
+	if n := utf8.RuneCountInString(text); n > maxPromptChars {
+		return badRequest("%s is too long: %d characters, the limit is %d", what, n, maxPromptChars)
+	}
+	return nil
+}
 
 func (s *Server) listModes(c *fiber.Ctx) error {
 	modes, err := s.store.ListModes()
@@ -32,6 +47,9 @@ func (s *Server) createMode(c *fiber.Ctx) error {
 	}
 	if strings.TrimSpace(body.Title) == "" || strings.TrimSpace(body.Body) == "" {
 		return badRequest("title and body are required")
+	}
+	if err := checkPromptLength("mode text", strings.TrimSpace(body.Body)); err != nil {
+		return err
 	}
 	m, err := s.store.CreateMode(body.Title, body.Body)
 	if err != nil {
@@ -63,6 +81,10 @@ func (s *Server) updateMode(c *fiber.Ctx) error {
 	}
 	if body.Body != nil {
 		m.Body = strings.TrimSpace(*body.Body)
+		// Only new text is measured: a rename leaves whatever is stored.
+		if err := checkPromptLength("mode text", m.Body); err != nil {
+			return err
+		}
 	}
 	if m.Title == "" || m.Body == "" {
 		return badRequest("title and body cannot be empty")

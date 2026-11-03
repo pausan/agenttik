@@ -27,6 +27,19 @@ shown mode lists how many projects link to it.
   project's Prompt page with **Save as mode…**.
 - The title and the text are edited in place and saved on blur. An emptied
   field is put back.
+- Under the text sits its size, characters and an estimate of tokens at four
+  characters each, following what is typed rather than what is saved. The
+  project's prompt carries the same line ([047](047-project-prompt.md)): both
+  open every conversation they are linked to, and length is the only part of
+  that cost the page can show.
+- The size turns amber over 8,000 characters and red over 32,000, where the
+  field stops saving and keeps what was typed, to shorten rather than retype,
+  and says so in a toast. `POST`/`PATCH /api/modes` and a project's prompt
+  refuse the same length with 400; a `PATCH` that sends no new text, a rename,
+  is not measured, so text stored before the limit can still be renamed. Text
+  already stored is over the limit but not unsaved, and the field says only
+  that. The longest prompt the app itself ships, the orchestrator's, is under
+  7,000, so the limit catches a pasted document and nothing else.
 - Titles are unique, ignoring case.
 - Delete asks for a second click on the same button. The select then moves to
   the first remaining mode.

@@ -73,7 +73,11 @@ is a real value — it is how the injection is turned off — where an empty nam
 or path only ever means "not sent".
 
 The project page commits on blur, the same way a schedule's prompt does
-([028](028-scheduled-jobs.md)).
+([028](028-scheduled-jobs.md)). Under the field it shows the prompt's size, in
+characters and an estimate of tokens at four characters each, as a mode's text
+does ([101](101-modes.md)): amber over 8,000 characters, and over 32,000 red
+and refused by `PATCH /api/projects` with 400. A prompt stored before the limit
+keeps working and is not called unsaved; it is measured when it is edited.
 
 ## Choices
 

@@ -5,6 +5,7 @@ import { vTabScroll } from "../tab-scroll";
 import {
   S,
   fail,
+  notice,
   loadProjectPane,
   TASK_PAGE_SIZES,
   openSchedule,
@@ -28,6 +29,7 @@ import {
   stopTask,
 } from "../store";
 import { ago, duration, isoDate, isoLocal, nf, tokens, usageBreakdownRows, usageCost } from "../api";
+import { overPromptLimit, promptLimitNotice, promptSize, promptSizeTone } from "../prompt-size.js";
 import { TASK_TIME_FILTERS, filterTaskRows, taskText } from "../task-search.js";
 import { smartSearch, refreshSmartIndex, searchTasks } from "../smart-search.js";
 import SmartSearchProgress from "./SmartSearchProgress.vue";
@@ -108,8 +110,18 @@ watch(
   },
 );
 
+const promptSaved = computed(() => prompt.value.trim() === (props.tab.data.project.prompt || ""));
+
 function commitPrompt() {
   editingPrompt.value = false;
+  // Unchanged: nothing to save, so nothing to refuse. A prompt stored before
+  // the limit existed keeps working until it is edited.
+  if (promptSaved.value) return;
+  // Over the limit the text stays in the field to be shortened, unsaved.
+  if (overPromptLimit(prompt.value)) {
+    notice("Project prompt too long to save", promptLimitNotice(prompt.value));
+    return;
+  }
   promptSave = setProjectPrompt(props.tab.data.project, prompt.value);
 }
 
@@ -490,6 +502,7 @@ async function doDelete() {
           <p class="m-0 flex-1 text-xs text-dimmed">
             Saved when you click away. Tasks already running keep the prompt they opened with.
           </p>
+          <span class="text-xs tabular-nums" :class="promptSizeTone(prompt)">{{ promptSize(prompt, promptSaved) }}</span>
           <!-- Only a project with no mode: one with a mode would lose its link. -->
           <template v-if="!tab.data.project.mode_id && prompt.trim()">
             <form v-if="modeTitle !== null" class="flex items-center gap-2" @submit.prevent="saveAsMode">

@@ -55,7 +55,19 @@ test("a project prompt becomes a mode and a task picks another before its first 
   const pick = dialog.getByRole("combobox", { name: "Mode to edit" });
   await pick.click();
   await page.getByRole("option", { name: "TDD", exact: true }).click();
-  await expect(dialog.getByRole("textbox", { name: "Text of TDD" })).toHaveValue("Test first.");
+  const text = dialog.getByRole("textbox", { name: "Text of TDD" });
+  await expect(text).toHaveValue("Test first.");
+  // The size under the field follows what is typed, before it is saved.
+  await expect(dialog.getByText("11 characters · ~3 tokens")).toBeVisible();
+  await text.fill("Test first. Then write the code.");
+  await expect(dialog.getByText("32 characters · ~8 tokens")).toBeVisible();
+  // Over the limit the text stays in the field and nothing is saved.
+  await text.fill("y".repeat(32001));
+  await expect(dialog.getByText("32,001 characters · ~8.0k tokens · over the 32,000 limit, not saved")).toBeVisible();
+  await text.blur();
+  await expect(page.getByText("Mode text too long to save")).toBeVisible();
+  expect((await (await page.request.get(agenttik.url + "/api/modes")).json()).find((m) => m.title === "TDD").body).toBe("Test first.");
+  await text.fill("Test first.");
   await expect(dialog.getByRole("textbox", { name: "Text of Review" })).toHaveCount(0);
   await pick.click();
   await page.getByRole("option", { name: "Review", exact: true }).click();

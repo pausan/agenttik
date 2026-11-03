@@ -8,8 +8,9 @@
    projects with none. See specs/101-modes.md. */
 import { computed, ref, watch, watchEffect } from "vue";
 
-import { S, createMode, deleteMode, updateMode } from "../../store";
+import { S, createMode, deleteMode, notice, updateMode } from "../../store";
 import { fuzzyAny } from "../../fuzzy";
+import { overPromptLimit, promptLimitNotice, promptSize, promptSizeTone } from "../../prompt-size";
 
 const props = defineProps({ filter: { type: String, default: "" } });
 const emit = defineEmits(["count"]);
@@ -50,6 +51,15 @@ function cancelNew() {
 
 const title = ref("");
 const body = ref("");
+
+/* The size under the field follows what is typed, not what is saved: the mode
+   commits on blur, so the two differ while writing. */
+const typed = ref(null);
+watch(selected, () => (typed.value = null));
+const bodySize = computed(() => {
+  const text = typed.value ?? mode.value?.body ?? "";
+  return promptSize(text, text.trim() === mode.value?.body);
+});
 async function add() {
   if (!title.value.trim() || !body.value.trim()) return;
   const created = await createMode(title.value, body.value);
@@ -60,11 +70,17 @@ async function add() {
   }
 }
 
-/* An empty field is put back rather than saved: a mode needs both. */
+/* An empty field is put back rather than saved: a mode needs both. Text over
+   the limit is left in the field instead, to shorten rather than retype; the
+   size under it says it is not saved. */
 function commit(field, event) {
   const value = event.target.value.trim();
   if (!value || value === mode.value[field]) {
     event.target.value = mode.value[field];
+    return;
+  }
+  if (field === "body" && overPromptLimit(value)) {
+    notice("Mode text too long to save", promptLimitNotice(value));
     return;
   }
   updateMode(mode.value, { [field]: value });
@@ -135,9 +151,11 @@ const examples = "e.g. You review code and do not edit files. List problems by s
         aria-label="New mode title" />
       <UTextarea v-model="body" :rows="10" autoresize :maxrows="24" class="w-full" :placeholder="examples"
         aria-label="New mode text" :ui="{ base: 'resize-y font-mono text-xs' }" />
-      <div class="flex gap-2">
-        <UButton type="submit" size="sm" icon="i-lucide-plus" label="Add mode" :disabled="!title.trim() || !body.trim()" />
+      <div class="flex items-center gap-2">
+        <UButton type="submit" size="sm" icon="i-lucide-plus" label="Add mode"
+          :disabled="!title.trim() || !body.trim() || overPromptLimit(body)" />
         <UButton v-if="rows.length" size="sm" color="neutral" variant="ghost" label="Cancel" @click="cancelNew" />
+        <span class="flex-1 text-right text-xs tabular-nums" :class="promptSizeTone(body)">{{ promptSize(body) }}</span>
       </div>
     </form>
 
@@ -147,8 +165,11 @@ const examples = "e.g. You review code and do not edit files. List problems by s
       <UInput :model-value="mode.title" size="sm" class="w-full" :aria-label="`Title of ${mode.title}`"
         @blur="commit('title', $event)" @keydown.enter="$event.target.blur()" />
       <UTextarea :model-value="mode.body" :rows="10" autoresize :maxrows="24" class="w-full" :aria-label="`Text of ${mode.title}`"
-        :ui="{ base: 'resize-y font-mono text-xs' }" @blur="commit('body', $event)" />
-      <p class="text-xs text-dimmed">Saved when you click away.</p>
+        :ui="{ base: 'resize-y font-mono text-xs' }" @update:model-value="typed = $event" @blur="commit('body', $event)" />
+      <div class="flex flex-wrap items-center gap-2 text-xs text-dimmed">
+        <p class="m-0 flex-1">Saved when you click away.</p>
+        <span class="tabular-nums" :class="promptSizeTone(typed ?? mode.body)">{{ bodySize }}</span>
+      </div>
     </div>
   </section>
 </template>

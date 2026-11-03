@@ -1,7 +1,7 @@
 <script setup>
 import { computed, defineAsyncComponent, nextTick, ref, watch } from "vue";
 
-import { S, createSchedule, contextWindow, enqueue, enterDoes, fail, hit, limitsKey, openScreen, openTerminal, refreshSubscriptionLimits, screenOffered, send, setModel, setTaskPermission, providerOf, stopTurn } from "../store";
+import { S, createSchedule, contextWindow, enqueue, enterDoes, fail, hit, limitsKey, modeChoices, openScreen, openTerminal, refreshSubscriptionLimits, screenOffered, send, setModel, setTaskMode, setTaskPermission, providerOf, stopTurn } from "../store";
 import { ago } from "../api";
 import Chord from "./Chord.vue";
 import ContextPane from "./ContextPane.vue";
@@ -114,6 +114,21 @@ watch(
 function chooseModel(choice) {
   setModel(choice.provider, choice.model, choice.effort, choice.accountID);
 }
+
+/* The mode the task opens with, offered until its first prompt is accepted:
+   it goes in with that prompt and cannot change after. Once it has, the select
+   stays to say which mode the task is in, disabled, named by the title the
+   task copied rather than by a link that may point elsewhere now. A task that
+   started with no mode has nothing to name, so it loses the select.
+   See specs/101-modes.md. */
+const unstarted = computed(() => {
+  const d = S.detail;
+  return !!d && !d.messages?.length && !d.turns?.length && !d.queued?.length && !d.session.project_prompt;
+});
+const startedMode = computed(() => (unstarted.value ? "" : S.detail?.session.mode_title || ""));
+const taskModes = computed(() =>
+  startedMode.value ? [{ label: startedMode.value, value: 0 }] : modeChoices(S.detail?.session.project_id),
+);
 
 const savingPermission = ref(false);
 const toolPermissions = [
@@ -364,6 +379,19 @@ function runMenuAction(action) {
               show-favourite
               class="prompt-model"
               @change="chooseModel"
+            />
+            <USelect
+              v-if="startedMode || (unstarted && S.modes.length)"
+              :model-value="startedMode ? 0 : S.detail.session.mode_id || 0"
+              :items="taskModes"
+              :disabled="!!startedMode"
+              size="xs"
+              variant="ghost"
+              icon="i-lucide-bookmark"
+              class="prompt-mode max-w-40"
+              aria-label="Task mode"
+              :title="startedMode ? `This task runs in the ${startedMode} mode` : 'Mode this task opens with'"
+              @update:model-value="setTaskMode"
             />
           </div>
           <span v-if="dictation.phase !== 'idle'" role="status" class="min-w-0 truncate text-xs text-muted">{{ dictationLabel }}</span>

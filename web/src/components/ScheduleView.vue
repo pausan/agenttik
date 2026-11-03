@@ -12,6 +12,7 @@ import { vTabScroll } from "../tab-scroll";
 import {
   S,
   enterDoes,
+  modeChoices,
   EVERY,
   WEEKDAYS,
   pickTask,
@@ -23,6 +24,7 @@ import {
   setSchedulePaused,
   setScheduleFinishCondition,
   setScheduleFrequency,
+  setScheduleMode,
   setScheduleModel,
   setSchedulePrompt,
   setScheduleRemaining,
@@ -259,6 +261,19 @@ function runTime(run) {
             @change="chooseModel"
           />
         </div>
+        <template v-if="S.modes.length">
+          <div class="pt-1.5 text-muted">Mode</div>
+          <div class="flex flex-wrap items-center gap-2">
+            <USelect
+              :model-value="schedule.mode_id || 0"
+              :items="modeChoices(schedule.project_id)"
+              class="w-56"
+              aria-label="Mode"
+              @update:model-value="setScheduleMode(schedule, $event)"
+            />
+            <span class="text-xs text-dimmed">Each run opens with it.</span>
+          </div>
+        </template>
         <div class="pt-1.5 text-muted">Repeats</div>
         <div class="flex flex-wrap items-center gap-2">
           <USelectMenu

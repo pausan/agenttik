@@ -89,6 +89,10 @@ export const S = reactive({
   hiddenProjectsLoaded: false,
   actionModels: [],
   orchestrator: null, // shared settings, loaded when Settings opens
+  // The mode library, by title: standing prompts a project or a task opens
+  // its conversations with. See specs/101-modes.md.
+  modes: [],
+  settingsMode: 0, // the mode Settings → Modes opens on, set by the project page
   // The machine's screen: whether there is one to show this window, and
   // whether sharing is on. See specs/096-screen.md.
   screen: null,
@@ -1066,7 +1070,10 @@ if (isFlatView) {
   watch(() => frontSource()?.id, (now, before) => {
     if (!now || now === before) return;
     loadScreenInfo();
-    if (initialized) loadProviders().catch(() => {});
+    if (initialized) {
+      loadProviders().catch(() => {});
+      loadModes().catch(() => {});
+    }
   });
 }
 
@@ -1559,6 +1566,104 @@ export async function setProjectPrompt(p, prompt) {
   }
 }
 
+/* ------------------------------------------------------------------ modes */
+
+/* A mode is a way of working kept apart from any project: a titled standing
+   prompt. A project links to one, and it goes ahead of the project's own
+   prompt; a task picks its project's, another or none before its first
+   prompt. Linked, not copied, so editing a mode reaches every project that
+   uses it — and, as with the project prompt, only conversations yet to start.
+   See specs/101-modes.md. */
+export async function loadModes() {
+  S.modes = await api("GET", "/api/modes");
+}
+
+export async function createMode(title, body) {
+  try {
+    const mode = await api("POST", "/api/modes", { title, body });
+    await loadModes();
+    return mode;
+  } catch (e) {
+    fail(e);
+  }
+}
+
+/* fields is { title } or { body }: an editor commits the one it holds. */
+export async function updateMode(mode, fields) {
+  try {
+    await api("PATCH", "/api/modes/" + mode.id, fields);
+  } catch (e) {
+    fail(e);
+  }
+  await loadModes().catch(() => {});
+}
+
+/* Projects using it are left with none; tasks yet to start and schedules
+   fall back to their project's. */
+export async function deleteMode(mode) {
+  try {
+    await api("DELETE", "/api/modes/" + mode.id);
+    await Promise.all([loadModes(), refreshProjects()]);
+  } catch (e) {
+    fail(e);
+  }
+}
+
+/* 0 unlinks the project from its mode. */
+export async function setProjectMode(p, modeID) {
+  if (modeID === (p.mode_id || 0)) return;
+  try {
+    const updated = await api("PATCH", "/api/projects/" + p.id, { mode_id: modeID });
+    const tab = S.tabs.find((t) => t.kind === "project" && t.projectID === p.id);
+    if (tab) tab.data.project = updated;
+    await refreshProjects();
+  } catch (e) {
+    fail(e);
+  }
+}
+
+/* saveProjectPromptAsMode makes a project's own prompt a mode other projects
+   can link to. The text moves rather than being copied, so the project ends
+   up telling its tasks the same as before: the mode, now linked, and nothing
+   of its own beside it. */
+export async function saveProjectPromptAsMode(p, title) {
+  const mode = await createMode(title, p.prompt || "");
+  if (!mode) return;
+  try {
+    const updated = await api("PATCH", "/api/projects/" + p.id, { mode_id: mode.id, prompt: "" });
+    const tab = S.tabs.find((t) => t.kind === "project" && t.projectID === p.id);
+    if (tab) tab.data.project = updated;
+    await refreshProjects();
+  } catch (e) {
+    fail(e);
+  }
+}
+
+/* modeChoices is what a task, a pinned prompt or a schedule in the project
+   can open with: 0 is the project's mode, so that mode is not offered twice,
+   and -1 is none, which only differs from 0 when the project has one. */
+export function modeChoices(projectID) {
+  const project = S.projects.find((p) => p.id === projectID);
+  const own = S.modes.find((m) => m.id === project?.mode_id);
+  return [
+    { label: own ? `${own.title} (project)` : "No mode", value: 0 },
+    ...(own ? [{ label: "No mode", value: -1 }] : []),
+    ...S.modes.filter((m) => m !== own).map((m) => ({ label: m.title, value: m.id })),
+  ];
+}
+
+/* The mode a task opens with, picked in the prompt bar before its first
+   prompt: 0 is its project's, -1 none. */
+export async function setTaskMode(modeID) {
+  const tab = S.owner;
+  if (tab?.kind !== "session" || modeID === (tab.detail.session.mode_id || 0)) return;
+  try {
+    tab.detail.session = await api("PATCH", "/api/sessions/" + tab.sessionID, { mode_id: modeID });
+  } catch (e) {
+    fail(e);
+  }
+}
+
 /* setProjectRunMode chooses whether the project's agents run tools on their
    own ("auto") or ask first ("manual"). The next turn picks it up. */
 export async function setProjectRunMode(p, runMode) {
@@ -1629,6 +1734,7 @@ export async function createSchedule(form) {
       model: s.model,
       effort: s.effort || "",
       permission: s.permission,
+      mode_id: s.mode_id || 0,
       ...scheduleRecurrence(form),
       remaining: form.remaining,
       finish_condition: form.finishCondition || "",
@@ -1773,6 +1879,12 @@ export function setScheduleModel(schedule, provider, model, effort, accountID) {
     return;
   }
   return patchSchedule(schedule, { provider, account_id: account, model, effort });
+}
+
+/* Nor the mode its runs open with. See specs/101-modes.md. */
+export function setScheduleMode(schedule, modeID) {
+  if (modeID === (schedule.mode_id || 0)) return;
+  return patchSchedule(schedule, { mode_id: modeID });
 }
 
 /* Neither is the clock: a schedule can be moved from every 15 minutes to
@@ -2002,6 +2114,9 @@ export async function startTask(project) {
   const reuse = async (tabID) => {
     selectTab(tabID);
     if (cfg) await setModel(cfg.provider, cfg.model, cfg.effort, cfg.account_id);
+    // Unlike the model, a mode is not carried over: a new task opens in its
+    // project's, wherever the reused one was left. See specs/101-modes.md.
+    await setTaskMode(0);
     await nextTick();
     focusPrompt();
   };
@@ -3303,6 +3418,10 @@ function onEvent(msg) {
     if (S.orchestrator) loadOrchestratorConfig().catch(() => {});
     return;
   }
+  if (msg.event?.type === "modes_changed") {
+    loadModes().catch(() => {});
+    return;
+  }
   // A CLI's model list came back different from the one shown at launch.
   if (msg.event?.type === "providers_changed") {
     loadProviders().catch(() => {});
@@ -3678,15 +3797,20 @@ function claimProjectPrompt(tab) {
     return false;
   }
   const project = S.projects.find((p) => p.id === session.project_id);
-  if (!project?.prompt) return false;
-  session.project_prompt = project.prompt;
+  if (!project) return false;
+  const modeID = session.mode_id || project.mode_id || 0;
+  const mode = modeID > 0 ? S.modes.find((m) => m.id === modeID) : null;
+  const text = [mode?.body, project.prompt].filter(Boolean).join("\n\n");
+  if (!text) return false;
+  session.project_prompt = text;
+  session.mode_title = mode?.title || "";
   return true;
 }
 
 /* The other half of that: the prompt was refused, so the conversation has not
    started after all and nothing was injected into it. */
 function releaseProjectPrompt(tab, claimed) {
-  if (claimed) tab.detail.session.project_prompt = "";
+  if (claimed) Object.assign(tab.detail.session, { project_prompt: "", mode_title: "" });
 }
 
 /* The prompt is on screen before the request leaves. Its text is already known
@@ -4491,7 +4615,7 @@ async function initialize() {
     fail(e);
   }
   providersReady = loadProviders();
-  Promise.all([providersReady, refreshSchedules()]).catch(fail);
+  Promise.all([providersReady, refreshSchedules(), loadModes()]).catch(fail);
   initialized = true;
   initSmartSearch();
 }

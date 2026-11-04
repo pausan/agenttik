@@ -3,6 +3,23 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { addProject, expect, openProject, test } from "../fixtures.js";
 
+test("closing Go to file releases its worker before reopening", async ({ page }) => {
+  await addProject(page);
+  const workers = () => page.workers().filter((worker) => worker.url().includes("file-search-worker"));
+  const dialog = page.getByRole("dialog", { name: "Go to file", exact: true });
+  for (let i = 0; i < 5; i++) {
+    await page.keyboard.press("Control+p");
+    const input = dialog.getByPlaceholder("Go to file…");
+    await expect(input).toBeFocused();
+    await input.fill("AGENTS.md");
+    await expect(dialog.getByRole("option").first()).toContainText("AGENTS.md");
+    await expect.poll(() => workers().length).toBe(1);
+    await input.press(i % 2 ? "Enter" : "Escape");
+    await expect(dialog).toBeHidden();
+    await expect.poll(() => workers().length).toBe(0);
+  }
+});
+
 test("file search opens fuzzy matches in Edit and media in Preview", async ({ page }) => {
   const root = await mkdtemp(join(tmpdir(), "agenttik-file-search-"));
   const other = await mkdtemp(join(tmpdir(), "agenttik-file-other-"));

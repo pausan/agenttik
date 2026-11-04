@@ -48,6 +48,11 @@ listing and highlights only the drawn rows. The dialog draws only the
 fixed-height rows in view; Nuxt's command palette drew 100 rows of about ten
 components each on every key.
 
+The dialog owns its worker and terminates it on unmount when closed, releasing
+the worker's listing and search caches. Reopening creates a fresh worker.
+`e2e/tests/file-search.spec.js` checks that repeated searches leave one worker
+while open and none after closing through Escape or selecting a file.
+
 Settings mounts panes on first visit, retaining them until the dialog closes.
 Searching mounts all panes so result counts cover every section. Modal and
 slideover transitions and menu entrance/exit animations are disabled. Profile

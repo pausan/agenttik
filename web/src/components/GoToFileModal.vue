@@ -4,7 +4,7 @@
    search. Rows have one fixed height, so the scroll offset says which. The
    search runs in a worker (see file-search.js); until its answer arrives the
    last one stays on screen, and Enter waits for it. */
-import { computed, ref, shallowRef, toRaw, useTemplateRef, watch } from "vue";
+import { computed, onUnmounted, ref, shallowRef, toRaw, useTemplateRef, watch } from "vue";
 import { S, currentProjectID, openFileForEdit } from "../store";
 import { matchHits } from "../file-search";
 import { segments } from "../fuzzy";
@@ -65,6 +65,8 @@ function startWorker() {
   };
   return w;
 }
+
+onUnmounted(() => worker?.terminate());
 
 watch([open, query, () => S.tree], () => open.value && ask(), { immediate: true });
 watch(answer, (now, before) => {

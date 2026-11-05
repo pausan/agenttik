@@ -92,9 +92,13 @@ func (s *Server) createSchedule(c *fiber.Ctx) error {
 		WeekdayMask     int64  `json:"weekday_mask"`
 		Remaining       int64  `json:"remaining"`
 		FinishCondition string `json:"finish_condition"`
+		ModeID          int64  `json:"mode_id"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return badRequest("invalid body: %v", err)
+	}
+	if err := s.checkMode(body.ModeID, true); err != nil {
+		return err
 	}
 	prompt := strings.TrimSpace(body.Prompt)
 	if prompt == "" {
@@ -146,6 +150,7 @@ func (s *Server) createSchedule(c *fiber.Ctx) error {
 		Effort:          body.Effort,
 		Permission:      string(agent.Permission(body.Permission).Valid()),
 		FinishCondition: strings.TrimSpace(body.FinishCondition),
+		ModeID:          body.ModeID,
 		Every:           body.Every,
 		IntervalMinutes: body.IntervalMinutes,
 		AtMinute:        body.AtMinute,
@@ -219,6 +224,7 @@ func (s *Server) updateSchedule(c *fiber.Ctx) error {
 		AccountID       *int64  `json:"account_id"`
 		Model           string  `json:"model"`
 		Effort          string  `json:"effort"`
+		ModeID          *int64  `json:"mode_id"`
 
 		// The recurrence fields move together: every names the form, and
 		// the remaining fields carry its clock and calendar choices.
@@ -255,6 +261,14 @@ func (s *Server) updateSchedule(c *fiber.Ctx) error {
 			return badRequest("prompt is required")
 		}
 		if err := s.store.SetSchedulePrompt(sched.ID, prompt); err != nil {
+			return err
+		}
+	}
+	if body.ModeID != nil {
+		if err := s.checkMode(*body.ModeID, true); err != nil {
+			return err
+		}
+		if err := s.store.SetScheduleMode(sched.ID, *body.ModeID); err != nil {
 			return err
 		}
 	}

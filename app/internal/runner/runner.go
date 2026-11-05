@@ -223,6 +223,10 @@ const ProjectsTopic = "projects"
 // sidebar re-reads its list whole, as it does for the file watcher's event.
 const EventProjectsChanged agent.EventType = "projects_changed"
 
+// EventModesChanged also goes on ProjectsTopic: the mode library was edited.
+// See 101-modes.md.
+const EventModesChanged agent.EventType = "modes_changed"
+
 // EventProvidersChanged also travels on ProjectsTopic, since every window
 // listens there: a CLI answered with a model list other than the one shown,
 // and the pickers re-read the providers whole.
@@ -665,6 +669,7 @@ func (r *Runner) sendDuringTransferLock(queued store.QueuedMessage, stored int64
 		ForkFrom:          forkFrom,
 		Permission:        agent.Permission(sess.Permission),
 		RunMode:           r.runMode(sess.ProjectID),
+		Subagents:         r.subagents(),
 	})
 	if err != nil {
 		// Nothing was produced, so an outage leaves no trace but the waiting
@@ -1403,6 +1408,10 @@ func toolSummary(t *agent.ToolEvent) string {
 // does not rewrite what a conversation already under way was told, and the
 // transcript can go on showing the text that actually went in.
 //
+// The standing prompt is the task's mode, or the project's when the task left
+// it to the project, ahead of the project's own text. A mode deleted since it
+// was picked counts as none. See 101-modes.md.
+//
 // Three things disqualify a claim, and all three mean the same thing — this is
 // not the start of the conversation: a copy is already held, something has
 // already been said or is waiting to be, or a turn has run. The last one is
@@ -1416,13 +1425,86 @@ func (r *Runner) claimProjectPrompt(sess *store.Session, hasRun bool) {
 		return
 	}
 	project, err := r.store.GetProject(sess.ProjectID)
-	if err != nil || project.Prompt == "" {
+	if err != nil {
 		return
 	}
-	if err := r.store.SetSessionProjectPrompt(sess.ID, project.Prompt); err != nil {
+	modeID := sess.ModeID
+	if modeID == store.ModeOfProject {
+		modeID = project.ModeID
+	}
+	text, title := project.Prompt, ""
+	if modeID > 0 {
+		if mode, err := r.store.GetMode(modeID); err == nil {
+			text, title = joinPrompts(mode.Body, project.Prompt), mode.Title
+		}
+	}
+	if text == "" {
 		return
 	}
-	sess.ProjectPrompt = project.Prompt
+	if err := r.store.SetSessionProjectPrompt(sess.ID, text, title); err != nil {
+		return
+	}
+	sess.ProjectPrompt, sess.ModeTitle = text, title
+}
+
+// subagents offers every mode as a subagent the agent can launch by name. The
+// description keeps it to that: a mode is a choice the user makes, not one
+// the agent should make on its own. A name the slug cannot tell apart from
+// another's gains the mode's ID, again if that name is taken too. See
+// 101-modes.md.
+func (r *Runner) subagents() []agent.Subagent {
+	modes, err := r.store.ListModes()
+	if err != nil || len(modes) == 0 {
+		return nil
+	}
+	out := make([]agent.Subagent, 0, len(modes))
+	seen := make(map[string]bool, len(modes))
+	for _, m := range modes {
+		name := modeSlug(m.Title)
+		if name == "" {
+			name = "mode"
+		}
+		for seen[name] {
+			name += "-" + strconv.FormatInt(m.ID, 10)
+		}
+		seen[name] = true
+		out = append(out, agent.Subagent{
+			Name:        name,
+			Description: fmt.Sprintf("The %q mode. Use only when the user asks for this mode or for this subagent by name.", m.Title),
+			Prompt:      m.Body,
+		})
+	}
+	return out
+}
+
+// modeSlug is a mode's title as a subagent name: lower-case letters and digits
+// joined by single hyphens.
+func modeSlug(title string) string {
+	var b strings.Builder
+	hyphen := false
+	for _, c := range strings.ToLower(title) {
+		if c >= 'a' && c <= 'z' || c >= '0' && c <= '9' {
+			if hyphen && b.Len() > 0 {
+				b.WriteByte('-')
+			}
+			b.WriteRune(c)
+			hyphen = false
+		} else {
+			hyphen = true
+		}
+	}
+	return b.String()
+}
+
+// joinPrompts puts a blank line between the parts that are not empty.
+func joinPrompts(parts ...string) string {
+	kept := parts[:0:0]
+	for _, p := range parts {
+		if p != "" {
+			kept = append(kept, p)
+		}
+	}
+	return strings.Join(kept, "\n\n")
 }
 
 // withProjectPrompt is what the provider is given, as against what the

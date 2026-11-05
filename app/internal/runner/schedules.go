@@ -93,6 +93,7 @@ func (r *Runner) fireSchedule(s *store.Schedule, now time.Time) {
 		Model:      s.Model,
 		Effort:     s.Effort,
 		Permission: s.Permission,
+		ModeID:     s.ModeID,
 		ScheduleID: s.ID,
 	}
 	if err := r.store.CreateSession(sess); err != nil {
@@ -195,6 +196,7 @@ func (r *Runner) RunScheduleNow(scheduleID int64, enqueue bool) error {
 		Model:      s.Model,
 		Effort:     s.Effort,
 		Permission: s.Permission,
+		ModeID:     s.ModeID,
 		ScheduleID: s.ID,
 	}
 	if err := r.store.CreateSession(sess); err != nil {
@@ -397,7 +399,7 @@ func monthDay(year int, month time.Month, day int, atMinute int64, loc *time.Loc
 func (r *Runner) RunPinnedPrompt(s *store.Schedule, prompt string) (*store.Session, error) {
 	sess := &store.Session{ID: uuid.NewString(), ProjectID: s.ProjectID,
 		Provider: s.Provider, AccountID: s.AccountID, Model: s.Model,
-		Effort: s.Effort, Permission: s.Permission}
+		Effort: s.Effort, Permission: s.Permission, ModeID: s.ModeID}
 	if err := r.store.CreateSession(sess); err != nil {
 		return nil, err
 	}

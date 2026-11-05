@@ -436,6 +436,20 @@ INSERT INTO speech_config(id) VALUES (1);`,
     hidden_at  INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (source, project_id)
 );`,
+	// Modes: standing instructions kept apart from any project. A project links
+	// to one; a task or a schedule picks its project's (0), none (-1) or its
+	// own. A task keeps the title it was opened with beside the prompt copy.
+	// See specs/101-modes.md.
+	`CREATE TABLE modes (
+    id         INTEGER PRIMARY KEY,
+    title      TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+    body       TEXT    NOT NULL,
+    created_at INTEGER NOT NULL
+);
+ALTER TABLE projects ADD COLUMN mode_id INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE sessions ADD COLUMN mode_id INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE sessions ADD COLUMN mode_title TEXT NOT NULL DEFAULT '';
+ALTER TABLE schedules ADD COLUMN mode_id INTEGER NOT NULL DEFAULT 0;`,
 }
 
 // migrate reports whether it created the schema in an empty database.

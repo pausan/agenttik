@@ -1,10 +1,11 @@
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, inject, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { vTabScroll } from "../tab-scroll";
 
 import {
   S,
   fail,
+  notice,
   loadProjectPane,
   TASK_PAGE_SIZES,
   openSchedule,
@@ -14,7 +15,9 @@ import {
   renameTask,
   reorderTasks,
   resetOrchestratorPrompt,
+  saveProjectPromptAsMode,
   scheduleLabel,
+  setProjectMode,
   setProjectPrompt,
   setScheduleArchived,
   setSchedulePaused,
@@ -26,6 +29,7 @@ import {
   stopTask,
 } from "../store";
 import { ago, duration, isoDate, isoLocal, nf, tokens, usageBreakdownRows, usageCost } from "../api";
+import { overPromptLimit, promptLimitNotice, promptSize, promptSizeTone } from "../prompt-size.js";
 import { TASK_TIME_FILTERS, filterTaskRows, taskText } from "../task-search.js";
 import { smartSearch, refreshSmartIndex, searchTasks } from "../smart-search.js";
 import SmartSearchProgress from "./SmartSearchProgress.vue";
@@ -105,8 +109,18 @@ watch(
   },
 );
 
+const promptSaved = computed(() => prompt.value.trim() === (props.tab.data.project.prompt || ""));
+
 function commitPrompt() {
   editingPrompt.value = false;
+  // Unchanged: nothing to save, so nothing to refuse. A prompt stored before
+  // the limit existed keeps working until it is edited.
+  if (promptSaved.value) return;
+  // Over the limit the text stays in the field to be shortened, unsaved.
+  if (overPromptLimit(prompt.value)) {
+    notice("Project prompt too long to save", promptLimitNotice(prompt.value));
+    return;
+  }
   promptSave = setProjectPrompt(props.tab.data.project, prompt.value);
 }
 
@@ -122,6 +136,28 @@ async function resetPrompt() {
   }
 }
 
+/* The mode goes ahead of the prompt above. A project's own text can become a
+   mode for other projects to link to: it moves into the mode, so this
+   project's tasks are told the same as before. See specs/101-modes.md. */
+const openSettings = inject("openSettings", () => {});
+const projectModes = computed(() => [
+  { label: "No mode", value: 0 },
+  ...S.modes.map((m) => ({ label: m.title, value: m.id })),
+]);
+const linkedMode = computed(() => S.modes.find((m) => m.id === props.tab.data.project.mode_id));
+function editModes() {
+  S.settingsMode = linkedMode.value?.id || 0;
+  openSettings("modes");
+}
+const modeTitle = ref(null); // null while not naming a new mode
+async function saveAsMode() {
+  const title = modeTitle.value?.trim();
+  if (!title) return;
+  await promptSave;
+  await saveProjectPromptAsMode(props.tab.data.project, title);
+  modeTitle.value = null;
+}
+
 /* One ProjectView serves every project — switching to another one hands it a
    new tab rather than mounting a second component — so what belongs to the
    page in front is put back by hand. A filter or a page number carried into
@@ -134,6 +170,7 @@ watch(
     page.value = 1;
     editingPrompt.value = false;
     prompt.value = props.tab.data.project.prompt || "";
+    modeTitle.value = null;
     focusFilter();
   },
 );
@@ -391,7 +428,9 @@ async function doDelete() {
         <div class="mb-2 flex items-start gap-3">
           <p class="min-w-0 flex-1 text-sm text-muted">
             Sent to the agent ahead of the first prompt of every task started here, so every
-            conversation in this project begins knowing it. Leave it empty to send nothing.
+            conversation in this project begins knowing it. The mode — a reusable prompt shared
+            with other projects — goes first, then this project's own text. Leave both empty to
+            send nothing.
           </p>
           <UButton
             v-if="tab.data.project.kind === 'orchestrator'"
@@ -404,6 +443,25 @@ async function doDelete() {
             @click="resetPrompt"
           />
         </div>
+        <div class="mb-3 flex flex-wrap items-center gap-2">
+          <span class="text-sm text-muted">Mode</span>
+          <USelect
+            :model-value="tab.data.project.mode_id || 0"
+            :items="projectModes"
+            size="sm"
+            class="w-56"
+            aria-label="Project mode"
+            @update:model-value="setProjectMode(tab.data.project, $event)"
+          />
+          <UButton color="neutral" variant="link" size="sm" :label="linkedMode ? 'Edit mode' : 'Manage modes'" @click="editModes" />
+        </div>
+        <!-- The whole text, read-only: it is edited in Settings, where every
+             project linked to it shares the edit. A long one scrolls. -->
+        <p
+          v-if="linkedMode"
+          class="mb-3 max-h-[50vh] overflow-auto rounded-md border border-default p-2 font-mono text-xs whitespace-pre-wrap text-muted"
+          aria-label="Mode text"
+        >{{ linkedMode.body }}</p>
         <UTextarea
           v-model="prompt"
           :disabled="resettingPrompt"
@@ -416,9 +474,23 @@ async function doDelete() {
           @focus="editingPrompt = true"
           @blur="commitPrompt"
         />
-        <p class="mt-2 text-xs text-dimmed">
-          Saved when you click away. Tasks already running keep the prompt they opened with.
-        </p>
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <p class="m-0 flex-1 text-xs text-dimmed">
+            Saved when you click away. Tasks already running keep the prompt they opened with.
+          </p>
+          <span class="text-xs tabular-nums" :class="promptSizeTone(prompt)">{{ promptSize(prompt, promptSaved) }}</span>
+          <!-- Only a project with no mode: one with a mode would lose its link. -->
+          <template v-if="!tab.data.project.mode_id && prompt.trim()">
+            <form v-if="modeTitle !== null" class="flex items-center gap-2" @submit.prevent="saveAsMode">
+              <UInput v-model="modeTitle" size="sm" placeholder="Mode title" aria-label="Mode title" autofocus
+                @keydown.escape="modeTitle = null" />
+              <UButton type="submit" size="sm" label="Save" :disabled="!modeTitle.trim()" />
+              <UButton size="sm" color="neutral" variant="ghost" label="Cancel" @click="modeTitle = null" />
+            </form>
+            <UButton v-else size="sm" color="neutral" variant="subtle" icon="i-lucide-bookmark-plus"
+              label="Save as mode…" @click="modeTitle = ''" />
+          </template>
+        </div>
       </template>
 
       <template v-else>

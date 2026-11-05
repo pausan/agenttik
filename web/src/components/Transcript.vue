@@ -30,6 +30,7 @@ defineProps({ findOpen: Boolean });
 const emit = defineEmits(["start-tour"]);
 // Expanded, the conversation drops its reading width so wide tables fit.
 const expanded = inject("expanded");
+const openSettings = inject("openSettings", () => {});
 const box = ref(null);
 const content = ref(null);
 const transcriptRows = ref(null);
@@ -46,6 +47,27 @@ const elapsed = computed(() =>
   S.detail?.running && startedAt.value ? Math.max(0, Math.floor((now.value - startedAt.value) / 1000)) : 0,
 );
 const elapsedLabel = computed(() => `${elapsed.value} ${elapsed.value === 1 ? "second" : "seconds"}`);
+
+/* The injected-prompt chip opens what it names. A task can run a mode its
+   project does not link to — one picked in the prompt bar — so the mode is
+   the one the task kept: by its ID, or by the title it copied when it
+   deferred to its project, since the project may link elsewhere now. A mode
+   since deleted or renamed leaves the project's prompt page, which is where
+   the chip goes when no mode was added. See specs/101-modes.md. */
+const injectedMode = computed(() => {
+  const title = S.detail?.session?.mode_title;
+  if (!title) return null;
+  const id = S.detail.session.mode_id;
+  return S.modes.find((m) => m.id === id) || S.modes.find((m) => m.title.toLowerCase() === title.toLowerCase()) || null;
+});
+function openInjectedPrompt() {
+  if (!injectedMode.value) {
+    openProjectPrompt(S.detail.session.project_id);
+    return;
+  }
+  S.settingsMode = injectedMode.value.id;
+  openSettings("modes");
+}
 const clockFace = computed(() => CLOCK_FACES[Math.floor(now.value / 250) % CLOCK_FACES.length]);
 /* Between replies of a turn that waits on background tasks, the agent is not
    working and the prompt bar sends into the turn (specs/083). */
@@ -528,8 +550,9 @@ watch(
            here, so the conversation says so at the point it happened: what was
            added, on hover, and the page it is set on, on click. It is drawn
            from the copy the task holds, which is the text that actually went
-           in rather than whatever the project says now.
-           See specs/047-project-prompt.md. -->
+           in rather than whatever the project says now. A mode names itself,
+           by the title it had then, and opens in the library instead.
+           See specs/047-project-prompt.md and specs/101-modes.md. -->
       <UTooltip
         v-if="S.detail.session.project_prompt"
         :delay-duration="300"
@@ -539,10 +562,12 @@ watch(
         <button
           type="button"
           class="mb-4 flex items-center gap-1.5 text-[11px] text-dimmed hover:text-primary"
-          @click="openProjectPrompt(S.detail.session.project_id)"
+          @click="openInjectedPrompt"
         >
           <UIcon name="i-lucide-file-text" class="size-3.5 shrink-0" aria-hidden="true" />
-          <span class="underline decoration-dotted underline-offset-2">Project prompt added</span>
+          <span class="underline decoration-dotted underline-offset-2">{{
+            S.detail.session.mode_title ? `${S.detail.session.mode_title} mode added` : "Project prompt added"
+          }}</span>
         </button>
         <!-- Five lines, as the task list's prompt tooltip shows: the clamp
              puts the ellipsis on the last one it kept. -->
@@ -552,7 +577,9 @@ watch(
             <div class="line-clamp-5 break-words whitespace-pre-wrap">
               {{ S.detail.session.project_prompt }}
             </div>
-            <div class="text-dimmed">Click to open the project's prompt.</div>
+            <div class="text-dimmed">
+              {{ injectedMode ? `Click to open the ${injectedMode.title} mode.` : "Click to open the project's prompt." }}
+            </div>
           </div>
         </template>
       </UTooltip>

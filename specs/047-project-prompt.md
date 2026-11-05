@@ -5,6 +5,11 @@ conversation started in it opens with. It is set on the project page, under
 **Prompt**, beside Tasks and Stats. Empty — which is how every project
 starts — adds nothing anywhere.
 
+A project can also link to a mode, a standing prompt shared with other
+projects, which goes ahead of its own text; a task can pick another mode
+before its first prompt ([101](101-modes.md)). What follows applies to the
+combined text.
+
 When it is not empty, it goes in front of the **first prompt of each task**,
 separated by a blank line, and the task says so: a line above the transcript
 reading *Project prompt added*, the text itself on hover, and the project's
@@ -68,7 +73,11 @@ is a real value — it is how the injection is turned off — where an empty nam
 or path only ever means "not sent".
 
 The project page commits on blur, the same way a schedule's prompt does
-([028](028-scheduled-jobs.md)).
+([028](028-scheduled-jobs.md)). Under the field it shows the prompt's size, in
+characters and an estimate of tokens at four characters each, as a mode's text
+does ([101](101-modes.md)): amber over 8,000 characters, and over 32,000 red
+and refused by `PATCH /api/projects` with 400. A prompt stored before the limit
+keeps working and is not called unsaved; it is measured when it is edited.
 
 ## Choices
 

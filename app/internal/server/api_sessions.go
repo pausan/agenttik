@@ -78,12 +78,18 @@ func (s *Server) createSession(c *fiber.Ctx) error {
 		Effort     string `json:"effort"`
 		Permission string `json:"permission"`
 		Title      string `json:"title"`
+		// ModeID is the mode the task opens with; absent defers to the
+		// project's. See 101-modes.md.
+		ModeID int64 `json:"mode_id"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return badRequest("invalid body: %v", err)
 	}
 	project, err := s.store.GetProject(body.ProjectID)
 	if err != nil {
+		return err
+	}
+	if err := s.checkMode(body.ModeID, true); err != nil {
 		return err
 	}
 	provider, ok := s.registry.Get(body.Provider)
@@ -111,6 +117,7 @@ func (s *Server) createSession(c *fiber.Ctx) error {
 		Model:      body.Model,
 		Effort:     body.Effort,
 		Permission: string(agent.Permission(body.Permission).Valid()),
+		ModeID:     body.ModeID,
 	}
 	if err := s.store.CreateSession(sess); err != nil {
 		return err
@@ -219,9 +226,24 @@ func (s *Server) updateSession(c *fiber.Ctx) error {
 		Permission *string `json:"permission"`
 		Done       *bool   `json:"done"`
 		Flag       *string `json:"flag"`
+		ModeID     *int64  `json:"mode_id"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return badRequest("invalid body: %v", err)
+	}
+	if body.ModeID != nil {
+		if err := s.checkMode(*body.ModeID, true); err != nil {
+			return err
+		}
+		// The mode is given with the first prompt, so it is picked before
+		// one: something said, waiting, or run is too late.
+		hasRun, err := s.store.HasTurns(id)
+		if err != nil {
+			return err
+		}
+		if hasRun || sess.Prompt != "" || sess.ProjectPrompt != "" {
+			return badRequest("the mode is chosen before the task's first prompt")
+		}
 	}
 	if body.Flag != nil && !store.ValidFlag(*body.Flag) {
 		return badRequest("flag must be star, warn, danger, or empty")
@@ -283,6 +305,11 @@ func (s *Server) updateSession(c *fiber.Ctx) error {
 		provider, _ := s.registry.Get(name)
 		_, direct := provider.(*apiprovider.Provider)
 		if err := s.store.SetSessionPermission(id, *body.Permission, !direct); err != nil {
+			return err
+		}
+	}
+	if body.ModeID != nil {
+		if err := s.store.SetSessionMode(id, *body.ModeID); err != nil {
 			return err
 		}
 	}

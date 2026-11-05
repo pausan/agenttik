@@ -43,6 +43,11 @@ type Project struct {
 	// 047-project-prompt.md.
 	Prompt string `json:"prompt"`
 
+	// ModeID links the project to a mode whose text goes ahead of Prompt, or
+	// is 0 for none. A link, not a copy: editing the mode reaches every project
+	// that uses it. See 101-modes.md.
+	ModeID int64 `json:"mode_id"`
+
 	// RunMode is RunAuto, where the agent runs what its permission mode
 	// allows, RunGuarded, where it asks before changes, or RunManual, where
 	// it asks before every command. See 082-tool-approvals.md.
@@ -157,6 +162,13 @@ type Session struct {
 	// conversation was actually told. Empty means nothing was injected.
 	ProjectPrompt string `json:"project_prompt,omitempty"`
 
+	// ModeID is the mode the task opens with: ModeOfProject, ModeNone or a
+	// mode's ID. It only matters until the first prompt; ModeTitle is then the
+	// copy of the title that went in with ProjectPrompt, empty for none. See
+	// 101-modes.md.
+	ModeID    int64  `json:"mode_id"`
+	ModeTitle string `json:"mode_title,omitempty"`
+
 	// Denormalised for list views.
 	ProjectName string `json:"project_name,omitempty"`
 	ProjectPath string `json:"project_path,omitempty"`
@@ -193,6 +205,15 @@ type QueuedMessage struct {
 	RetryError string `json:"retry_error,omitempty"`
 }
 
+// Mode is a way of working kept apart from any project: standing instructions
+// a project or a task can open its conversations with. See 101-modes.md.
+type Mode struct {
+	ID        int64  `json:"id"`
+	Title     string `json:"title"`
+	Body      string `json:"body"`
+	CreatedAt int64  `json:"created_at"`
+}
+
 // Schedule is a prompt plus a clock. Each time it comes due it starts a new
 // session with the same prompt; it has no transcript, turns or provider thread
 // of its own. See 028-scheduled-jobs.md.
@@ -210,6 +231,9 @@ type Schedule struct {
 	// FinishCondition, when set, is put before the prompt of every run. A
 	// run that finds it true pauses the job. Empty means none.
 	FinishCondition string `json:"finish_condition"`
+
+	// ModeID is the mode every run opens with, as on a Session.
+	ModeID int64 `json:"mode_id"`
 
 	// Every is how the next run is worked out. IntervalMinutes carries the
 	// whole X hours Y minutes for EveryInterval; AtMinute is minutes past

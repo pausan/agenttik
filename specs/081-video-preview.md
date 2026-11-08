@@ -19,7 +19,9 @@ only while the player itself has focus, so they never reach the app's
 shortcuts or take arrows from the sliders: Space or K plays and pauses, ←/→
 seek 5 s, J/L seek 10 s, Home goes to the start, ↑/↓ change volume, M mutes,
 F is full screen, `<` and `>` step the speed. Volume and mute carry over to the
-next video; speed, loop and position reset with the file.
+next video; speed, loop and position reset with the file. The speed menu
+opens inside the player rather than on the page body, since in full screen
+only the player is drawn.
 
 ## Streaming and conversion
 

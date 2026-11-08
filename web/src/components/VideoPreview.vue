@@ -297,6 +297,7 @@ function onKey(e) {
         class="w-20"
         aria-label="Playback speed"
         title="Playback speed (< and >)"
+        :portal="box ?? true"
         @update:model-value="setRate(Number($event))"
       />
       <UButton

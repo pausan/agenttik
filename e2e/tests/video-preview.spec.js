@@ -54,6 +54,17 @@ test("videos play in place with speed, volume, loop and seeking, converted when 
     await page.getByRole("combobox", { name: "Playback speed" }).click();
     await page.getByRole("option", { name: "2×", exact: true }).click();
     expect((await state()).rate).toBe(2);
+    // In full screen only the player is drawn, so the menu opens inside it.
+    await page.getByRole("button", { name: "Full screen", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Exit full screen", exact: true })).toBeVisible();
+    await page.getByRole("combobox", { name: "Playback speed" }).click();
+    await page.getByRole("option", { name: "1.5×", exact: true }).click();
+    expect((await state()).rate).toBe(1.5);
+    await page.getByRole("button", { name: "Exit full screen", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Full screen", exact: true })).toBeVisible();
+    await page.getByRole("combobox", { name: "Playback speed" }).click();
+    await page.getByRole("option", { name: "2×", exact: true }).click();
+    expect((await state()).rate).toBe(2);
     await page.getByRole("slider", { name: "Volume", exact: true }).fill("0.35");
     expect((await state()).volume).toBeCloseTo(0.35);
     await page.getByRole("button", { name: "Mute", exact: true }).click();

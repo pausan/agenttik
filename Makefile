@@ -30,7 +30,7 @@ VERSION_LDFLAGS := -X main.version=$(VERSION)
 # scripts/build-vpx.sh (needs git, curl, a C compiler and nasm). See specs/096-screen.md.
 VPX_LIB := $(firstword $(wildcard app/internal/screen/vpx/lib/$(shell go env GOOS)_$(shell go env GOARCH)/*agenttikvpx*))
 
-.PHONY: all build build-web android ios vpx build-windows-amd64 build-macos-arm64 run run-web test test-startup e2e vet fmt clean deps hooks ui ui-dev
+.PHONY: all build build-web android android-install ios vpx build-windows-amd64 build-macos-arm64 run run-web test test-startup e2e vet fmt clean deps hooks ui ui-dev
 
 all: build
 
@@ -68,6 +68,11 @@ android:
 	cd $(MOBILE) && npm ci --no-audit --no-fund && npm test && npx cap sync android
 	cd $(MOBILE)/android && ./gradlew assembleRelease -PversionName="$(VERSION)"
 	mkdir -p bin && cp $(MOBILE)/android/app/build/outputs/apk/release/app-release.apk $(BIN)_android.apk
+
+## android-install: build the Android APK and install it on the connected device (needs adb)
+android-install: android
+	adb install -r $(BIN)_android.apk
+	adb shell monkey -p com.pausan.agenttik -c android.intent.category.LAUNCHER 1 >/dev/null
 
 ## ios: unsigned iOS Simulator build in bin/ (needs macOS and Xcode). Device
 ## builds need signing: run `npx cap open ios` in mobileapp and use Xcode.

@@ -69,10 +69,12 @@ android:
 	cd $(MOBILE)/android && ./gradlew assembleRelease -PversionName="$(VERSION)"
 	mkdir -p bin && cp $(MOBILE)/android/app/build/outputs/apk/release/app-release.apk $(BIN)_android.apk
 
-## android-install: build the Android APK and install it on the connected device (needs adb)
-android-install: android
-	adb install -r $(BIN)_android.apk
-	adb shell monkey -p com.pausan.agenttik -c android.intent.category.LAUNCHER 1 >/dev/null
+## android-install: build a debug APK, install it on the connected device and start it (needs adb).
+## Its app ID is com.pausan.agenttik.debug, so it sits next to the release app.
+android-install:
+	cd $(MOBILE) && npm ci --no-audit --no-fund && npm test && npx cap sync android
+	cd $(MOBILE)/android && ./gradlew installDebug -PversionName="$(VERSION)"
+	adb shell am start -n com.pausan.agenttik.debug/com.pausan.agenttik.MainActivity
 
 ## ios: unsigned iOS Simulator build in bin/ (needs macOS and Xcode). Device
 ## builds need signing: run `npx cap open ios` in mobileapp and use Xcode.

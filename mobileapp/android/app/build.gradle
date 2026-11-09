@@ -18,6 +18,11 @@ android {
         }
     }
     buildTypes {
+        debug {
+            // Installs next to the release app, so it never hits that app's
+            // signature or wipes its data.
+            applicationIdSuffix ".debug"
+        }
         release {
             // No release key yet: the APK carries the building machine's
             // debug key and is meant for adb install.

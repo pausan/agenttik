@@ -226,8 +226,9 @@ list keeps the old entry until it is removed in Settings → Server.
 Locally, `make android` runs the page tests, syncs and builds the same
 release APK with this machine's debug key, version name `$(VERSION)` and code
 1, and copies it to `bin/agenttik_android.apk`.
-`make android-install` does the same, then installs it with `adb install -r`
-on the connected device and starts the app.
+`make android-install` builds a debug APK, installs it on the connected
+device and starts it. Its app ID is `com.pausan.agenttik.debug`, so it
+installs next to a release or CI build and keeps its own data.
 
 iOS is not built in CI. On a Mac with Xcode, `make ios` runs the page tests,
 syncs and builds an unsigned Release app for the iOS Simulator into

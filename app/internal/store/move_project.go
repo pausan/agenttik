@@ -77,6 +77,14 @@ func (s *Store) MoveProjectTo(dst *Store, id int64) (int64, error) {
 		offsets[table] = max
 	}
 	projectID := id + offsets["projects"]
+	// Modes belong to the profile, so the ones the project uses go with it.
+	// A destination mode of the same title is taken as the same way of
+	// working and kept as it is. See 101-modes.md.
+	if _, err = tx.Exec(`INSERT INTO destination.modes (title, body, created_at)
+ SELECT m.title, m.body, m.created_at FROM main.modes m WHERE m.id IN (`+usedModes+`)
+ AND NOT EXISTS (SELECT 1 FROM destination.modes d WHERE d.title = m.title)`, id, id, id); err != nil {
+		return 0, fmt.Errorf("move modes: %w", err)
+	}
 	sessions := `SELECT id FROM main.sessions WHERE project_id = ?`
 	filters := map[string]string{
 		"projects": "id = ?", "schedules": "project_id = ?", "sessions": "project_id = ?",
@@ -117,6 +125,9 @@ func (s *Store) MoveProjectTo(dst *Store, id int64) (int64, error) {
 				if s.AccountStore() != dst.AccountStore() {
 					values[i] = `CASE WHEN account_id = 0 THEN provider_session_id ELSE '' END`
 				}
+			case "mode_id":
+				values[i] = `CASE WHEN mode_id <= 0 THEN mode_id ELSE COALESCE((SELECT d.id FROM destination.modes d
+ JOIN main.modes m ON d.title = m.title WHERE m.id = mode_id), 0) END`
 			case "paused":
 				values[i] = "1"
 			case "position":
@@ -155,6 +166,11 @@ func (s *Store) MoveProjectTo(dst *Store, id int64) (int64, error) {
 	return projectID, nil
 }
 
+// usedModes is every mode a project, its tasks or its schedules name.
+const usedModes = `SELECT mode_id FROM main.projects WHERE id = ?
+ UNION SELECT mode_id FROM main.sessions WHERE project_id = ?
+ UNION SELECT mode_id FROM main.schedules WHERE project_id = ?`
+
 var movedAttachment = regexp.MustCompile(`/api/attachments/([a-f0-9]{64}\.(?:png|jpg|gif|webp))`)
 
 func copyProjectFiles(tx *sql.Tx, source, destination string, id, projectID int64, created *[]string) error {
@@ -162,7 +178,8 @@ func copyProjectFiles(tx *sql.Tx, source, destination string, id, projectID int6
 	rows, err := tx.Query(`SELECT content FROM main.messages WHERE session_id IN (SELECT id FROM main.sessions WHERE project_id = ?)
  UNION ALL SELECT prompt FROM main.schedules WHERE project_id = ?
  UNION ALL SELECT prompt FROM main.projects WHERE id = ?
- UNION ALL SELECT project_prompt FROM main.sessions WHERE project_id = ?`, id, id, id, id)
+ UNION ALL SELECT project_prompt FROM main.sessions WHERE project_id = ?
+ UNION ALL SELECT body FROM main.modes WHERE id IN (`+usedModes+`)`, id, id, id, id, id, id, id)
 	if err != nil {
 		return err
 	}

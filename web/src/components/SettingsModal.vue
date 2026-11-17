@@ -8,12 +8,13 @@
    unsaved fields survive navigation. Searching mounts all panes for counts. */
 import { computed, reactive, ref, watch } from "vue";
 
-import { S, fail, loadActionModels, loadArchivedProjects, loadOrchestratorConfig, loadProviders, loadServerConfig, openProject } from "../store";
+import { S, fail, loadActionModels, loadArchivedProjects, loadModes, loadOrchestratorConfig, loadProviders, loadServerConfig, openProject } from "../store";
 import { loadProfiles } from "../profiles";
 import ProfileSettings from "./settings/ProfileSettings.vue";
 import AppearanceSettings from "./settings/AppearanceSettings.vue";
 import GeneralSettings from "./settings/GeneralSettings.vue";
 import ModelSettings from "./settings/ModelSettings.vue";
+import ModeSettings from "./settings/ModeSettings.vue";
 import OrchestratorSettings from "./settings/OrchestratorSettings.vue";
 import ProjectSettings from "./settings/ProjectSettings.vue";
 import ServerSettings from "./settings/ServerSettings.vue";
@@ -73,7 +74,7 @@ watch(open, async (on) => {
   filter.value = "";
   app?.refresh();
   try {
-    await Promise.all([loadActionModels(), loadProfiles(), loadProviders(), loadArchivedProjects(), loadOrchestratorConfig(), loadServerConfig()]);
+    await Promise.all([loadActionModels(), loadProfiles(), loadProviders(), loadArchivedProjects(), loadModes(), loadOrchestratorConfig(), loadServerConfig()]);
   } catch (e) {
     fail(e);
     open.value = false;
@@ -158,6 +159,12 @@ async function showOrchestrator() {
               :filter="filter"
               @count="counts.orchestrator = $event"
               @open-project="showOrchestrator"
+            />
+          </div>
+          <div v-if="visited.has('modes')" v-show="section === 'modes'">
+            <ModeSettings
+              :filter="filter"
+              @count="counts.modes = $event"
             />
           </div>
           <div v-if="visited.has('appearance')" v-show="section === 'appearance'">

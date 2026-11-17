@@ -5,7 +5,7 @@ test("settings tree groups sections, collapses, and searches descendants", async
   const dialog = page.getByRole("dialog");
   const nav = dialog.getByRole("list", { name: "Settings sections", exact: true });
   expect(await nav.locator(":scope > li").evaluateAll((rows) => rows.map((row) => row.querySelector(":scope > div > button:last-child").innerText.trim())))
-    .toEqual(["General", "Orchestrator", "Providers", "Models", "Server", "Help", "About"]);
+    .toEqual(["General", "Orchestrator", "Modes", "Providers", "Models", "Server", "Help", "About"]);
   await expect(nav.getByRole("list", { name: "General sections", exact: true }).getByRole("button"))
     .toHaveText(["Appearance", "Profiles", "Projects", "Shortcuts"]);
   await expect(nav.getByRole("list", { name: "Providers sections", exact: true }).getByRole("button"))

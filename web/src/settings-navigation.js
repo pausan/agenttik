@@ -6,6 +6,7 @@ export const SETTINGS_SECTIONS = [
     { id: "shortcuts", label: "Shortcuts", icon: "i-lucide-keyboard" },
   ] },
   { id: "orchestrator", label: "Orchestrator", icon: "i-lucide-network" },
+  { id: "modes", label: "Modes", icon: "i-lucide-bookmark" },
   { id: "providers", label: "Providers", icon: "i-lucide-plug", group: true, children: [
     { id: "subscriptions", label: "Subscriptions", icon: "i-lucide-id-card" },
     { id: "api-providers", label: "API Providers", icon: "i-lucide-key-round" },

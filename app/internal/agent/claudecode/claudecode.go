@@ -85,7 +85,9 @@ func permissionFlag(p agent.Permission, runMode string) []string {
 }
 
 // buildArgs is separated from Run so the flag mapping can be unit tested.
-func buildArgs(req agent.TurnRequest) []string {
+// agentsPath is the file the modes were written to, empty when the turn offers
+// none or the file could not be written.
+func buildArgs(req agent.TurnRequest, agentsPath string) []string {
 	args := []string{
 		"-p",
 		"--output-format", "stream-json",
@@ -114,6 +116,13 @@ func buildArgs(req agent.TurnRequest) []string {
 		args = append(args, "--effort", req.Effort)
 	}
 	args = append(args, permissionFlag(req.Permission, req.RunMode)...)
+	if agentsPath != "" && !req.Isolated {
+		// Given on every turn: the definitions live in the process, not in
+		// the conversation it resumes. Under `-p` the flag takes the path to
+		// the JSON, which keeps a library of long modes off a command line
+		// that Windows caps at 32,767 characters, escaping included.
+		args = append(args, "--agents", agentsPath)
+	}
 	if req.ProviderSessionID != "" {
 		args = append(args, "--resume", req.ProviderSessionID)
 	} else if req.ForkFrom != "" {
@@ -148,6 +157,33 @@ func buildEnv(req agent.TurnRequest) []string {
 	return append(env, "MCP_CONNECTION_NONBLOCKING=0")
 }
 
+// writeAgents puts the modes a turn offers as subagents in a file for the CLI
+// to read at startup, and answers with its path. The caller removes it once
+// the turn is over: the CLI reads it some time after the process starts.
+func writeAgents(subagents []agent.Subagent) (string, error) {
+	agents := make(map[string]agent.Subagent, len(subagents))
+	for _, a := range subagents {
+		agents[a.Name] = a
+	}
+	data, err := json.Marshal(agents)
+	if err != nil {
+		return "", err
+	}
+	f, err := os.CreateTemp("", "agenttik-agents-*.json")
+	if err != nil {
+		return "", err
+	}
+	_, err = f.Write(data)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		os.Remove(f.Name())
+		return "", err
+	}
+	return f.Name(), nil
+}
+
 func (p *Provider) Run(ctx context.Context, req agent.TurnRequest) (<-chan agent.Event, error) {
 	if err := p.Available(); err != nil {
 		return nil, err
@@ -155,8 +191,18 @@ func (p *Provider) Run(ctx context.Context, req agent.TurnRequest) (<-chan agent
 	if err := req.CheckWorkDir(); err != nil {
 		return nil, err
 	}
-	cmd, stdin, stdout, stderr, err := start(req)
+	// A file that cannot be written costs the turn its subagents, not the turn.
+	var agentsPath string
+	if len(req.Subagents) > 0 && !req.Isolated {
+		if path, err := writeAgents(req.Subagents); err == nil {
+			agentsPath = path
+		}
+	}
+	cmd, stdin, stdout, stderr, err := start(req, agentsPath)
 	if err != nil {
+		if agentsPath != "" {
+			os.Remove(agentsPath)
+		}
 		return nil, err
 	}
 	var h *host
@@ -170,6 +216,9 @@ func (p *Provider) Run(ctx context.Context, req agent.TurnRequest) (<-chan agent
 	events := make(chan agent.Event, 64)
 	go func() {
 		defer close(events)
+		if agentsPath != "" {
+			defer os.Remove(agentsPath)
+		}
 
 		// Kill the whole process group when the caller cancels.
 		done := make(chan struct{})
@@ -211,9 +260,9 @@ func (p *Provider) Run(ctx context.Context, req agent.TurnRequest) (<-chan agent
 //
 // stdin is nil for an isolated request, whose prompt is the whole of its
 // input; a task turn's caller writes the prompt and answers through it.
-func start(req agent.TurnRequest) (*exec.Cmd, io.WriteCloser, io.ReadCloser, *strings.Builder, error) {
+func start(req agent.TurnRequest, agentsPath string) (*exec.Cmd, io.WriteCloser, io.ReadCloser, *strings.Builder, error) {
 	for attempt := 0; attempt < 2; attempt++ {
-		cmd := exec.Command(Binary, buildArgs(req)...)
+		cmd := exec.Command(Binary, buildArgs(req, agentsPath)...)
 		cmd.Dir = req.WorkDir
 		cmd.Env = buildEnv(req)
 		// The prompt goes in on stdin, never as an argv element.

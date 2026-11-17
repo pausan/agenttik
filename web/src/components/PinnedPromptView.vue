@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, watch } from "vue";
 import { vTabScroll } from "../tab-scroll";
-import { patchSchedule, removeSchedule, runPinnedPrompt, setScheduleArchived, setScheduleModel } from "../store";
+import { S, modeChoices, patchSchedule, removeSchedule, runPinnedPrompt, setScheduleArchived, setScheduleMode, setScheduleModel } from "../store";
 import ModelSelection from "./ModelSelection.vue";
 
 const props = defineProps({ tab: { type: Object, required: true } });
@@ -60,6 +60,16 @@ function chooseModel(choice) {
           :effort="saved.effort || ''"
           size="xs"
           @change="chooseModel"
+        />
+        <USelect
+          v-if="S.modes.length"
+          :model-value="saved.mode_id || 0"
+          :items="modeChoices(saved.project_id)"
+          size="xs"
+          icon="i-lucide-bookmark"
+          class="max-w-48"
+          aria-label="Mode"
+          @update:model-value="setScheduleMode(saved, $event)"
         />
       </div>
       <label class="block text-sm text-muted">

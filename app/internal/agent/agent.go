@@ -81,6 +81,17 @@ type TurnRequest struct {
 	// RunGuarded asks before changes, RunManual before every command. Plan is
 	// unchanged by it. Empty is RunAuto. See 082-tool-approvals.md.
 	RunMode string
+
+	// Subagents are the modes, offered to providers that let a turn define
+	// its own subagents (Claude Code). Others ignore them. See 101-modes.md.
+	Subagents []Subagent
+}
+
+// Subagent is a mode as a subagent the agent can launch by name.
+type Subagent struct {
+	Name        string `json:"-"`
+	Description string `json:"description"`
+	Prompt      string `json:"prompt"`
 }
 
 // How much a turn asks before tools run. The values are the project's

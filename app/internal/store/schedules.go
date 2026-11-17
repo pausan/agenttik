@@ -10,7 +10,7 @@ import (
 // Running includes queued runs: their run row stays open until the first turn
 // finishes, so ticks cannot pile up another prompt while one is waiting.
 const scheduleCols = `s.id, s.project_id, s.title, s.prompt, s.provider, s.account_id, s.model, s.effort,
-	s.permission, s.finish_condition, s.every, s.interval_minutes, s.at_minute, s.day_interval, s.weekday_mask, s.anchor_at, s.remaining,
+	s.permission, s.finish_condition, s.mode_id, s.every, s.interval_minutes, s.at_minute, s.day_interval, s.weekday_mask, s.anchor_at, s.remaining,
 	s.paused, s.next_run_at, s.created_at, s.done_at, s.position,
 	EXISTS(SELECT 1 FROM schedule_runs r WHERE r.schedule_id = s.id AND r.status = '` + RunRunning + `'),
 	p.name, p.path`
@@ -18,7 +18,7 @@ const scheduleCols = `s.id, s.project_id, s.title, s.prompt, s.provider, s.accou
 func scanSchedule(sc interface{ Scan(...any) error }) (*Schedule, error) {
 	var v Schedule
 	err := sc.Scan(&v.ID, &v.ProjectID, &v.Title, &v.Prompt, &v.Provider, &v.AccountID, &v.Model, &v.Effort,
-		&v.Permission, &v.FinishCondition, &v.Every, &v.IntervalMinutes, &v.AtMinute, &v.DayInterval, &v.WeekdayMask, &v.AnchorAt, &v.Remaining,
+		&v.Permission, &v.FinishCondition, &v.ModeID, &v.Every, &v.IntervalMinutes, &v.AtMinute, &v.DayInterval, &v.WeekdayMask, &v.AnchorAt, &v.Remaining,
 		&v.Paused, &v.NextRunAt, &v.CreatedAt, &v.DoneAt, &v.Position,
 		&v.Running, &v.ProjectName, &v.ProjectPath)
 	if err != nil {
@@ -39,11 +39,11 @@ func (s *Store) CreateSchedule(v *Schedule) error {
 	}
 	res, err := s.db.Exec(
 		`INSERT INTO schedules (project_id, title, prompt, provider, account_id, model, effort, permission,
-		    finish_condition, every, interval_minutes, at_minute, day_interval, weekday_mask, anchor_at, remaining,
+		    finish_condition, mode_id, every, interval_minutes, at_minute, day_interval, weekday_mask, anchor_at, remaining,
 		    paused, next_run_at, created_at, position)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
 		    (SELECT COALESCE(MAX(position), 0) + 1 FROM schedules WHERE project_id = ?))`,
-		v.ProjectID, v.Title, v.Prompt, v.Provider, v.AccountID, v.Model, v.Effort, v.Permission, v.FinishCondition,
+		v.ProjectID, v.Title, v.Prompt, v.Provider, v.AccountID, v.Model, v.Effort, v.Permission, v.FinishCondition, v.ModeID,
 		v.Every, v.IntervalMinutes, v.AtMinute, v.DayInterval, v.WeekdayMask, v.AnchorAt, v.Remaining, v.Paused, v.NextRunAt,
 		v.CreatedAt, v.ProjectID)
 	if err != nil {

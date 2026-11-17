@@ -122,3 +122,72 @@ func TestVideoTranscode(t *testing.T) {
 		t.Fatalf("converted: %+v", probed)
 	}
 }
+
+func TestAudioServed(t *testing.T) {
+	s, st := newTestServer(t)
+	dir := t.TempDir()
+	p, err := st.CreateProject("sounds", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "song.MP3"), []byte("ID3abc"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	resp := do(t, s, "GET", "/api/projects/"+itoa(p.ID)+"/video?path=song.MP3", nil)
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 || resp.Header.Get("Content-Type") != "audio/mpeg" || string(body) != "ID3abc" {
+		t.Fatalf("mp3: %d %s %q", resp.StatusCode, resp.Header.Get("Content-Type"), body)
+	}
+}
+
+// A song with a cover picture converts to its sound alone.
+func TestAudioTranscode(t *testing.T) {
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("ffmpeg is not installed")
+	}
+	if _, err := exec.LookPath("ffprobe"); err != nil {
+		t.Skip("ffprobe is not installed")
+	}
+	s, st := newTestServer(t)
+	dir := t.TempDir()
+	p, err := st.CreateProject("sounds", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cover := filepath.Join(dir, "cover.png")
+	song := filepath.Join(dir, "song.mp3")
+	if out, err := exec.Command(ffmpeg, "-v", "error", "-f", "lavfi", "-i", "color=red:size=32x32", "-frames:v", "1", cover).CombinedOutput(); err != nil {
+		t.Skipf("cannot make a cover: %v: %s", err, out)
+	}
+	if out, err := exec.Command(ffmpeg, "-v", "error", "-f", "lavfi", "-i", "sine=duration=2", "-i", cover,
+		"-map", "0:a", "-map", "1:v", "-c:a", "mp3", "-c:v", "png", "-disposition:v", "attached_pic", song).CombinedOutput(); err != nil {
+		t.Skipf("cannot make a test song: %v: %s", err, out)
+	}
+
+	req := httptest.NewRequest("GET", "/api/projects/"+itoa(p.ID)+"/video?path=song.mp3&transcode=1", nil)
+	resp, err := s.app.Test(req, 20000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 || len(body) < 100 {
+		t.Fatalf("transcode: %d %d bytes", resp.StatusCode, len(body))
+	}
+	converted := filepath.Join(t.TempDir(), "out.webm")
+	if err := os.WriteFile(converted, body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var probed videoInfo
+	out, err := exec.Command("ffprobe", "-v", "error", "-print_format", "json",
+		"-show_entries", "format=duration:stream=codec_type,codec_name,width,height", converted).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	probed.probe(out)
+	if probed.Video != "" || probed.Audio != "opus" {
+		t.Fatalf("converted: %+v", probed)
+	}
+}

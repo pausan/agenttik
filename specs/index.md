@@ -99,7 +99,7 @@ screen, **session** for the row, the route or the CLI flag.
 | [026](026-image-preview.md) | Previewing images, zooming, mouse and touch panning, and image diffs |
 | [086](086-html-preview.md) | Sandboxed HTML with scripts, local assets, data files and preview tokens |
 | [058](058-font-preview.md) | Font samples, custom text, size controls and glyph squares |
-| [081](081-video-preview.md) | Video player controls, ranged streaming and ffmpeg conversion |
+| [081](081-video-preview.md) | Video and audio player controls, ranged streaming and ffmpeg conversion |
 | [059](059-file-information.md) | File byte sizes, image dimensions and color depth in the central header |
 | [027](027-ignored-files-in-the-tree.md) | Alphabetical Tree listings up to a 200,000-entry cap, ignored files gray |
 | [046](046-tree-file-actions.md) | Tree file actions, renaming from tabs and Changes, copying paths and adding paths to prompts |

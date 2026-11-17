@@ -1,4 +1,4 @@
-# Video previews
+# Video and audio previews
 
 `.mp4`, `.m4v`, `.mov`, `.webm`, `.ogv`, `.mkv`, `.avi`, `.mpg`, `.mpeg`,
 `.wmv`, `.flv`, `.3gp` and `.m2ts`, matched without case sensitivity, offer
@@ -8,6 +8,15 @@ Preview and Diff have no text editor or line count. Hex previews the first
 unless the remembered view is Diff, which is git's binary line. `.ts` and
 `.mts` are left out: they are TypeScript far more often than MPEG streams. The header shows the size and the picture's
 dimensions, read off the element.
+
+## Audio
+
+`.mp3`, `.wav`, `.ogg`, `.oga`, `.opus`, `.flac`, `.m4a`, `.aac`, `.weba`,
+`.aif`, `.aiff` and `.wma` open the same way, in the same player and through
+the same endpoints. The picture area shows a music note and the file name,
+there is no full screen, and the footer says “audio”. A sound with no picture
+is expected, so it skips the no-picture ffprobe check. Converting an audio
+file keeps its first audio stream as Opus in WebM and drops any cover picture.
 
 ## The player
 
@@ -68,10 +77,12 @@ the bridge, and nothing but the video route is forwarded.
 
 Go tests cover whole and ranged reads, an unsatisfiable range, rejection of
 non-video paths, and, with ffmpeg installed, ffprobe metadata and a real
-conversion (codecs, start offset, odd-width rounding). Unit tests cover time
+conversion (codecs, start offset, odd-width rounding), an MP3 served as
+`audio/mpeg`, and a song with a cover converted to sound alone. Unit tests cover time
 formatting, speed steps and range checks. The browser test plays a native WebM
 and a converted AVI, checking speed, volume, mute, loop, seeking, keys, reset
-of speed and carry-over of volume between files. A Go test checks the bridge
+of speed and carry-over of volume between files; another plays a native MP3
+and a converted WMA. A Go test checks the bridge
 forwards only the video route under its token. `make test-desktop-video` plays
 a clip in the real Wails/WebKit window: from the custom scheme it must still
 fail — or the bridge can go — and through the bridge it must seek and play.

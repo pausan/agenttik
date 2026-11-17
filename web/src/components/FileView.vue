@@ -3,7 +3,7 @@
    text, so it offers only the last two, and its diff is the two pictures
    rather than two columns of lines.
 
-   Tree selections prefer Edit, with Preview for images, fonts and videos. Changes
+   Tree selections prefer Edit, with Preview for images, fonts, videos and audio. Changes
    and commit file lists open Diff. The toggle changes the current tab's view.
    Every text file has a Preview: what renders is rendered, and code is shown
    coloured and read-only, so a diff can be swapped for the file it leaves.
@@ -14,7 +14,7 @@
 import { computed, inject, onMounted, onUnmounted, ref, watch } from "vue";
 import { vTabScroll } from "../tab-scroll";
 
-import { isDirty, isFont, isImage, isMedia, isOutsideProject, isVideo, saveFile, setFileMode } from "../store";
+import { isAudio, isDirty, isFont, isImage, isMedia, isOutsideProject, isVideo, saveFile, setFileMode } from "../store";
 import { langOf } from "../highlight";
 import { api, nf } from "../api";
 import { fileInfoLabel } from "../file-info";
@@ -46,6 +46,7 @@ onUnmounted(() => {
 const image = computed(() => isImage(props.tab.path));
 const font = computed(() => isFont(props.tab.path));
 const video = computed(() => isVideo(props.tab.path));
+const audio = computed(() => isAudio(props.tab.path));
 const media = computed(() => isMedia(props.tab.path));
 const outside = computed(() => isOutsideProject(props.tab.path));
 
@@ -123,7 +124,7 @@ const fills = computed(
   () =>
     body.value === "images" ||
     (body.value === "edit" && large.value) ||
-    (body.value === "preview" && (image.value || video.value || /\.html?$/i.test(props.tab.path))),
+    (body.value === "preview" && (image.value || video.value || audio.value || /\.html?$/i.test(props.tab.path))),
 );
 
 const lines = computed(() => props.tab.binary ? 0 : lineCount(text.value));
@@ -211,7 +212,7 @@ const stat = computed(() => {
     <div
       class="flex shrink-0 items-center gap-3 border-t border-default px-5 py-1 text-xs text-dimmed"
     >
-      <span>{{ body === "hex" ? "binary" : image ? "image" : font ? "font" : video ? "video" : langOf(tab.path) || "text" }}</span>
+      <span>{{ body === "hex" ? "binary" : image ? "image" : font ? "font" : video ? "video" : audio ? "audio" : langOf(tab.path) || "text" }}</span>
       <span v-if="tab.commit" class="text-dimmed">committed</span>
       <span v-else-if="media && body !== 'hex'" class="text-dimmed">not editable</span>
       <span v-else-if="tab.readOnly" class="text-warning">read only</span>

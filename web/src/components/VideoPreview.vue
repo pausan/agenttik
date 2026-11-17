@@ -15,16 +15,21 @@ const muted = ref(false);
    converted by ffmpeg on the server while it plays. Such a stream has no
    length of its own and cannot be seeked by range, so the length comes from
    ffprobe and a seek past what has arrived asks for a new one from there.
-   offset is where the current stream starts in the file. */
+   offset is where the current stream starts in the file.
+
+   A sound plays in the same element, with a note in place of a picture and
+   no full screen. */
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 
 import { api } from "../api";
-import { videoURL } from "../store";
+import { isAudio, videoURL } from "../store";
 import { formatTime, inRanges, mediaBase, SPEEDS, stepSpeed } from "../video";
 
 const props = defineProps({ tab: { type: Object, required: true } });
 const emit = defineEmits(["dimensions"]);
 
+const audio = computed(() => isAudio(props.tab.path));
+const noun = computed(() => audio.value ? "audio" : "video");
 const box = ref(null);
 const video = ref(null);
 const convert = ref(false);
@@ -80,7 +85,7 @@ function onMetadata() {
     length.value = el.duration;
     // A container the browser opens but whose picture it cannot decode
     // plays as sound alone, with no error to say so.
-    if (!el.videoWidth) return fallback(true);
+    if (!el.videoWidth && !audio.value) return fallback(true);
   }
   status.value = "ready";
   if (resume) {
@@ -94,7 +99,7 @@ function onError() {
   // 3 is a decode failure, 4 a format this browser does not play.
   if (!convert.value && (code === 3 || code === 4)) return fallback(false);
   status.value = "error";
-  problem.value = "Cannot play this video.";
+  problem.value = `Cannot play this ${noun.value}.`;
 }
 
 async function fallback(onlyWithPicture) {
@@ -116,7 +121,7 @@ async function fallback(onlyWithPicture) {
   }
   if (!info.transcode) {
     status.value = "error";
-    problem.value = "This browser cannot play this video, and converting it needs ffmpeg, which is not installed.";
+    problem.value = `This browser cannot play this ${noun.value}, and converting it needs ffmpeg, which is not installed.`;
     return;
   }
   length.value = info.duration || NaN;
@@ -195,6 +200,7 @@ function toggleMute() {
 }
 
 function toggleFullscreen() {
+  if (audio.value) return;
   if (document.fullscreenElement) document.exitFullscreen?.();
   else box.value?.requestFullscreen?.().catch(() => {});
 }
@@ -236,7 +242,7 @@ function onKey(e) {
     ref="box"
     tabindex="0"
     class="flex h-full min-h-0 flex-col bg-black outline-none"
-    aria-label="Video player"
+    :aria-label="audio ? 'Audio player' : 'Video player'"
     @keydown="onKey"
   >
     <div class="relative flex min-h-0 flex-1 items-center justify-center">
@@ -256,10 +262,14 @@ function onKey(e) {
         @click="toggle"
         @dblclick="toggleFullscreen"
       ></video>
-      <p v-if="status === 'loading'" role="status" class="absolute text-sm text-neutral-300">
-        {{ convert ? "Converting video…" : "Loading video…" }}
+      <div v-if="audio" class="pointer-events-none absolute flex flex-col items-center gap-3 px-5 text-neutral-400">
+        <UIcon name="i-lucide-music" class="size-16" />
+        <span class="max-w-md truncate text-sm">{{ tab.path.split("/").pop() }}</span>
+      </div>
+      <p v-if="status === 'loading'" role="status" class="absolute text-sm text-neutral-300" :class="audio && 'bottom-4'">
+        {{ convert ? `Converting ${noun}…` : `Loading ${noun}…` }}
       </p>
-      <p v-else-if="status === 'error'" role="alert" class="absolute max-w-md px-5 text-center text-sm text-warning">
+      <p v-else-if="status === 'error'" role="alert" class="absolute max-w-md px-5 text-center text-sm text-warning" :class="audio && 'bottom-4'">
         {{ problem }}
       </p>
     </div>
@@ -330,6 +340,7 @@ function onKey(e) {
         @click="loop = !loop"
       />
       <UButton
+        v-if="!audio"
         :icon="fullscreen ? 'i-lucide-minimize-2' : 'i-lucide-maximize-2'"
         size="xs"
         color="neutral"

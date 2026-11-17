@@ -108,3 +108,36 @@ test("videos play in place with speed, volume, loop and seeking, converted when 
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("audio files play in the same player, without a picture or full screen", async ({ page }) => {
+  test.skip(!hasFFmpeg(), "needs ffmpeg and ffprobe");
+  const dir = await mkdtemp(join(tmpdir(), "agenttik-audio-"));
+  try {
+    const tone = (path, codec) => execFileSync("ffmpeg", ["-v", "error", "-f", "lavfi", "-i", "sine=duration=3", "-c:a", codec, path]);
+    tone(join(dir, "song.mp3"), "mp3");
+    tone(join(dir, "song.wma"), "wmav2");
+    await addProject(page, dir);
+    await openProject(page, dir);
+    await sidebar(page).getByRole("tab", { name: "Tree" }).click();
+
+    const media = page.locator("video");
+    const time = page.getByLabel("Playback time", { exact: true });
+    await sidebar(page).getByRole("button", { name: "song.mp3", exact: true }).click();
+    await expect(time).toHaveText("0:00 / 0:03");
+    await expect(page.getByLabel("Audio player", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Full screen", exact: true })).toHaveCount(0);
+    await expect(page.getByText("converted", { exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "Play", exact: true }).click();
+    await expect.poll(() => media.evaluate((el) => el.currentTime)).toBeGreaterThan(0.2);
+    await page.getByRole("button", { name: "Pause", exact: true }).click();
+
+    // What the browser cannot decode is converted to sound alone.
+    await sidebar(page).getByRole("button", { name: "song.wma", exact: true }).click();
+    await expect(page.getByText("converted", { exact: true })).toBeVisible();
+    await expect(time).toHaveText("0:00 / 0:03");
+    await page.getByRole("button", { name: "Play", exact: true }).click();
+    await expect.poll(() => media.evaluate((el) => el.currentTime)).toBeGreaterThan(0.2);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

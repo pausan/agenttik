@@ -37,6 +37,34 @@ var videoTypes = map[string]string{
 	".m2ts": "video/mp2t",
 }
 
+// audioTypes are the sounds the same endpoint serves, through the same
+// player. A cover picture in one is left out of a conversion.
+var audioTypes = map[string]string{
+	".mp3":  "audio/mpeg",
+	".wav":  "audio/wav",
+	".ogg":  "audio/ogg",
+	".oga":  "audio/ogg",
+	".opus": "audio/ogg",
+	".flac": "audio/flac",
+	".m4a":  "audio/mp4",
+	".aac":  "audio/aac",
+	".weba": "audio/webm",
+	".aif":  "audio/aiff",
+	".aiff": "audio/aiff",
+	".wma":  "audio/x-ms-wma",
+}
+
+// mediaType is the content type a video or audio file is served as, and
+// whether it is audio.
+func mediaType(rel string) (kind string, audio, ok bool) {
+	ext := strings.ToLower(filepath.Ext(rel))
+	if kind, ok = videoTypes[ext]; ok {
+		return kind, false, true
+	}
+	kind, ok = audioTypes[ext]
+	return kind, true, ok
+}
+
 // videoFile resolves a working-tree video. There is no rev: a video is far
 // past what git show should push through memory, and a diff of one is git's
 // one binary line.
@@ -45,9 +73,9 @@ func (s *Server) videoFile(c *fiber.Ctx) (rel, abs, kind string, err error) {
 	if err != nil {
 		return "", "", "", err
 	}
-	kind, ok := videoTypes[strings.ToLower(filepath.Ext(rel))]
+	kind, _, ok := mediaType(rel)
 	if !ok {
-		return "", "", "", badRequest("%s is not a video agenttik plays", rel)
+		return "", "", "", badRequest("%s is not a video or audio file agenttik plays", rel)
 	}
 	return rel, abs, kind, nil
 }
@@ -62,7 +90,8 @@ func (s *Server) projectVideo(c *fiber.Ctx) error {
 		return err
 	}
 	if c.Query("transcode") == "1" {
-		return s.transcodeVideo(c, abs)
+		_, audio, _ := mediaType(rel)
+		return s.transcodeVideo(c, abs, audio)
 	}
 	f, err := os.Open(abs)
 	if err != nil {
@@ -104,7 +133,7 @@ func (s *Server) projectVideo(c *fiber.Ctx) error {
 // them, and WebM plays while it is still being written. It cannot be seeked
 // by range, so the player seeks by asking again from a new start. ffmpeg runs only while someone is reading;
 // a closed connection, or the server closing, stops it.
-func (s *Server) transcodeVideo(c *fiber.Ctx, abs string) error {
+func (s *Server) transcodeVideo(c *fiber.Ctx, abs string, audio bool) error {
 	ffmpeg, err := exec.LookPath("ffmpeg")
 	if err != nil {
 		return fiber.NewError(fiber.StatusNotImplemented, "ffmpeg is not installed")
@@ -114,7 +143,7 @@ func (s *Server) transcodeVideo(c *fiber.Ctx, abs string) error {
 		start = 0
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(ctx, ffmpeg, transcodeArgs(abs, start)...)
+	cmd := exec.CommandContext(ctx, ffmpeg, transcodeArgs(abs, start, audio)...)
 	out, err := cmd.StdoutPipe()
 	if err != nil {
 		cancel()
@@ -155,22 +184,28 @@ func (s *Server) transcodeVideo(c *fiber.Ctx, abs string) error {
 	return nil
 }
 
-// transcodeArgs keeps the first video and audio stream, either of which may
+// transcodeArgs keeps a video's first video and audio stream, either of which may
 // be missing. The file: prefix stops a name being read as another protocol,
 // the scale rounds odd sizes, which yuv420p cannot hold, and realtime keeps
-// the encoder ahead of playback.
-func transcodeArgs(abs string, start float64) []string {
-	return []string{
+// the encoder ahead of playback. An audio file keeps its sound alone: its
+// one "video" stream is a cover picture.
+func transcodeArgs(abs string, start float64, audio bool) []string {
+	args := []string{
 		"-nostdin", "-hide_banner", "-loglevel", "error",
 		"-ss", strconv.FormatFloat(start, 'f', 3, 64),
 		"-i", "file:" + abs,
-		"-map", "0:v:0?", "-map", "0:a:0?", "-sn", "-dn",
-		"-c:v", "libvpx-vp9", "-deadline", "realtime", "-cpu-used", "8", "-row-mt", "1",
-		"-b:v", "0", "-crf", "32", "-pix_fmt", "yuv420p",
-		"-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
-		"-c:a", "libopus", "-ac", "2", "-ar", "48000", "-b:a", "128k",
-		"-f", "webm", "pipe:1",
 	}
+	if audio {
+		args = append(args, "-map", "0:a:0", "-vn", "-sn", "-dn")
+	} else {
+		args = append(args, "-map", "0:v:0?", "-map", "0:a:0?", "-sn", "-dn",
+			"-c:v", "libvpx-vp9", "-deadline", "realtime", "-cpu-used", "8", "-row-mt", "1",
+			"-b:v", "0", "-crf", "32", "-pix_fmt", "yuv420p",
+			"-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2")
+	}
+	return append(args,
+		"-c:a", "libopus", "-ac", "2", "-ar", "48000", "-b:a", "128k",
+		"-f", "webm", "pipe:1")
 }
 
 type videoInfo struct {

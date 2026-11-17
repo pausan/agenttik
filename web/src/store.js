@@ -2281,6 +2281,7 @@ const IMAGE = /\.(png|jpe?g|gif|webp|avif|bmp|ico|apng)$/i;
 const FONT = /\.(ttf|otf|woff2?)$/i;
 // Not .ts or .mts: those are TypeScript far more often than MPEG streams.
 const VIDEO = /\.(mp4|m4v|mov|webm|ogv|mkv|avi|mpe?g|wmv|flv|3gp|m2ts)$/i;
+const AUDIO = /\.(mp3|wav|ogg|oga|opus|flac|m4a|aac|weba|aiff?|wma)$/i;
 
 /* Every text file has a Preview, but only these render as something other
    than their own text — the ones a remembered Preview should open on. */
@@ -2303,10 +2304,15 @@ export function isVideo(path) {
   return VIDEO.test(String(path || ""));
 }
 
+// Sounds play in the video player, from the same endpoint.
+export function isAudio(path) {
+  return AUDIO.test(String(path || ""));
+}
+
 /* Media previews stream directly to the renderer. Hex is loaded separately;
    a line request still has no meaning in either view. */
 export function isMedia(path) {
-  return isImage(path) || isFont(path) || isVideo(path);
+  return isImage(path) || isFont(path) || isVideo(path) || isAudio(path);
 }
 
 /* A path still absolute here is outside the project: resolveFileRef trims the

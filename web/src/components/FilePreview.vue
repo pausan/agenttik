@@ -18,7 +18,8 @@
 
    Raster images and fonts have no text to follow: their bytes come from the
    raw endpoint. FontPreview registers a face only while it is displayed.
-   Videos stream from their own endpoint, in ranges, through VideoPreview.
+   Videos and sounds stream from their own endpoint, in ranges, through
+   VideoPreview.
 
    Any other text is shown as it reads in the editor, coloured, but as a page
    rather than a field: nothing to type into, and selecting it is copying. */
@@ -29,7 +30,7 @@ import { highlight, langOf } from "../highlight";
 import { largeFile } from "../file-editor";
 
 import MarkdownContent from "./MarkdownContent.vue";
-import { fail, htmlPreviewToken, isFont, isImage, isVideo, rawURL, S } from "../store";
+import { fail, htmlPreviewToken, isAudio, isFont, isImage, isVideo, rawURL, S } from "../store";
 import FontPreview from "./FontPreview.vue";
 import ImageFrame from "./ImageFrame.vue";
 import VideoPreview from "./VideoPreview.vue";
@@ -94,7 +95,7 @@ const svg = computed(() => "data:image/svg+xml;charset=utf-8," + encodeURICompon
 
   <FontPreview v-else-if="isFont(tab.path)" :src="rawURL(tab)" />
 
-  <VideoPreview v-else-if="isVideo(tab.path)" :tab="tab" @dimensions="emit('dimensions', $event)" />
+  <VideoPreview v-else-if="isVideo(tab.path) || isAudio(tab.path)" :tab="tab" @dimensions="emit('dimensions', $event)" />
 
   <CsvPreview v-else-if="/\.(csv|tsv)$/i.test(tab.path)" :key="tab.id" :text="text" />
 

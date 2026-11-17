@@ -119,13 +119,19 @@ function chooseModel(choice) {
    it goes in with that prompt and cannot change after. Once it has, the select
    stays to say which mode the task is in, disabled, named by the title the
    task copied rather than by a link that may point elsewhere now. A task that
-   started with no mode has nothing to name, so it loses the select.
+   started with no mode has nothing to name, so it loses the select. Neither
+   shows while the library holds no mode but the project's own: that one is
+   the default, and there is nothing else to pick or to tell apart from it.
    See specs/101-modes.md. */
 const unstarted = computed(() => {
   const d = S.detail;
   return !!d && !d.messages?.length && !d.turns?.length && !d.queued?.length && !d.session.project_prompt;
 });
 const startedMode = computed(() => (unstarted.value ? "" : S.detail?.session.mode_title || ""));
+const otherModes = computed(() => {
+  const project = S.projects.find((p) => p.id === S.detail?.session.project_id);
+  return S.modes.some((m) => m.id !== project?.mode_id);
+});
 const taskModes = computed(() =>
   startedMode.value ? [{ label: startedMode.value, value: 0 }] : modeChoices(S.detail?.session.project_id),
 );
@@ -381,7 +387,7 @@ function runMenuAction(action) {
               @change="chooseModel"
             />
             <USelect
-              v-if="startedMode || (unstarted && S.modes.length)"
+              v-if="otherModes && (startedMode || unstarted)"
               :model-value="startedMode ? 0 : S.detail.session.mode_id || 0"
               :items="taskModes"
               :disabled="!!startedMode"

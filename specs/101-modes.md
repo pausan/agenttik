@@ -75,7 +75,8 @@ project has one, and every other mode. Once the first prompt is sent or queued
 the select is disabled and names the mode the task runs in, by the title the
 task copied rather than by its link, which can point elsewhere later; the
 server refuses a change after that. A task started in no mode has none to name
-and loses the select.
+and loses the select. Neither shows while the library holds no mode but the
+project's own: it is the default, and there is nothing else to pick.
 
 A new task always opens in its project's mode. Unlike the model, effort and
 subscription ([025](025-blank-task-reuse.md)), the mode of the newest task is

@@ -19,6 +19,10 @@ test("a project prompt becomes a mode and a task picks another before its first 
   await page.getByRole("button", { name: "Edit mode", exact: true }).click();
   await expect(page.getByRole("dialog").getByRole("textbox", { name: "Text of Review" })).toHaveValue("Review only.");
   await page.keyboard.press("Escape");
+  // With only the project's mode in the library there is nothing to pick.
+  await newTask(page);
+  await pickModel(page);
+  await expect(page.getByRole("combobox", { name: "Task mode" })).toHaveCount(0);
   const tdd = await (await page.request.post(agenttik.url + "/api/modes", { data: { title: "TDD", body: "Test first." } })).json();
 
   await newTask(page);

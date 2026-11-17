@@ -198,8 +198,10 @@ and finish its follow-up reply first.
 Every task prompt, including resumes, carries lifecycle guidance: once the
 requested work is complete, stop disposable helpers the agent started before
 the final reply. Keep waiting for needed tests, builds and agents, and respect
-processes the user asked to keep running. This is agent guidance, not an
-automatic timeout or cancellation. It is sent with the prompt so resumed
+processes the user asked to keep running. A task that only waits for such
+work is not disposable, since it is what wakes the agent, and the agent should
+give it a timeout. This is agent guidance, not an automatic timeout or
+cancellation. It is sent with the prompt so resumed
 conversations receive it even when the CLI reuses a saved system prompt.
 The app transcript retains the user's original prompt. Isolated requests
 keep their original input and receive no lifecycle guidance.

@@ -2391,10 +2391,12 @@ export function resolveFileRef(path, basePath = "") {
   return parts.join("/");
 }
 
-export async function openFileRef(path, line = 0, basePath = "", hints = [], system = false, showInTree = null) {
+/* locateFileRef finds the file a link names, falling back as the spec says,
+   and answers the project, the resolved path and whether it is a folder. It
+   throws when nothing is found. */
+export async function locateFileRef(path, basePath = "", hints = []) {
   const projectID = currentProjectID();
-  const ownerID = S.owner?.id || "";
-  if (!projectID) return;
+  if (!projectID) throw new Error("No project is open.");
   const target = path;
   path = resolveFileRef(path, basePath) || ".";
   const folders = [...new Set(hints.map((hint) => resolveFileRef(hint, basePath) || "."))].slice(0, 100);
@@ -2405,14 +2407,21 @@ export async function openFileRef(path, line = 0, basePath = "", hints = [], sys
   query.set("hints", JSON.stringify(folders));
   // A transcript link may name only a file the task's tool calls worked on.
   if (!basePath && S.detail?.session.id) query.set("session", S.detail.session.id);
+  const info = await api("GET", `/api/projects/${projectID}/file-info?${query}`);
+  return { projectID, path: info.path || path, dir: !!info.dir };
+}
+
+export async function openFileRef(path, line = 0, basePath = "", hints = [], system = false, showInTree = null) {
+  const ownerID = S.owner?.id || "";
+  if (!currentProjectID()) return;
   try {
-    const info = await api("GET", `/api/projects/${projectID}/file-info?${query}`);
-    path = info.path || path;
+    const { projectID, dir, path: found } = await locateFileRef(path, basePath, hints);
+    path = found;
     if (showInTree && !isOutsideProject(path)) {
       await showInTree(path);
-      if (info.dir) return;
+      if (dir) return;
     }
-    if (info.dir || system) return openInSystem(path, projectID);
+    if (dir || system) return openInSystem(path, projectID);
     return openFileIn(projectID, ownerID, path, { line, pin: true });
   } catch (e) {
     fail(e);

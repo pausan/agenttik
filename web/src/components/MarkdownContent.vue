@@ -1,16 +1,21 @@
 <script setup>
 import { computed, inject, ref } from "vue";
 
-import { markdown } from "../markdown";
-import { copyText, openExternal, openFileRef, resolveFileRef } from "../store";
+import { fileRefs, markdown } from "../markdown";
+import { copyText, isAudio, openExternal, openFileRef, resolveFileRef } from "../store";
+import AudioRef from "./AudioRef.vue";
 
 defineOptions({ inheritAttrs: false });
 
 const props = defineProps({
   text: { type: String, default: "" },
   basePath: { type: String, default: "" },
+  // A transcript plays the sound files it names, under the text.
+  players: { type: Boolean, default: false },
 });
 const html = computed(() => markdown(props.text));
+const refs = computed(() => props.players ? fileRefs(html.value) : []);
+const sounds = computed(() => refs.value.filter(isAudio));
 const block = ref(null);
 const aimedLink = ref("");
 const aimedFile = ref(null);
@@ -76,4 +81,5 @@ const menu = computed(() => aimedFile.value ? [
   <UContextMenu :items="menu">
     <div ref="block" v-bind="$attrs" v-html="html" @click="onClick" @contextmenu="aimLink" />
   </UContextMenu>
+  <AudioRef v-for="file in sounds" :key="file" :file="file" :hints="refs" />
 </template>

@@ -18,6 +18,20 @@ there is no full screen, and the footer says “audio”. A sound with no pictur
 is expected, so it skips the no-picture ffprobe check. Converting an audio
 file keeps its first audio stream as Opus in WebM and drops any cover picture.
 
+### In the conversation
+
+A finished agent reply that links a sound file (code span or markdown link,
+see [022](022-transcript-file-links.md)) gets a small player under the
+message for each distinct one. `AudioRef` finds the file with the same lookup
+as a click on the link (`locateFileRef`), and shows nothing if it is missing
+or a folder. It is the browser's own `<audio controls>`, streaming from the
+video endpoint through the desktop bridge, with the file name and two
+buttons: **Open in tab** opens the Preview tab, **Open in browser** hands the
+stream URL to the system browser in the desktop window, or a new tab in a
+browser. A format the browser cannot decode switches once to the converted
+stream, which plays from the start without seeking. Streaming replies get
+no player until they finish, so the lookup runs once.
+
 ## The player
 
 `VideoPreview` draws the video filling the pane on black, with a bar beneath:
@@ -82,7 +96,8 @@ conversion (codecs, start offset, odd-width rounding), an MP3 served as
 formatting, speed steps and range checks. The browser test plays a native WebM
 and a converted AVI, checking speed, volume, mute, loop, seeking, keys, reset
 of speed and carry-over of volume between files; another plays a native MP3
-and a converted WMA. A Go test checks the bridge
+and a converted WMA; a third checks a reply's player plays, opens in a tab
+and in the browser, and that a missing file gets none. A Go test checks the bridge
 forwards only the video route under its token. `make test-desktop-video` plays
 a clip in the real Wails/WebKit window: from the custom scheme it must still
 fail — or the bridge can go — and through the bridge it must seek and play.

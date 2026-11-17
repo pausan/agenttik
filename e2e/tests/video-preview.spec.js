@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { addProject, expect, openProject, sidebar, test } from "../fixtures.js";
+import { addProject, expect, newTask, openProject, pickModel, sendPrompt, sidebar, test } from "../fixtures.js";
 
 function hasFFmpeg() {
   try {
@@ -137,6 +137,41 @@ test("audio files play in the same player, without a picture or full screen", as
     await expect(time).toHaveText("0:00 / 0:03");
     await page.getByRole("button", { name: "Play", exact: true }).click();
     await expect.poll(() => media.evaluate((el) => el.currentTime)).toBeGreaterThan(0.2);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("a sound file named in a reply gets a player in the conversation, if it exists", async ({ page }) => {
+  test.skip(!hasFFmpeg(), "needs ffmpeg and ffprobe");
+  const dir = await mkdtemp(join(tmpdir(), "agenttik-audio-ref-"));
+  try {
+    execFileSync("ffmpeg", ["-v", "error", "-f", "lavfi", "-i", "sine=duration=3", "-c:a", "mp3", join(dir, "song.mp3")]);
+    await addProject(page, dir);
+    await openProject(page, dir);
+    await newTask(page);
+    await pickModel(page);
+    await sendPrompt(page, "Made `song.mp3`, not `missing.mp3`.");
+
+    const player = page.getByLabel("Audio song.mp3", { exact: true });
+    await expect(player).toBeVisible();
+    await expect(page.getByLabel("Audio missing.mp3", { exact: true })).toHaveCount(0);
+    const audio = player.locator("audio");
+    await expect.poll(() => audio.evaluate((el) => el.duration)).toBeCloseTo(3, 0);
+    await audio.evaluate((el) => el.play());
+    await expect.poll(() => audio.evaluate((el) => el.currentTime)).toBeGreaterThan(0.2);
+    await audio.evaluate((el) => el.pause());
+
+    await page.evaluate(() => {
+      window.openedLinks = [];
+      window.open = (url) => { window.openedLinks.push(String(url)); return null; };
+    });
+    await player.getByRole("button", { name: "Open in browser", exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.openedLinks)).toEqual([expect.stringMatching(/\/api\/projects\/\d+\/video\?path=song\.mp3/)]);
+
+    await player.getByRole("button", { name: "Open in tab", exact: true }).click();
+    await expect(page.getByRole("tab", { name: "song.mp3", exact: true })).toBeVisible();
+    await expect(page.getByLabel("Audio player", { exact: true })).toBeVisible();
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

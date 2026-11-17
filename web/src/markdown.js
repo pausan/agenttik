@@ -289,7 +289,7 @@ function link(url, text) {
    An extension is what tells a path from the other things a code span holds:
    `S.detail` and `account/rateLimits/read` are not files. */
 const FILE_EXT =
-  /\.(?:js|mjs|cjs|jsx|ts|tsx|vue|svelte|go|mod|sum|rs|py|rb|php|java|kt|swift|c|h|cc|cpp|hpp|cs|sh|bash|fish|zsh|sql|css|scss|html?|xml|json|ya?ml|toml|ini|conf|env|lock|md|markdown|txt|csv|svg|png|jpe?g|gif|webp)$/i;
+  /\.(?:js|mjs|cjs|jsx|ts|tsx|vue|svelte|go|mod|sum|rs|py|rb|php|java|kt|swift|c|h|cc|cpp|hpp|cs|sh|bash|fish|zsh|sql|css|scss|html?|xml|json|ya?ml|toml|ini|conf|env|lock|md|markdown|txt|csv|svg|png|jpe?g|gif|webp|mp3|wav|ogg|oga|opus|flac|m4a|aac|weba|aiff?|wma)$/i;
 
 /* An optional file:// prefix, the path, and the line it named — as `:801`,
    or `#L801` the way a forge writes it. A trailing column is dropped. */
@@ -316,4 +316,13 @@ function fileLink(target, inner, explicit = false) {
   const label = ref.line ? `${ref.path}:${ref.line}` : ref.path;
   const line = ref.line ? ` data-line="${ref.line}"` : "";
   return `<button type="button" class="file" data-file="${esc(ref.path)}"${line} title="Open ${esc(label)}">${inner}</button>`;
+}
+
+const UNESCAPES = Object.fromEntries(Object.entries(ESCAPES).map(([c, e]) => [e, c]));
+
+/* fileRefs lists, once each and in order, the files rendered markdown links
+   to, so a caller can act on them without walking the DOM. */
+export function fileRefs(html) {
+  const paths = [...html.matchAll(/data-file="([^"]*)"/g)].map((m) => m[1].replace(/&(?:amp|lt|gt|quot);/g, (e) => UNESCAPES[e]));
+  return [...new Set(paths)];
 }

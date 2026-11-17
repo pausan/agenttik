@@ -284,7 +284,7 @@ function onKey(e) {
     </form>
 
     <template v-else>
-      <MarkdownContent v-if="rendered" :class="classes" :text="markdownText" />
+      <MarkdownContent v-if="rendered" :class="classes" :text="markdownText" :players="!message.streaming" />
       <div v-else :class="classes">
         <span v-if="text">{{ text }}</span>
         <div v-if="images.length" class="mt-2 flex flex-wrap gap-2" aria-label="Message images">

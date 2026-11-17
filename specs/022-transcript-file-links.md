@@ -29,6 +29,9 @@ Two forms are recognised, both of them what a coding agent actually writes:
 - a **markdown link** whose target is a path, relative or absolute, with an
   optional `:801` or `#L801`.
 
+A finished reply also plays the sound files it links, in a small player
+under the message ([081](081-video-preview.md)).
+
 Paths are drawn in the link colour and underline on hover. A code span keeps
 its chip, so nothing about the transcript's shape changes — only some of it
 became clickable.

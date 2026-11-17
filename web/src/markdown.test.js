@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { COPY_BUTTON, markdown } from "./markdown.js";
+import { COPY_BUTTON, fileRefs, markdown } from "./markdown.js";
 
 const code = (pre) => `<div class="code">${pre}${COPY_BUTTON}</div>`;
 
@@ -124,4 +124,10 @@ test("explicit local links accept extensionless files, spaces and document fragm
   for (const target of ["javascript:alert", "data:text/plain,hello", "//example.com/a.md", "bad%00.md", "bad%ZZ.md"]) {
     assert.equal(markdown(`[blah](${target})`), "<p>blah</p>");
   }
+});
+
+test("sound files in code spans link, and fileRefs lists each linked file once", () => {
+  const html = markdown("Made `out/song.mp3` and [this](a&b.WAV), see `out/song.mp3` and `notes.md`.");
+  assert.match(html, /data-file="out\/song\.mp3"/);
+  assert.deepEqual(fileRefs(html), ["out/song.mp3", "a&b.WAV", "notes.md"]);
 });

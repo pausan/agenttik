@@ -79,9 +79,10 @@ button[draggable="true"]:active { cursor: grabbing; }
   isolation: isolate;
 }
 
-/* Wails disables GPU acceleration on Linux. WebKitGTK's native overlay
-   scrollbars then paint above opaque dialogs regardless of z-index. Styled
-   scrollbars follow CSS paint order and reserve a small gutter instead. */
+/* When the Linux window draws in software, WebKitGTK's native overlay
+   scrollbars paint above opaque dialogs regardless of z-index. Styled
+   scrollbars follow CSS paint order and reserve a small gutter instead, and
+   are used on the GPU too so both look the same. */
 .desktop-linux::-webkit-scrollbar,
 .desktop-linux ::-webkit-scrollbar {
   width: 10px;

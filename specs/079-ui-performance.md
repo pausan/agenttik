@@ -58,8 +58,28 @@ Searching mounts all panes so result counts cover every section. Modal and
 slideover transitions and menu entrance/exit animations are disabled. Profile
 switching retains a full page navigation and its existing storage isolation.
 
-The Linux desktop window paints in software (`WebviewGpuPolicyNever`), so
-whatever changes on screen costs CPU on every frame it changes. A smooth
+The Linux desktop window draws on the GPU where that works
+(`desktop_gpu_linux.go`). On some drivers an accelerated webview stays blank,
+so before the window opens a child process (`agenttik --internal-gpu-check`)
+draws a solid colour in an offscreen view with acceleration forced on, reads
+the pixels the widget shows, and reads the GL renderer from `webkit://gpu`.
+The window draws on the GPU only if the colour arrived within 5 seconds on a
+hardware renderer; a blank view, a software renderer such as llvmpipe, a
+crash, a hang or no display means software (`WebviewGpuPolicyNever`). The
+verdict is saved in `gpu-check.json` under the user cache directory, keyed by
+the check's revision, the WebKit version, the kernel, the NVIDIA module
+version, each render node's PCI ids and driver, and X11 or Wayland; a new key
+checks again, which costs about a second at that launch. `AGENTTIK_GPU=on` or
+`off` skips the check. All native desktop tests pass with `AGENTTIK_GPU=on`.
+
+On the development host (AMD Radeon 890M, WebKitGTK 2.52, 1920 × 1021), with
+the transcript of a 454-message task scrolled 20 px ten times a second, the
+web process used 15–18% of a core in software and 4% on the GPU. Streaming a
+long reply into it, the real desktop window's web processes used 41–44% in
+software and 32% on the GPU, and the window's process 9–10% and 7%: what
+streaming costs is mostly layout, which the GPU does not take.
+
+In software, whatever changes on screen costs CPU on every frame it changes. A smooth
 looping animation redraws at 60 fps: one 6 px pulsing dot cost 5–8% of a core
 in WebKit's web process and 3–5% in the window's. Looping animations are
 therefore stepped. Status dots pulse in four steps per keyframe gap (4 fps,

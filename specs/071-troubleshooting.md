@@ -57,6 +57,15 @@ The complete wrappers passed five consecutive native keyboard runs under GDB.
 Request release alone was insufficient: the same FormData crash still occurred
 until body creation and body-stream release were confined to GTK too.
 
+## Blank or garbled Linux window
+
+The window draws on the GPU when a check at launch finds that works
+([079](079-ui-performance.md)). If it is blank or garbled anyway, start it with
+`AGENTTIK_GPU=off` to draw in software, and report the driver. When it chose
+software, the log says why: `desktop: drawing in software: …`. Deleting
+`~/.cache/agenttik/gpu-check.json` runs the check again at the next launch;
+`AGENTTIK_GPU=on` skips it and uses the GPU.
+
 ## Frontend reports
 
 Reports use an allowlist: timestamp, random launch ID, error class, capture

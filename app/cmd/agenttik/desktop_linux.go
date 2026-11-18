@@ -30,9 +30,8 @@ func configureDesktop(app *options.App) {
 	quietBrowserOpener()
 	app.Linux = &linux.Options{
 		Icon: appIcon(),
-		// Wails only picks this default while Linux options are nil, and
-		// the webview goes blank on some drivers with acceleration on.
-		WebviewGpuPolicy: linux.WebviewGpuPolicyNever,
+		// Set explicitly: Wails picks Never while Linux options are nil.
+		WebviewGpuPolicy: gpuPolicy(),
 	}
 	// WebKitGTK shows the page a desktop file drag only as a URI list, with
 	// no File objects to read, so Wails reports the dropped paths natively.

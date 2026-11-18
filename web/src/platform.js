@@ -7,8 +7,9 @@ export function isMacOS(platform = platformName()) {
   return /^mac/i.test(platform);
 }
 
-// WebKitGTK paints native overlay scrollbars above portalled UI when Wails
-// disables GPU acceleration. CSS scrollbars stay in the page's paint order.
+// WebKitGTK paints native overlay scrollbars above portalled UI when the
+// window draws in software, its fallback where the GPU check fails. CSS
+// scrollbars stay in the page's paint order, so they are used either way.
 export function needsCSSScrollbars(platform = platformName(), runtime = globalThis.window?.runtime) {
   return /^linux/i.test(platform) && !!runtime;
 }

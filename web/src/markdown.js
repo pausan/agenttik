@@ -22,8 +22,33 @@ function esc(s) {
 }
 
 export function markdown(src) {
-  if (!src) return "";
-  return blocks(String(src).replace(/\r\n?/g, "\n").split("\n")).join("");
+  return markdownBlocks(src).join("");
+}
+
+/* The top-level blocks, each the HTML of one element. */
+export function markdownBlocks(src) {
+  if (!src) return [];
+  return blocks(String(src).replace(/\r\n?/g, "\n").split("\n"));
+}
+
+/* Shows blocks in el, given the ones drawn there last time (shown), and
+   returns what to pass next time. A streaming reply grows at its end, so the
+   blocks it already had stay as they are and only those from the first that
+   changed are rebuilt: the browser lays out a paragraph, not the whole reply.
+   Pass [] to draw everything. When el does not hold one node per block, as
+   when something else changed it, everything is drawn again. */
+export function drawBlocks(el, shown, next) {
+  let same = 0;
+  if (shown.length && el.childNodes.length === shown.length) {
+    const n = Math.min(shown.length, next.length);
+    while (same < n && shown[same] === next[same]) same++;
+    if (same === shown.length && same === next.length) return shown;
+    while (el.childNodes.length > same) el.lastChild.remove();
+    el.insertAdjacentHTML("beforeend", next.slice(same).join(""));
+  } else {
+    el.innerHTML = next.join("");
+  }
+  return el.childNodes.length === next.length ? next : [];
 }
 
 /* ------------------------------------------------------------------ blocks */

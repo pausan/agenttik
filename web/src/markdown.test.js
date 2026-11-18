@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { COPY_BUTTON, fileRefs, markdown } from "./markdown.js";
+import { COPY_BUTTON, drawBlocks, fileRefs, markdown, markdownBlocks } from "./markdown.js";
 
 const code = (pre) => `<div class="code">${pre}${COPY_BUTTON}</div>`;
 
@@ -130,4 +130,59 @@ test("sound files in code spans link, and fileRefs lists each linked file once",
   const html = markdown("Made `out/song.mp3` and [this](a&b.WAV), see `out/song.mp3` and `notes.md`.");
   assert.match(html, /data-file="out\/song\.mp3"/);
   assert.deepEqual(fileRefs(html), ["out/song.mp3", "a&b.WAV", "notes.md"]);
+});
+
+test("markdownBlocks gives one element per block, which markdown joins", () => {
+  const src = "# Title\n\nSome **text**.\n\n- a\n- b\n\n```js\nx\n```\n\n| a |\n|---|\n| 1 |";
+  const parts = markdownBlocks(src);
+  assert.deepEqual(parts.map((p) => p.match(/^<(\w+)/)[1]), ["h1", "p", "ul", "div", "table"]);
+  assert.equal(parts.join(""), markdown(src));
+  assert.deepEqual(markdownBlocks(""), []);
+});
+
+/* An element holding one node per inserted block, counting what is rebuilt. */
+function fakeElement() {
+  const el = {
+    childNodes: [],
+    built: 0,
+    get lastChild() {
+      const nodes = el.childNodes;
+      return { remove: () => nodes.pop() };
+    },
+    set innerHTML(html) {
+      el.childNodes = [];
+      el.insertAdjacentHTML("beforeend", html);
+    },
+    insertAdjacentHTML(_, html) {
+      const nodes = html.match(/<(h\d|p|ul|ol|div|table|blockquote|hr)\b/g) || [];
+      el.built += nodes.length;
+      el.childNodes.push(...nodes);
+    },
+  };
+  return el;
+}
+
+test("drawBlocks rebuilds only the blocks from the first that changed", () => {
+  const el = fakeElement();
+  let shown = drawBlocks(el, [], markdownBlocks("# A\n\none\n\ntwo"));
+  assert.equal(el.built, 3);
+  shown = drawBlocks(el, shown, markdownBlocks("# A\n\none\n\ntwo three"));
+  assert.equal(el.built, 4, "only the last paragraph is drawn again");
+  shown = drawBlocks(el, shown, markdownBlocks("# A\n\none\n\ntwo three\n\nfour"));
+  assert.equal(el.built, 5, "a new paragraph is drawn alone");
+  assert.equal(drawBlocks(el, shown, shown), shown, "unchanged blocks draw nothing");
+  assert.equal(el.built, 5);
+  shown = drawBlocks(el, shown, markdownBlocks("# A"));
+  assert.deepEqual(el.childNodes, ["<h1"]);
+  assert.equal(el.built, 5, "dropping blocks only removes them");
+});
+
+test("drawBlocks draws everything again when the element was changed elsewhere", () => {
+  const el = fakeElement();
+  const shown = drawBlocks(el, [], markdownBlocks("one\n\ntwo"));
+  el.childNodes.push("<p");
+  const next = drawBlocks(el, shown, markdownBlocks("one\n\ntwo"));
+  assert.equal(el.childNodes.length, 2);
+  assert.equal(el.built, 4);
+  assert.equal(next.length, 2);
 });

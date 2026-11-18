@@ -1,7 +1,7 @@
 <script setup>
-import { computed, inject, ref } from "vue";
+import { computed, inject, onMounted, ref, watch } from "vue";
 
-import { fileRefs, markdown } from "../markdown";
+import { drawBlocks, fileRefs, markdownBlocks } from "../markdown";
 import { preserveSelection, useSelectionMenu } from "../selection-menu";
 import { copyText, isAudio, openExternal, openFileRef, resolveFileRef } from "../store";
 import AudioRef from "./AudioRef.vue";
@@ -14,10 +14,19 @@ const props = defineProps({
   // A transcript plays the sound files it names, under the text.
   players: { type: Boolean, default: false },
 });
-const html = computed(() => markdown(props.text));
-const refs = computed(() => props.players ? fileRefs(html.value) : []);
+const parts = computed(() => markdownBlocks(props.text));
+const refs = computed(() => props.players ? fileRefs(parts.value.join("")) : []);
 const sounds = computed(() => refs.value.filter(isAudio));
 const block = ref(null);
+
+/* Drawn by hand rather than with v-html, which would rebuild the whole reply
+   every time a streaming one grows (specs/079-ui-performance.md). */
+let shown = [];
+function draw() {
+  if (block.value) shown = drawBlocks(block.value, shown, parts.value);
+}
+onMounted(draw);
+watch([parts, block], draw, { flush: "post" });
 const { selectionItems, aimSelection, menuOpen } = useSelectionMenu();
 const aimedLink = ref("");
 const aimedFile = ref(null);
@@ -85,7 +94,7 @@ const menu = computed(() => selectionItems.value.length && !aimedLink.value && !
 
 <template>
   <UContextMenu :items="menu" @update:open="menuOpen">
-    <div ref="block" v-bind="$attrs" v-html="html" @click="onClick" @mousedown.right="preserveSelection" @contextmenu="aimMenu" />
+    <div ref="block" v-bind="$attrs" @click="onClick" @mousedown.right="preserveSelection" @contextmenu="aimMenu" />
   </UContextMenu>
   <AudioRef v-for="file in sounds" :key="file" :file="file" :hints="refs" />
 </template>

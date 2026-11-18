@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -138,6 +139,9 @@ func wrapped(prompt, tag string) string {
 }
 
 var sessionCounter, approvalCounter int64
+
+// streamWord is a word and the spacing after it.
+var streamWord = regexp.MustCompile(`\S+\s*`)
 
 func nextSessionID() string {
 	return fmt.Sprintf("fake-%d", atomic.AddInt64(&sessionCounter, 1))
@@ -369,11 +373,13 @@ func (s *script) reply(ctx context.Context, prompt string) bool {
 
 	text := strings.TrimSpace(strings.Join(reply, "\n"))
 	if text != "" {
-		for _, word := range strings.Fields(text) {
+		// A word at a time, with the spacing after it, so line breaks and
+		// so markdown blocks survive.
+		for _, word := range streamWord.FindAllString(text, -1) {
 			if !sleepCtx(ctx, 15*time.Millisecond) {
 				return false
 			}
-			events <- agent.Event{Type: agent.EventText, Text: word + " "}
+			events <- agent.Event{Type: agent.EventText, Text: word}
 		}
 	}
 

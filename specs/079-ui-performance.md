@@ -90,9 +90,21 @@ A streaming reply arrives a word or two per event, dozens of times a second.
 Its markdown is redrawn at most every 100 ms (`STREAM_RENDER_MS` in
 `Message.vue`); the end of the stream and any other change draw at once.
 Following the output scrolls the transcript, which repaints all of it, so the
-redraw rate sets most of the cost. Two other ideas measured no gain and were
-dropped: redrawing only the changed markdown blocks, and handling stream
-events in 50 ms batches. A 200 ms redraw saved another 5 points.
+redraw rate sets most of the cost. Handling stream events in 50 ms batches
+measured no gain. A 200 ms redraw saved another 5 points.
+
+A redraw rebuilds only the blocks from the first one that changed
+(`drawBlocks` in `markdown.js`, used by `MarkdownContent.vue` instead of
+`v-html`): each block is one element, so the blocks before it keep their
+nodes, and a growing reply lays out its last paragraph rather than all of it.
+If the element no longer holds one node per block, it is drawn whole. The fake
+provider streams each word with the spacing after it, so a fake reply keeps
+its paragraphs; it used to stream words joined by single spaces, which made
+every fake reply one paragraph and hid this cost. Streaming the 400-part reply
+into a 454-message task in Chromium, the main thread went from 343–383 to
+212–237 ms a second: redraw timers from 134–150 to 20 ms, style from 53 to 28
+ms, and the median layout from about 300 dirty objects to 26. In WebKit the
+web process fell by 2 to 6 points of a core, within the noise of a loaded host.
 
 ## Reproducing measurements
 

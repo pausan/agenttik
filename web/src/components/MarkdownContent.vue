@@ -37,10 +37,10 @@ function fileAt(e) {
   return hit ? { path: hit.dataset.file, line: Number(hit.dataset.line) || 0 } : null;
 }
 
-function openFile(file, system = false, tree = false) {
+function openFile(file, options) {
   if (file) {
     const hints = [...block.value.querySelectorAll("button.file")].map((link) => link.dataset.file);
-    openFileRef(file.path, file.line, props.basePath, hints, system, tree ? showInTree : null);
+    openFileRef(file.path, file.line, props.basePath, hints, options);
   }
 }
 
@@ -80,9 +80,11 @@ function openLink() {
 
 const linkMenu = computed(() => aimedFile.value ? [
   { label: "Open in new tab", icon: "i-lucide-file-plus", onSelect: () => openFile(aimedFile.value) },
-  { label: "Open in system browser", icon: "i-lucide-external-link", onSelect: () => openFile(aimedFile.value, true) },
-  { label: "Show in tree", icon: "i-lucide-folder-tree", onSelect: () => openFile(aimedFile.value, false, true) },
+  { label: "Open in system browser", icon: "i-lucide-external-link", onSelect: () => openFile(aimedFile.value, { system: "file" }) },
+  { label: "Open folder in system browser", icon: "i-lucide-folder-open", onSelect: () => openFile(aimedFile.value, { system: "folder" }) },
+  { label: "Show in tree", icon: "i-lucide-folder-tree", onSelect: () => openFile(aimedFile.value, { showInTree }) },
   { label: "Copy path", icon: "i-lucide-copy", onSelect: () => copyText(resolveFileRef(aimedFile.value.path, props.basePath) || ".") },
+  { label: "Copy full path", icon: "i-lucide-copy", onSelect: () => copyText(resolveFileRef(aimedFile.value.path, props.basePath, true) || ".") },
 ] : [
   { label: "Open in browser", icon: "i-lucide-external-link", disabled: !aimedLink.value, onSelect: openLink },
   { label: "Copy link", icon: "i-lucide-copy", disabled: !aimedLink.value, onSelect: () => copyText(aimedLink.value) },

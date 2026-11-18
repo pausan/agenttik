@@ -135,6 +135,16 @@ func TestFileInfoEndpoint(t *testing.T) {
 	if got := decode[fileInfo](t, do(t, s, "GET", base+".", nil)); !got.Dir || got.Image != nil {
 		t.Fatalf("directory metadata = %+v", got)
 	}
+	root, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"empty.txt", "."} {
+		got := decode[fileInfo](t, do(t, s, "GET", base+name+"&locate=1", nil))
+		if got.Folder != root || got.Dir != (name == ".") {
+			t.Fatalf("%s: locate metadata = %+v", name, got)
+		}
+	}
 	// Text beyond the editor/preview limits still has an exact size.
 	f, err := os.Create(filepath.Join(dir, "large.bin"))
 	if err != nil {

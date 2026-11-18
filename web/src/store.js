@@ -2490,9 +2490,9 @@ export function openFileForEdit(path) {
 }
 
 /* Markdown links resolve from the document's folder, or from the project
-   root in a transcript. What is left absolute is outside the project, and is
-   read where it lies. The API bounds what it writes and checks files exist. */
-export function resolveFileRef(path, basePath = "") {
+   root in a transcript. Copying the full path uses the project root and its
+   native separator, even if the browser runs on another OS. */
+export function resolveFileRef(path, basePath = "", fullPath = false) {
   const root = S.projects.find((p) => p.id === currentProjectID())?.path || "";
   if (root && path.startsWith(root + "/")) path = path.slice(root.length + 1);
   else if (!path.startsWith("/") && basePath.includes("/")) path = basePath.slice(0, basePath.lastIndexOf("/") + 1) + path;
@@ -2503,11 +2503,14 @@ export function resolveFileRef(path, basePath = "") {
     if (part === ".." && parts.length && parts.at(-1) !== "..") parts.pop();
     else parts.push(part);
   }
-  return parts.join("/");
+  if (!fullPath || !root) return parts.join("/");
+  if (!parts.length) return root;
+  const separator = root.startsWith("/") ? "/" : "\\";
+  return root + (root.endsWith(separator) ? "" : separator) + parts.join(separator);
 }
 
 /* locateFileRef finds the file a link names, falling back as the spec says,
-   and answers the project, the resolved path and whether it is a folder. It
+   and answers the project, the resolved path and its absolute folder. It
    throws when nothing is found. */
 export async function locateFileRef(path, basePath = "", hints = []) {
   const projectID = currentProjectID();
@@ -2523,20 +2526,20 @@ export async function locateFileRef(path, basePath = "", hints = []) {
   // A transcript link may name only a file the task's tool calls worked on.
   if (!basePath && S.detail?.session.id) query.set("session", S.detail.session.id);
   const info = await api("GET", `/api/projects/${projectID}/file-info?${query}`);
-  return { projectID, path: info.path || path, dir: !!info.dir };
+  return { projectID, path: info.path || path, dir: !!info.dir, folder: info.folder };
 }
 
-export async function openFileRef(path, line = 0, basePath = "", hints = [], system = false, showInTree = null) {
+export async function openFileRef(path, line = 0, basePath = "", hints = [], { system, showInTree } = {}) {
   const ownerID = S.owner?.id || "";
   if (!currentProjectID()) return;
   try {
-    const { projectID, dir, path: found } = await locateFileRef(path, basePath, hints);
+    const { projectID, dir, path: found, folder } = await locateFileRef(path, basePath, hints);
     path = found;
     if (showInTree && !isOutsideProject(path)) {
       await showInTree(path);
       if (dir) return;
     }
-    if (dir || system) return openInSystem(path, projectID);
+    if (dir || system) return openInSystem(system === "folder" ? folder : path, projectID);
     return openFileIn(projectID, ownerID, path, { line, pin: true });
   } catch (e) {
     fail(e);

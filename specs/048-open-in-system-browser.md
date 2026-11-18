@@ -7,6 +7,10 @@ machine agenttik runs on, which opens it the way a double click in a file
 manager would — a folder in the file browser, a file in whatever is registered
 for its type.
 
+Local links also offer **Open folder in system browser**. The file lookup
+returns the absolute path of the containing folder, or the linked folder
+itself, and passes it to the same opener.
+
 A right click that misses every Tree row aims at the project folder, so the
 pane's empty space opens the project itself. Nothing here asks first: opening
 something changes nothing.

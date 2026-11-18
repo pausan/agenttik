@@ -8,19 +8,22 @@ behaviour and the menu's open action does the same.
 
 A file the agent names in its reply is clickable, and clicking it opens that
 file in a kept app tab. An already open file is selected and kept instead of
-creating a duplicate. Right-clicking a local link offers **Open in new tab**
-and **Open in system browser**, plus **Show in tree** and **Copy path**. Show in
-tree switches the sidebar to Tree, clears its filter, expands parent folders
-and selects the resolved file before opening its kept tab with any requested
-line selected. Directory targets are selected without opening the system file
-explorer. Files outside the project open read-only without a Tree selection.
-Copy uses the resolved project-relative path, or an absolute path for a target
-outside the project,
-without a line suffix. Directory links open the system file explorer without
-creating an editor tab. System opening uses the same file opener
-as the Tree ([048](048-open-in-system-browser.md)). A reference that names a
-line (`web/src/store.js:801`) opens the editor scrolled to that line, with the
-line selected.
+creating a duplicate. Right-clicking a local link offers these actions.
+
+- **Open in new tab** opens a kept file tab. A reference such as
+  `web/src/store.js:801` scrolls to that line and selects it. Directory links
+  open in the system file manager.
+- **Open in system browser** uses the same system opener as the Tree
+  ([048](048-open-in-system-browser.md)). **Open folder in system browser**
+  opens the file's containing folder, or the linked folder itself.
+- **Show in tree** switches the sidebar to Tree, clears its filter, expands
+  parent folders and selects the resolved file before opening its kept tab.
+  Directory targets are selected in the Tree. Files outside the project
+  open read-only.
+- **Copy path** copies the link's project-relative path, or its absolute
+  path if it is outside the project. **Copy full path** copies an absolute
+  path in either case. Both omit line numbers and use the path written in
+  the link, resolved against its base folder.
 
 Two forms are recognised, both of them what a coding agent actually writes:
 
@@ -46,8 +49,9 @@ Document fragments are stripped; `:line` and `#Lline` retain line navigation.
 
 Transcript paths resolve from the project root. Markdown preview paths resolve
 from the displayed file's folder, including `./` and `../`. Absolute paths
-inside the project have the project folder trimmed off. Copy uses this resolved path. Opening first checks that exact path. If it is
-missing, a transcript link next tries what the task's own tool calls named.
+inside the project are also available as project-relative paths. Opening
+first checks that exact path. If it is missing, a transcript link next tries
+what the task's own tool calls named.
 Agents often reply with `report.md` after working in `tasks/2026-10-08-x/`,
 and a project can hold hundreds of `index.html` files. The server reads the
 session's stored tool rows with `app/internal/toolpaths`, which follows each

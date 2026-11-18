@@ -19,10 +19,11 @@ import (
 )
 
 type fileInfo struct {
-	Path  string     `json:"path,omitempty"`
-	Dir   bool       `json:"dir,omitempty"`
-	Size  int64      `json:"size"`
-	Image *imageInfo `json:"image,omitempty"`
+	Path   string     `json:"path,omitempty"`
+	Folder string     `json:"folder,omitempty"`
+	Dir    bool       `json:"dir,omitempty"`
+	Size   int64      `json:"size"`
+	Image  *imageInfo `json:"image,omitempty"`
 }
 
 type imageInfo struct {
@@ -58,8 +59,9 @@ func (s *Server) projectFileInfo(c *fiber.Ctx) error {
 			header, _ = gitBlob(root, spec)
 		}
 	} else {
+		locate := c.Query("locate") == "1"
 		info, err := os.Stat(abs)
-		if os.IsNotExist(err) && c.Query("locate") == "1" {
+		if os.IsNotExist(err) && locate {
 			var hints []string
 			_ = json.Unmarshal([]byte(c.Query("hints")), &hints)
 			projectID, _ := strconv.ParseInt(c.Params("id"), 10, 64)
@@ -83,9 +85,16 @@ func (s *Server) projectFileInfo(c *fiber.Ctx) error {
 		if err != nil {
 			return badRequest("cannot read %s: %v", rel, err)
 		}
-		if info.IsDir() {
+		body.Dir = info.IsDir()
+		if locate {
+			body.Folder = abs
+			if !body.Dir {
+				body.Folder = filepath.Dir(abs)
+			}
+		}
+		if body.Dir {
 			c.Set(fiber.HeaderCacheControl, "no-store")
-			return c.JSON(fileInfo{Dir: true, Path: body.Path})
+			return c.JSON(body)
 		}
 		if !info.Mode().IsRegular() {
 			return badRequest("%s is not a regular file", rel)

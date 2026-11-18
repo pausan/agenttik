@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -81,14 +81,27 @@ test("local transcript links open kept tabs and offer the system opener", async 
   await context.grantPermissions(["clipboard-read", "clipboard-write"], {
     origin: new URL(page.url()).origin,
   });
-  for (const [name, path] of [["absolute", "README.md"], ["directory", "web"], ["root", "."]]) {
+  for (const [name, path] of [["first", "README.md"], ["absolute", "README.md"], ["directory", "web"], ["root", "."]]) {
     await page.getByRole("button", { name, exact: true }).click({ button: "right" });
     await page.getByRole("menuitem", { name: "Copy path", exact: true }).click();
     await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(path);
+    await page.getByRole("button", { name, exact: true }).click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Copy full path", exact: true }).click();
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(join(REPO, path));
   }
   await page.getByRole("button", { name: "directory", exact: true }).click();
   await page.getByRole("button", { name: "root", exact: true }).click();
   await expect.poll(() => opened).toEqual([{ path: "README.md" }, { path: "web" }, { path: "." }]);
+  opened.length = 0;
+  for (const name of ["absolute", "directory", "root"]) {
+    await page.getByRole("button", { name, exact: true }).click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Open folder in system browser" }).click();
+  }
+  const projectFolder = await realpath(REPO);
+  await expect.poll(() => opened).toEqual([
+    { path: projectFolder }, { path: join(projectFolder, "web") }, { path: projectFolder },
+  ]);
+  await expect(page.getByRole("tab", { name: "README.md", exact: true })).toHaveCount(0);
   await expect(page.locator('[role="tab"][title="web"]')).toHaveCount(0);
 
   // fail() logs handled API errors too; allow only this deliberate failure.
@@ -115,7 +128,7 @@ test("local transcript links open kept tabs and offer the system opener", async 
   await expect(page.getByRole("tab", { name: "Makefile", exact: true })).toBeVisible();
 });
 
-test("Markdown preview links resolve from their document and keep existing tabs", async ({ page }) => {
+test("Markdown preview links resolve from their document and keep existing tabs", async ({ page, context }) => {
   const dir = await mkdtemp(join(tmpdir(), "agenttik-markdown-links-"));
   try {
     await mkdir(join(dir, "docs"));
@@ -138,6 +151,15 @@ test("Markdown preview links resolve from their document and keep existing tabs"
     await page.getByRole("button", { name: "sibling", exact: true }).click({ button: "right" });
     await page.getByRole("menuitem", { name: "Open in system browser" }).click();
     await expect.poll(() => opened).toEqual([{ path: "docs/my file.md" }]);
+    await page.getByRole("button", { name: "sibling", exact: true }).click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Open folder in system browser" }).click();
+    await expect.poll(() => opened).toEqual([{ path: "docs/my file.md" }, { path: join(await realpath(dir), "docs") }]);
+    await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: new URL(page.url()).origin });
+    for (const [name, path] of [["sibling", join("docs", "my file.md")], ["parent", "README.md"]]) {
+      await page.getByRole("button", { name, exact: true }).click({ button: "right" });
+      await page.getByRole("menuitem", { name: "Copy full path" }).click();
+      await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(join(dir, path));
+    }
     await page.getByRole("button", { name: "sibling", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Sibling document" })).toBeVisible();
     const siblingTab = page.getByRole("tab", { name: "my file.md", exact: true });
@@ -191,6 +213,9 @@ test("missing transcript links use folder hints and recursive matches", async ({
     await page.getByRole("button", { name: "recover", exact: true }).click({ button: "right" });
     await page.getByRole("menuitem", { name: "Open in system browser" }).click();
     await expect.poll(() => opened).toEqual([{ path: "hint/found.txt" }]);
+    await page.getByRole("button", { name: "recover", exact: true }).click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Open folder in system browser" }).click();
+    await expect.poll(() => opened).toEqual([{ path: "hint/found.txt" }, { path: join(await realpath(dir), "hint") }]);
     await sendPrompt(page, "[scan](/old/checkout/found.txt)");
     await page.getByRole("button", { name: "scan", exact: true }).click();
     await expect(page.getByRole("textbox", { name: "a/nested/found.txt", exact: true })).toBeVisible();

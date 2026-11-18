@@ -2,6 +2,7 @@
 import { computed, inject, ref } from "vue";
 
 import { fileRefs, markdown } from "../markdown";
+import { preserveSelection, useSelectionMenu } from "../selection-menu";
 import { copyText, isAudio, openExternal, openFileRef, resolveFileRef } from "../store";
 import AudioRef from "./AudioRef.vue";
 
@@ -17,6 +18,7 @@ const html = computed(() => markdown(props.text));
 const refs = computed(() => props.players ? fileRefs(html.value) : []);
 const sounds = computed(() => refs.value.filter(isAudio));
 const block = ref(null);
+const { selectionItems, aimSelection, menuOpen } = useSelectionMenu();
 const aimedLink = ref("");
 const aimedFile = ref(null);
 const showInTree = inject("showInTree");
@@ -55,8 +57,9 @@ function onClick(e) {
   openFile(fileAt(e));
 }
 
-// One delegated handler and menu per rendered block, regardless of link count.
-function aimLink(e) {
+// Capture the selection before the menu moves focus.
+function aimMenu(e) {
+  aimSelection(e);
   aimedLink.value = e.target.closest("a[href]")?.href || "";
   aimedFile.value = fileAt(e);
 }
@@ -66,7 +69,7 @@ function openLink() {
   if (!openExternal(aimedLink.value)) window.open(aimedLink.value, "_blank", "noopener,noreferrer");
 }
 
-const menu = computed(() => aimedFile.value ? [
+const linkMenu = computed(() => aimedFile.value ? [
   { label: "Open in new tab", icon: "i-lucide-file-plus", onSelect: () => openFile(aimedFile.value) },
   { label: "Open in system browser", icon: "i-lucide-external-link", onSelect: () => openFile(aimedFile.value, true) },
   { label: "Show in tree", icon: "i-lucide-folder-tree", onSelect: () => openFile(aimedFile.value, false, true) },
@@ -75,11 +78,14 @@ const menu = computed(() => aimedFile.value ? [
   { label: "Open in browser", icon: "i-lucide-external-link", disabled: !aimedLink.value, onSelect: openLink },
   { label: "Copy link", icon: "i-lucide-copy", disabled: !aimedLink.value, onSelect: () => copyText(aimedLink.value) },
 ]);
+const menu = computed(() => selectionItems.value.length && !aimedLink.value && !aimedFile.value
+  ? selectionItems.value
+  : [...selectionItems.value, ...linkMenu.value]);
 </script>
 
 <template>
-  <UContextMenu :items="menu">
-    <div ref="block" v-bind="$attrs" v-html="html" @click="onClick" @contextmenu="aimLink" />
+  <UContextMenu :items="menu" @update:open="menuOpen">
+    <div ref="block" v-bind="$attrs" v-html="html" @click="onClick" @mousedown.right="preserveSelection" @contextmenu="aimMenu" />
   </UContextMenu>
   <AudioRef v-for="file in sounds" :key="file" :file="file" :hints="refs" />
 </template>

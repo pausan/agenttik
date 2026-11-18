@@ -34,7 +34,9 @@ serves every bubble, so long transcripts do not build one per message.
 Every message in a transcript can be copied. Hovering a bubble reveals the
 actions beside its role label; they occupy the layout at all times, so nothing
 shifts when the pointer arrives. The copy icon becomes a tick for a moment so
-the click is visibly acknowledged.
+the click is visibly acknowledged. Right-clicking selected message text keeps
+the selection and offers **Copy**, which puts only that passage on the
+clipboard. Link and file actions are also available when right-clicking a link.
 
 Your own prompts also get a pencil. It opens the prompt for editing in place —
 where it sits in the transcript, not in a dialogue over it — with Send,

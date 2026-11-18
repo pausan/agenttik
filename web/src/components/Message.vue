@@ -16,6 +16,7 @@ import { S, copyText, editMessage, hit, queueUnprocessed, sendUnprocessed, setMo
 import { promptState } from "../background-tasks";
 import { messageDate, messageTime } from "../message-time";
 import { promptImages, promptText } from "../prompt-images";
+import { preserveSelection, useSelectionMenu } from "../selection-menu";
 import ConversationImage from "./ConversationImage.vue";
 import MarkdownContent from "./MarkdownContent.vue";
 import ModelSelection from "./ModelSelection.vue";
@@ -118,6 +119,11 @@ async function copy() {
   if (!(await copyText(props.message.content))) return;
   copied.value = true;
   window.setTimeout(() => (copied.value = false), 1200);
+}
+
+const { selectionItems, aimSelection, menuOpen } = useSelectionMenu();
+function aimCopyMenu(event) {
+  if (!aimSelection(event)) event.stopImmediatePropagation();
 }
 
 const draft = ref(null); // non-null while editing
@@ -286,7 +292,9 @@ function onKey(e) {
     <template v-else>
       <MarkdownContent v-if="rendered" :class="classes" :text="markdownText" :players="!message.streaming" />
       <div v-else :class="classes">
-        <span v-if="text">{{ text }}</span>
+        <UContextMenu v-if="text" :items="selectionItems" @update:open="menuOpen">
+          <span @mousedown.right="preserveSelection" @contextmenu.capture="aimCopyMenu">{{ text }}</span>
+        </UContextMenu>
         <div v-if="images.length" class="mt-2 flex flex-wrap gap-2" aria-label="Message images">
           <button v-for="(image, i) in images" :key="i" type="button" :aria-label="`View attached image ${i + 1}`" class="max-w-full cursor-zoom-in rounded focus-visible:outline-2 focus-visible:outline-primary" @click="preview = image">
             <img :src="image.url" :alt="`Attached image ${i + 1}`" loading="lazy" class="max-h-80 max-w-full rounded object-contain" />
